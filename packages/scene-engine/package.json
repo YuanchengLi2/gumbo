@@ -2,6 +2,7 @@
   "name": "@dream/scene-engine",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "exports": "./src/index.ts",
   "dependencies": {
     "@fontsource/bebas-neue": "^5.2.5",
