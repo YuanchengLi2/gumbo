@@ -4,3 +4,4 @@ export * from './modules';
 export * from './host-html';
 export * from './esbuild-plugin';
 export * from './compile-options';
+export * from './reference.generated';

@@ -9,6 +9,8 @@ import {ENGINE_VERSION} from '../packages/scene-engine/src/protocol';
 import {CHUNKS,MODULES} from '../packages/scene-engine/src/modules';
 import {dreamModulesPlugin} from '../packages/scene-engine/src/esbuild-plugin';
 
+import {engineReferenceModule} from './build-engine-reference';
+writeFileSync(resolve('packages/scene-engine/src/reference.generated.ts'),engineReferenceModule(readFileSync(resolve('packages/scene-engine/reference/api.md'),'utf8')));
 const root=resolve('packages/scene-engine'),out=resolve(process.argv[2]??`apps/desktop/resources/staged/engine/${ENGINE_VERSION}`);
 const require=createRequire(join(root,'package.json'));
 rmSync(out,{recursive:true,force:true});mkdirSync(join(out,'fonts'),{recursive:true});

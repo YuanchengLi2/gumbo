@@ -21,17 +21,22 @@ import {toolActivity,fileChanges} from '../../../packages/orchestrator/src/activ
 import {inspectMedia} from './media-evidence';
 import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
+import {importResources} from './resource-import';
+import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
 
+/** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
+export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:false,sfx:false,voiceover:false,commands:true});
 export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
- currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId);return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
+ currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId,{changedOnly:false});return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
  private sceneRevisions(timeline:TimelineDocument){const assets=new Map(this.db.footage().assets.map(a=>[a.id,a]));return[...timeline.spine.map(c=>c.assetId),...timeline.attached.flatMap(i=>i.source?[i.source.assetId]:[])].map(id=>assets.get(id)).filter(a=>a?.scene?.format==='engine').map(a=>a!.scene!.revisionId);}
- /** Errors reported by scenes that changed in this request (published since it started) and by its current drafts. */
- sceneErrors(turnId?:string){
-  const start=this.db.getMeta('turn_start_version'),before=new Set(start?this.sceneRevisions(this.db.timeline(start)):[]),revisions=this.sceneRevisions(this.db.timeline()).filter(r=>!before.has(r));
+ /** Errors reported by scenes on the timeline (by default only those changed in this request, published since it
+  * started) and by this request's current drafts. The project state shows all of them; finishing checks the changed ones. */
+ sceneErrors(turnId?:string,options:{changedOnly?:boolean}={}){
+  const start=this.db.getMeta('turn_start_version'),before=new Set(options.changedOnly!==false&&start?this.sceneRevisions(this.db.timeline(start)):[]),revisions=this.sceneRevisions(this.db.timeline()).filter(r=>!before.has(r));
   const drafts=turnId?Object.values(JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}') as Record<string,string>):[];
   const names=new Map(this.db.footage().assets.map(a=>[a.scene?.revisionId,a.filename]));
   return this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
@@ -57,14 +62,15 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.write('context/decisions.json',JSON.stringify(this.db.db.prepare('SELECT scope,text FROM project_decisions WHERE active=1').all()));
   this.write('context/published-project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));
   this.write('context/environment.json',JSON.stringify(workspaceEnvironment(this.root),null,2));
-  this.write('context/live-scenes.md',liveSceneGuide);
+  // The HTML scene guide only matters to the legacy bundling workflow (advanced tools).
+  if(process.env.DREAM_AGENT_ADVANCED_TOOLS==='1')this.write('context/live-scenes.md',liveSceneGuide);
   this.write('context/project-schema.json',JSON.stringify(WorkspaceDocumentSchema.toJSONSchema(),null,2));
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
  context(query:string){const selected=this.index.search(query);this.db.event('workspace.context',{availableCharacters:selected.availableCharacters,selectedCharacters:selected.selectedCharacters,selectedFiles:selected.hits.map(h=>h.path)});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
-  return{workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
+  return{capabilities:engineCapabilities(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.footage().assets){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;
@@ -105,6 +111,11 @@ export class CodeWorkspace implements CodeWorkspacePort {
    return written;
   });
   if(name==='check_outputs')return this.exclusive(()=>this.checkOutputs(input,callId,turnId,scope));
+  if(name==='import_resources')return this.exclusive(async()=>{
+   if(!this.options.files)throw new Error('Computer file access is unavailable.');
+   const allowed=await this.options.files({action:'authorize_import',paths:[input.source]},signal);if('permissionRequired'in allowed)throw new FileApprovalRequired();
+   return this.scoped(scope,async()=>importResources(this.root,input));
+  });
   if(name==='bundle_scene'){if(!process.env.DREAM_SHARED_LIBRARIES)throw new Error('The editing tools are unavailable.');const libraries=process.env.DREAM_SHARED_LIBRARIES;return this.exclusive(()=>bundleScene(this.root,libraries,input,signal));}
   if(name==='read_transcript'){
    const asset=this.db.footage().assets.find(a=>a.id===input.assetId);if(!asset)throw new Error('Unknown project asset.');if(!asset.hasAudio)throw new Error('This media has no audio track.');
@@ -114,7 +125,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   }
   if(name==='view_media'){
    if(input.scope==='computer'&&input.path){if(!this.options.importSources)throw new Error('Source intake is unavailable.');const imported=await this.options.importSources([input.path],callId,signal);if(imported.permissionRequired)throw new FileApprovalRequired();input={...input,assetId:imported.assets[0].id,path:undefined};}
-   if(input.assetId)await this.sources(signal);
+   // Media is read where it is; copies into Sources/ are only made for commands that need the files.
    // Chat never renders: the live player shows published code immediately, and only Export renders video.
    if(input.target==='preview'){
     const timeline=this.db.timeline(),resolved=resolveTimeline(timeline,this.db.footage());
