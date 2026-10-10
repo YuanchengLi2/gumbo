@@ -1,5 +1,31 @@
 # Dream
 
+## Scene engine, cost and computer media — October 10, 2026
+
+The agent writes only the code for the video. A prebuilt scene engine provides everything else:
+- React with Remotion timing, three.js through React Three Fiber, d3, icons, noise and eleven bundled fonts;
+- project media and resources by name, frame-exact video, textures, a ready 3D scene, fit-to-box text, safe areas and beat timing;
+- compilation in milliseconds and the live player; only Export renders;
+- music written as score files and synthesized by Dream.
+
+**Orchestration.** Opus directs dependency graphs of Haiku workers that share one cached project snapshot, retry once when blocked, and report changed files, errors and cost.
+
+**Cost and speed.**
+- Context is compacted with headroom and stays under Haiku's long-context price.
+- Thinking-only cutoffs lower effort instead of raising the output limit.
+- The lead's history uses a one-hour cache while workers run.
+- The run monitor shows cost, tokens and time per caller.
+
+**Computer media.** "Use what I shot today" works: `find_media` finds photos, videos and audio by capture date in camera rolls, phone sync folders, Downloads and memory cards, and `import_media` imports them in capture order.
+
+**Chat and timeline.**
+- Media drags straight onto the timeline.
+- Attachments, selections and message media show as thumbnails and short previews.
+- Chat answers render markdown.
+- The composer sets the permission mode (edit automatically, plan first, ask only) and the effort.
+
+See [the engine documentation](docs/CODE-ENGINE.md). The optional gateway features take effect after `supabase functions deploy dream-gateway`.
+
 ## Opus-led agent engine — October 9, 2026
 
 Simple exact edits and questions are handled by Haiku alone. Creative, multi-part and planned work is led by Opus, which inspects the project, decides, and delegates self-contained tasks to Haiku workers, up to four in parallel when their files do not overlap, then verifies and finishes. The agent loop has step and nudge limits, groups repeated failures, and completes once the current revision is published. Context compaction runs only after a measured overrun and keeps a stable prefix, so prompt caching and model reasoning survive long tasks. Dropped connections are cancelled and retried automatically. Commands no longer publish; scenes can reference bundled libraries with `<script src>`, which publication inlines. Details: [engine documentation](docs/CODE-ENGINE.md). The gateway changes require `supabase functions deploy dream-gateway`.

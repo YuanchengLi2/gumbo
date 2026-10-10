@@ -466,3 +466,54 @@ Design: `docs/CODE-ENGINE.md`; decision: `DECISIONS.md`.
 - Not yet verified:
   - a live provider run of the new roles (`scripts/smoke-engine-local.ts`, spends money);
 - Gateway: `dream-gateway` deployed to `qewguvfkkwvdoqptiljd` on October 9. Version 23 is active, and the downloaded live source carries the `continue` route; it is otherwise identical to the previous deployed version 21. No migrations were required.
+
+## Scene engine, orchestration, computer media and chat — October 10, 2026
+
+Baseline from the October 10 Minecraft explainer run, before this work:
+- 34 minutes, $2.14 and 113 model calls;
+- 76% of Haiku output was hidden thinking;
+- 2 thinking-only cutoffs, 12 Haiku calls over 100K tokens and about 20 failed tool calls;
+- the agent installed and bundled three.js, wrote its own 3D layer and pasted base64 textures before writing the shots.
+
+**Commits**
+- `4779b5a` chat UI
+- `d657810` inference and storage
+- `2310346` and `01d2636` gateway
+- `667662d` and `b94b0fd` scene engine runtime and protocol
+- `24d3a98`, `e1184ab` and `976ced7` compile, errors and agent tools
+- `e0715b9` music and sound
+- `eb5a397` orchestration
+- `6c8cf0b` computer media
+- `dc56d94` timeline and media tiles
+
+**Verified**
+- `pnpm typecheck` is clean.
+- `pnpm test`: 79 files and 246 tests pass. New coverage includes:
+  - markdown rendering;
+  - permission and effort routing;
+  - compaction hysteresis and the Haiku cap;
+  - truncation handling and pricing parity;
+  - activity rows;
+  - engine host, compile, publication, resources and music;
+  - the task graph (order, concurrency cap, skips, resume, validation, shared snapshot, staggered start, one retry, reports);
+  - contact sheets with real ffmpeg;
+  - capture time from MP4/QuickTime and EXIF bytes;
+  - find_media windows, folders and permissions;
+  - bulk import with dedupe;
+  - timeline placement and media tiles.
+- Packaged app (`apps/desktop/out/Dream-win32-x64`): 12 desktop specs pass, including:
+  - engine scenes seek exactly in the player and export the same frames on the spine and as overlays;
+  - the agent writes an engine scene, the user sees its draft, and a scene error reaches the next request;
+  - dragging project media onto the timeline places it at the drop point, and selections and attachments show as media tiles;
+  - "Look at what I shot today and make a short" finds today's clips in a camera folder, imports only those, and cuts them in capture order;
+  - the existing chat, planning, computer-access, editor-flow, live-scene and manual journeys.
+- Package checks: `scripts/verify-package.ts` passes, including the engine manifest hashes. `scripts/diagnose-package.mjs` reports the runtime modules, composition bundle, scene engine and export browser present. The diagnosis previously probed `@remotion/bundler`, which is a build-time dependency and not shipped; that check was replaced.
+
+**Not yet verified**
+- Live provider runs. They spend money and need approval and a budget:
+  - `pnpm exec tsx scripts/smoke-engine-local.ts --minecraft`: the voxel explainer comparison. Targets are at most 15 minutes, at most $0.90, a thinking share of at most 0.5, no thinking-only cutoffs, no Haiku calls over 100K and at most 5 failed tools.
+  - `--today`: the today's-footage short.
+  - `--eval`: ten everyday requests.
+  - The live cloud desktop spec `code-agent-live.spec.ts`.
+- Gateway: the cacheTtl, task budget, summarized Haiku progress and costUsd features need `supabase functions deploy dream-gateway`. The `continue` route is already live in version 23. Until deployment the app runs without these features.
+- HEIC import depends on the staged ffmpeg build. When it cannot decode HEIC, `import_media` reports those files as failed with the reason.

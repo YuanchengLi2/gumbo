@@ -10,7 +10,7 @@ Remotion's licensing and company-use terms must be reviewed for the publisher be
 
 pyannote model weights have separate access/redistribution conditions. No gated weights or publisher Hugging Face tokens are embedded. Their runtime remains unavailable until approved, locally staged model artifacts exist. The Python runtime is locked, frozen and staged. Frozen scene-detection and audio-analysis checks passed; model-dependent backends and redistribution notices still require release verification.
 
-Dream's score/SFX catalog is original deterministic synthesis; no sampled music, filmed scenes, or voices are included. The system Arial font is used; no font files are redistributed at this stage.
+Dream's score/SFX catalog is original deterministic synthesis; no sampled music, filmed scenes, or voices are included. The editor interface uses the system Arial font. The scene engine redistributes the font files listed below.
 
 ## OpenCut Classic interaction algorithms
 
@@ -21,3 +21,14 @@ Source and adaptation notes: `apps/desktop/src/renderer/manual/opencut/UPSTREAM.
 ## Optional scene-aware context
 
 claude-real-video 0.10.7 (MIT) supplies local frame extraction/deduplication for requested scene-aware ranges. Dream uses its local core API only; downloader, network, model-installation, and transcription extras are not shipped in the context worker. Its license is preserved in resources/notices/claude-real-video-LICENSE.txt. The default immediate overview uses the existing FFmpeg runtime and encoded keyframe seeks.
+
+## Scene engine runtime
+
+The prebuilt scene runtime (packages/scene-engine, staged to resources/staged/engine/<version>) bundles:
+- three.js 0.180.0 (MIT), React Three Fiber 9 (MIT), drei 10 (MIT) and troika-three-text (MIT, used by drei text);
+- React and React DOM (MIT), Remotion and @remotion/* 4.0.533 (Remotion License: the company-use terms noted above apply to the runtime as well);
+- d3 7.9.0 (ISC), simplex-noise 4 (MIT), lucide-react (ISC).
+
+Bundled fonts (via @fontsource, SIL Open Font License 1.1): Inter, Roboto, Montserrat, Poppins, Oswald, Bebas Neue, Playfair Display, Lora, Space Grotesk, JetBrains Mono and Press Start 2P. The OFL permits bundling with software; the fonts may not be sold on their own. Preserve each font's OFL notice with the distributed files.
+
+GSAP is deliberately not included: its no-charge license carries use restrictions that need review before redistribution. Scene easing uses Remotion's interpolate, spring and Easing and d3-ease instead.

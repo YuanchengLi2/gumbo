@@ -49,3 +49,29 @@ Generated visual assets reference a project-relative sequence directory, source 
 The application-data visual recipe cache is regenerable. The captured frame sequences in `Media/Generated/` are authoritative dependencies of saved project versions; retain or collect them with the project. Project folders contain no account credentials.
 
 SQLite migration 4 adds the disposable project-context chunk/FTS index. Stable record/chunk IDs and content hashes support bounded retrieval of timeline items, beats, asset metadata, local conversations and saved visual code. Changes to the project head and index revision refresh it; deleted timeline items leave the current-context index while immutable version history remains available. This index contains no account credentials and does not upload project files. Saved visual/audio definitions remain project-local library revisions.
+
+
+## October 10, 2026 additions
+
+Timeline schemaVersion remains 1.
+
+**Workspace (`Workspace/project.json`, version 1)**
+- `outputs` accept kind `scene`, `image`, `audio`, `music` and `sfx`.
+- Scene outputs point at a React component (`.tsx`, `.ts`, `.jsx`, `.js`) or a legacy HTML file. Width, height, fps and durationInFrames default to the project's.
+- Optional `props` (one component for many shots), `assets` (extra asset ids or `output:<id>` references, for example a music output whose beats the scene reads) and `transparent`.
+- Music outputs are score files (`src/music/*.score.json`); sound effects are sound design files or a named preset.
+- `resources/` is authored source for scenes (24 MB per file, 96 MB in total) and is restored with versions like `src/`.
+
+**Assets**
+- Engine scenes are assets with `scene.format: 'engine'` and `scene.engine {version, chunks, props, assets, files, transparent}`. Their compiled bundle, source map and resource manifest live in `Media/Generated/<hash>/`.
+- Resource files are stored once in the content-addressed `Media/Engine/files/`.
+- Generated music assets carry beat times in `generated.beats`.
+- Imported media may record `capturedAt` (ISO time), `capturedAtSource` (`quicktime`, `mp4`, `exif` or `file`) and `source {path, size, modifiedAt}`. An unchanged source (same path, size and modification time) maps to one asset.
+
+**Database migrations**
+- Activity events move from the `turn_activity:<turn>` meta JSON into `activity_events` rows. The meta keeps status, phase, tasks and file changes.
+- `ai_usage` records every model response: request, turn, model, purpose, phase, worker, tokens, cost and duration.
+- `scene_errors` stores runtime errors reported by scenes, per revision.
+- `messages.selection` stores the timeline selection a user message referred to: id, kind, asset, source range, label and timeline position.
+
+All of these migrations are idempotent and back up the database first, like earlier ones.
