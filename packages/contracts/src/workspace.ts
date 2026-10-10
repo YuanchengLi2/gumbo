@@ -17,11 +17,13 @@ export type SourceChange={path:string;beforeHash?:string;afterHash?:string;added
 export function lineDelta(before:string,after:string){const counts=new Map<string,number>();for(const line of before?before.split('\n'):[])counts.set(line,(counts.get(line)??0)+1);let added=0;for(const line of after?after.split('\n'):[]){const n=counts.get(line)??0;if(n)counts.set(line,n-1);else added++;}let removed=0;for(const n of counts.values())removed+=n;return{added,removed};}
 export type PublicationReceipt={id:string;versionId:string;baseVersionId:string;sourceSnapshot:string;processId:string;assets:string[];refreshed?:string[];changes:string[];files:SourceChange[];documentHash:string};
 /** A worker's write boundary: path prefixes (empty means any authored file) and whether it owns project.json. */
-export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string};
+export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string;parent?:string};
 export interface CodeWorkspacePort {
  initialize():Promise<void>;
  execute(name:string,input:any,callId:string,turnId:string,signal:AbortSignal,scope?:WorkerScope):Promise<any>;
  unpublishedChanges?():string[];
+ /** Errors scenes reported while playing (player or chat preview) for scenes changed in this request and its current drafts. */
+ sceneErrors?(turnId?:string):{scene:string;assetId?:string;location?:string;message:string}[];
  context(query:string):unknown;
  mediaContext?():unknown;
  currentContext?():unknown;

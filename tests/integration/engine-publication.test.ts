@@ -36,3 +36,28 @@ it('refuses to publish a scene that does not compile and keeps the published rev
   await expect(publish(ws,'p1')).rejects.toThrow(/src\/broken\.tsx:1:\d+/);expect(db.head()).toBe(head);
  }finally{db.close();}
 });
+
+it('checks scene code on write, previews drafts without publishing, and refuses to finish while a changed scene reports errors',async()=>{
+ const {codeAgent}=await import('../../packages/orchestrator/src/code-agent');const {recordSceneError}=await import('../../apps/project-service/src/scene-errors');
+ const root=mkdtempSync(join(tmpdir(),'dream-engine-errors-')),db=new ProjectDB(root,'Errors'),events:{type:string;payload:any}[]=[];
+ const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg:'unavailable',ffprobe:'unavailable'},(type,payload)=>events.push({type,payload}));
+ try{await ws.initialize();db.setMeta('pending_request',JSON.stringify({text:'Make a scene',turnId:'turn'}));const signal=new AbortController().signal;
+  const broken=await ws.execute('write_file',{path:'src/intro.tsx',content:"export default function Intro(){ return <div>{</div>; }"},'w1','turn',signal);expect(broken.check.errors[0]).toMatchObject({file:'src/intro.tsx',line:1});
+  const fixed=await ws.execute('write_file',{path:'src/intro.tsx',content:"import {useCurrentFrame} from 'remotion';\nexport default function Intro(){\n const f=useCurrentFrame();\n if(f>10)throw new Error('frame-limit');\n return <div>{f}</div>;\n}\n"},'w2','turn',signal);expect(fixed.check).toEqual({compiles:true});
+  const checked=await ws.execute('check_outputs',{paths:['src/intro.tsx']},'c1','turn',signal,{writes:['src/'],canPublish:false,parent:'worker:call:intro'});
+  expect(checked.checked[0]).toMatchObject({compiles:true});const draft=events.find(e=>e.type==='scene.draft')!.payload;expect(draft.hash).toBe(checked.checked[0].preview);expect(existsSync(draft.source.bundlePath)).toBe(true);
+  expect(db.turnActivity('turn')!.events!.find(e=>e.id==='draft:c1')).toMatchObject({parent:'worker:call:intro',drafts:[expect.objectContaining({hash:draft.hash,width:1920})]});expect(db.head()).toBe(db.getMeta('turn_start_version'));
+  // A draft that fails while previewing is reported with the authored line and reaches the agent's context.
+  const bundle=readFileSync(draft.source.bundlePath,'utf8').split('\n'),line=bundle.findIndex(l=>l.includes('frame-limit'))+1;
+  await recordSceneError(db,{draft:draft.hash,message:'frame-limit',stack:`Error: frame-limit\n    at Intro (dream-engine://app/draft/${draft.hash}/bundle.js:${line}:${bundle[line-1].indexOf('throw')+1})`});
+  expect((ws.currentContext() as any).sceneErrors).toEqual([expect.objectContaining({message:'frame-limit',location:expect.stringMatching(/^src\/intro\.tsx:4:/)})]);
+  // Publish the scene; an error reported for the published revision blocks completion until it is fixed.
+  const d=doc(root);d.outputs=[{id:'intro',path:'src/intro.tsx',kind:'scene',durationInFrames:30}];d.timeline.spine=[{id:'i',assetId:'output:intro',srcIn:0,srcOut:1,speed:1,audio:{mute:true},reason:'Intro'}];writeFileSync(join(root,'Workspace/project.json'),JSON.stringify(d));
+  db.setMeta('turn-drafts:turn','{}');let n=0;
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',model:'fixture',text:'Finish',signal,publish:()=>{},infer:async(_m,_s,messages)=>{n++;
+   if(n===2){const scene=db.footage().assets.find(a=>a.scene&&db.timeline().spine.some(c=>c.assetId===a.id))!;await recordSceneError(db,{assetId:scene.id,revisionId:scene.scene!.revisionId,message:'frame-limit'});}
+   const last=JSON.stringify(messages);
+   return{content:[n===1?{type:'tool_use',id:'p1',name:'publish_project',input:{}}:n===2?{type:'tool_use',id:'f1',name:'finish',input:{status:'complete',summary:'Done.',evidence:[]}}:last.includes('reported errors while playing')?{type:'tool_use',id:'f2',name:'finish',input:{status:'blocked',summary:'The intro fails after frame 10.',nextAction:'Fix the frame limit.',evidence:[]}}:{type:'text',text:'unexpected '+last.slice(0,300)}],stop_reason:'tool_use',usage:{}};}});
+  expect(result.outcome).toMatchObject({status:'blocked'});expect(n).toBe(3);
+ }finally{db.close();}
+});

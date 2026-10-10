@@ -114,6 +114,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
        if(!current)throw new Error('Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.');
        if(!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
       }
+      // Scenes changed in this request that failed while playing must be fixed first (errors come from the visible player and chat previews).
+      const broken=input.status==='complete'&&!planning&&!options.research?workspace.sceneErrors?.(turnId)??[]:[];
+      if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them${role==='lead'?' through a build worker':''} and publish again before finishing.`);
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
      }else if(call.name==='delegate'){
       if(!options.runWorkers)throw new Error('Delegation is unavailable in this phase.');
@@ -123,7 +126,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      }else if(call.name==='switch_to_orchestrated'||call.name==='hand_off'){
       checkpoint.switch=call.name==='hand_off'?{to:'solo',handoff:input.brief}:{to:'lead',handoff:input.handoff,reason:input.reason};result={switching:true};
      }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='consult_director'){if(!options.consult)throw new Error('Director consultation is unavailable within director mode.');result={guidance:await options.consult(input.question,call.id)};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
-     else result=await workspace.execute(call.name,input,call.id,turnId,signal,role==='worker'?{writes:options.writes??[],canPublish:!!options.canPublish,taskId:options.taskId}:undefined);
+     else result=await workspace.execute(call.name,input,call.id,turnId,signal,role==='worker'?{writes:options.writes??[],canPublish:!!options.canPublish,taskId:options.taskId,parent:options.parent}:undefined);
      if(result?.process&&result.process.status!=='complete')throw new Error(`Command ${result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      delete checkpoint.failures[operationKey];if(checkpoint.coarse)delete checkpoint.coarse[coarse];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
     }catch(error){

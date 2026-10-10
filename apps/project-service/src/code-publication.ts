@@ -14,12 +14,12 @@ import {compileScene,isEngineScene,type CompileError} from './engine-compile';
 /** Compile errors as the agent sees them: one line per error with its file position. */
 export const formatCompileErrors=(errors:CompileError[])=>'The scene code does not compile:\n'+errors.slice(0,12).map(e=>`${e.file}:${e.line}:${e.column} ${e.text}`).join('\n');
 /** Copies a compiled scene's resources into the project's content-addressed store and records them beside the bundle. */
-export function storeEngineScene(projectFolder:string,root:string,compiled:{bundle:string;map:string;resources:Record<string,string>},directory:string){
+export function storeEngineScene(projectFolder:string,root:string,compiled:{bundle:string;map:string;resources:Record<string,string>},directory:string):{bundlePath:string;files:Record<string,string>;storeDir:string}{
  const store=join(projectFolder,'Media/Engine/files'),files:Record<string,string>={};mkdirSync(store,{recursive:true});mkdirSync(directory,{recursive:true});
  for(const [key,rel] of Object.entries(compiled.resources)){const bytes=readFileSync(join(root,rel)),hash=digest(bytes),target=join(store,hash);if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,bytes);renameSync(temp,target);}files[key]=hash;}
  const write=(name:string,text:string)=>{const target=join(directory,name);if(existsSync(target)&&readFileSync(target,'utf8')===text)return;const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);};
  write('scene.js',compiled.bundle);if(compiled.map)write('scene.js.map',compiled.map);write('resources.json',JSON.stringify({files}));
- return join(directory,'scene.js');
+ return{bundlePath:join(directory,'scene.js'),files,storeDir:store};
 }
 
 /** Candidate validation and immutable ingestion happen before the single SQLite commit. */
@@ -36,7 +36,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  const engineAsset=async(sourcePath:string,name:string,size:Size,extra:EngineOptions)=>{
   const compiled=await compileScene(root,{entry:sourcePath,mode:'publish'});if(compiled.errors.length)throw new Error(formatCompileErrors(compiled.errors));
   const revision=digest(JSON.stringify({scene:compiled.hash,...size,props:extra.props??null,transparent:!!extra.transparent}));
-  const target=storeEngineScene(db.folder,root,compiled,join(db.folder,'Media/Generated',revision));
+  const target=storeEngineScene(db.folder,root,compiled,join(db.folder,'Media/Generated',revision)).bundlePath;
   return AssetSchema.parse({id:'code_'+revision,filename:name,kind:'video',originalPath:target,fingerprint:revision,durationSec:size.durationInFrames/size.fps,fps:size.fps,width:size.width,height:size.height,status:'ready',scene:{format:'engine',revisionId:revision,durationInFrames:size.durationInFrames,engine:{version:compiled.version,chunks:compiled.chunks,props:extra.props,assets:[...new Set([...compiled.assetRefs,...extra.assets??[]])],music:[],files:Object.keys(compiled.resources).length,transparent:!!extra.transparent}}});
  };
  const sceneAsset=async(sourcePath:string,name:string,size:Size,extra:EngineOptions={})=>{

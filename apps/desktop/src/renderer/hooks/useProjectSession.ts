@@ -7,6 +7,13 @@ export function useProjectSession(){
  const s=useEditor(),[projects,setProjects]=useState<ProjectSummary[]>([]),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[progress,setProgress]=useState<ExportProgress|null>(null),[catalog,setCatalog]=useState<any>({scores:[],sfx:[]});
  const refreshProjects=useCallback(()=>window.dream.projects().then(setProjects).catch(error=>useEditor.getState().setError(error.message)),[]);
  const command:CommandFn=useCallback(async c=>{const store=useEditor.getState();store.setBusy(true);try{const result=await window.dream.command(c);if(result?.timeline)store.setProject(result);return result;}catch(error){store.setError((error as Error).message);return undefined;}finally{store.setBusy(false);}},[]);
+ // Scenes that fail while playing in the player or a chat preview report back, so the agent sees the error next step.
+ useEffect(()=>{
+  const seen=new Set<string>();
+  const report=(event:Event)=>{const detail=(event as CustomEvent).detail??{},draft=typeof detail.draft==='string'?/\/draft\/([a-f0-9]{16,64})\//.exec(detail.draft)?.[1]:undefined,key=JSON.stringify([detail.revisionId??draft??detail.assetId,detail.message]);
+   if(!detail.message||seen.has(key))return;seen.add(key);void window.dream.command({type:'scene_error',assetId:draft?undefined:detail.assetId,revisionId:draft?undefined:detail.revisionId,draft,message:String(detail.message).slice(0,4000),stack:detail.stack?String(detail.stack).slice(0,16000):undefined}).catch(()=>{});};
+  window.addEventListener('dream:scene-error',report);return()=>window.removeEventListener('dream:scene-error',report);
+ },[]);
  useEffect(()=>{void window.dream.command({type:'state'}).then(s.setProject).catch(()=>{});void refreshProjects();void window.dream.runtime().then(setRuntime);void window.dream.catalog().then(setCatalog);return window.dream.onEvent(event=>{
   const current=useEditor.getState().project;if(event.projectId&&current&&event.projectId!==current.meta.id&&event.type!=='state')return;
   if(event.type==='state')s.setProject(event.payload as any);

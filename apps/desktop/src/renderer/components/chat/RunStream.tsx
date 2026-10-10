@@ -41,9 +41,14 @@ function MediaStrip({media}:{media:NonNullable<PublicActivity['media']>}){
  </figure>)}</div>;
 }
 
+/** Scenes a worker is still writing, drawn live from their draft code before anything is published. */
+function DraftStrip({drafts}:{drafts:NonNullable<PublicActivity['drafts']>}){
+ return <div className={'stream-media'+(drafts.length===1?' single':'')}>{drafts.slice(0,3).map(draft=>{const asset={id:'draft_'+draft.hash,filename:draft.name,kind:'video',durationSec:draft.durationInFrames/draft.fps,fps:draft.fps,width:draft.width,height:draft.height,originalPath:'',fingerprint:draft.hash,scene:{format:'engine',revisionId:draft.hash.padEnd(64,'0'),durationInFrames:draft.durationInFrames}} as unknown as Asset;
+  return <figure key={draft.hash} className="stream-thumb" title={draft.name}><ScenePeek asset={asset} src={`dream-engine://app/draft/${draft.hash}/index.html`}/><figcaption>Draft · {draft.name}</figcaption></figure>;})}</div>;
+}
 function Action({event,running}:{event:PublicActivity;running:boolean}){
  const changes=editingChanges(event.changes??[]),text=editingActivity(event),icon=<StatusIcon status={event.status} running={running}/>;
- return <div className={'run-event '+event.status} data-event-id={event.id}>{changes.length?<details className="run-event-details"><summary>{icon}<span>{text}</span><ChevronRight className="run-disclosure" size={12}/></summary><ul>{changes.map((change,n)=><li key={n}>{change}</li>)}</ul></details>:<div className="stream-action">{icon}<span>{text}</span></div>}{!!event.media?.length&&<MediaStrip media={event.media}/>}</div>;
+ return <div className={'run-event '+event.status} data-event-id={event.id}>{changes.length?<details className="run-event-details"><summary>{icon}<span>{text}</span><ChevronRight className="run-disclosure" size={12}/></summary><ul>{changes.map((change,n)=><li key={n}>{change}</li>)}</ul></details>:<div className="stream-action">{icon}<span>{text}</span></div>}{!!event.media?.length&&<MediaStrip media={event.media}/>}{!!event.drafts?.length&&<DraftStrip drafts={event.drafts}/>}</div>;
 }
 
 function Actions({events,running}:{events:PublicActivity[];running:boolean}){

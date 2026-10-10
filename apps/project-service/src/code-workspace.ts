@@ -19,13 +19,23 @@ import {ProjectContext} from '../../../packages/orchestrator/src/context';
 import {FileApprovalRequired} from '../../../packages/orchestrator/src/file-tools';
 import {toolActivity,fileChanges} from '../../../packages/orchestrator/src/activity';
 import {inspectMedia} from './media-evidence';
-import {publishWorkspace} from './code-publication';
+import {publishWorkspace,storeEngineScene} from './code-publication';
+import {compileScene,isEngineScene} from './engine-compile';
+import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
 
 export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
- currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db)};}
+ currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId);return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
+ private sceneRevisions(timeline:TimelineDocument){const assets=new Map(this.db.footage().assets.map(a=>[a.id,a]));return[...timeline.spine.map(c=>c.assetId),...timeline.attached.flatMap(i=>i.source?[i.source.assetId]:[])].map(id=>assets.get(id)).filter(a=>a?.scene?.format==='engine').map(a=>a!.scene!.revisionId);}
+ /** Errors reported by scenes that changed in this request (published since it started) and by its current drafts. */
+ sceneErrors(turnId?:string){
+  const start=this.db.getMeta('turn_start_version'),before=new Set(start?this.sceneRevisions(this.db.timeline(start)):[]),revisions=this.sceneRevisions(this.db.timeline()).filter(r=>!before.has(r));
+  const drafts=turnId?Object.values(JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}') as Record<string,string>):[];
+  const names=new Map(this.db.footage().assets.map(a=>[a.scene?.revisionId,a.filename]));
+  return this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
+ }
  private queue:Promise<unknown>=Promise.resolve();
  /** Parallel workers share one workspace: commands and publication run one at a time (dependency installs, lockfiles, project.json). */
  private exclusive<T>(work:()=>Promise<T>):Promise<T>{const next=this.queue.then(work,work);this.queue=next.catch(()=>{});return next;}
@@ -89,8 +99,12 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(intent){if(intent.identity!==identity)throw new Error('File call ID belongs to a different edit.');if(digest(old)===intent.afterHash)return{path:input.path,hash:intent.afterHash};if(digest(old)!==intent.beforeHash)throw new Error('The working file changed after the interrupted write. Read its current revision.');return this.write(input.path,intent.content);}
    if(input.expectedHash!==undefined&&digest(old)!==input.expectedHash)throw new Error(`The file changed since that revision (current hash ${digest(old)}); re-read the affected range before editing.`);
    if(name==='edit_file'){const matches=old.split(input.oldText).length-1;if(matches!==1)throw new Error(matches?`oldText matches ${matches} places; include more surrounding text so it matches exactly one.`:existsSync(path)?'oldText was not found in the current file; re-read the range you are editing.':'The file does not exist; use write_file to create it.');}
-   const content=name==='edit_file'?old.replace(input.oldText,input.newText):input.content;this.db.saveState(receiptKey,{identity,beforeHash:digest(old),afterHash:digest(content),content});return this.write(input.path,content);
+   const content=name==='edit_file'?old.replace(input.oldText,input.newText):input.content;this.db.saveState(receiptKey,{identity,beforeHash:digest(old),afterHash:digest(content),content});const written=this.write(input.path,content);
+   // Scene code is compiled (never run) right away, so syntax and import mistakes come back with this write.
+   if(isEngineScene(input.path)&&normalizeScope(input.path).startsWith('src/'))try{const compiled=await compileScene(this.root,{entry:input.path,mode:'draft'});return{...written,check:compiled.errors.length?{errors:compiled.errors.slice(0,8),note:'Compile check of this file. Errors about files you have not written yet resolve once they exist.'}:{compiles:true}};}catch{}
+   return written;
   });
+  if(name==='check_outputs')return this.exclusive(()=>this.checkOutputs(input,callId,turnId,scope));
   if(name==='bundle_scene'){if(!process.env.DREAM_SHARED_LIBRARIES)throw new Error('The editing tools are unavailable.');const libraries=process.env.DREAM_SHARED_LIBRARIES;return this.exclusive(()=>bundleScene(this.root,libraries,input,signal));}
   if(name==='read_transcript'){
    const asset=this.db.footage().assets.find(a=>a.id===input.assetId);if(!asset)throw new Error('Unknown project asset.');if(!asset.hasAudio)throw new Error('This media has no audio track.');
@@ -162,6 +176,27 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Commands never publish: a check or install mid-edit must not publish a half-finished project.json. Use publish_project.
    return{process:result};
   }
+ }
+ /** Compiles scenes as drafts and shows them to the user as live previews, without publishing. Workers that cannot
+  * publish use this so their scenes are visible right away; errors from the preview come back like player errors. */
+ private async checkOutputs(input:{paths?:string[];scene?:string},callId:string,turnId:string,scope?:WorkerScope){
+  let document:any={};try{document=JSON.parse(readFileSync(join(this.root,'project.json'),'utf8'));}catch{}
+  const settings=document.timeline?.settings??this.db.timeline().settings,outputs:any[]=Array.isArray(document.outputs)?document.outputs:[];
+  const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>o.kind==='scene'&&isEngineScene(String(o.path))&&(!input.scene||o.id===input.scene));
+  if(!entries.length)throw new Error('There is no scene to check: pass the scene files (src/....tsx) as paths, or declare scene outputs in project.json.');
+  const results:any[]=[],drafts:any[]=[],recorded=JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}');
+  for(const entry of entries.slice(0,8)){
+   if(!isEngineScene(String(entry.path))){results.push({id:entry.id,path:entry.path,skipped:'Only engine scenes (.tsx, .ts, .jsx, .js) have draft previews.'});continue;}
+   const compiled=await compileScene(this.root,{entry:entry.path,mode:'draft'});
+   if(compiled.errors.length){results.push({id:entry.id,path:entry.path,errors:compiled.errors.slice(0,8)});continue;}
+   const hash=compiled.hash.slice(0,32),stored=storeEngineScene(this.db.folder,this.root,compiled,join(this.db.folder,'Media/Drafts',hash));
+   const size={width:entry.width??settings.width,height:entry.height??settings.height,fps:entry.fps??settings.fps,durationInFrames:entry.durationInFrames??Math.round((entry.fps??settings.fps)*5)};
+   this.publishEvent('scene.draft',{hash,source:{config:{assetId:'draft_'+hash,revisionId:compiled.hash,...size,chunks:compiled.chunks,props:entry.props,transparent:!!entry.transparent,beats:{}},...stored}});
+   recorded[normalizeScope(entry.path)+'#'+(entry.id??'')]=hash;drafts.push({hash,name:String(entry.id??entry.path),...size});results.push({id:entry.id,path:entry.path,compiles:true,preview:hash});
+  }
+  this.db.setMeta('turn-drafts:'+turnId,JSON.stringify(recorded));
+  if(drafts.length){const event=this.db.activityEvent(turnId,{id:'draft:'+callId,kind:'action',tool:'check_outputs',text:drafts.length>1?'Previewing the scenes':'Previewing the scene',status:'complete',drafts,...(scope?.parent?{parent:scope.parent}:{})});this.publishEvent('ai.activity',{turnId,event});}
+  return{checked:results,note:'Compiled without running anything. The user sees a live preview; if it fails while playing, the error arrives in your next step.'};
  }
  private async publish(result:ProcessResult,turnId:string,callId:string){
   const publication=await publishWorkspace(this.db,result,turnId,this.options.ffprobe);

@@ -10,7 +10,7 @@ import {requestIdentity} from './request-identity';
 import {installVectorSearch,saveVectors,semanticSearch,fuseSearch,type SearchHit} from './vectors';
 import {migrate,compactActivityEvent} from './migrate';
 import Database from 'better-sqlite3';
-import { randomUUID } from 'node:crypto';
+import { randomUUID,createHash } from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,renameSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {emptyTimeline,TimelineSchema,diff,type TimelineDocument,type Op} from '@dream/timeline';
@@ -80,6 +80,17 @@ export class ProjectDB {
  /** Saves a turn's summary (status, phase, tasks, changes). Its events live in activity_events. */
  private saveActivity(turnId:string,activity:TurnActivity){const {events:_events,...rest}=activity;this.setMeta('turn_activity:'+turnId,JSON.stringify(rest));}
  activityPage(turnId:string,before?:number,limit=200){return(this.db.prepare('SELECT json FROM activity_events WHERE turn_id=? AND sequence<? ORDER BY sequence DESC LIMIT ?').all(turnId,before??Number.MAX_SAFE_INTEGER,Math.min(500,limit)) as {json:string}[]).map(r=>JSON.parse(r.json)).reverse();}
+ /** Records a scene error once per scene revision (or draft) and message; repeats only bump the count. */
+ recordSceneError(error:{assetId?:string;revisionId?:string;draft?:string;turnId?:string;message:string;stack?:string;location?:string}){
+  const id=createHash('sha256').update(JSON.stringify([error.revisionId??error.draft??error.assetId,error.message])).digest('hex').slice(0,32),now=new Date().toISOString();
+  this.db.prepare('INSERT INTO scene_errors(id,asset_id,revision_id,draft,turn_id,message,stack,location,count,first_at,last_at) VALUES(?,?,?,?,?,?,?,?,1,?,?) ON CONFLICT(id) DO UPDATE SET count=count+1,last_at=excluded.last_at,location=COALESCE(excluded.location,location),turn_id=COALESCE(excluded.turn_id,turn_id)').run(id,error.assetId??null,error.revisionId??null,error.draft??null,error.turnId??null,error.message.slice(0,2000),error.stack?.slice(0,8000)??null,error.location??null,now,now);
+  return id;
+ }
+ /** Errors reported for the given scene revisions or drafts, newest first. */
+ sceneErrors(filter:{revisions?:string[];drafts?:string[]}){
+  const revisions=filter.revisions??[],drafts=filter.drafts??[];if(!revisions.length&&!drafts.length)return[];
+  return this.db.prepare(`SELECT asset_id AS assetId,revision_id AS revisionId,draft,message,location,count FROM scene_errors WHERE revision_id IN (${revisions.map(()=>'?').join(',')||"''"}) OR draft IN (${drafts.map(()=>'?').join(',')||"''"}) ORDER BY last_at DESC LIMIT 20`).all(...revisions,...drafts) as {assetId?:string;revisionId?:string;draft?:string;message:string;location?:string;count:number}[];
+ }
  /** The text of one published file change, read from content-addressed blobs (publications store only hashes). */
  fileDiff(beforeHash?:string,afterHash?:string,maxChars=120000){const text=(hash?:string)=>hash?Buffer.from(this.blobs.get(hash),'base64').toString('utf8'):'';const before=text(beforeHash),after=text(afterHash);return{before:before.slice(0,maxChars),after:after.slice(0,maxChars),truncated:before.length>maxChars||after.length>maxChars};}
  recordUsage(event:{requestId:string;turnId?:string;model:string;purpose?:string;phase?:string;parent?:string;usage?:any;costUsd?:number;durationMs?:number;stopReason?:string}){const u=event.usage??{};this.db.prepare('INSERT OR IGNORE INTO ai_usage(request_id,turn_id,model,purpose,phase,parent,input_tokens,cache_read,cache_write,output_tokens,cost_usd,duration_ms,stop_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(event.requestId,event.turnId??null,event.model,event.purpose??null,event.phase??null,event.parent??null,u.input_tokens??0,u.cache_read_input_tokens??0,u.cache_creation_input_tokens??0,u.output_tokens??0,event.costUsd??0,event.durationMs??null,event.stopReason??null,new Date().toISOString());}
