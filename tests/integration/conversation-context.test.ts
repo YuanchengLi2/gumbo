@@ -74,3 +74,19 @@ it('keeps an unfinished or latest signed exchange unchanged instead of breaking 
   expect(compactConversation(db,'turn',messages,10)).toEqual(messages);
  }finally{db.close();}
 });
+
+it('compacts a 30-step Haiku worker at most twice and never sends it more than 96K tokens',async()=>{
+ const {infer}=await import('../../packages/orchestrator/src/inference');const {estimateTokens}=await import('../../packages/orchestrator/src/context-budget');
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-haiku-worker-')),'Worker');try{
+  const sizes:number[]=[];let counts=0;const real=(body:any)=>Math.round(estimateTokens({system:body.system,messages:body.messages,tools:body.tools})*.9);
+  const fetcher:typeof fetch=async(url,init)=>{const body=JSON.parse(String(init?.body));if(String(url).endsWith('/count-tokens')){counts++;return Response.json({input_tokens:real(body)});}const tokens=real(body);sizes.push(tokens);return Response.json({content:[{type:'tool_use',id:'read'+sizes.length,name:'read_file',input:{path:'src/shot'+sizes.length+'.tsx'}}],stop_reason:'tool_use',usage:{input_tokens:tokens,output_tokens:200}});};
+  const messages:any[]=[{role:'user',content:'Build the seven shots.'}];
+  for(let step=0;step<30;step++){
+   const response=await infer({db,config:{url:'http://local-fixture',token:'fixture'},resume:0,input:{model:'claude-haiku-5-5',system:'Worker',messages,tools:[],turnId:'turn',purpose:'worker',phase:'main:worker:call:shots',max_tokens:16384}},{fetch:fetcher});
+   messages.push({role:'assistant',content:response.content},{role:'user',content:[{type:'tool_result',tool_use_id:response.content[0].id,content:`// shot ${step}\n`+'export const frame=interpolate(f,[0,30],[0,1]);\n'.repeat(300)}]});
+  }
+  expect(sizes).toHaveLength(30);expect(Math.max(...sizes)).toBeLessThanOrEqual(96000);
+  const compactions=(db.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type='ai.context_compacted'").get() as {n:number}).n;
+  expect(compactions).toBeGreaterThan(0);expect(compactions).toBeLessThanOrEqual(2);expect(counts).toBeLessThan(10);
+ }finally{db.close();}
+});

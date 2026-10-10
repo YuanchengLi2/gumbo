@@ -5,7 +5,8 @@ import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,Task
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport,type Publication} from './code-agent';
 import {workerPrompt,workerScope} from './code-prompt';
 import {infer,InferenceError} from './inference';
-import {intelligence,outputAllowance} from './intelligence';
+import {intelligence,outputAllowance,taskBudget,type WorkerMode} from './intelligence';
+import {normalizeScope} from './code-tools';
 import {routeCodeRequest,type RequestIntent} from './routing';
 import {approvesPlan} from '@dream/contracts';
 export {approvesPlan};
@@ -62,11 +63,14 @@ export class Director {
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds);this.chooseEffort(turnId,effort);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
  /** One inference. The first substantive request of the user-facing phase carries the bounded source map; workers and consultations work from briefs. */
- async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',media=true){
+ async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',media=true,extra:{workerMode?:WorkerMode}={}){
   if(media&&purpose!=='routing'&&turnId&&!(messages as any[]).some(m=>m.role==='assistant'||m.dreamSource==='media')){const blocks=await initialMediaContext(this.db,turnId,this.controller?.signal);if(blocks.length)(messages as any[]).push({role:'user',dreamSource:'media',content:blocks});}
   // Effort is pinned per role for the whole conversation: changing it mid-conversation resets the prompt cache.
-  const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,0,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined);
-  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:purpose==='consultation'?16384:outputAllowance(profile)},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:this.publish});
+  // The lead thinks harder after repeated worker failures; a phase that spent a whole response thinking steps its effort down.
+  const failures=purpose==='lead'&&turnId?Number(this.db.getMeta('worker-failures:'+turnId)??0):0,lower=turnId?Number(this.db.getMeta(`effort-override:${turnId}:${phase}`)??0):0;
+  const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,failures,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
+  // The lead waits on workers for many minutes: its history uses the one-hour cache so it is not re-written after each wait.
+  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:purpose==='consultation'?16384:outputAllowance(profile),...(purpose==='lead'?{cacheTtl:'1h' as const}:{}),...(taskBudget(purpose,extra.workerMode)?{taskBudget:taskBudget(purpose,extra.workerMode)}:{})},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:this.publish});
  }
  private signal(){return this.controller?.signal??new AbortController().signal;}
  // The composer's effort choice holds for the whole request (changing it mid-conversation would reset the prompt cache).
@@ -104,9 +108,12 @@ export class Director {
   const signal=this.signal(),builds=tasks.filter(t=>t.mode!=='research').length;
   const run=async(task:WorkerTask):Promise<WorkerReport>=>{
    const phase=`${leadPhase}:worker:${callId}:${task.id}`,id=`worker:${callId}:${task.id}`,research=task.mode==='research',canPropose=!research&&builds===1;
+   // Timeline integration only edits project.json and publishes; it needs little deliberation.
+   const workerMode:WorkerMode=research?'research':task.publish&&(task.writes??[]).every(w=>normalizeScope(w)==='project.json')?'publish':'build';
    this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:'running',detail:research?'research':'build'});
    try{
-    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:`Task (${research?'research':'build'}): ${task.title}\n\n${task.brief}\n\n${workerScope(task,canPropose)}`,model:models.worker,role:'worker',system:workerPrompt,research,canPropose,writes:research?[]:task.writes,canPublish:!research&&task.publish,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,false)});
+    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:`Task (${research?'research':'build'}): ${task.title}\n\n${task.brief}\n\n${workerScope(task,canPropose)}`,model:models.worker,role:'worker',system:workerPrompt,research,canPropose,writes:research?[]:task.writes,canPublish:!research&&task.publish,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,false,{workerMode})});
+    this.db.setMeta('worker-failures:'+turnId,outcome.status==='complete'?'0':String(Number(this.db.getMeta('worker-failures:'+turnId)??0)+1));
     const saved=this.db.loadState<any>(`code-agent:${turnId}:${phase}`),publication=Object.values(saved?.completed??{}).map((r:any)=>r?.publication as Publication|undefined).filter(Boolean).at(-1);
     this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:outcome.status==='complete'?'complete':'failed',detail:outcome.status==='blocked'?outcome.summary:research?'research':'build'});
     return{taskId:task.id,title:task.title,status:outcome.status,summary:outcome.summary,nextAction:outcome.status==='blocked'?outcome.nextAction:undefined,publication};

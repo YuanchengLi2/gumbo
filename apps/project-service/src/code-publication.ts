@@ -1,7 +1,7 @@
 import {readFileSync,mkdirSync,copyFileSync,existsSync,writeFileSync,renameSync} from 'node:fs';
 import {join,extname} from 'node:path';
 import {randomUUID} from 'node:crypto';
-import {WorkspaceDocumentSchema,type PublicationReceipt,type ProcessResult,type SourceChange} from '@dream/contracts';
+import {WorkspaceDocumentSchema,lineDelta,type PublicationReceipt,type ProcessResult,type SourceChange} from '@dream/contracts';
 import {AssetSchema,type Asset} from '@dream/footage';
 import {resolve as resolveTimeline} from '@dream/timeline';
 import type {ProjectDB} from '@dream/project-db';
@@ -54,12 +54,13 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  const bind=(clip:{assetId:string;srcIn:number;srcOut:number})=>{clip.assetId=outputs.get(clip.assetId)?.id??refreshed.get(clip.assetId)?.id??clip.assetId;const asset=all.get(clip.assetId);if(!asset)throw new Error(`Unknown asset ${clip.assetId}.`);if(clip.srcOut<=clip.srcIn||asset.kind!=='image'&&clip.srcOut>asset.durationSec+1/Math.max(asset.fps,30))throw new Error(`Source range exceeds ${asset.filename}.`);};
  timeline.spine.forEach(bind);timeline.music.forEach(bind);timeline.attached.forEach(item=>{if(item.source)bind(item.source);});
  const ids=[...timeline.spine,...timeline.attached,...timeline.music].map(i=>i.id);if(new Set(ids).size!==ids.length)throw new Error('Timeline item IDs must be unique.');
- const resolved=resolveTimeline(timeline,{...db.footage(),assets:[...all.values()]});if(!Number.isFinite(resolved.durationSec)||resolved.warnings.some(w=>w.code==='anchor_removed'))throw new Error('The timeline has invalid timing or missing anchors.');
+ const resolved=resolveTimeline(timeline,{...db.footage(),assets:[...all.values()]});const lost=resolved.warnings.filter(w=>w.code==='anchor_removed');
+ if(!Number.isFinite(resolved.durationSec)||lost.length)throw new Error('The timeline has invalid timing or missing anchors'+(lost.length?': '+lost.slice(0,8).map(w=>`${(w as any).itemId??'item'} (${w.message})`).join('; ')+'. Give each attached item a valid start anchor and a positive duration.':'.'));
  const snapshot=db.workspace.capture(root),previous=db.workspace.snapshot(db.head());
  if(JSON.stringify(timeline)===JSON.stringify(db.timeline())&&snapshot.hash===previous)return;
  const changes=timelineChanges(db.timeline(),timeline,id=>all.get(id)?.filename??id),oldFiles=previous?db.workspace.files(previous):{};
  const files:SourceChange[]=[];
- for(const path of new Set([...Object.keys(oldFiles),...Object.keys(snapshot.files)]))if(oldFiles[path]!==snapshot.files[path]){const before=oldFiles[path]?Buffer.from(db.blobs.get(oldFiles[path]),'base64').toString('utf8'):'',after=snapshot.files[path]?Buffer.from(db.blobs.get(snapshot.files[path]),'base64').toString('utf8'):'';files.push({path,beforeHash:oldFiles[path],afterHash:snapshot.files[path],before:before.slice(0,6000),after:after.slice(0,6000),truncated:before.length>6000||after.length>6000});}
+ for(const path of new Set([...Object.keys(oldFiles),...Object.keys(snapshot.files)]))if(oldFiles[path]!==snapshot.files[path]){const before=oldFiles[path]?Buffer.from(db.blobs.get(oldFiles[path]),'base64').toString('utf8'):'',after=snapshot.files[path]?Buffer.from(db.blobs.get(snapshot.files[path]),'base64').toString('utf8'):'';files.push({path,beforeHash:oldFiles[path],afterHash:snapshot.files[path],...lineDelta(before,after)});}
  return db.db.transaction(()=>{
   if(db.head()!==candidate.baseVersionId)throw new Error('The project changed while outputs were being inspected.');
   for(const asset of [...outputs.values(),...refreshed.values()])db.saveAsset(asset);
@@ -68,7 +69,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
   // a previous run's scratch outputs to rebuild the edit.
   const canonical=JSON.stringify({...candidate,baseVersionId:versionId,timeline,outputs:[]},null,2);
   snapshot.files['project.json']=db.blobs.put(Buffer.from(canonical).toString('base64'));
-  const documentChange=files.find(file=>file.path==='project.json');if(documentChange){documentChange.afterHash=snapshot.files['project.json'];documentChange.after=canonical.slice(0,6000);documentChange.truncated=documentChange.before.length>=6000||canonical.length>6000;}
+  const documentChange=files.find(file=>file.path==='project.json');if(documentChange){documentChange.afterHash=snapshot.files['project.json'];Object.assign(documentChange,lineDelta(documentChange.beforeHash?Buffer.from(db.blobs.get(documentChange.beforeHash),'base64').toString('utf8'):'',canonical));}
   snapshot.hash=db.blobs.put(JSON.stringify(snapshot.files));
   db.workspace.associate(versionId,snapshot.hash);db.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(versionId,branch);db.db.prepare('DELETE FROM actions WHERE branch_id=? AND undone=1').run(branch);
   db.workspace.queueRestore(versionId);

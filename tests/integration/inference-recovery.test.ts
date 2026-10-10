@@ -60,3 +60,20 @@ it('recovers the original completed response after a lost connection without ano
  expect(response.content).toEqual(result.content);expect(generations).toBe(1);expect(polls).toBe(2);expect(new Set(ids).size).toBe(1);expect(db.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type='ai.usage'").get()).toMatchObject({n:1});
  }finally{db.close();}
 });
+
+it('never raises the cap after a thinking-only cut-off, doubles once after visible output, and keeps raised caps to one phase',async()=>{
+ const db=fixture();try{const haiku={...input,model:'claude-haiku-5-5',purpose:'worker',max_tokens:16384};let sizes:number[]=[];
+  const thinking={content:[{type:'thinking',thinking:'planning',signature:'sig'}],stop_reason:'max_tokens',usage:{output_tokens:16384}};
+  await expect(infer({db,config,resume:0,input:{...haiku,phase:'lead:worker:c:a'}},{fetch:async(_u,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(thinking);}})).rejects.toMatchObject({code:'truncated',thinkingOnly:true});
+  expect(sizes).toEqual([16384]);
+  sizes=[];let n=0;
+  await expect(infer({db,config,resume:0,input:{...haiku,phase:'lead:worker:c:b',messages:[{role:'user',content:'Write b'}]}},{fetch:async(_u,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);n++;return Response.json({content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}});}})).rejects.toMatchObject({code:'truncated'});
+  expect(sizes).toEqual([16384,32768]);
+  // A parallel worker never inherits another phase's raised allowance.
+  sizes=[];await infer({db,config,resume:0,input:{...haiku,phase:'lead:worker:c:c',messages:[{role:'user',content:'Write c'}]}},{fetch:async(_u,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(result);}});
+  expect(sizes).toEqual([16384]);
+  // After a complete response with more room, the raised allowance is cleared.
+  sizes=[];n=0;await infer({db,config,resume:0,input:{...haiku,phase:'lead:worker:c:d',messages:[{role:'user',content:'Write d'}]}},{fetch:async(_u,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(n++===0?{content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}}:result);}});
+  expect(sizes).toEqual([16384,32768]);expect(db.getMeta('output_capacity:turn:claude-haiku-5-5:lead:worker:c:d')||'').toBe('');
+ }finally{db.close();}
+});

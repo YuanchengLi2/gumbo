@@ -13,9 +13,10 @@ export function accountScope(connection:ProviderConnection){
 }
 
 /** Thinking is replayable only against the exact prefix that produced it. Local history is never rewritten. */
-export function providerSession(db:ProjectDB,connection:ProviderConnection,input:{turnId?:string;purpose:string;model:string;system:string;tools:unknown[];messages:any[];profile?:unknown;tool_choice?:unknown}){
+export function providerSession(db:ProjectDB,connection:ProviderConnection,input:{turnId?:string;purpose:string;model:string;system:string;tools:unknown[];messages:any[];profile?:unknown;tool_choice?:unknown;phase?:string}){
  const account=accountScope(connection),configuration=hash({gateway:connection.url,account,model:input.model,system:input.system,tools:input.tools,profile:input.profile,tool_choice:input.tool_choice});
- const key=`provider-session:${account}:${input.turnId??'standalone'}:${input.purpose}`;
+ // One session per conversation phase: parallel workers share a purpose but are separate conversations.
+ const key=`provider-session:${account}:${input.turnId??'standalone'}:${input.purpose}:${input.phase??'main'}`;
  const normalized:Message[]=[];
  const binding=(messages:Message[],content:any[])=>hash({configuration,messages,assistant:content});
  for(const message of input.messages){

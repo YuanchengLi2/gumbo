@@ -9,7 +9,10 @@ export type ProcessRequest=z.infer<typeof ProcessRequestSchema>;
 export type ProcessResult={id:string;status:'complete'|'failed'|'cancelled'|'interrupted';exitCode:number|null;startedAt:string;finishedAt:string;output:string;logPath:string;isolation:'windows-appcontainer';commandHash:string};
 export type ProcessRunner=(request:ProcessRequest,signal:AbortSignal,onOutput:(text:string)=>void)=>Promise<ProcessResult>;
 export type SourceSnapshot={hash:string;files:Record<string,string>};
-export type SourceChange={path:string;beforeHash?:string;afterHash?:string;before:string;after:string;truncated:boolean};
+// Publications record which files changed and by how many lines; the text itself comes from file_diff on demand.
+export type SourceChange={path:string;beforeHash?:string;afterHash?:string;added:number;removed:number};
+/** Lines added and removed between two texts (multiset comparison, order-insensitive; exact enough for a change summary). */
+export function lineDelta(before:string,after:string){const counts=new Map<string,number>();for(const line of before?before.split('\n'):[])counts.set(line,(counts.get(line)??0)+1);let added=0;for(const line of after?after.split('\n'):[]){const n=counts.get(line)??0;if(n)counts.set(line,n-1);else added++;}let removed=0;for(const n of counts.values())removed+=n;return{added,removed};}
 export type PublicationReceipt={id:string;versionId:string;baseVersionId:string;sourceSnapshot:string;processId:string;assets:string[];refreshed?:string[];changes:string[];files:SourceChange[];documentHash:string};
 /** A worker's write boundary: path prefixes (empty means any authored file) and whether it owns project.json. */
 export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string};

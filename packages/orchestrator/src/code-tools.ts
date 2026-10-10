@@ -4,7 +4,7 @@ import {TaskUpdateSchema,TaskPlanSchema,FileOperationSchema} from '@dream/contra
 import {DecisionInput} from './project-memory';
 import {engineBudgets} from '@dream/config';
 const path=z.string().min(1).max(2000);
-const WorkerTask=z.object({id:z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),title:z.string().trim().min(1).max(120),brief:z.string().min(1).max(16000),mode:z.enum(['build','research']).default('build'),writes:z.array(z.string().min(1).max(300)).max(20).default([]),publish:z.boolean().default(false)});
+const WorkerTask=z.object({id:z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),title:z.string().trim().min(1).max(120),brief:z.string().min(1).max(24000),mode:z.enum(['build','research']).default('build'),writes:z.array(z.string().min(1).max(300)).max(20).default([]),publish:z.boolean().default(false)});
 export const codeSchemas={
  remember_decision:DecisionInput,
  consult_director:z.object({question:z.string().min(1).max(12000)}),
@@ -53,9 +53,17 @@ export function toolsFor(role:AgentRole,options:ToolOptions={}){
  return(Object.entries(codeSchemas) as [ToolName,z.ZodTypeAny][]).filter(([name])=>allowed.has(name)).map(([name,schema])=>({name,description:descriptions[name],input_schema:(()=>{const json=z.toJSONSchema(schema,{target:'draft-7',io:'input'}) as any;if(!unlabeled.has(name))json.properties={...json.properties,progress:{type:'string',maxLength:200,description:'A specific user-visible editing action based on this step, without implementation filenames or coding terms. Example: Match the caption timing to the first voiceover line.'}};return json;})()}));
 }
 export function codeTools(readOnly=false,canConsult=false){return toolsFor(readOnly?'readonly':'solo',{canConsult});}
+// Over-long prose (a summary, a brief, a search query) is shortened instead of failing the whole call. Paths, code and IDs are never trimmed.
+const prose=new Set(['summary','finding','query','brief','title','question','reason','handoff','nextAction','progress','assessment']);
+function trimProse(value:any,schema:any,key?:string):any{
+ if(typeof value==='string'){const max=schema?.maxLength??schema?.anyOf?.find((s:any)=>s?.maxLength)?.maxLength;return key&&prose.has(key)&&max&&value.length>max?value.slice(0,max-1)+'…':value;}
+ if(Array.isArray(value)){const items=schema?.items??schema?.anyOf?.find((s:any)=>s?.items)?.items;return value.map(v=>trimProse(v,items,key));}
+ if(value&&typeof value==='object'){const props=schema?.properties??schema?.anyOf?.find((s:any)=>s?.properties)?.properties??{};return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,trimProse(v,props[k],k)]));}
+ return value;
+}
 export function parseCodeTool(name:string,input:unknown,readOnly=false,allowed?:Set<string>){
  if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&(sideEffects.has(name as ToolName)||name==='delegate')))throw new Error('This capability is unavailable in the current phase.');
- const schema=codeSchemas[name as ToolName];const parsed=schema.parse(normalizeOptionalNulls(input,z.toJSONSchema(schema,{target:'draft-7',io:'input'})));
+ const schema=codeSchemas[name as ToolName],json=z.toJSONSchema(schema,{target:'draft-7',io:'input'});const parsed=schema.parse(trimProse(normalizeOptionalNulls(input,json),json));
  const progress=!unlabeled.has(name)&&input&&typeof input==='object'?(input as any).progress:undefined;return progress==null?parsed:{...parsed,progress:z.string().trim().min(1).max(200).parse(progress)};
 }
 /** Parallel build workers must not share write scopes, edit the timeline document or publish. Research workers never write. */

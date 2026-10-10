@@ -1,14 +1,42 @@
 import type Database from 'better-sqlite3';
 import {existsSync} from 'node:fs';
+import {lineDelta} from '@dream/contracts';
 
 // Every step is idempotent, so a partially applied or re-run upgrade (restored backup, older user_version) cannot fail on existing objects.
 const addColumn=(table:string,column:string,definition:string)=>(db:Database.Database)=>{if(!(db.prepare(`PRAGMA table_info(${table})`).all() as {name:string}[]).some(c=>c.name===column))db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);};
 export function migrate(db:Database.Database,initialSchema:string){
  const current=db.pragma('user_version',{simple:true}) as number;
- const migrations:(string|((db:Database.Database)=>void))[]=[initialSchema,`CREATE TABLE IF NOT EXISTS embeddings(id TEXT NOT NULL,asset_id TEXT NOT NULL,model_id TEXT NOT NULL,dimensions INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(id,model_id)); CREATE INDEX IF NOT EXISTS embeddings_model ON embeddings(model_id,dimensions);`,addColumn('requests','identity','TEXT'),`CREATE TABLE IF NOT EXISTS context_chunks(id TEXT PRIMARY KEY,kind TEXT NOT NULL,owner TEXT NOT NULL,text TEXT NOT NULL,hash TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS context_fts USING fts5(id UNINDEXED,text);`, engineSchema,decisionSchema,workflowIndexSchema,observationIndexSchema,`INSERT INTO meta(key,value) VALUES('timeline_features','manual-v1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;`,addColumn('messages','attachments',"TEXT NOT NULL DEFAULT '[]'"), workspaceSchema];
+ const migrations:(string|((db:Database.Database)=>void))[]=[initialSchema,`CREATE TABLE IF NOT EXISTS embeddings(id TEXT NOT NULL,asset_id TEXT NOT NULL,model_id TEXT NOT NULL,dimensions INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(id,model_id)); CREATE INDEX IF NOT EXISTS embeddings_model ON embeddings(model_id,dimensions);`,addColumn('requests','identity','TEXT'),`CREATE TABLE IF NOT EXISTS context_chunks(id TEXT PRIMARY KEY,kind TEXT NOT NULL,owner TEXT NOT NULL,text TEXT NOT NULL,hash TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS context_fts USING fts5(id UNINDEXED,text);`, engineSchema,decisionSchema,workflowIndexSchema,observationIndexSchema,`INSERT INTO meta(key,value) VALUES('timeline_features','manual-v1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;`,addColumn('messages','attachments',"TEXT NOT NULL DEFAULT '[]'"), workspaceSchema, activitySchema, moveActivityEvents];
  if(current>migrations.length)throw new Error('This project was saved by a newer Dream version. Update Dream before opening it.');
  if(current>0&&current<migrations.length){const backup=db.name+`.pre-engine-v${current}.sqlite`;if(!existsSync(backup))db.prepare('VACUUM INTO ?').run(backup);}
  for(let i=current;i<migrations.length;i++)db.transaction(()=>{const step=migrations[i];if(typeof step==='string')db.exec(step);else step(db);db.pragma(`user_version=${i+1}`);})();
+}
+
+// Activity events are rows, so a stream update writes one small row instead of re-serializing the whole turn.
+const activitySchema=`
+CREATE TABLE IF NOT EXISTS activity_events(turn_id TEXT NOT NULL,id TEXT NOT NULL,sequence INTEGER NOT NULL,json TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(turn_id,id));
+CREATE INDEX IF NOT EXISTS activity_turn_sequence ON activity_events(turn_id,sequence);
+CREATE TABLE IF NOT EXISTS ai_usage(request_id TEXT PRIMARY KEY,turn_id TEXT,model TEXT NOT NULL,purpose TEXT,phase TEXT,parent TEXT,input_tokens INTEGER NOT NULL DEFAULT 0,cache_read INTEGER NOT NULL DEFAULT 0,cache_write INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL DEFAULT 0,cost_usd REAL NOT NULL DEFAULT 0,duration_ms INTEGER,stop_reason TEXT,created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS ai_usage_turn ON ai_usage(turn_id);
+`;
+// Existing turns move their events into rows; the saved turn keeps only its status, phase, tasks and changes.
+function moveActivityEvents(db:Database.Database){
+ const insert=db.prepare('INSERT OR IGNORE INTO activity_events(turn_id,id,sequence,json,updated_at) VALUES(?,?,?,?,?)'),update=db.prepare('UPDATE meta SET value=? WHERE key=?');
+ for(const row of db.prepare("SELECT key,value FROM meta WHERE key LIKE 'turn_activity:%'").all() as {key:string;value:string}[]){
+  let value:any;try{value=JSON.parse(row.value);}catch{continue;}
+  if(!Array.isArray(value?.events))continue;const turnId=row.key.slice('turn_activity:'.length);
+  value.events.forEach((event:any,index:number)=>{if(event?.id)insert.run(turnId,String(event.id),Number.isFinite(event.sequence)?event.sequence:index,JSON.stringify(compactActivityEvent(event)),String(event.updatedAt??new Date().toISOString()));});
+  delete value.events;update.run(JSON.stringify(value),row.key);
+ }
+}
+/** Activity rows keep what the stream shows. Command output and details are bounded; file changes keep hashes and
+ * line counts, and the text is read on demand through file_diff. */
+export function compactActivityEvent<T extends Record<string,any>>(event:T):T{
+ const out:any={...event};
+ if(typeof out.output==='string'&&out.output.length>4000)out.output=out.output.slice(-4000);
+ if(typeof out.detail==='string'&&out.detail.length>1000)out.detail=out.detail.slice(0,1000);
+ if(Array.isArray(out.files))out.files=out.files.map(({before,after,truncated:_truncated,...file}:any)=>({...file,...(typeof file.added!=='number'?lineDelta(String(before??''),String(after??'')):{})}));
+ return out;
 }
 
 const engineSchema=`

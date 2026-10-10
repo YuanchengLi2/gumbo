@@ -32,6 +32,26 @@ function archive(db:ProjectDB,turn:string,messages:Message[]){
 }
 const describe=(entry:Entry,turn:string)=>({id:entry.id,receipt:prefix(turn)+entry.id,toolCallId:entry.toolCallId,name:entry.name,status:entry.result.is_error?'failed':'succeeded',excerpt:textOf(entry.result.content).slice(0,1000),truncated:textOf(entry.result.content).length>1000});
 
+/** Older user messages that stay authoritative after compaction: real instructions and feedback, the two latest
+ * pieces of director advice, and only the newest project-state snapshot. Engine nudges are dropped, and media images
+ * shown at the start become a short note, so the prefix shrinks instead of growing with every compaction. */
+function keptDirections(older:Message[],tail:Message[],budget:number,cleanMessage:(m:Message)=>Message){
+ const kept:Message[]=[],tailStatus=tail.some(m=>m.dreamSource==='media-status');let status=false,advice=0,media=false,used=0;
+ for(let m of [...older].reverse()){
+  if(m.role!=='user'||isSnapshot(m)||Array.isArray(m.content)&&m.content.some((b:any)=>b.type==='tool_result')||m.dreamSource==='nudge')continue;
+  if(m.dreamSource==='media-status'){if(tailStatus||status)continue;status=true;}
+  else if(m.dreamSource==='media'||m.dreamSource==='media-note'){
+   if(media)continue;media=true;
+   const images=Array.isArray(m.content)?m.content.filter((b:any)=>b.type==='image').length:0;
+   m={role:'user',dreamSource:'media-note',content:m.dreamSource==='media-note'?m.content:'Earlier in this request '+images+' frames of the project media were shown. They are not repeated here; use view_media to look again.'};
+  }
+  else if(m.dreamSource==='advice'){if(advice>=2)continue;advice++;}
+  const size=bytes(cleanMessage(m));if(kept.length&&used+size>budget)continue;used+=size;kept.push(cleanMessage(m));
+ }
+ return kept.reverse();
+}
+const previousDigest=(older:Message[])=>{for(const m of [...older].reverse()){if(typeof m.content!=='string')continue;try{const value=JSON.parse(m.content);if(value?.notice?.startsWith('Older tool exchanges were compacted.'))return value;}catch{}}};
+
 type Plan={cut:number;prefix:Message[]};
 /** Choose a compaction boundary at complete exchange boundaries. The prefix replaces messages before cut. */
 function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:number,keepMetadata:boolean):Plan|undefined{
@@ -42,11 +62,13 @@ function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:
  for(let keep=Math.max(minimum,Math.min(3,assistantIndices.length-1));keep>=minimum;keep--){
   const cut=keep?assistantIndices[assistantIndices.length-keep]:last!+2,older=messages.slice(1,cut);
   // Only complete results enter the archive. The entire latest assistant message stays verbatim.
-  const entries=archive(db,turn,older);
-  const directions=older.filter(m=>m.role==='user'&&!isSnapshot(m)&&!(Array.isArray(m.content)&&m.content.some(b=>b.type==='tool_result'))).map(cleanMessage);
-  const decisions=older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[]).slice(-8).map(t=>t.slice(0,1500));
-  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:entries.length,earlierCallsOmitted:Math.max(0,entries.length-20),recentReceipts:entries.slice(-20).map(entry=>describe(entry,turn)),recentAssistantNotes:decisions};
-  const tail=messages.slice(cut),working=workingContext(messages,tail,targetBytes*.4);
+  const entries=archive(db,turn,older),tail=messages.slice(cut),earlier=previousDigest(older);
+  const directions=keptDirections(older,tail,targetBytes*.15,cleanMessage);
+  const decisions=[...earlier?.recentAssistantNotes??[],...older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[])].slice(-8).map((t:string)=>t.slice(0,1500));
+  // A later compaction carries the earlier summary forward instead of losing it.
+  const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length;
+  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-20),recentReceipts:receipts.slice(-20),recentAssistantNotes:decisions};
+  const working=workingContext(messages,tail,targetBytes*.3);
   plan={cut,prefix:[cleanMessage(messages[0]),{role:'user',...(keepMetadata?{dreamSource:'snapshot' as const}:{}),content:JSON.stringify(digest)},...directions,...(working?[cleanMessage(working)]:[])]};
   if(bytes([...plan.prefix,...tail])<=targetBytes)break;
  }
@@ -69,9 +91,12 @@ export function providerView(db:ProjectDB,turn:string,scope:string,messages:Mess
  const valid=saved&&saved.cut<=messages.length&&hash(messages.slice(0,saved.cut).map(clean))===saved.prefixHash;
  const view=valid?[...saved!.prefix,...messages.slice(saved!.cut).map(m=>({...m}))]:messages.map(m=>({...m}));
  if(compactToBytes===undefined||bytes(view)<=compactToBytes)return view;
- const plan=planCompaction(db,turn,messages,compactToBytes,true);if(!plan)return view;
- db.db.transaction(()=>{db.saveState(key,{cut:plan.cut,prefixHash:hash(messages.slice(0,plan.cut).map(clean)),prefix:plan.prefix});db.event('ai.context_compacted',{turnId:turn,scope,beforeBytes:bytes(messages),afterBytes:bytes([...plan.prefix,...messages.slice(plan.cut)]),cut:plan.cut});})();
- return [...plan.prefix,...messages.slice(plan.cut).map(m=>({...m}))];
+ // Plan on the current view: the existing summary is carried forward and only newer exchanges are archived.
+ // A view index past the saved prefix is a history index shifted by the prefix, so the new boundary maps back exactly.
+ const plan=planCompaction(db,turn,view,compactToBytes,true);if(!plan)return view;
+ const cut=valid?plan.cut+saved!.cut-saved!.prefix.length:plan.cut;
+ db.db.transaction(()=>{db.saveState(key,{cut,prefixHash:hash(messages.slice(0,cut).map(clean)),prefix:plan.prefix});db.event('ai.context_compacted',{turnId:turn,scope,beforeBytes:bytes(view),afterBytes:bytes([...plan.prefix,...messages.slice(cut)]),cut});})();
+ return [...plan.prefix,...messages.slice(cut).map(m=>({...m}))];
 }
 
 const schemas={
