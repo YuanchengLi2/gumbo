@@ -22,12 +22,14 @@ import {inspectMedia} from './media-evidence';
 import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
 import {importResources} from './resource-import';
+import {workerRenderer} from './sound-outputs';
+import {sfxCatalog} from '@dream/procedural-media';
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
-export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:false,sfx:false,voiceover:false,commands:true});
+export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
 export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
@@ -45,7 +47,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  /** Parallel workers share one workspace: commands and publication run one at a time (dependency installs, lockfiles, project.json). */
  private exclusive<T>(work:()=>Promise<T>):Promise<T>{const next=this.queue.then(work,work);this.queue=next.catch(()=>{});return next;}
  async preparePackages(signal:AbortSignal){await this.initialize();await prepareProjectPackages(this.db,this.options.run,this.publishEvent,signal);this.refreshContext();this.db.setMeta('workspace_python_packages',JSON.stringify(workspaceEnvironment(this.root).pythonPackages));this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);}
- constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal)=>Promise<void>;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
+ constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal)=>Promise<void>;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
  async initialize(){
   this.db.workspace.restorePending();this.db.workspace.syncPublishedDocument();for(const dir of ['src','output','context/transcripts','.logs','.cache'])mkdirSync(join(this.root,dir),{recursive:true});
   if(!existsSync(join(this.root,'project.json'))){this.write('project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));this.write('package.json',JSON.stringify({name:'dream-project',private:true,type:'module',scripts:{}},null,2));this.write('requirements.txt','');this.write('README.md','# Dream workspace\n\nEdit project.json or source files, then call publish_project to validate and publish. Timeline assets retain their IDs; live scenes are declared in outputs with id, path, kind: scene, width, height, fps and durationInFrames. Reference scenes using output:<id>. See context/live-scenes.md. Call publish_project when ready; no render command is needed. Packages and tools belong here. Context files are refreshed from Dream.\n');}
@@ -210,7 +212,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   return{checked:results,note:'Compiled without running anything. The user sees a live preview; if it fails while playing, the error arrives in your next step.'};
  }
  private async publish(result:ProcessResult,turnId:string,callId:string){
-  const publication=await publishWorkspace(this.db,result,turnId,this.options.ffprobe);
+  const publication=await publishWorkspace(this.db,result,turnId,this.options.ffprobe,{renderAudio:this.options.audioWorker?workerRenderer(this.options.audioWorker):undefined});
   if(!publication){const head=this.db.head(),receipt={id:result.id,versionId:head,baseVersionId:head,sourceSnapshot:this.db.workspace.snapshot(head)!,processId:result.id,assets:[],changes:[],files:[],documentHash:digest(readFileSync(join(this.root,'project.json'))),unchanged:true};this.db.db.prepare('INSERT OR IGNORE INTO workspace_publications VALUES(?,?,?)').run(result.id,result.commandHash,JSON.stringify(receipt));return receipt;}
   if(publication){this.db.workspace.queueRestore(publication.versionId);this.db.workspace.restorePending();const event=this.db.activityEvent(turnId,{id:'publication:'+callId,kind:'changes',status:'complete',text:'Updated live preview',changes:publication.changes,files:publication.files,media:[...publication.assets,...publication.refreshed??[]].map(id=>{const a=this.db.footage().assets.find(a=>a.id===id)!;return{id,name:a.filename,kind:a.scene?'scene':a.kind};})});this.publishEvent('ai.activity',{turnId,event});this.publishEvent('state',this.db.state({bounded:true}));}
   return publication;

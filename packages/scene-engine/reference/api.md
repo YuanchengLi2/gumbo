@@ -47,6 +47,35 @@ In `project.json`, add an output and place it on the timeline as `output:<id>`:
 - Scenes are silent. Put music, voice and sound effects on the timeline (`music`, `sfx` items).
 - Errors from a scene playing in the player or a preview come back to you with the file and line.
 
+## Music and sound effects (written as data, synthesized by Dream)
+
+Music is a score file, not code: `src/music/<name>.score.json`, declared as `{"id":"theme","path":"src/music/theme.score.json","kind":"music"}` and placed in the timeline `music` list as `output:theme`. Dream synthesizes it and records its beat times; a scene output that lists `"music":["theme"]` can follow them with `useBeats('theme')`.
+
+Score fields: `tempo` (BPM), `key` ("A minor"), `meter` ("4/4"), `mood` (calm, bright, cinematic, pulse, warm), `intensity` (0-1), optional `durationSec`, `sections` (`[{name, bars, kind}]`, kind intro, body, build, break or ending) and `tracks`. Each track has an `instrument` (pad, bass, pluck, lead, keys, kick, snare, hat, tom, shaker, cymbal, riser, impact) and exactly one of:
+
+- `pattern`: steps, one character per sixteenth note: `x` hit, `X` accent, `o` soft, `.` rest (spaces and `|` are ignored).
+- `notes`: `"A2:8n A2 C3 E3:4n r:2n"`. A note name with an optional duration (`1n`, `2n`, `4n`, `8n`, `16n`; `4n.` dotted, `8t` triplet) that carries to following notes. `r` is a rest and `C4+E4` plays together.
+- `chords`: `["Am","F","C","G"]`, each lasting `chordBeats` (default one bar).
+- `arp`: `{"chords":["Am","F"],"pattern":"up|down|updown|random","rate":"16n","octaves":2}`.
+
+Optional per track: `sections` (names to play in), `repeat` (a count, or `false` to play once; by default a track loops to fill its sections), `octave`, `velocity`, `gainDb`, `pan`. Errors name the field and the token that is wrong.
+
+Sound effects are timeline `sfx` items whose source is an output of kind `sfx`: either a preset, `"path":"preset:Soft whoosh"` (the project state lists the presets), or a sound design file `src/sfx/<name>.sfx.json` with `durationSec` and `layers` (each `wave` sine, triangle, saw, square or noise, `startSec`, `durationSec`, `frequencyHz`, `endFrequencyHz`, `gainDb`, `pan`, `attackSec`, `releaseSec`, `filterHz`).
+
+## Example: score
+
+```json
+{"title":"Bright pulse","tempo":118,"key":"D major","mood":"bright","intensity":0.7,
+ "sections":[{"name":"intro","bars":2,"kind":"intro"},{"name":"main","bars":8},{"name":"outro","bars":2,"kind":"ending"}],
+ "tracks":[
+  {"instrument":"pad","chords":["D","Bm","G","A"]},
+  {"instrument":"bass","notes":"D2:8n D2 r D2 F#2 r A2 r","sections":["main","outro"]},
+  {"instrument":"kick","pattern":"x...x...x...x...","sections":["main"]},
+  {"instrument":"hat","pattern":"..x...x...x...x.","velocity":0.5,"sections":["main"]},
+  {"instrument":"pluck","arp":{"chords":["D","Bm","G","A"],"rate":"16n","octaves":2},"sections":["main"],"gainDb":-6}
+ ]}
+```
+
 ## Example: kinetic title
 
 ```tsx

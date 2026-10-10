@@ -18,9 +18,9 @@ export const AssetSchema = z.object({
   // html: a legacy self-contained document. engine: compiled code run by the prebuilt scene engine; the bundle is
   // originalPath, and resources.json beside it maps workspace resources to content-addressed files.
   scene:z.object({format:z.enum(['html','engine']),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive(),
-   engine:z.object({version:z.number().int().positive(),chunks:z.array(z.string()).default(['core']),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).default([]),music:z.array(z.string()).default([]),files:z.number().int().nonnegative().optional(),transparent:z.boolean().default(false)}).optional()}).optional(),
+   engine:z.object({version:z.number().int().positive(),chunks:z.array(z.string()).default(['core']),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).default([]),music:z.record(z.string(),z.string()).default({}),files:z.number().int().nonnegative().optional(),transparent:z.boolean().default(false)}).optional()}).optional(),
   creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string(),sourcePath:z.string().optional()}).optional(),
-  generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional()}).optional()
+  generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional(),beats:z.array(z.number().nonnegative()).max(20000).optional()}).optional()
 });
 export type Asset = z.infer<typeof AssetSchema>;
 export const WordSchema = z.object({id:z.string(),assetId:z.string(),text:z.string(),start:z.number().nonnegative(),end:z.number().positive(),confidence:z.number().min(0).max(1),speaker:z.string().default('unknown'),pauseBefore:z.number().nonnegative().default(0)});

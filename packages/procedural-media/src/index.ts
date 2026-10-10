@@ -4,6 +4,7 @@ export * from './catalog';
 export * from './sfx';
 export * from './synth';
 export * from './wav';
+export * from './notation';
 import {arrangeScore} from './score';
 import {renderArrangement} from './synth';
 import type {ScoreDocument,ScoreOptions} from './schema';

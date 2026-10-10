@@ -19,7 +19,8 @@ const resourcesOf=(bundlePath:string):Record<string,string>=>{const file=join(di
 /** Published engine scenes keep their compiled files in Media/Generated/<hash>/ and resources in Media/Engine/files/. */
 export function sceneFromAsset(asset:Asset,beats:(musicId:string)=>number[]|undefined=()=>undefined):SceneSource|undefined{
  const scene=asset.scene;if(scene?.format!=='engine'||!scene.engine)return;
- const music=Object.fromEntries(scene.engine.music.map(id=>[id,beats(id)??[]]));
+ // Scenes read beats by the music output's name; the asset behind each name supplies them.
+ const music=Object.fromEntries(Object.entries(scene.engine.music).map(([name,assetId])=>[name,beats(assetId)??[]]));
  return{config:{assetId:asset.id,revisionId:scene.revisionId,width:asset.width,height:asset.height,fps:asset.fps,durationInFrames:scene.durationInFrames,chunks:scene.engine.chunks,props:scene.engine.props,transparent:scene.engine.transparent,beats:music},bundlePath:asset.originalPath,files:resourcesOf(asset.originalPath),storeDir:resolve(dirname(asset.originalPath),'..','..','Engine','files')};
 }
 
