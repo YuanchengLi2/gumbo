@@ -74,7 +74,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
   db.workspace.queueRestore(versionId);
   const last=db.db.prepare('SELECT * FROM actions WHERE branch_id=? ORDER BY seq DESC LIMIT 1').get(branch) as any;
   if(last?.turn_id===turnId)db.db.prepare('UPDATE actions SET after_id=? WHERE id=?').run(versionId,last.id);else db.db.prepare('INSERT INTO actions(id,branch_id,before_id,after_id,turn_id,seq) VALUES(?,?,?,?,?,?)').run(randomUUID(),branch,candidate.baseVersionId,versionId,turnId,(last?.seq??0)+1);
-  const receipt:PublicationReceipt={id:process.id,versionId,baseVersionId:candidate.baseVersionId,sourceSnapshot:snapshot.hash,processId:process.id,assets:[...outputs.values()].map(a=>a.id),changes,files,documentHash};
+  const receipt:PublicationReceipt={id:process.id,versionId,baseVersionId:candidate.baseVersionId,sourceSnapshot:snapshot.hash,processId:process.id,assets:[...outputs.values()].map(a=>a.id),...(refreshed.size?{refreshed:[...refreshed.values()].map(a=>a.id)}:{}),changes,files,documentHash};
   db.db.prepare('INSERT INTO workspace_publications VALUES(?,?,?)').run(process.id,process.commandHash,JSON.stringify(receipt));db.recordFileChanges(turnId,process.id,changes);db.event('workspace.published',receipt);return receipt;
  })();
 }

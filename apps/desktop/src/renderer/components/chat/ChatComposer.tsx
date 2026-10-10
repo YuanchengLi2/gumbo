@@ -1,9 +1,60 @@
-import React,{useState,useRef,useLayoutEffect} from 'react';
-import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks} from 'lucide-react';
+import React,{useState,useRef,useLayoutEffect,useEffect} from 'react';
+import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check} from 'lucide-react';
+import type {Permission,Effort} from '../../store/editor';
 export type Attachment={id:string;name:string};
-type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;planFirst?:boolean;onPlanFirst?:(value:boolean)=>void};
+type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;effort?:Effort;onEffort?:(value:Effort)=>void};
+
+export const permissions:{id:Permission;label:string;detail:string;icon:React.ReactNode}[]=[
+ {id:'auto',label:'Edit automatically',detail:'Dream changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
+ {id:'plan',label:'Plan first',detail:'Opus writes a plan. Nothing changes until you approve it.',icon:<ListChecks size={14}/>},
+ {id:'ask',label:'Ask only',detail:'Answers, scripts and ideas. The project is never changed.',icon:<MessageCircle size={14}/>}
+];
+export const efforts:{id:Effort;label:string;detail:string}[]=[
+ {id:'auto',label:'Auto',detail:'Dream matches the thinking to each request.'},
+ {id:'low',label:'Low',detail:'Fastest and cheapest. Best for small, precise changes.'},
+ {id:'medium',label:'Medium',detail:'Balanced speed and depth.'},
+ {id:'high',label:'High',detail:'Deepest thinking for complex creative work. Slower and costs more.'}
+];
+
+/** Closes on outside click and Escape. */
+function usePopover(){
+ const [open,setOpen]=useState(false),ref=useRef<HTMLDivElement>(null);
+ useEffect(()=>{if(!open)return;const close=(e:MouseEvent)=>{if(!ref.current?.contains(e.target as Node))setOpen(false);},key=(e:KeyboardEvent)=>{if(e.key==='Escape'){setOpen(false);e.stopPropagation();}};document.addEventListener('mousedown',close);document.addEventListener('keydown',key,true);return()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',key,true);};},[open]);
+ return{open,setOpen,ref};
+}
+
+function EffortBars({level}:{level:number}){return <span className="effort-bars" data-level={level} aria-hidden="true"><i/><i/><i/></span>;}
+
+function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permission)=>void}){
+ const menu=usePopover(),current=permissions.find(p=>p.id===value)??permissions[0],[computer,setComputer]=useState<{id:string}|null|undefined>();
+ useEffect(()=>{if(!menu.open)return;window.dream.fileGrants().then((grants:any[])=>setComputer(grants.find(g=>g.scope==='computer')??null)).catch(()=>setComputer(undefined));},[menu.open]);
+ const toggleComputer=async()=>{try{if(computer)await window.dream.revokeFileGrant(computer.id);else await window.dream.grantComputer();const grants=await window.dream.fileGrants();setComputer(grants.find((g:any)=>g.scope==='computer')??null);}catch{}};
+ return <div className="composer-popover-anchor" ref={menu.ref}>
+  <button type="button" className={'composer-chip permission-chip '+value} aria-label={'Permissions: '+current.label} aria-haspopup="menu" aria-expanded={menu.open} onClick={()=>menu.setOpen(!menu.open)}>{current.icon}<span>{current.label}</span><ChevronDown size={12}/></button>
+  {menu.open&&<div className="composer-popover permission-menu" role="menu" aria-label="Permissions">
+   <header>Permissions</header>
+   {permissions.map(p=><button key={p.id} type="button" role="menuitemradio" aria-checked={p.id===value} className={p.id===value?'selected':''} onClick={()=>{onChange(p.id);menu.setOpen(false);}}><span className="permission-icon">{p.icon}</span><span><strong>{p.label}</strong><small>{p.detail}</small></span>{p.id===value&&<Check size={14} className="permission-check"/>}</button>)}
+   {computer!==undefined&&<div className="permission-computer"><Computer size={14}/><span><strong>Search this computer</strong><small>{computer?'Dream can find and read your files.':'Dream only uses files you add.'}</small></span><button type="button" className={'switch'+(computer?' on':'')} role="switch" aria-checked={!!computer} aria-label="Allow searching this computer" onClick={()=>void toggleComputer()}><i/></button></div>}
+  </div>}
+ </div>;
+}
+
+function EffortControl({value,onChange}:{value:Effort;onChange:(value:Effort)=>void}){
+ const menu=usePopover(),index=Math.max(0,efforts.findIndex(e=>e.id===value)),current=efforts[index];
+ return <div className="composer-popover-anchor" ref={menu.ref}>
+  <button type="button" className="composer-chip effort-chip" aria-label={'Effort: '+current.label} aria-haspopup="dialog" aria-expanded={menu.open} title="Effort" onClick={()=>menu.setOpen(!menu.open)}><EffortBars level={index}/><span>{current.label}</span></button>
+  {menu.open&&<div className="composer-popover effort-popover" role="dialog" aria-label="Effort">
+   <header>Effort<span>{current.label}</span></header>
+   <input type="range" min={0} max={efforts.length-1} step={1} value={index} aria-label="Effort" aria-valuetext={current.label} onChange={e=>onChange(efforts[Number(e.target.value)].id)} style={{'--fill':`${index/(efforts.length-1)*100}%`} as React.CSSProperties}/>
+   <div className="effort-stops">{efforts.map((e,i)=><button type="button" key={e.id} className={i===index?'selected':''} onClick={()=>onChange(e.id)}>{e.label}</button>)}</div>
+   <p>{current.detail}</p>
+  </div>}
+ </div>;
+}
+
 export function ChatComposer(p:Props){const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null);
  const resize=()=>{const node=textarea.current;if(!node)return;node.style.height='auto';node.style.height=Math.min(p.home?280:200,Math.max(p.home?120:44,node.scrollHeight))+'px';};
  useLayoutEffect(resize,[p.value,p.home,p.attachments.length]);
  useLayoutEffect(()=>{const node=textarea.current;if(!node)return;let width=node.offsetWidth;const observer=new ResizeObserver(()=>{if(node.offsetWidth!==width){width=node.offsetWidth;resize();}});observer.observe(node);return()=>observer.disconnect();},[]);
- return <div className={'composer-area '+(p.home?'home-composer':'')}><form className="composer" onSubmit={e=>{e.preventDefault();p.onSubmit();}}>{p.attachments.length>0&&<div className="attachment-list">{p.attachments.map(a=><span className="attachment-chip" key={a.id} title={a.name}>{a.name}<button type="button" aria-label={'Remove '+a.name} onClick={()=>p.onRemove(a.id)}><X size={12}/></button></span>)}</div>}<textarea ref={textarea} aria-label="Ask Dream to edit" placeholder={p.home?'Describe the video you want to create…':'Ask me to edit, add something, or change anything…'} value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!p.active)p.onSubmit();}}}/><div className="composer-actions"><div className="attachment-menu-anchor"><button type="button" className="add-media" aria-label="Add media" aria-expanded={menu} onClick={()=>setMenu(!menu)}><span><Plus size={21}/></span>{p.home&&'Add media'}</button>{menu&&<div className="attachment-menu"><button type="button" onClick={()=>{setMenu(false);p.onUpload();}}><Upload size={16}/> Upload media</button>{p.onMedia&&<button type="button" onClick={()=>{setMenu(false);p.onMedia!();}}><FolderOpen size={16}/> Project media</button>}<button type="button" onClick={()=>{setMenu(false);p.onComputer();}}><Computer size={16}/> Computer files</button></div>}</div>{!p.home&&p.onPlanFirst&&<button type="button" className="plan-toggle" aria-pressed={!!p.planFirst} disabled={p.active||p.busy} onClick={()=>p.onPlanFirst!(!p.planFirst)} title="Plan the changes before editing"><ListChecks size={13}/>Plan first</button>}<span className="spacer"/>{p.active?<button type="button" className="send" aria-label="Stop editing" onClick={p.onStop}><Square size={12} fill="currentColor"/></button>:<button type="submit" className="send" aria-label="Send prompt" disabled={!p.value.trim()||p.busy}><ArrowUp size={18}/></button>}</div></form></div>;}
+ const placeholder=p.home?'Describe the video you want to create…':p.permission==='ask'?'Ask a question, or ask for a script or ideas…':p.permission==='plan'?'Describe the change and Dream will plan it first…':'Ask me to edit, add something, or change anything…';
+ return <div className={'composer-area '+(p.home?'home-composer':'')}><form className="composer" onSubmit={e=>{e.preventDefault();p.onSubmit();}}>{p.attachments.length>0&&<div className="attachment-list">{p.attachments.map(a=><span className="attachment-chip" key={a.id} title={a.name}>{a.name}<button type="button" aria-label={'Remove '+a.name} onClick={()=>p.onRemove(a.id)}><X size={12}/></button></span>)}</div>}<textarea ref={textarea} aria-label="Ask Dream to edit" placeholder={placeholder} value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!p.active)p.onSubmit();}}}/><div className="composer-actions"><div className="attachment-menu-anchor"><button type="button" className="add-media" aria-label="Add media" aria-expanded={menu} onClick={()=>setMenu(!menu)}><span><Plus size={p.home?21:17}/></span>{p.home&&'Add media'}</button>{menu&&<div className="attachment-menu"><button type="button" onClick={()=>{setMenu(false);p.onUpload();}}><Upload size={16}/> Upload media</button>{p.onMedia&&<button type="button" onClick={()=>{setMenu(false);p.onMedia!();}}><FolderOpen size={16}/> Project media</button>}<button type="button" onClick={()=>{setMenu(false);p.onComputer();}}><Computer size={16}/> Computer files</button></div>}</div>{!p.home&&p.onPermission&&<PermissionMenu value={p.permission??'auto'} onChange={p.onPermission}/>}{!p.home&&p.onEffort&&<EffortControl value={p.effort??'auto'} onChange={p.onEffort}/>}<span className="spacer"/>{p.active?<button type="button" className="send" aria-label="Stop editing" onClick={p.onStop}><Square size={12} fill="currentColor"/></button>:<button type="submit" className="send" aria-label="Send prompt" disabled={!p.value.trim()||p.busy}><ArrowUp size={18}/></button>}</div></form></div>;}

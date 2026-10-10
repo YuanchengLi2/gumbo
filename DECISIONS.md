@@ -113,3 +113,11 @@ This entry supersedes earlier statements that Sonnet executes or that Opus execu
 - Chat never renders (October 8 rule, reaffirmed after a brief stills experiment): published code appears in the live player immediately and only Export renders. Layout robustness comes from authoring rules (relative sizing, fit-to-box text, flex/grid layout) and source review by the lead.
 - Approved plans run in one continuing lead conversation rather than a new conversation per step (per-step cache writes roughly halved in live measurement). Earlier steps' publications do not satisfy later steps.
 - Computer-file changes are proposed through `propose_file_changes` with the existing review and resume flow; the October 8 rewrite had dropped this capability.
+
+
+## October 10, 2026 — Chat, core engine, cost and file system upgrade
+
+- Chat answers and streamed notes share one markdown renderer (tables, lists, quotes, code). Terminal text streams as a note and hands over to the formatted answer, so nothing blinks out at the end of a run.
+- A sent message appears immediately (optimistic) and the chat pins to the bottom; a failed send returns the text to the composer.
+- The composer chooses the permission mode (Edit automatically, Plan first, Ask only) and the effort (Auto, Low, Medium, High). Ask only routes every request to an answer; a chosen effort applies to every model of that request except the router. Approving a plan leaves plan mode, as in Claude Code.
+- The task dock monitors the running request (current step, elapsed time, tasks, latest activity).

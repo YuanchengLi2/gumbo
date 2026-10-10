@@ -10,7 +10,7 @@ export type ProcessResult={id:string;status:'complete'|'failed'|'cancelled'|'int
 export type ProcessRunner=(request:ProcessRequest,signal:AbortSignal,onOutput:(text:string)=>void)=>Promise<ProcessResult>;
 export type SourceSnapshot={hash:string;files:Record<string,string>};
 export type SourceChange={path:string;beforeHash?:string;afterHash?:string;before:string;after:string;truncated:boolean};
-export type PublicationReceipt={id:string;versionId:string;baseVersionId:string;sourceSnapshot:string;processId:string;assets:string[];changes:string[];files:SourceChange[];documentHash:string};
+export type PublicationReceipt={id:string;versionId:string;baseVersionId:string;sourceSnapshot:string;processId:string;assets:string[];refreshed?:string[];changes:string[];files:SourceChange[];documentHash:string};
 /** A worker's write boundary: path prefixes (empty means any authored file) and whether it owns project.json. */
 export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string};
 export interface CodeWorkspacePort {

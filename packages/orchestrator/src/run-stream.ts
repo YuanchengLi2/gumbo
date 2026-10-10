@@ -5,10 +5,10 @@ import {toolActivity,toolDetail} from './activity';
 /** Provider blocks and actual executions share stable activity IDs. No synthetic thought text: under the updates display a thinking block carries only the model's own progress note, never its reasoning. */
 export class RunStream {
  private blocks=new Map<number,{type:string;id:string;name?:string;text:string;json:string}>();
- private updates=false;private last=0;private emitted=new Map<string,string>();
+ private updates=false;private last=0;private emitted=new Map<string,string>();private open=new Set<string>();
  constructor(private db:ProjectDB,private turnId:string,private requestId:string,private publish?:(type:string,payload:unknown)=>void,private showProse=true,private parent?:string){}
  // Each write re-serializes the turn's activity log and crosses IPC; identical drafting updates (long tool inputs) are skipped.
- emit(patch:Omit<PublicActivity,'sequence'>){const signature=JSON.stringify(patch);if(this.emitted.get(patch.id)===signature)return;this.emitted.set(patch.id,signature);const event=this.db.activityEvent(this.turnId,{...patch,requestId:this.requestId,...(this.parent?{parent:this.parent}:{})});if(event)this.publish?.('ai.activity',{turnId:this.turnId,event});}
+ emit(patch:Omit<PublicActivity,'sequence'>){const signature=JSON.stringify(patch);if(this.emitted.get(patch.id)===signature)return;this.emitted.set(patch.id,signature);if(patch.status==='streaming')this.open.add(patch.id);else this.open.delete(patch.id);const event=this.db.activityEvent(this.turnId,{...patch,requestId:this.requestId,...(this.parent?{parent:this.parent}:{})});if(event)this.publish?.('ai.activity',{turnId:this.turnId,event});}
  accept({event,data}:{event:string;data:any}){
   if(event==='dream_policy'){this.updates=data.thinkingDisplay==='updates';return;}
   if(data.type==='content_block_start'){
@@ -40,5 +40,6 @@ export class RunStream {
    if(block.type==='thinking'&&updates&&String(block.thinking??'').trim())this.emit({id:`${this.requestId}:thinking:${index}`,kind:'commentary',text:block.thinking,status:'complete'});
   });
  }
- interrupt(reason:string){for(const b of this.blocks.values())if(b.type==='tool_use')this.emit({id:'tool:'+b.id,kind:'action',text:toolActivity(b.name,{})??'Preparing an action',tool:b.name,status:'interrupted',detail:reason});}
+ // A cut-off note stops streaming (a retry rewrites the same block), so the stream never shows a stuck cursor.
+ interrupt(reason:string){for(const b of this.blocks.values()){if(b.type==='tool_use')this.emit({id:'tool:'+b.id,kind:'action',text:toolActivity(b.name,{})??'Preparing an action',tool:b.name,status:'interrupted',detail:reason});else if(this.open.has(b.id))this.emit({id:b.id,kind:'commentary',text:b.text,status:'complete'});}}
 }

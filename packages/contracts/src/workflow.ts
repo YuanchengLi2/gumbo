@@ -18,3 +18,6 @@ export const WorkTaskSchema=z.object({id:z.string().min(1).max(100),title:z.stri
 export const TaskUpdateSchema=z.object({tasks:z.array(WorkTaskSchema).min(1).max(24)});
 export type WorkTask=z.infer<typeof WorkTaskSchema>;
 export type PublicActivity={id:string;sequence:number;revision?:number;kind:'action'|'commentary'|'reasoning'|'changes'|'terminal';text:string;status:string;requestId?:string;parent?:string;tool?:string;detail?:string;changes?:string[];files?:import('./workspace').SourceChange[];media?:{id:string;name:string;kind:string}[];output?:string;startedAt?:string;updatedAt?:string};
+
+/** A short go-ahead for a waiting plan. Anything with further instructions revises the plan instead. */
+export const approvesPlan=(text:string)=>/^(?:(?:ok(?:ay)?|yes|yep|sure|great|perfect|looks good|sounds good|good)[,.!]?\s*)*(?:go(?: ahead)?|do it|edit(?: it)?|make it|build it|apply(?: it| the plan)?|implement(?: it| the plan)?|start|run it|proceed|let'?s go|approve(?:d)?|ship it)?[.!]?\s*$/i.test(text.trim())&&text.trim().length>0;
