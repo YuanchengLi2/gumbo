@@ -11,6 +11,7 @@ import {probe,fingerprint} from './media';
 import {validateSceneSource,inlineLocalAssets} from './scene-source';
 import {compileScene,isEngineScene,type CompileError} from './engine-compile';
 import {soundOutput,inProcessRenderer,type AudioRenderer} from './sound-outputs';
+import {documentErrors,anchorProblem} from './document-errors';
 
 /** Compile errors as the agent sees them: one line per error with its file position. */
 export const formatCompileErrors=(errors:CompileError[])=>'The scene code does not compile:\n'+errors.slice(0,12).map(e=>`${e.file}:${e.line}:${e.column} ${e.text}`).join('\n');
@@ -27,7 +28,8 @@ export function storeEngineScene(projectFolder:string,root:string,compiled:{bund
 export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId:string,ffprobe:string,options:{renderAudio?:AudioRenderer;signal?:AbortSignal}={}):Promise<PublicationReceipt|undefined>{
  if(process.status!=='complete'||process.exitCode!==0)throw new Error('Only a successful process can publish.');
  const replay=db.db.prepare('SELECT json FROM workspace_publications WHERE id=?').get(process.id) as any;if(replay)return JSON.parse(replay.json);
- const root=join(db.folder,'Workspace'),candidate=WorkspaceDocumentSchema.parse(JSON.parse(readFileSync(workspacePath(root,'project.json'),'utf8'))),documentHash=digest(JSON.stringify(candidate));
+ const root=join(db.folder,'Workspace');let raw:unknown;try{raw=JSON.parse(readFileSync(workspacePath(root,'project.json'),'utf8'));}catch(error){throw new Error('project.json is not valid JSON: '+(error as Error).message);}
+ const parsed=WorkspaceDocumentSchema.safeParse(raw);if(!parsed.success)throw new Error(documentErrors(parsed.error));const candidate=parsed.data,documentHash=digest(JSON.stringify(candidate));
  if(candidate.baseVersionId!==db.head())throw new Error(`The project changed: project.json is based on version ${candidate.baseVersionId}, but the published version is now ${db.head()}. Read context/published-project.json for the current timeline and baseVersionId, then reapply your change in project.json on top of it.`);
  if(candidate.timeline.id!==db.timeline().id)throw new Error('The document belongs to another project.');
  if(new Set(candidate.outputs.map(o=>o.id)).size!==candidate.outputs.length)throw new Error('Output IDs must be unique.');
@@ -84,7 +86,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  timeline.spine.forEach(bind);timeline.music.forEach(bind);timeline.attached.forEach(item=>{if(item.source)bind(item.source);});
  const ids=[...timeline.spine,...timeline.attached,...timeline.music].map(i=>i.id);if(new Set(ids).size!==ids.length)throw new Error('Timeline item IDs must be unique.');
  const resolved=resolveTimeline(timeline,{...db.footage(),assets:[...all.values()]});const lost=resolved.warnings.filter(w=>w.code==='anchor_removed');
- if(!Number.isFinite(resolved.durationSec)||lost.length)throw new Error('The timeline has invalid timing or missing anchors'+(lost.length?': '+lost.slice(0,8).map(w=>`${(w as any).itemId??'item'} (${w.message})`).join('; ')+'. Give each attached item a valid start anchor and a positive duration.':'.'));
+ if(!Number.isFinite(resolved.durationSec)||lost.length)throw new Error(lost.length?'These timeline items cannot be placed:\n'+lost.slice(0,8).map(w=>anchorProblem(timeline,(w as any).itemId??'')).join('\n'):'The timeline has invalid timing.');
  const snapshot=db.workspace.capture(root),previous=db.workspace.snapshot(db.head());
  if(JSON.stringify(timeline)===JSON.stringify(db.timeline())&&snapshot.hash===previous)return;
  const changes=timelineChanges(db.timeline(),timeline,id=>all.get(id)?.filename??id),oldFiles=previous?db.workspace.files(previous):{};

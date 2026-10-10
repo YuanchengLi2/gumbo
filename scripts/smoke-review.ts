@@ -7,7 +7,7 @@ import {frameDifference} from '../tests/fixtures/frame-fidelity';
 
 const db=new ProjectDB(resolve('artifacts/Smoke Project'));const state=db.state();db.close();
 const staged=resolve('apps/desktop/resources/staged');
-const runtime={renderBundle:join(staged,'remotion'),browser:join(staged,'render-browser/chrome-headless-shell.exe'),binariesDirectory:join(staged,'compositor'),cacheDirectory:resolve('artifacts/review-cache')};
+const runtime={renderBundle:join(staged,'remotion'),browser:join(staged,'render-browser/chrome-headless-shell.exe'),binariesDirectory:join(staged,'compositor'),cacheDirectory:resolve('artifacts/review-cache'),engineRuntime:join(staged,'engine')};
 const packet=reviewPacket(state.versionId,state.timeline,state.footage),started=Date.now();
 const images=await renderReview(packet.request,runtime,new AbortController().signal);
 mkdirSync('artifacts/review-frames',{recursive:true});

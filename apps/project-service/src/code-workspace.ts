@@ -26,13 +26,14 @@ import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
 import {importResources} from './resource-import';
 import {workerRenderer} from './sound-outputs';
-import {sfxCatalog} from '@dream/procedural-media';
+import {sfxCatalog,describeScore,SoundDesignSchema} from '@dream/procedural-media';
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
+const workspaceReadme=['# Dream workspace','','Scenes are React components in src/ that the Dream scene engine runs; music and sound effects are score and sound files in src/music/ and src/sfx/. Declare them as outputs in project.json and place them on the timeline as output:<id>; the engine reference in your instructions has a complete example of every timeline item.','','check_outputs compiles scenes and checks score files as drafts the user can see; publish_project compiles and publishes to the live player. Nothing renders until Export.','','Files from the computer go into resources/ with import_resources. Installed npm packages are bundled into scenes. Context files are refreshed from Dream.',''].join('\n');
 export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
@@ -63,11 +64,13 @@ export class CodeWorkspace implements CodeWorkspacePort {
  async initialize(){
   try{const status=await this.options.files?.({action:'computer_status'});if(status&&'access'in status)this.computer=status as ComputerStatus;}catch{}
   this.db.workspace.restorePending();this.db.workspace.syncPublishedDocument();for(const dir of ['src','output','context/transcripts','.logs','.cache'])mkdirSync(join(this.root,dir),{recursive:true});
-  if(!existsSync(join(this.root,'project.json'))){this.write('project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));this.write('package.json',JSON.stringify({name:'dream-project',private:true,type:'module',scripts:{}},null,2));this.write('requirements.txt','');this.write('README.md','# Dream workspace\n\nEdit project.json or source files, then call publish_project to validate and publish. Timeline assets retain their IDs; live scenes are declared in outputs with id, path, kind: scene, width, height, fps and durationInFrames. Reference scenes using output:<id>. See context/live-scenes.md. Call publish_project when ready; no render command is needed. Packages and tools belong here. Context files are refreshed from Dream.\n');}
+  if(!existsSync(join(this.root,'project.json'))){this.write('project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));this.write('package.json',JSON.stringify({name:'dream-project',private:true,type:'module',scripts:{}},null,2));this.write('requirements.txt','');this.write('README.md',workspaceReadme);}
   if(!this.db.getMeta('workspace_sources_migrated')){
    for(const row of this.db.db.prepare("SELECT id,json FROM library WHERE kind='visual_revision'").all() as {id:string;json:string}[]){const revision=JSON.parse(row.json),modules=revision.definition?.source?.modules??{};for(const [path,hash] of Object.entries(modules)){this.write(`src/legacy/${digest(row.id).slice(0,16)}/${path}`,this.db.blobs.get(String(hash)));}}
    this.db.setMeta('workspace_sources_migrated','1');
   }
+  // Projects from before the scene engine carry a README that points at the retired HTML scene guide.
+  const readme=join(this.root,'README.md');if(existsSync(readme)&&readFileSync(readme,'utf8').includes('context/live-scenes.md'))this.write('README.md',workspaceReadme);
   this.refreshContext();if(!this.db.workspace.snapshot(this.db.head()))this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);
  }
  // Media is listed in capture order when known, so "in the order I shot it" needs no extra lookups.
@@ -228,14 +231,22 @@ export class CodeWorkspace implements CodeWorkspacePort {
  }
  /** Compiles scenes as drafts and shows them to the user as live previews, without publishing. Workers that cannot
   * publish use this so their scenes are visible right away; errors from the preview come back like player errors. */
+ private checkSound(entry:{id?:string;path:string;kind?:string}){
+  let json:unknown;try{json=JSON.parse(readFileSync(workspacePath(this.root,entry.path),'utf8'));}catch(error){return{id:entry.id,path:entry.path,errors:[`Not readable JSON: ${(error as Error).message}`]};}
+  const sound=entry.kind==='sfx'||entry.path.endsWith('.sfx.json');
+  try{return sound?{id:entry.id,path:entry.path,sound:{durationSec:SoundDesignSchema.parse({schemaVersion:1,id:entry.id??'sound',title:entry.id??'sound',seed:1,...(json as object)}).durationSec}}:{id:entry.id,path:entry.path,score:describeScore(json,entry.id)};}
+  catch(error){const issue=(error as {issues?:{path:PropertyKey[];message:string}[]}).issues?.[0];return{id:entry.id,path:entry.path,errors:[issue?`${issue.path.join('.')}: ${issue.message}`:(error as Error).message]};}
+ }
  private async checkOutputs(input:{paths?:string[];scene?:string},callId:string,turnId:string,scope?:WorkerScope){
   let document:any={};try{document=JSON.parse(readFileSync(join(this.root,'project.json'),'utf8'));}catch{}
   const settings=document.timeline?.settings??this.db.timeline().settings,outputs:any[]=Array.isArray(document.outputs)?document.outputs:[];
-  const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>o.kind==='scene'&&isEngineScene(String(o.path))&&(!input.scene||o.id===input.scene));
-  if(!entries.length)throw new Error('There is no scene to check: pass the scene files (src/....tsx) as paths, or declare scene outputs in project.json.');
+  const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>(o.kind==='scene'&&isEngineScene(String(o.path))||o.kind==='music'||o.kind==='sfx'&&!String(o.path).startsWith('preset:'))&&(!input.scene||o.id===input.scene));
+  if(!entries.length)throw new Error('There is nothing to check: pass scene files (src/....tsx) or score files (src/music/....score.json) as paths, or declare those outputs in project.json.');
   const results:any[]=[],drafts:any[]=[],recorded=JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}');
   for(const entry of entries.slice(0,8)){
-   if(!isEngineScene(String(entry.path))){results.push({id:entry.id,path:entry.path,skipped:'Only engine scenes (.tsx, .ts, .jsx, .js) have draft previews.'});continue;}
+   // Score and sound files are checked as data: what they will play, and what is wrong with them, without rendering audio.
+   if(entry.kind==='music'||String(entry.path).endsWith('.score.json')||entry.kind==='sfx'||String(entry.path).endsWith('.sfx.json')){results.push(this.checkSound(entry));continue;}
+   if(!isEngineScene(String(entry.path))){results.push({id:entry.id,path:entry.path,skipped:'Only engine scenes (.tsx, .ts, .jsx, .js) and score or sound files can be checked.'});continue;}
    const compiled=await compileScene(this.root,{entry:entry.path,mode:'draft'});
    if(compiled.errors.length){results.push({id:entry.id,path:entry.path,errors:compiled.errors.slice(0,8)});continue;}
    const hash=compiled.hash.slice(0,32),stored=storeEngineScene(this.db.folder,this.root,compiled,join(this.db.folder,'Media/Drafts',hash));

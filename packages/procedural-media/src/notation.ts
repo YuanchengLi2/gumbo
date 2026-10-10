@@ -109,3 +109,18 @@ export function scoreFromNotation(input:unknown,id='score'):ScoreDocument{
  const checked=ScoreSchema.safeParse(document);if(!checked.success){const issue=checked.error.issues[0];throw new NotationError(issue.path.join('.')||'score',issue.message);}
  return checked.data;
 }
+
+const round=(value:number,places=2)=>Math.round(value*10**places)/10**places;
+/** What a score file will play, for checking before publishing: length in bars and seconds, sections, and each track's
+ * loop length. A track whose loop is not a whole number of bars drifts against the bar line, which is reported. */
+export function describeScore(input:unknown,id='score'){
+ const score=scoreFromNotation(input,id),barBeats=score.meter.beatsPerBar,warnings:string[]=[];
+ const notation=input&&typeof input==='object'&&(input as any).schemaVersion!==2?ScoreNotationSchema.parse(input):undefined;
+ const tracks=score.tracks.map((track,n)=>{
+  const end=track.notes.reduce((max,note)=>Math.max(max,note.beat+note.durationBeats),0),loop=notation?trackLoop(notation.tracks[n],n,score.meter.beatUnit,barBeats).length/barBeats:undefined;
+  if(!track.notes.length)warnings.push(`tracks[${n}] (${track.instrument}) plays no notes.`);
+  if(loop!==undefined&&Math.abs(loop-Math.round(loop))>1e-6)warnings.push(`tracks[${n}] (${track.instrument}) loops every ${round(loop,3)} bars, so it drifts against the bar line; make its pattern or notes fill whole bars.`);
+  return{track:n,instrument:track.instrument,notes:track.notes.length,...(loop!==undefined?{loopBars:round(loop,3)}:{}),endsAtBar:round(end/barBeats)};
+ });
+ return{tempo:score.tempo,meter:`${score.meter.beatsPerBar}/${score.meter.beatUnit}`,durationSec:round(score.durationSec),bars:round(score.durationSec/(60/score.tempo)/barBeats),sections:score.sections.map(section=>({name:section.name,startBar:round(section.startBeat/barBeats),bars:round(section.durationBeats/barBeats)})),tracks,warnings};
+}

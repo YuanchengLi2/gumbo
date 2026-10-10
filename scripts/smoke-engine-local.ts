@@ -88,7 +88,7 @@ const sceneClips=()=>project.timeline().spine.filter(c=>project.footage().assets
 async function frames(prefix:string){
  const timeline=project.timeline(),footage=project.footage(),total=resolveTimeline(timeline,footage).durationInFrames,count=Math.min(8,total);if(!count)return[];
  const picks=Array.from({length:count},(_,i)=>Math.min(total-1,Math.round((i+.5)*total/count)));
- const images=await renderReview({versionId:project.head(),timeline,footage,frames:picks.map(frame=>({frame,labels:[]}))},{renderBundle:join(staged,'remotion'),browser:paths.browser,binariesDirectory:join(staged,'compositor'),cacheDirectory:join(folder,'.dream/review-cache')},new AbortController().signal);
+ const images=await renderReview({versionId:project.head(),timeline,footage,frames:picks.map(frame=>({frame,labels:[]}))},{renderBundle:join(staged,'remotion'),browser:paths.browser,binariesDirectory:join(staged,'compositor'),cacheDirectory:join(folder,'.dream/review-cache'),engineRuntime:join(staged,'engine')},new AbortController().signal);
  return images.frames.map(image=>{const file=join(folder,`${prefix}-frame-${String(image.frame).padStart(5,'0')}.jpg`);writeFileSync(file,Buffer.from(image.data,'base64'));return file;});
 }
 async function scenario(name:string,request:string,check:(versionsBefore:number)=>string|undefined,options:{interrupt?:boolean;render?:string;plan?:boolean;expectStatus?:string}={}){
@@ -101,8 +101,11 @@ async function scenario(name:string,request:string,check:(versionsBefore:number)
  let paused:string|undefined;
  if(interrupted){paused=project.getMeta('ai_status');console.log(`  >> status after interruption: ${paused}; resuming`);if(paused==='interrupted')await director!.resume();}
  const turn=JSON.parse(project.getMeta('pending_request')!).turnId,route=project.loadState<any>('routing:'+turn),status=project.getMeta('ai_status');
- const problem=interrupted&&paused!=='interrupted'?`interruption left status ${paused}`:status!==(options.expectStatus??'complete')?`status ${status}`:check(versionsBefore);
- const rendered=!problem&&options.render?await frames(options.render).catch(error=>[`render failed: ${(error as Error).message}`]):[];
+ const checked=interrupted&&paused!=='interrupted'?`interruption left status ${paused}`:status!==(options.expectStatus??'complete')?`status ${status}`:check(versionsBefore);
+ // A frame that cannot render is a failure: the user would see the same thing on Export.
+ let rendered:string[]=[],renderError:string|undefined;
+ if(!checked&&options.render)try{rendered=await frames(options.render);}catch(error){renderError=`render failed: ${(error as Error).message.slice(0,400)}`;}
+ const problem=checked??renderError;
  const result={name,request,status,problem,interrupted,route:route&&{intelligence:route.intelligence,complexity:route.complexity},seconds:Math.round((Date.now()-started)/1000),costUsd:+usage.slice(before).reduce((s,r)=>s+Number(r.cost_usd??0),0).toFixed(4),inferences:inferences(turn),callers:callers(turn),metrics:metrics(turn),versions:project.state().versions.length,timeline:project.timeline().spine.map(c=>({id:c.id,assetId:c.assetId,seconds:+(c.srcOut-c.srcIn).toFixed(2)})),frames:rendered,summary:project.state().messages.filter(m=>m.role==='assistant').at(-1)?.report};
  console.log(`  -> ${problem?'FAILED: '+problem:'passed'} in ${result.seconds}s, $${result.costUsd}, ${result.inferences.length} inferences${interrupted?', resumed after interruption':''}${rendered.length?`, ${rendered.length} frames rendered`:''}`);
  for(const c of result.callers)console.log(`     ${c.caller} (${c.model}): ${c.calls} calls, $${c.costUsd}, ${c.promptTokens} prompt + ${c.outputTokens} output tokens, ${c.seconds}s`);

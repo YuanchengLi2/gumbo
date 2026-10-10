@@ -6,7 +6,7 @@ import {resolve} from '@dream/timeline';
 import {ReviewRenderRequestSchema,ReviewImagesSchema,type ReviewRenderRequest,type ReviewImages} from '@dream/contracts';
 import {renderServer} from './render-server';
 
-export type ReviewRuntime={renderBundle:string;browser:string;binariesDirectory:string;cacheDirectory:string;authorize?:(path:string)=>void;engineRuntime?:string;gl?:'angle'|'swangle'};
+export type ReviewRuntime={renderBundle:string;browser:string;binariesDirectory:string;cacheDirectory:string;authorize?:(path:string)=>void;/** The staged scene engine; without it engine scenes cannot load and the render times out. */ engineRuntime:string;gl?:'angle'|'swangle'};
 export async function renderReview(raw:ReviewRenderRequest,runtime:ReviewRuntime,signal:AbortSignal):Promise<ReviewImages>{
  const request=ReviewRenderRequestSchema.parse(raw),resolved=resolve(request.timeline,request.footage);
  if(request.frames.some(f=>f.frame>=resolved.durationInFrames))throw new Error('Review frames are outside this version.');

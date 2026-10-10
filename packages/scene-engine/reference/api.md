@@ -1,6 +1,6 @@
 # Dream scene engine
 
-A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose default export draws one frame. Dream runs it: loading, frame timing, playback, seeking, fonts, media access, 3D setup and export are handled for you. Write only the code for the video itself. Do not write renderers, loaders, frame loops, bundlers or build steps.
+A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose default export draws one frame. Dream runs it: loading, frame timing, playback, seeking, fonts, media access, 3D setup and export are handled for you. Write only the code for the video itself. Do not write renderers, loaders, frame loops, bundlers or build steps. This reference is complete: you do not need to search the workspace for engine, score or project-document formats.
 
 ## Declaring a scene
 
@@ -13,7 +13,31 @@ In `project.json`, add an output and place it on the timeline as `output:<id>`:
 - Size and frame rate default to the project's; set `width`, `height` or `fps` only to differ.
 - `props` are passed to the component, so one component can serve many shots with different props.
 - `transparent: true` gives the scene no background, for overlays placed on `attached` above footage.
-- `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing. Writing a scene file returns a compile check.
+- `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
+
+## Timeline items (complete examples)
+
+The `timeline` in `project.json` has `spine` (clips that play one after another and set the video's length), `attached` (overlays and sound effects placed in time), `music` and `settings`. Every item has a unique `id`; times are in seconds.
+
+```json
+{"spine":[
+  {"id":"shot1","assetId":"output:intro","srcIn":0,"srcOut":5,"speed":1,"audio":{"mute":true}},
+  {"id":"shot2","assetId":"<imported asset id>","srcIn":12.5,"srcOut":18}
+ ],
+ "attached":[
+  {"id":"name","type":"overlay","component":"source","source":{"assetId":"output:lowerthird","srcIn":0,"srcOut":4},"start":{"kind":"clip","clipId":"shot2","at":"start","offsetSec":0.5},"durationSec":4,"layer":1,"params":{"x":0.5,"y":0.5,"scale":1}},
+  {"id":"whoosh1","type":"sfx","component":"source","source":{"assetId":"output:whoosh","srcIn":0,"srcOut":0.6},"start":{"kind":"project","at":"start","offsetSec":5},"durationSec":0.6,"layer":1}
+ ],
+ "music":[
+  {"id":"bed","assetId":"output:theme","srcIn":0,"srcOut":20,"start":{"kind":"project","at":"start","offsetSec":0},"gainDb":-12,"fadeOutSec":1}
+ ]}
+```
+
+- `srcIn` and `srcOut` pick seconds of the source; a scene output lasts `durationInFrames / fps` seconds.
+- An attached item needs `type` (`overlay`, `broll`, `effect` or `sfx`), `component` (`"source"` when it plays an asset), `source`, a `start` anchor and a length: `durationSec`, or an `end` anchor.
+- Anchors: `{"kind":"project","at":"start","offsetSec":5}` (`at` is `"start"` or `"end"`); `{"kind":"clip","clipId":"shot2","at":"start","offsetSec":0}` (`at` is `"start"`, `"end"` or seconds into the clip; it follows the clip if the clip moves); `{"kind":"word","wordId":"...","clipId":"...","edge":"start"}` (lands on a spoken word).
+- A music item needs `srcIn`, `srcOut` and a `start` anchor; `gainDb` defaults to -18 and music ducks under speech automatically.
+- Overlay `params`: `x` and `y` (0 to 1, the center), `scale`, `rotation`, `opacity`, `fit` (`"cover"` or `"contain"`).
 
 ## Available imports (no install needed)
 
