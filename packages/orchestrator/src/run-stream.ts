@@ -5,19 +5,19 @@ import {toolActivity,toolDetail} from './activity';
 /** Provider blocks and actual executions share stable activity IDs. No synthetic thought text: under the updates display a thinking block carries only the model's own progress note, never its reasoning. */
 export class RunStream {
  private blocks=new Map<number,{type:string;id:string;name?:string;text:string;json:string}>();
- private updates=false;private last=0;private emitted=new Map<string,string>();private open=new Set<string>();
+ private updates=false;private summarized=false;private last=0;private emitted=new Map<string,string>();private open=new Set<string>();
  constructor(private db:ProjectDB,private turnId:string,private requestId:string,private publish?:(type:string,payload:unknown)=>void,private showProse=true,private parent?:string){}
  // Each write re-serializes the turn's activity log and crosses IPC; identical drafting updates (long tool inputs) are skipped.
  emit(patch:Omit<PublicActivity,'sequence'>){const signature=JSON.stringify(patch);if(this.emitted.get(patch.id)===signature)return;this.emitted.set(patch.id,signature);if(patch.status==='streaming')this.open.add(patch.id);else this.open.delete(patch.id);const event=this.db.activityEvent(this.turnId,{...patch,requestId:this.requestId,...(this.parent?{parent:this.parent}:{})});if(event)this.publish?.('ai.activity',{turnId:this.turnId,event});}
  accept({event,data}:{event:string;data:any}){
-  if(event==='dream_policy'){this.updates=data.thinkingDisplay==='updates';return;}
+  if(event==='dream_policy'){this.updates=data.thinkingDisplay==='updates';this.summarized=data.thinkingDisplay==='summarized';return;}
   if(data.type==='content_block_start'){
    const b=data.content_block;this.blocks.set(data.index,{type:b.type,id:b.id??`${this.requestId}:${b.type}:${data.index}`,name:b.name,text:b.text??b.thinking??'',json:''});this.flush(data.index);return;
   }
   if(data.type==='content_block_delta'){
    const b=this.blocks.get(data.index);if(!b)return;
    if(data.delta.type==='text_delta')b.text+=data.delta.text;
-   if(data.delta.type==='thinking_delta'&&this.updates)b.text+=data.delta.thinking;
+   if(data.delta.type==='thinking_delta'&&(this.updates||this.summarized))b.text+=data.delta.thinking;
    if(data.delta.type==='input_json_delta')b.json+=data.delta.partial_json;
    if(Date.now()-this.last>150){this.last=Date.now();this.flush(data.index);}return;
   }
@@ -26,6 +26,8 @@ export class RunStream {
  private flush(index:number,done=false){
   const b=this.blocks.get(index);if(!b)return;
   if(this.showProse&&(b.type==='text'||b.type==='thinking'&&this.updates)&&b.text.trim())this.emit({id:b.id,kind:'commentary',text:b.text,status:done?'complete':'streaming'});
+  // A summarized thought is transient progress (its latest line), shown on the worker's row while it runs, never as chat prose.
+  if(b.type==='thinking'&&this.summarized&&b.text.trim())this.emit({id:b.id,kind:'reasoning',text:b.text.trim().split('\n').filter(Boolean).at(-1)!.slice(-160),status:done?'complete':'streaming'});
   if(b.type==='tool_use'){
    let input:any={};try{input=JSON.parse(b.json);}catch{}
    this.emit({id:'tool:'+b.id,kind:'action',text:toolActivity(b.name,input)??'Preparing '+(b.name??'an action').replaceAll('_',' '),tool:b.name,detail:toolDetail(b.name,input,b.json),status:done?'ready':'drafting'});

@@ -54,8 +54,8 @@ function Actions({events,running}:{events:PublicActivity[];running:boolean}){
 }
 
 function Task({event,all,running}:{event:PublicActivity;all:PublicActivity[];running:boolean}){
- const children=all.filter(e=>e.parent===event.id),shown=children.filter(e=>!hidden(e)),latest=shown.at(-1),working=running&&live(event.status);
- return <details className={'run-task '+event.status} data-event-id={event.id}><summary><StatusIcon status={event.status} running={running}/><span className="run-task-title">{editingActivity(event)}{working&&latest&&<small className="run-task-live">{latest.kind==='commentary'?latest.text.trim().split('\n')[0]:editingActivity(latest)}</small>}</span>{!!shown.length&&<ChevronRight className="run-disclosure" size={12}/>}</summary>{!!shown.length&&<div className="run-task-body"><Items list={items(children,all)} all={all} running={running}/></div>}</details>;
+ const children=all.filter(e=>e.parent===event.id),shown=children.filter(e=>!hidden(e)),thinking=children.findLast(e=>e.kind==='reasoning'&&live(e.status)),latest=shown.at(-1),working=running&&live(event.status);
+ return <details className={'run-task '+event.status} data-event-id={event.id}><summary><StatusIcon status={event.status} running={running}/><span className="run-task-title">{editingActivity(event)}{working&&(thinking||latest)&&<small className="run-task-live">{thinking?thinking.text:latest!.kind==='commentary'?latest!.text.trim().split('\n')[0]:editingActivity(latest!)}</small>}</span>{!!shown.length&&<ChevronRight className="run-disclosure" size={12}/>}</summary>{!!shown.length&&<div className="run-task-body"><Items list={items(children,all)} all={all} running={running}/></div>}</details>;
 }
 
 function Items({list,all,running}:{list:Item[];all:PublicActivity[];running:boolean}){
