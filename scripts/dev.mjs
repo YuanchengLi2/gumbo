@@ -1,0 +1,3 @@
+import {readFileSync,existsSync} from 'node:fs';import {spawn} from 'node:child_process';
+if(existsSync('.env.local'))for(const line of readFileSync('.env.local','utf8').split(/\r?\n/)){const match=/^(DREAM_(?:SUPABASE_URL|SUPABASE_ANON_KEY|COMPANION_URL|WHISPER_BINARY|WHISPER_MODEL|INGEST_BINARY|FFMPEG|FFPROBE))=(.*)$/.exec(line);if(match)process.env[match[1]]=match[2].replace(/^['"]|['"]$/g,'');}
+const child=spawn(process.platform==='win32'?'pnpm.cmd':'pnpm',['--filter','@dream/desktop','start'],{stdio:'inherit',shell:process.platform==='win32',env:process.env});child.on('exit',code=>process.exit(code??1));

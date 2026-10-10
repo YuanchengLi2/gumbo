@@ -1,0 +1,2 @@
+import {existsSync} from 'node:fs';import {join} from 'node:path';
+console.log('Dream development environment');console.log('Node:',process.version);console.log('Platform:',process.platform,process.arch);console.log('Local cloud configuration:',existsSync('.env.local')?'present':'not configured');console.log('Model binary:',process.env.DREAM_WHISPER_BINARY&&existsSync(process.env.DREAM_WHISPER_BINARY)?'present':'not staged');console.log('No provider credentials are needed by a distributed desktop build.');

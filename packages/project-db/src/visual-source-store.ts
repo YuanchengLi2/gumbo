@@ -1,0 +1,19 @@
+import {randomUUID} from 'node:crypto';
+import {z} from 'zod';
+import type {ProjectDB} from './index';
+import {VisualDefinitionSchema,type VisualDefinition} from '@dream/contracts';
+
+const pathSchema=z.string().regex(/^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_-]+\.(?:tsx?|jsx?)$/);
+export class VisualSourceStore {
+ constructor(private db:ProjectDB){}
+ private save(id:string,definition:VisualDefinition){const hash=this.db.blobs.putJSON(definition);this.db.db.prepare('INSERT INTO visual_drafts(id,revision,hash) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,hash=excluded.hash').run(id,hash,hash);return{id,revision:hash,definition};}
+ get(id:string,expected?:string){const row=this.db.db.prepare('SELECT revision,hash FROM visual_drafts WHERE id=?').get(id) as {revision:string;hash:string}|undefined;if(!row)throw new Error('Visual draft not found.');if(expected&&expected!==row.revision)throw new Error('Visual draft changed; read its current revision before editing.');return{id,revision:row.revision,definition:this.db.blobs.getJSON<VisualDefinition>(row.hash)};}
+ normalize(raw:unknown){const definition=VisualDefinitionSchema.parse(raw);if(definition.schemaVersion===1){const hash=this.db.blobs.put(definition.code);definition.schemaVersion=2;definition.source={entry:'scene.tsx',modules:{'scene.tsx':hash}};definition.code='';}delete definition.moduleSources;return definition;}
+ create(raw:unknown){return this.save(randomUUID(),this.normalize(raw));}
+ write(id:string,expected:string,name:string,code?:string,reuseHash?:string){return this.db.db.transaction(()=>{pathSchema.parse(name);const draft=this.get(id,expected);if((code===undefined)===(reuseHash===undefined))throw new Error('Provide either source code or an existing module hash.');const source=code??this.db.blobs.get(z.string().regex(/^[a-f0-9]{64}$/).parse(reuseHash));if(!source.length||source.length>250000)throw new Error('Module source must contain 1 to 250000 characters.');const hash=this.db.blobs.put(source);draft.definition.source!.modules[name]=hash;this.checkSize(draft.definition);return this.save(id,draft.definition);})();}
+ patch(id:string,expected:string,name:string,expectedHash:string,oldText:string,newText:string){return this.db.db.transaction(()=>{const draft=this.get(id,expected),hash=draft.definition.source?.modules[name];if(hash!==expectedHash)throw new Error('Module changed; read its current source before patching.');const text=this.db.blobs.get(hash!);const at=text.indexOf(oldText);if(!oldText||at<0||text.indexOf(oldText,at+1)>=0)throw new Error('Patch must match exactly one source occurrence.');return this.write(id,expected,name,text.slice(0,at)+newText+text.slice(at+oldText.length));})();}
+ parameters(id:string,expected:string,parameters:Record<string,unknown>){const draft=this.get(id,expected);draft.definition.parameters={...draft.definition.parameters,...parameters};return this.save(id,draft.definition);}
+ read(hash:string,offset=0,limit=8000){z.string().regex(/^[a-f0-9]{64}$/).parse(hash);const text=this.db.blobs.get(hash),start=Math.max(0,Math.floor(offset)),size=Math.min(16000,Math.max(1,Math.floor(limit)));return{hash,text:text.slice(start,start+size),offset:start,totalCharacters:text.length,nextOffset:start+size<text.length?start+size:null};}
+ private checkSize(definition:VisualDefinition){const refs=Object.values(definition.source!.modules);if(refs.length>64||refs.reduce((n,hash)=>n+this.db.blobs.get(hash).length,0)>250000)throw new Error('A visual supports at most 64 modules and 250000 total source characters. Split larger work into scenes.');}
+ hydrate(definition:VisualDefinition){if(!definition.source)return definition;this.checkSize(definition);if(!definition.source.modules[definition.source.entry])throw new Error('Visual entry module is missing.');return{...definition,moduleSources:Object.fromEntries(Object.entries(definition.source.modules).map(([name,hash])=>[name,this.db.blobs.get(hash)]))};}
+}

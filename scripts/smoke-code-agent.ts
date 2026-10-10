@@ -1,0 +1,27 @@
+import {spawnSync} from 'node:child_process';
+import {randomUUID} from 'node:crypto';
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {ProjectDB} from '@dream/project-db';
+import {AssetSchema} from '@dream/footage';
+import {Director} from '@dream/orchestrator';
+import {CodeWorkspace} from '../apps/project-service/src/code-workspace';
+import {CodeRuntime} from '../apps/desktop/src/main/code-runtime';
+import {renderReview} from '../apps/desktop/src/main/review-rendering';
+import {fingerprint} from '../apps/project-service/src/media';
+const projectRef='qewguvfkkwvdoqptiljd',url=`https://${projectRef}.supabase.co`,config=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase projects api-keys --project-ref ${projectRef} --output json`],{encoding:'utf8',windowsHide:true});if(config.status)throw new Error('Dedicated acceptance account configuration is unavailable.');
+const keys=JSON.parse(config.stdout),serviceKey=keys.find((k:any)=>k.name==='service_role')?.api_key,anonKey=keys.find((k:any)=>k.name==='anon')?.api_key;if(!serviceKey||!anonKey)throw new Error('Acceptance configuration is missing.');
+async function api(path:string,body?:unknown,token=serviceKey,method=body?'POST':'GET'){const response=await fetch(url+path,{method,headers:{apikey:serviceKey,Authorization:'Bearer '+token,'Content-Type':'application/json',Prefer:'return=representation'},...(body?{body:JSON.stringify(body)}:{})});const text=await response.text(),data=text?JSON.parse(text):null;if(!response.ok)throw new Error('Acceptance account request failed: '+response.status);return data;}
+const resumeFolder=process.argv.find(a=>a.startsWith('--resume='))?.slice(9);
+const folder=resolve(resumeFolder??('artifacts/code-agent-live-'+Date.now())),staged=resolve('apps/desktop/resources/staged'),paths={creation:join(staged,'creation'),ffmpeg:join(staged,'media-runtime/ffmpeg.exe'),ffprobe:join(staged,'media-runtime/ffprobe.exe'),browser:join(staged,'render-browser/chrome-headless-shell.exe')},runtime=new CodeRuntime(paths,process.argv.includes('--qualification'));
+let userId:string|undefined,testEmail:string|undefined,db:ProjectDB|undefined;
+try{
+ const email=testEmail=`dream-code-${randomUUID()}@example.invalid`,password=randomUUID()+randomUUID();const user=await api('/auth/v1/admin/users',{email,password,email_confirm:true});userId=user.id;await api('/rest/v1/dream_invites',{email});const session=await api('/auth/v1/token?grant_type=password',{email,password},anonKey);await api('/functions/v1/dream-gateway/account',undefined,session.access_token);
+ db=new ProjectDB(folder,'Code agent live acceptance');if(!resumeFolder){const source=resolve('artifacts/fixtures/source.mp4');db.saveAsset(AssetSchema.parse({id:'a_source',filename:'Source calibration footage',kind:'video',durationSec:6,fps:30,width:1280,height:720,hasAudio:true,originalPath:source,fingerprint:await fingerprint(source),status:'ready'}));db.apply([{type:'insert_clip',position:0,clip:{id:'c_source',assetId:'a_source',srcIn:0,srcOut:6,speed:1,audio:{gainDb:-6,fadeInSec:.01,fadeOutSec:.01,mute:false},reason:'Acceptance source'},reason:'Acceptance'}],'Source','fixture',db.head());}
+ const events:any[]=[],publish=(type:string,payload:any)=>{if(type==='ai.activity'&&payload.event?.status!=='streaming')console.log(payload.event?.text);if(type==='ai.error')console.log(payload.message);events.push({type,payload});};
+ const review=(request:any,signal:AbortSignal)=>renderReview(request,{renderBundle:join(staged,'remotion'),browser:paths.browser,binariesDirectory:join(staged,'compositor'),cacheDirectory:join(folder,'.dream/review-cache')},signal);
+ const workspace=new CodeWorkspace(db,{run:runtime.run.bind(runtime),...paths,renderReview:review,files:async request=>'paths'in request?{paths:request.paths}:{permissionRequired:true}},publish);
+ const director=new Director(db,async()=>({url:url+'/functions/v1/dream-gateway',token:session.access_token,accountId:userId}),publish,review,undefined,undefined,undefined,workspace);
+ const started=Date.now();if(resumeFolder)await director.resume();else await director.message('Shorten the only clip from 6 seconds to exactly 3 seconds, preserving its source-backed edit and current audio. Inspect the saved preview and finish.');
+ const report={status:db.getMeta('ai_status'),elapsedMs:Date.now()-started,clip:db.timeline().spine[0],versions:db.state().versions,activity:db.experience().activity,usage:(db.db.prepare("SELECT json FROM events WHERE type IN ('ai.usage','ai.context','workspace.context','ai.routed')").all() as any[]).map(row=>JSON.parse(row.json))};const billed=await api('/rest/v1/dream_usage?user_id=eq.'+userId+'&select=model,cost_usd,status',undefined);Object.assign(report,{providerCostUsd:billed.reduce((total:number,row:any)=>total+Number(row.cost_usd),0),billing:billed});writeFileSync(join(folder,'acceptance.json'),JSON.stringify(report,null,2));if(report.status!=='complete'||report.clip.srcOut-report.clip.srcIn!==3)throw new Error('Live acceptance incomplete; inspect '+join(folder,'acceptance.json'));console.log('Live source-backed shortening passed:',folder);
+}finally{runtime.stop();db?.close();if(testEmail)await api('/rest/v1/dream_invites?email=eq.'+encodeURIComponent(testEmail),undefined,serviceKey,'DELETE').catch(()=>{});if(userId){await api(`/auth/v1/admin/users/${userId}`,undefined,serviceKey,'DELETE').catch(()=>{});}}

@@ -1,0 +1,14 @@
+{
+  "name": "@dream/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@dream/timeline": "workspace:*",
+    "@dream/project-db": "workspace:*",
+    "zod": "^4.1.0",
+    "@dream/footage": "workspace:*",
+    "@dream/procedural-media": "workspace:*"
+  }
+}

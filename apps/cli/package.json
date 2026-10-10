@@ -1,0 +1,1 @@
+{"name":"@dream/cli","version":"0.1.0","private":true,"type":"module","dependencies":{"@dream/project-db":"workspace:*","@dream/timeline":"workspace:*","@dream/footage":"workspace:*","@dream/contracts":"workspace:*","@dream/procedural-media":"workspace:*"}}

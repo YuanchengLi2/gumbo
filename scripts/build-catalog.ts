@@ -1,0 +1,2 @@
+import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {mkdirSync,writeFileSync} from 'node:fs';
+mkdirSync('packages/procedural-media/catalog',{recursive:true});writeFileSync('packages/procedural-media/catalog/scores.json',JSON.stringify(scoreCatalog,null,2));writeFileSync('packages/procedural-media/catalog/sfx.json',JSON.stringify(sfxCatalog,null,2));console.log('50 scores and 40 sound effects cataloged.');

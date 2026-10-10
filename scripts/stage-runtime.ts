@@ -1,0 +1,2 @@
+import {ensureBrowser} from '@remotion/renderer';import {mkdirSync,writeFileSync} from 'node:fs';import {resolve} from 'node:path';import {createHash} from 'node:crypto';
+const browser=await ensureBrowser({logLevel:'info',chromeMode:'headless-shell'});mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/browser.json',JSON.stringify(browser,null,2));console.log('Rendering browser installed:',browser.type);

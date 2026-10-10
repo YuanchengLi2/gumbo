@@ -1,0 +1,11 @@
+import {build} from 'esbuild';
+import {mkdir} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {spawn,spawnSync} from 'node:child_process';
+import {createRequire} from 'node:module';
+const folder=resolve('artifacts/sandbox-acceptance');await mkdir(folder,{recursive:true});const executable=resolve(folder,'harness.cjs');
+const fixture=spawnSync(resolve('apps/desktop/resources/staged/media-runtime/ffmpeg.exe'),['-v','error','-y','-f','lavfi','-i','color=c=red:s=64x64:r=30:d=0.2','-f','lavfi','-i','color=c=blue:s=64x64:r=30:d=0.2','-filter_complex','[0:v][1:v]concat=n=2:v=1:a=0[v]','-map','[v]','-c:v','libx264','-pix_fmt','yuv420p',resolve(folder,'selected-video.mp4')],{windowsHide:true});if(fixture.status!==0)throw new Error(fixture.stderr.toString());
+await build({entryPoints:['tests/fixtures/sandbox-main.ts'],outfile:executable,bundle:true,format:'cjs',platform:'node',external:['electron']});
+await build({entryPoints:['apps/desktop/src/workers/component-compile.ts'],outfile:resolve(folder,'component-compile.cjs'),bundle:true,format:'cjs',platform:'node'});
+const electron=createRequire(import.meta.url)('electron') as string;
+const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;const child=spawn(electron,[executable],{windowsHide:true,stdio:'inherit',env});process.exitCode=await new Promise<number>((resolve,reject)=>{child.once('error',reject);child.once('exit',code=>resolve(code??1));});

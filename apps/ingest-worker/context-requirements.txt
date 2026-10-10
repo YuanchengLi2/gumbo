@@ -1,0 +1,3 @@
+# Only the local extraction/deduplication API is used. No URL downloader or ML extras.
+claude-real-video==0.10.7
+Pillow==11.3.0

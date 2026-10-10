@@ -1,0 +1,49 @@
+{
+  "name": "dream-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.14.0",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "pnpm --filter @dream/desktop build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "package": "pnpm --filter @dream/desktop package",
+    "make": "pnpm --filter @dream/desktop make",
+    "cli": "tsx apps/cli/src/main.ts",
+    "check:env": "tsx scripts/check-env.ts",
+    "stage:runtime": "tsx scripts/stage-runtime.ts",
+    "build:catalog": "tsx scripts/build-catalog.ts",
+    "build:score-worker": "tsx scripts/build-score-worker.ts",
+    "build:sandbox": "tsx scripts/build-sandbox.ts",
+    "stage:code-runtime": "tsx scripts/stage-code-runtime.ts",
+    "qualify:code-runtime": "tsx scripts/qualify-code-runtime.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@remotion/bundler": "4.0.533",
+    "@remotion/renderer": "4.0.533",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "esbuild": "0.25.12"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "electron-winstaller@5.4.4": "patches/electron-winstaller@5.4.4.patch"
+    },
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "better-sqlite3",
+      "esbuild",
+      "ffmpeg-static",
+      "ffprobe-static"
+    ]
+  }
+}

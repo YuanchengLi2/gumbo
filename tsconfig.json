@@ -1,0 +1,70 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@dream/timeline": [
+        "packages/timeline/src/index.ts"
+      ],
+      "@dream/footage": [
+        "packages/footage/src/index.ts"
+      ],
+      "@dream/guardrails": [
+        "packages/guardrails/src/index.ts"
+      ],
+      "@dream/contracts": [
+        "packages/contracts/src/index.ts"
+      ],
+      "@dream/config": [
+        "packages/config/src/index.ts"
+      ],
+      "@dream/project-db": [
+        "packages/project-db/src/index.ts"
+      ],
+      "@dream/composition": [
+        "packages/composition/src/index.ts"
+      ],
+      "@dream/effects": [
+        "packages/effects/src/index.ts"
+      ],
+      "@dream/procedural-media": [
+        "packages/procedural-media/src/index.ts"
+      ],
+      "@dream/orchestrator": [
+        "packages/orchestrator/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist",
+    "**/.vite",
+    "supabase/functions",
+    "**/node_modules",
+    "**/out",
+    "**/resources/staged"
+  ]
+}

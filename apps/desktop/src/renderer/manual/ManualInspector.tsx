@@ -1,0 +1,76 @@
+import React,{useEffect,useState} from 'react';
+
+import {resolve,canvasPresets,type Op} from '@dream/timeline';
+
+import type {ProjectState} from '@dream/project-db';
+
+import type {VisualRevision} from '@dream/contracts';
+
+import type {CommandFn} from '../hooks/useProjectSession';
+
+import {reason,ensureDuration,projectAnchor,type Item} from './model';
+
+import {colorPresets} from '@dream/effects';
+
+function NumberField({label,value,min,max,step=.01,onCommit}:{label:string;value:number;min?:number;max?:number;step?:number;onCommit:(n:number)=>void}){return <label className="manual-field">{label}<input aria-label={label} type="number" min={min} max={max} step={step} defaultValue={Number(value.toFixed(4))} onBlur={e=>{const n=Number(e.target.value);if(e.target.value!==''&&Number.isFinite(n)&&n!==value)onCommit(n);}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}/></label>;}
+
+export function ManualInspector({project,item,selectedCount,disabled,execute,command,onError}:{project:ProjectState;item?:Item;selectedCount:number;disabled:boolean;execute:(ops:Op[],label:string)=>Promise<any>;command:CommandFn;onError:(text:string)=>void}){
+
+ const t=project.timeline,f=project.footage,clip=t.spine.find(c=>c.id===item?.id),attached=t.attached.find(i=>i.id===item?.id),music=t.music.find(m=>m.id===item?.id),word=resolve(t,f).words.find(w=>w.id===item?.id),asset=f.assets.find(a=>a.id===item?.assetId),locked=item&&t.trackSettings?.[item.track]?.locked;
+
+ const [visual,setVisual]=useState<VisualRevision|null>(null),[parameters,setParameters]=useState<Record<string,unknown>>({}),[renderRequest,setRenderRequest]=useState<string|null>(null);const renderJob=project.jobs.find(job=>job.assetId===renderRequest&&job.step==='creation'),rendering=!!renderRequest&&(!renderJob||['queued','running'].includes(renderJob.status));
+
+ useEffect(()=>{let active=true;setVisual(null);setRenderRequest(null);if(asset?.sequence)void window.dream.command<VisualRevision>({type:'visual_get',revisionId:asset.sequence.revisionId}).then(value=>{if(active){setVisual(value);setParameters(value.definition.parameters);}}).catch(()=>{});return()=>{active=false;};},[asset?.sequence?.revisionId]);
+
+ const update=(ops:Op[],label='Change properties')=>{void execute(ops,label);};
+
+ const params=(change:Record<string,unknown>)=>attached&&update([{type:'update_item',itemId:attached.id,changes:{params:{...attached.params,...change}},reason}]);
+
+ const audio=(change:any)=>clip?update([{type:'set_clip_audio',clipId:clip.id,audio:change,reason}]):music?update([{type:'update_music',musicId:music.id,changes:change,reason}]):params(change);
+
+ const projectSettings=(settings:any)=>update([{type:'set_project_settings',settings,reason}],'Project settings');
+
+ const setSpan=(start:number,duration:number)=>attached?update([...ensureDuration(t,start+duration),{type:'update_item',itemId:attached.id,clearEnd:true,changes:{start:projectAnchor(start),durationSec:duration},reason}]):music&&update([...ensureDuration(t,start+duration),{type:'update_music',musicId:music.id,changes:{start:projectAnchor(start),srcOut:music.srcIn+duration},reason}]);
+
+ return <aside className="manual-inspector"><div className="manual-panel-heading"><strong>{item?'Properties':'Project'}</strong><small>{selectedCount>1?`${selectedCount} selected`:item?.kind??''}</small></div><fieldset disabled={disabled||!!locked} key={(item?.id??'project')+project.versionId}>
+
+ {!item?<><h4>Canvas</h4><label className="manual-field">Format<select aria-label="Canvas format" value={`${t.settings.width}x${t.settings.height}`} onChange={e=>{const [width,height]=e.target.value.split('x').map(Number);projectSettings({width,height});}}>{canvasPresets.map(preset=>[`${preset.width}x${preset.height}`,preset.ratio+' · '+preset.name]).map(([value,name])=><option key={value} value={value}>{name}</option>)}</select></label><label className="manual-field">Frame rate<select aria-label="Frame rate" value={t.settings.fps} onChange={e=>projectSettings({fps:Number(e.target.value)})}>{[24,25,30,60].map(n=><option key={n}>{n}</option>)}</select></label><NumberField label="Canvas minimum length (s)" value={t.settings.durationSec??0} min={0} max={14400} onCommit={durationSec=>projectSettings({durationSec})}/><p className="manual-help">The main track is magnetic. Visual and audio tracks can be positioned freely. A minimum length supports titles or audio without a main video.</p></>:<><h4 title={item.label}>{item.label}</h4><small className="manual-help">{item.start.toFixed(3)}–{item.end.toFixed(3)} s</small>
+
+ {item.kind!=='clip'&&item.kind!=='caption'&&<NumberField label="Timeline start (s)" value={item.start} min={0} onCommit={start=>setSpan(start,item.end-item.start)}/>}
+
+ {clip&&asset?.kind!=='image'&&<><NumberField label="Source in (s)" value={clip.srcIn} min={0} max={clip.srcOut} onCommit={srcIn=>update([{type:'trim_clip',clipId:clip.id,srcIn,reason}])}/><NumberField label="Source out (s)" value={clip.srcOut} min={clip.srcIn} max={asset?.durationSec} onCommit={srcOut=>update([{type:'trim_clip',clipId:clip.id,srcOut,reason}])}/><NumberField label="Speed" value={clip.speed} min={.25} max={4} step={.25} onCommit={speed=>update([{type:'set_speed',clipId:clip.id,speed,reason}])}/></>}
+
+ {clip&&asset?.kind==='image'&&<NumberField label="Image duration (s)" value={clip.holdSec??5} min={1/t.settings.fps} onCommit={holdSec=>update([{type:'set_clip_hold',clipId:clip.id,holdSec,reason}])}/>}
+
+ {(music||attached)&&<NumberField label="Duration (s)" value={item.end-item.start} min={1/t.settings.fps} onCommit={duration=>{if(attached?.source&&asset?.kind!=='image'){const difference=duration-(item.end-item.start);update(trimItemsForInspector(project,item,difference));}else setSpan(item.start,duration);}}/>}
+
+ {(music||attached?.source&&asset?.kind!=='image')&&<NumberField label="Source in (s)" value={music?.srcIn??attached!.source!.srcIn} min={0} max={asset?.durationSec} onCommit={srcIn=>{const length=item.end-item.start;if(music)update([{type:'update_music',musicId:music.id,changes:{srcIn,srcOut:srcIn+length},reason}]);else update([{type:'update_item',itemId:item.id,changes:{source:{...attached!.source!,srcIn,srcOut:srcIn+length}},reason}]);}}/>}
+
+ {(clip||music||attached?.source&&asset?.hasAudio||attached?.type==='sfx')&&<><h4>Audio</h4>{!music&&<label className="manual-check"><input type="checkbox" checked={clip?.audio.mute??Boolean(attached?.params.mute??true)} onChange={e=>audio({mute:e.target.checked})}/> Mute clip</label>}<NumberField label="Volume (dB)" value={clip?.audio.gainDb??music?.gainDb??Number(attached?.params.gainDb??0)} min={-60} max={24} step={1} onCommit={gainDb=>audio({gainDb})}/>{(clip||music)&&<><NumberField label="Fade in (s)" value={clip?.audio.fadeInSec??music!.fadeInSec} min={0} onCommit={fadeInSec=>audio({fadeInSec})}/><NumberField label="Fade out (s)" value={clip?.audio.fadeOutSec??music!.fadeOutSec} min={0} onCommit={fadeOutSec=>audio({fadeOutSec})}/></>}{music&&<NumberField label="Speech ducking (dB)" value={music.duckUnderSpeechDb} min={0} max={30} onCommit={duckUnderSpeechDb=>audio({duckUnderSpeechDb})}/>}</>}
+
+ {clip&&asset?.kind!=='audio'&&<><h4>Framing</h4><label className="manual-field">Fit<select aria-label="Clip fit" value={clip.framing?.mode??'fit'} onChange={e=>update([{type:'set_framing',clipId:clip.id,framing:{scale:1,x:.5,y:.5,...clip.framing,mode:e.target.value as 'fit'|'fill'},reason}])}><option value="fit">Fit</option><option value="fill">Fill</option></select></label>{(['scale','x','y'] as const).map(key=><NumberField key={key} label={'Clip '+key} value={clip.framing?.[key]??(key==='scale'?1:.5)} min={key==='scale'?.1:0} max={key==='scale'?8:1} onCommit={value=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,[key]:value},reason}])}/>)}</>}
+
+ {clip&&<><h4>Transform</h4><NumberField label="Rotation" value={clip.framing?.rotation??0} min={-360} max={360} step={1} onCommit={rotation=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,rotation},reason}])}/>{(['flipX','flipY'] as const).map(key=><label className="manual-check" key={key}><input type="checkbox" checked={clip.framing?.[key]??false} onChange={e=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,[key]:e.target.checked},reason}])}/>{key==='flipX'?'Flip horizontal':'Flip vertical'}</label>)}<NumberField label="Opacity" value={clip.framing?.opacity??1} min={0} max={1} onCommit={opacity=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,opacity},reason}])}/><h4>Adjust</h4><div className="color-presets">{colorPresets.map(preset=><button key={preset.id} onClick={()=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,exposure:preset.exposure,contrast:preset.contrast,saturation:preset.saturation,temperature:preset.temperature},reason}])}>{preset.name}</button>)}</div>{(['exposure','contrast','saturation','temperature'] as const).map(key=><NumberField key={key} label={key[0].toUpperCase()+key.slice(1)} value={clip.framing?.[key]??(['contrast','saturation'].includes(key)?1:0)} min={key==='exposure'?-2:key==='temperature'?-1:0} max={key==='exposure'?2:key==='temperature'?1:3} onCommit={value=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5,...clip.framing,[key]:value},reason}])}/>)}<button className="text-button" onClick={()=>update([{type:'set_framing',clipId:clip.id,framing:{mode:'fit',scale:1,x:.5,y:.5},reason}])}>Reset video properties</button></>}
+
+ {attached&&<><h4>{attached.source?'Transform':'Element'}</h4>{attached.source&&<label className="manual-field">Layer fit<select aria-label="Layer fit" value={String(attached.params.fit??(asset?.sequence?'contain':'cover'))} onChange={e=>params({fit:e.target.value})}><option value="contain">Fit</option><option value="cover">Fill</option></select></label>}{!attached.source&&<><label className="manual-field">Text<textarea aria-label="Element text" defaultValue={String(attached.params.text??'')} onBlur={e=>params({text:e.target.value})}/></label><NumberField label="Font size" value={Number(attached.params.fontSize??60)} min={10} max={200} step={1} onCommit={fontSize=>params({fontSize})}/><label className="manual-field">Text / shape color<input aria-label="Element color" type="color" defaultValue={String(attached.params.color??'#ffffff')} onBlur={e=>params({color:e.target.value})}/></label><label className="manual-field">Background<input aria-label="Element background" defaultValue={String(attached.params.background??(attached.component==='title_card'?'#111418':'transparent'))} onBlur={e=>params({background:e.target.value})}/></label></>}{(['x','y','scale','rotation','opacity'] as const).map(key=><NumberField key={key} label={'Element '+key} value={Number(attached.params[key]??(['x','y'].includes(key)?.5:key==='rotation'?0:1))} min={key==='rotation'?-360:key==='scale'?.1:0} max={key==='rotation'?360:key==='scale'?8:1} step={key==='rotation'?1:.01} onCommit={value=>params({[key]:value})}/>)}{attached.type==='effect'&&<NumberField label="Effect amount" value={Number(attached.params.amount??.1)} min={0} max={2} onCommit={amount=>params({amount})}/>}</>}
+
+ {clip&&<><h4>Transition into clip</h4><select aria-label="Transition" value={clip.transitionIn?.type??'cut'} onChange={e=>update([{type:'set_transition',clipId:clip.id,transition:{type:e.target.value as any,durationSec:e.target.value==='cut'?0:.3},reason}])}>{['cut','crossfade','dip_to_black','whip','zoom_through','slide'].map(type=><option key={type} value={type}>{type.replaceAll('_',' ')}</option>)}</select>{clip.transitionIn&&clip.transitionIn.type!=='cut'&&<NumberField label="Transition duration (s)" value={clip.transitionIn.durationSec} min={0} max={3} onCommit={durationSec=>update([{type:'set_transition',clipId:clip.id,transition:{...clip.transitionIn!,durationSec},reason}])}/>}<p className="manual-help">Transitions need unused source frames around the cut.</p></>}
+
+ {word&&<><label className="manual-field">Caption text<textarea aria-label="Caption text" defaultValue={word.text} onBlur={e=>update([{type:'update_caption_overrides',overrides:[{wordId:word.wordId,clipId:word.clipId,text:e.target.value}],reason}])}/></label><label className="manual-check"><input type="checkbox" checked={word.emphasis} onChange={e=>update([{type:'update_caption_overrides',overrides:[{wordId:word.wordId,clipId:word.clipId,text:word.text,emphasis:e.target.checked}],reason}])}/> Emphasize</label></>}
+
+ </>}
+
+ <h4>Captions</h4><label className="manual-check"><input type="checkbox" checked={!!t.captions} onChange={e=>update([{type:'set_captions',captions:e.target.checked?{style:'clean',params:{},overrides:[]}:null,reason}],'Toggle captions')}/> Show transcript captions</label>{t.captions&&<label className="manual-field">Caption style<select aria-label="Caption style" value={t.captions.style} onChange={e=>update([{type:'set_captions',captions:{...t.captions!,style:e.target.value as any},reason}])}>{['clean','karaoke','word_pop','emphasis'].map(style=><option key={style}>{style}</option>)}</select></label>}
+
+ </fieldset>{locked&&<p className="manual-help">This track is locked. Unlock it in the timeline to change its contents.</p>}
+
+ {visual&&item&&<fieldset disabled={disabled||!!locked}><h4>Generated scene parameters</h4><p className="manual-help">Timing and placement reuse the saved frames. Updating these parameters renders a new local revision.</p>{Object.entries((visual.definition.parameterSchema.properties??{}) as Record<string,any>).map(([name,schema])=><label className="manual-field" key={name}>{schema.title??name}{schema.type==='boolean'?<input aria-label={'Scene '+name} type="checkbox" checked={!!parameters[name]} onChange={e=>setParameters(old=>({...old,[name]:e.target.checked}))}/>:<input aria-label={'Scene '+name} type={schema.type==='number'||schema.type==='integer'?'number':'text'} value={String(parameters[name]??schema.default??'')} onChange={e=>setParameters(old=>({...old,[name]:schema.type==='number'||schema.type==='integer'?Number(e.target.value):e.target.value}))}/>}</label>)}<button className="manual-primary" disabled={rendering} onClick={async()=>{try{const requestId=crypto.randomUUID();setRenderRequest(requestId);const result=await command({type:'create_visual',definition:{...visual.definition,parameters},placement:clip?'spine':'overlay',start:projectAnchor(item.start),replaceItemId:item.id,requestId,expectedVersionId:project.versionId});if(!result)setRenderRequest(null);}catch(error){setRenderRequest(null);onError((error as Error).message);}}}>{rendering?'Rendering scene…':'Update generated scene'}</button>{rendering&&<progress aria-label="Generated scene render progress" max={100} value={renderJob?.percent??0}/>}{renderJob?.status==='failed'&&<p className="manual-help">{renderJob.error}</p>}</fieldset>}
+
+ <p className="manual-credit">Timeline tools by OpenCut Classic · MIT</p></aside>;
+
+}
+
+import {trimItems as trimModelItems} from './model';
+
+function trimItemsForInspector(project:ProjectState,item:Item,delta:number){return trimModelItems(project.timeline,project.footage,[item.id],'right',delta);}
+

@@ -1,0 +1,14 @@
+project_id = "dream-desktop"
+[auth]
+enable_anonymous_sign_ins = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback", "http://127.0.0.1:**/callback**"]
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+[functions.dream-gateway]
+verify_jwt = false

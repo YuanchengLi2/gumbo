@@ -1,0 +1,36 @@
+import {test,expect,chromium} from '@playwright/test';
+import {build} from 'esbuild';
+import {createServer} from 'node:http';
+import {mkdtempSync,writeFileSync,readFileSync,existsSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join,resolve} from 'node:path';
+import {renderStill,renderMedia,selectComposition} from '@remotion/renderer';
+import {AssetSchema} from '../../packages/footage/src';
+import {emptyTimeline,TimelineSchema} from '../../packages/timeline/src/schema';
+import {renderServer} from '../../apps/desktop/src/main/render-server';
+
+test('scene code plays and seeks live; explicit export draws the same frames with audio',async()=>{
+ test.setTimeout(180000);
+ const root=mkdtempSync(join(tmpdir(),'dream-live-browser-')),scene=join(root,'scene.html');
+ writeFileSync(scene,'<div id="frame"></div><script>window.renderFrame=async(frame)=>{await Promise.resolve();document.body.style.background=frame<15?"rgb(255, 0, 0)":"rgb(0, 0, 255)";document.getElementById("frame").textContent=frame;};</script>');
+ const wav=Buffer.alloc(44+48000*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(48000,24);wav.writeUInt32LE(96000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);for(let n=0;n<48000;n++)wav.writeInt16LE(Math.round(Math.sin(n/48000*440*Math.PI*2)*5000),44+n*2);writeFileSync(join(root,'audio.wav'),wav);
+ const asset=AssetSchema.parse({id:'live',filename:'Scene',kind:'video',durationSec:1,fps:30,width:240,height:120,originalPath:scene,fingerprint:'fixture',scene:{format:'html',revisionId:'a'.repeat(64),durationInFrames:30}}),audio=AssetSchema.parse({id:'audio',filename:'Music',kind:'audio',durationSec:1,hasAudio:true,originalPath:join(root,'audio.wav'),fingerprint:'audio'});
+ const timeline=TimelineSchema.parse({...emptyTimeline('live'),settings:{fps:30,width:240,height:120},spine:[{id:'scene',assetId:'live',srcIn:0,srcOut:1,speed:1,audio:{mute:true},reason:'Live'}],music:[{id:'music',assetId:'audio',srcIn:0,srcOut:1,start:{kind:'project',at:'start',offsetSec:0},gainDb:0,reason:'Music'}]});
+ const media=await renderServer(new Map([['live',asset],['audio',audio]])),props={timeline,footage:{assets:[asset,audio],words:[],shots:[],faces:[],revision:0},media:media.media,audioMedia:media.audioMedia};
+ const bundle=await build({stdin:{contents:`import React,{createRef,useState} from 'react';import{createRoot}from'react-dom/client';import{Player}from'@remotion/player';import{TimelineComposition}from'./packages/composition/src/index.tsx';const ref=createRef();window.player=ref;const base=${JSON.stringify(props)};function App(){const[inputProps,setProps]=useState(base);window.revise=(id)=>setProps({...base,timeline:{...base.timeline,spine:base.timeline.spine.map(c=>({...c,assetId:id}))},footage:{...base.footage,assets:base.footage.assets.map(a=>a.id==='live'?{...a,id}:a)},media:{...base.media,[id]:base.media.live+'?revision='+id}});return React.createElement(Player,{ref,component:TimelineComposition,inputProps,compositionWidth:240,compositionHeight:120,durationInFrames:30,fps:30,controls:true});}createRoot(document.getElementById('root')).render(React.createElement(App));`,resolveDir:resolve('.'),loader:'tsx'},bundle:true,write:false,format:'iife',platform:'browser',alias:{react:resolve('node_modules/react'),'react-dom':resolve('node_modules/react-dom'),remotion:resolve('node_modules/remotion'), '@remotion/player':resolve('node_modules/@remotion/player')}});
+ const server=createServer((req,res)=>{res.setHeader('Content-Type',req.url==='/app.js'?'application/javascript':'text/html');res.end(req.url==='/app.js'?bundle.outputFiles[0].text:'<!doctype html><div id="root"></div><script src="/app.js"></script>');});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ const executable=resolve('apps/desktop/resources/staged/render-browser/chrome-headless-shell.exe'),browser=await chromium.launch({executablePath:executable});
+ try{
+  const page=await browser.newPage(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')console.log(m.text());});await page.goto(`http://127.0.0.1:${(server.address() as any).port}`);
+  const iframe=page.frameLocator('iframe');await expect(iframe.locator('#frame')).toHaveText('0');
+  await page.evaluate(()=>(window as any).player.current.seekTo(20));await expect(iframe.locator('#frame')).toHaveText('20');await expect(iframe.locator('body')).toHaveCSS('background-color','rgb(0, 0, 255)');
+  await page.evaluate(()=>(window as any).player.current.seekTo(3));await expect(iframe.locator('#frame')).toHaveText('3');await expect(iframe.locator('body')).toHaveCSS('background-color','rgb(255, 0, 0)');
+  await page.evaluate(()=>(window as any).player.current.play());await expect.poll(()=>iframe.locator('#frame').textContent()).not.toBe('3');await page.evaluate(()=>(window as any).player.current.pause());expect(existsSync(join(root,'export.mp4'))).toBe(false);expect(errors).toEqual([]);
+  const originalSource=readFileSync(scene,'utf8');writeFileSync(scene,'<script>window.renderFrame=()=>{throw Error("broken scene")};</script>');await page.evaluate(()=>(window as any).revise('broken'));await expect(page.getByRole('alert')).toContainText('broken scene');writeFileSync(scene,originalSource);await page.evaluate(()=>(window as any).revise('fixed'));await expect(page.getByRole('alert')).toHaveCount(0);await page.evaluate(()=>(window as any).player.current.seekTo(20));await expect(iframe.locator('#frame')).toHaveText('20');
+  const inputProps={...props,exporting:true},options={serveUrl:resolve('artifacts/remotion'),inputProps,browserExecutable:executable},composition=await selectComposition({...options,id:'Dream'});
+  await renderStill({...options,composition,frame:3,output:join(root,'early.png')});await renderStill({...options,composition,frame:20,output:join(root,'late.png')});
+  const early=await browser.newPage();await early.goto('file:///'+join(root,'early.png').replaceAll('\\','/'));const earlyPixel=await early.evaluate(async()=>{const img=document.querySelector('img')!;await img.decode();const canvas=document.createElement('canvas');canvas.width=240;canvas.height=120;const ctx=canvas.getContext('2d')!;ctx.drawImage(img,0,0);return Array.from(ctx.getImageData(100,80,1,1).data);});expect(earlyPixel).toEqual([255,0,0,255]);
+  await early.goto('file:///'+join(root,'late.png').replaceAll('\\','/'));const latePixel=await early.evaluate(async()=>{const img=document.querySelector('img')!;await img.decode();const canvas=document.createElement('canvas');canvas.width=240;canvas.height=120;const ctx=canvas.getContext('2d')!;ctx.drawImage(img,0,0);return Array.from(ctx.getImageData(100,80,1,1).data);});expect(latePixel).toEqual([0,0,255,255]);
+  await renderMedia({...options,composition,codec:'h264',outputLocation:join(root,'export.mp4'),concurrency:1});expect(readFileSync(join(root,'export.mp4')).byteLength).toBeGreaterThan(1000);
+ }finally{await browser.close();await media.close();server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
+});

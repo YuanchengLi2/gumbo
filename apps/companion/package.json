@@ -1,0 +1,1 @@
+{"name":"@dream/companion","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"next dev","build":"next build","start":"next start"},"dependencies":{"next":"16.3.8","react":"19.3.0","react-dom":"19.3.0","@supabase/supabase-js":"^2.57.4"},"devDependencies":{"typescript":"^5.9.3","@types/react":"^19.0.0","@types/node":"^24.0.0"}}

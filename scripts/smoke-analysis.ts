@@ -1,0 +1,20 @@
+import {analyzeStage} from '../apps/project-service/src/analysis-client';
+import {AssetSchema} from '@dream/footage';
+import {fingerprint} from '../apps/project-service/src/media';
+import {resolve,join} from 'node:path';
+import {mkdirSync,writeFileSync,mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+
+const binary=resolve('apps/ingest-worker/build/dist/dream-ingest/dream-ingest.exe');
+process.env.DREAM_FFMPEG_DLL_DIR=resolve('apps/desktop/resources/staged/compositor');
+const source=resolve('artifacts/fixtures/source.mp4'),output=mkdtempSync(join(tmpdir(),'dream-frozen-analysis-'));
+const asset=AssetSchema.parse({id:'frozen-fixture',filename:'source.mp4',kind:'video',originalPath:source,durationSec:6,fingerprint:await fingerprint(source)});
+const controller=new AbortController();
+const shots=await analyzeStage(binary,'shots',asset,source,output,controller.signal);
+if(!shots.shots.length||Math.abs(shots.shots.at(-1)!.end-6)>.1)throw new Error('Frozen scene detector returned invalid fixture timing.');
+const wav=Buffer.alloc(44+16000*2*2);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(16000,24);wav.writeUInt32LE(32000,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
+const audio=join(output,'silent.wav');writeFileSync(audio,wav);
+const features=await analyzeStage(binary,'audio_features',{...asset,id:'silent',fingerprint:await fingerprint(audio)},audio,output,controller.signal);
+if(features.silence.length!==1||features.silence[0].end!==2)throw new Error('Frozen audio analyzer returned invalid silence timing.');
+const report={runtime:binary,shots:shots.shots.length,duration:shots.shots.at(-1)!.end,silentAudioSec:2,pipelineRevision:features.pipelineRevision,passed:true};
+mkdirSync('artifacts',{recursive:true});writeFileSync('artifacts/frozen-analysis-acceptance.json',JSON.stringify(report,null,2));console.log(report);

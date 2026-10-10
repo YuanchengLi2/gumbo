@@ -1,0 +1,10 @@
+[
+ {"query":"clip-9999","owner":"clip-9999","category":"exact"},
+ {"query":"Amethyst closing ceremony","owner":"clip-9999","category":"relevance"},
+ {"query":"cobalt opening introduction","owner":"clip-0","category":"relevance"},
+ {"query":"amber workshop demonstration","owner":"clip-5000","category":"relevance"},
+ {"query":"preserve violet titles","owner":"direction","category":"constraint"},
+ {"query":"keep original voice narration","owner":"voice","category":"constraint"},
+ {"query":"asset-999","owner":"asset-999","category":"exact"},
+ {"query":"ceremony ending Amethyst","owner":"clip-9999","category":"relevance"}
+]

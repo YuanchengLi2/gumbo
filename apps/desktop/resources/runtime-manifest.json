@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "targets": [
+    "win32-x64",
+    "darwin-arm64"
+  ],
+  "ffmpeg": {
+    "package": "ffmpeg-static",
+    "version": "5.2.0"
+  },
+  "ffprobe": {
+    "package": "ffprobe-static",
+    "version": "3.1.0"
+  },
+  "rendering": {
+    "remotion": "4.0.533",
+    "browser": "chrome-headless-shell"
+  },
+  "analysis": {
+    "whisper": "large-v3-turbo",
+    "status": "requires staged runtime and approved model weights"
+  },
+  "creation": {
+    "node": "24.19.0",
+    "python": "3.13.16",
+    "platform": "win32-x64",
+    "manifest": "staged/creation/manifest.json",
+    "manifestSha256": "026b1fe314b23811ecff9d4c42a8245af40aa74668ea48dbdd96d7942bee7acb"
+  }
+}

@@ -1,0 +1,1 @@
+import {createClient} from '@supabase/supabase-js';import {supabaseUrl,anonKey} from './api';let client:ReturnType<typeof createClient>|undefined;export const auth=()=>client??=createClient(supabaseUrl,anonKey,{auth:{flowType:'pkce'}});

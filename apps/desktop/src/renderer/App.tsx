@@ -1,0 +1,62 @@
+import {editingChanges} from './editing-language';
+import React,{useEffect,useRef,useState} from 'react';
+
+import type {PlayerRef} from '@remotion/player';
+
+import {resolve} from '@dream/timeline';
+
+import {ArrowLeft,Undo2,Redo2,SlidersHorizontal,Upload,Settings2,History,X,Download,Check,Share2,FolderOpen} from 'lucide-react';
+
+import {useProjectSession} from './hooks/useProjectSession';
+
+import {useEditor} from './store/editor';
+
+import {HomeScreen} from './components/home/HomeScreen';
+
+import {AIWorkspace} from './components/workspace/AIWorkspace';
+
+
+
+import {FileAccessPanel} from './components/files/FileAccessPanel';
+
+
+
+export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),[dialog,setDialog]=useState<'history'|'export'|'settings'|'share'|null>(null),[exportFormat,setExportFormat]=useState<'video'|'timeline'>('timeline'),[files,setFiles]=useState(false),[input,setInput]=useState(''),[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',duration=project?resolve(project.timeline,project.footage).durationSec:0;
+
+ useEffect(()=>{void window.dream.setTheme('light');},[s.route]);
+ function seek(frame:number){const current=useEditor.getState().project;if(!current)return;const n=Math.max(0,Math.min(Math.max(1,resolve(current.timeline,current.footage).durationInFrames)-1,frame));s.setFrame(n);player.current?.seekTo(n);}
+
+ async function create(){if(creating.current||s.busy||!homeInput.trim())return;creating.current=true;try{const p=await s.create({requestId:crypto.randomUUID(),text:homeInput.trim(),paths:homePaths});if(p){setHomeInput('');setHomePaths([]);setInput('');}}finally{creating.current=false;}}
+
+ async function attach(paths?:string[]){try{if(paths){const documents=paths.filter(path=>!(/\.(mp4|mov|webm|mkv|m4v|wav|mp3|m4a|aac|png|jpe?g|webp)$/i.test(path)));if(documents.length){const note='Use these files for this edit: '+documents.map(path=>JSON.stringify(path)).join(', ');if(s.route==='home')setHomeInput(old=>old+(old?'\n':'')+note);else setInput(old=>old+(old?'\n':'')+note);paths=paths.filter(path=>!documents.includes(path));if(!paths.length)return;}}if(s.route==='home'){const selected=paths??await window.dream.pickMedia();setHomePaths(old=>[...new Set([...old,...selected])]);}else{const ids=await s.importFiles(paths);s.setAttachments([...new Set([...useEditor.getState().attachments,...ids])]);}}catch(error){s.setError((error as Error).message);}}
+
+ async function submit(plan=false,resumeSaved=true){if(!project||!input.trim()||active||s.busy)return;const text=input.trim();const result=await s.command(project.aiStatus==='interrupted'&&resumeSaved&&!plan?{type:'resume',text}:{type:'message',text,selection:s.selected,assetIds:s.attachments,intent:plan?'plan':'auto',requestId:crypto.randomUUID()});if(result){setInput('');s.setAttachments([]);s.setSidebarTab('chat');}}
+
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey;if(e.code==='Space'){e.preventDefault();player.current?.toggle();}else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();seek(s.frame+(e.key==='ArrowRight'?1:-1)*(e.shiftKey?project?.timeline.settings.fps??30:1));}else if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();void s.command({type:e.shiftKey?'redo':'undo'});}else if(e.key==='Escape')s.setSelected([]);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[s.route,s.frame,dialog,files,project?.versionId,active]);
+
+ async function exportVideo(){s.setProgress({status:'rendering',progress:0});try{const result=await window.dream.exportVideo(exportFormat);if(!result)s.setProgress(null);}catch(error){s.setProgress({status:'failed',progress:0,error:(error as Error).message});}}
+
+ return <main className={'app platform-'+s.runtime?.platform+' '+''} onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();void window.dream.registerDropped([...e.dataTransfer.files]).then(paths=>attach(paths)).catch(error=>s.setError(error.message));}}>
+
+ {s.route==='home'||!project?<HomeScreen projects={s.projects} value={homeInput} onChange={setHomeInput} attachments={homePaths.map(path=>({id:path,name:path.split(/[\\/]/).pop()!}))} onRemove={id=>setHomePaths(paths=>paths.filter(p=>p!==id))} onSubmit={()=>void create()} onUpload={()=>void attach()} onComputer={()=>setFiles(true)} onOpen={folder=>void s.open(folder)} onSettings={()=>setDialog('settings')} busy={s.busy}/>:<><header className="workspace-header"><button className="icon-button" aria-label="Back to projects" onClick={()=>{player.current?.pause();s.setRoute('home');void s.refreshProjects();}}><ArrowLeft size={21}/></button><input className="project-title" aria-label="Project name" key={project.meta.id+project.meta.name} defaultValue={project.meta.name} onBlur={e=>{const name=e.target.value.trim();if(name&&name!==project.meta.name)void s.command({type:'rename',name});}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}/><span className="spacer"/><button className="icon-button" title="Undo" aria-label="Undo" disabled={!project.canUndo||active} onClick={()=>s.command({type:'undo'})}><Undo2 size={17}/></button><button className="icon-button" title="Redo" aria-label="Redo" disabled={!project.canRedo||active} onClick={()=>s.command({type:'redo'})}><Redo2 size={17}/></button><button className="icon-button" title="Settings" onClick={()=>setDialog('settings')}><Settings2 size={17}/></button><button className="button primary" disabled={!duration||active} onClick={()=>setDialog('export')}><Upload size={17}/>Export</button></header>{<AIWorkspace key={project.meta.id} project={project} player={player} frame={s.frame} playing={s.playing} onFrame={s.setFrame} onPlaying={s.setPlaying} onSeek={seek} selected={s.selected} onSelect={s.setSelected} attachments={s.attachments} onAttachments={s.setAttachments} tab={s.sidebarTab} onTab={s.setSidebarTab} value={input} onChange={setInput} command={s.command} onSubmit={(plan,resume)=>void submit(plan,resume)} onImport={()=>void attach()} onComputer={()=>setFiles(true)} onHistory={()=>setDialog('history')} onError={s.setError} busy={s.busy} catalog={s.catalog}/>}</>}
+
+ {s.error&&<div className="error-toast" role="alert"><p>{s.error}</p><button aria-label="Dismiss error" onClick={()=>s.setError(null)}><X size={17}/></button></div>}
+
+ {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
+
+ {dialog&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null);}}><section className={'dialog '+(dialog==='history'?'wide':'')} role="dialog" aria-label={dialog}><div className="dialog-header"><h2>{dialog==='history'?'Version history':dialog==='settings'?'Settings':dialog==='share'?'Share your video':'Export video'}</h2><button className="icon-button" aria-label="Close dialog" onClick={()=>setDialog(null)}><X size={20}/></button></div>
+
+ {dialog==='history'&&<div className="version-list">{project?.history?.versionsBefore&&<button className="text-button" onClick={async()=>{const page=await s.command({type:'history_page',kind:'versions',before:project.history!.versionsBefore!,limit:50});const current=useEditor.getState().project;if(page&&current)s.setProject({...current,versions:[...current.versions,...page.items],history:{...current.history!,versionsBefore:page.nextBefore}});}}>Load earlier versions</button>}{project?.versions.map(v=><div key={v.id}><span><strong>{editingChanges([v.summary])[0]}</strong><small>{new Date(v.createdAt).toLocaleString()}</small></span>{v.id===project.versionId?<small>Current</small>:<button className="text-button" disabled={active} onClick={()=>s.command({type:'restore',versionId:v.id})}>Restore</button>}</div>)}</div>}
+
+ {dialog==='export'&&<><p>Save an editable timeline for Premiere Pro or DaVinci Resolve, or render a finished video.</p><div className="export-format-options">{(['timeline','video'] as const).map(format=><label key={format}><input type="radio" name="export-format" checked={exportFormat===format} disabled={s.progress?.status==='rendering'} onChange={()=>{setExportFormat(format);s.setProgress(null);}}/><span>{format==='timeline'?'Editable tracks':'Finished video'}<small>{format==='timeline'?'XML timeline and media folder. Graphics stay on separate rendered layers; their internal animation is baked.':'One MP4 with the complete picture and audio mix.'}</small></span></label>)}</div><div className="export-details"><span>{exportFormat==='timeline'?'Premiere / Resolve · XML + media':'MP4 · H.264'}</span><strong>{project?.timeline.settings.width} × {project?.timeline.settings.height} · {project?.timeline.settings.fps} fps</strong><span>{duration.toFixed(1)} seconds</span></div>{s.progress&&<div className="export-progress"><progress max={1} value={s.progress.progress}/><span>{s.progress.status==='completed'?'Export complete':s.progress.status==='failed'?s.progress.error:s.progress.status==='cancelled'?'Export cancelled':`${s.progress.phase??'Exporting'} · ${Math.round(s.progress.progress*100)}%`}</span></div>}<div className="export-warnings">{s.progress?.warnings?.map(w=><p key={w}>{w}</p>)}</div><div className="dialog-actions">{s.progress?.status==='rendering'?<button className="button secondary" onClick={()=>window.dream.cancelExport()}>Cancel export</button>:s.progress?.status==='completed'&&s.progress.path?<><button className="button secondary" onClick={()=>window.dream.reveal(s.progress!.path!)}><FolderOpen size={15}/>Reveal</button>{exportFormat==='video'&&<button className="text-button" onClick={()=>setDialog('share')}>Share link</button>}</>:null}<button className="button primary" disabled={s.progress?.status==='rendering'} onClick={exportVideo}><Download size={16}/>{exportFormat==='timeline'?'Export tracks':'Save MP4'}</button></div></>}
+
+ {dialog==='share'&&<><p>Upload your completed MP4 and create a viewing link.</p>{share&&<input className="share-url" readOnly value={share}/>}<div className="dialog-actions"><button className="button primary" onClick={async()=>{try{const result=await window.dream.shareExport();if(result)setShare(result.url);}catch(error){s.setError((error as Error).message);}}}><Share2 size={16}/>Create link</button>{share&&<button className="button secondary" onClick={()=>navigator.clipboard.writeText(share)}>Copy link</button>}</div></>}
+
+ {dialog==='settings'&&<><p>Projects are saved on this computer. New imports are copied into their project folders.</p><div className="settings-section"><h3>Computer files</h3><p>Manage Dream’s permission to find and work with files.</p><button className="button secondary" onClick={()=>{setDialog(null);setFiles(true);}}>Manage file access</button></div><div className="settings-section"><h3>Local processing</h3>{[['Video and audio playback',s.runtime?.ffmpeg&&s.runtime?.ffprobe],['Speech runtime',s.runtime?.whisper],['Speech model',s.runtime?.models]].map(([label,ready])=><div className="runtime-row" key={String(label)}><span>{label}</span><small>{ready?'Ready':'Not installed'}</small></div>)}{!s.runtime?.models&&<button className="button secondary" onClick={()=>s.command({type:'models',action:'install',id:'whisper-large-v3-turbo'})}>Download speech model · 1.6 GB</button>}</div><div className="settings-section"><h3>Dream AI</h3><p>Connects automatically when needed. Selected text and sampled images are sent for AI processing; your projects stay local.</p></div></>}
+
+ </section></div>}
+
+ </main>;
+
+}
+
