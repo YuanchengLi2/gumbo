@@ -4,7 +4,7 @@ import {create} from 'zustand';
 import type {ProjectState} from '@dream/project-db';
 export type LiveCommentary={turnId:string;requestId:string;text:string;status:'streaming'|'complete'|'discarded'};
 /** A sent message shown at once, until the saved conversation includes it. */
-export type PendingMessage={requestId:string;text:string;assetIds:string[];createdAt:string};
+export type PendingMessage={selection?:import('@dream/timeline').SelectionRef[];requestId:string;text:string;assetIds:string[];createdAt:string};
 /** Cost and time of the running request, per caller (the lead, or a worker's activity id) and model. */
 export type UsageRow={owner:string;model:string;calls:number;cost:number;prompt:number;output:number;ms:number};
 export type TurnUsage={turnId:string;rows:UsageRow[]};

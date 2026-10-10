@@ -141,3 +141,26 @@
 .task-window-activity li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.task-window li.running>svg{color:#7d6bc4}.task-window li.interrupted,.task-window li.failed{color:#a46b56}
 @media(prefers-reduced-motion:reduce){.run-working span{animation:none;color:#6f6290;background:none}.stream-cursor{animation:none}}
 .task-window-usage{list-style:none;margin:0 0 4px;padding:0}.task-window-usage li{flex-wrap:wrap;row-gap:2px}.task-window-usage li>span small{font-size:10px;color:#a39ba9}.task-window-usage li>small{font-variant-numeric:tabular-nums}
+
+/* Media tiles: attachments, selections and message media show what they are, not just a name. */
+.media-tile{position:relative;display:inline-flex;flex-direction:column;width:112px;border:1px solid #e3e1ea;border-radius:9px;overflow:hidden;background:#fff;font-size:10.5px;color:#4a4656;flex:none;vertical-align:top}
+.media-tile.card{width:180px}
+.media-tile-visual{position:relative;display:block;aspect-ratio:16/9;background:#eceaf2;overflow:hidden}
+.media-tile-visual>img,.media-tile-visual>video{display:block;width:100%;height:100%;object-fit:cover}
+.media-tile-visual>.scene-peek{width:100%;height:100%}
+.media-tile-icon{position:absolute;inset:0;display:grid;place-items:center;color:#a39cb0}
+.media-tile-wave{position:absolute;inset:18% 6%;width:88%;height:64%}.media-tile-wave line{stroke:#8e7fc8;stroke-width:.8}
+.media-tile-length{position:absolute;right:4px;bottom:4px;background:#12141bcc;color:#fff;border-radius:4px;padding:0 4px;font-size:9.5px;font-variant-numeric:tabular-nums}
+.media-tile-label{display:flex;align-items:center;gap:4px;padding:4px 6px;min-width:0}.media-tile-label>svg{flex:none;color:#8f8a99}.media-tile-label>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.media-tile>button{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:#12141bb3;color:#fff}
+.media-tile.text .media-tile-visual{aspect-ratio:auto;height:28px}
+.attachment-list{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:9px}
+.conversation-turn .message.user .message-attachments{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.selection-strip{display:flex;align-items:flex-start;gap:8px;margin-top:8px;padding:8px;border:1px solid #e3ddf3;border-radius:11px;background:#f8f6fd}
+.selection-strip-items{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:thin}
+.selection-strip>button{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#6d6280}
+/* Timeline drag and drop. */
+.track.drop-target{background:#f1eefb}
+.drop-indicator{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#7d6bc4;pointer-events:none;z-index:6}
+.timeline-empty{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:#9a95a6;pointer-events:none}
+.timeline-notice{margin:6px 0 0;font-size:11px;color:#6a58b0}

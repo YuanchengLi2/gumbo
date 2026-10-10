@@ -64,7 +64,8 @@ it('moves events out of saved turns during migration, idempotently',()=>{
  const db=fixture();const folder=db.folder;db.close();
  const raw=new Database(join(folder,'.dream/project.sqlite'));const version=raw.pragma('user_version',{simple:true}) as number;
  raw.exec('DROP TABLE activity_events');raw.prepare('INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('turn_activity:old',JSON.stringify({steps:[],status:'complete',changes:[],events:[{id:'a',sequence:0,kind:'action',text:'Read',status:'complete'},{id:'p',sequence:1,kind:'changes',text:'Updated',status:'complete',files:[{path:'src/a.js',before:'one',after:'one\ntwo',truncated:false}]}]}));
- raw.pragma(`user_version=${version-3}`);raw.close();
+ // Rewind to just before the activity migration (activity schema, event move, scene errors, message selection).
+ raw.pragma(`user_version=${version-4}`);raw.close();
  const reopened=new ProjectDB(folder);try{
   expect(JSON.parse(reopened.getMeta('turn_activity:old')!).events).toBeUndefined();
   const events=reopened.turnActivity('old')!.events!;expect(events.map(e=>e.id)).toEqual(['a','p']);expect(events[1].files![0]).toEqual({path:'src/a.js',added:1,removed:0});

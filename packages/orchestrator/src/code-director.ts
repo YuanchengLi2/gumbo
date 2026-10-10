@@ -10,6 +10,7 @@ import {normalizeScope} from './code-tools';
 import {runTaskGraph,retryable} from './task-graph';
 import {routeCodeRequest,type RequestIntent} from './routing';
 import {approvesPlan} from '@dream/contracts';
+import {selectionRefs} from '@dream/timeline';
 export {approvesPlan};
 import {proposePlan,approvePlan,executeWorkflow} from './workflow';
 import {FileApprovalRequired} from './file-tools';
@@ -61,7 +62,7 @@ export class Director {
    if(route.route==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...route,continued:true});return this.resume(text);}
    this.recordRoute(turnId,route);
   }
-  this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds);this.chooseEffort(turnId,effort);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
+  this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
  /** One inference. The first substantive request of the user-facing phase carries the bounded source map; workers and consultations work from briefs. */
  async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',media=true,extra:{workerMode?:WorkerMode;onStream?:()=>void}={}){

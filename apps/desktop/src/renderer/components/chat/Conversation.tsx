@@ -6,9 +6,13 @@ import type {PublicActivity} from '@dream/contracts';
 import {DreamMark} from '../home/HomeScreen';
 import {MessageText} from './MessageText';
 import {useEditor} from '../../store/editor';
+import {MediaTile} from '../media/MediaTile';
+import type {SelectionRef} from '@dream/timeline';
 
-function UserMessage({text,assetIds,project}:{text:string;assetIds?:string[];project:ProjectState}){
- return <article className="message user"><div>{!!assetIds?.length&&<div className="message-attachments">{assetIds.map(id=><span key={id}>{project.footage.assets.find(a=>a.id===id)?.filename??'Media'}</span>)}</div>}<p>{text}</p></div></article>;
+// Attached media and the timeline selection sent with a message show as media tiles, not names.
+function UserMessage({text,assetIds,selection,project}:{text:string;assetIds?:string[];selection?:SelectionRef[];project:ProjectState}){
+ const asset=(id?:string)=>id?project.footage.assets.find(a=>a.id===id):undefined;
+ return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div></article>;
 }
 const Identity=()=><div className="assistant-identity"><DreamMark/><span>Dream</span></div>;
 
@@ -25,12 +29,12 @@ export function Conversation({project}:{project:ProjectState}){
  // The closing note streams like any other note and hands over to the formatted answer once it is saved, so text never blinks out.
  const answered=!running&&!!last?.text;
  events=events.flatMap(e=>e.kind==='terminal'?answered||!e.text.trim()?[]:[{...e,kind:'commentary' as const}]:[e]).filter(e=>e.status!=='discarded'&&!(e.kind==='commentary'&&answered&&e.text.trim()===last!.text.trim())).sort((a,b)=>a.sequence-b.sequence);
- return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} project={project}/>)}
+ return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} selection={m.selection} project={project}/>)}
  {(events.length>0||last||running)&&<div className="assistant-turn"><Identity/><div className="assistant-turn-body"><RunStream events={events} running={running} assets={project.footage.assets}/>
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
  {!running&&!!activity?.changes.length&&<details className="turn-summary" aria-label="Change summary"><summary>Changes<span>{editingChanges(activity.changes).length}</span></summary><ul>{editingChanges(activity.changes).map((change,i)=><li key={i}>{change}</li>)}</ul></details>}
  </div></div>}</section>;
  })}
- {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} project={project}/><div className="assistant-turn"><Identity/><div className="assistant-turn-body"><RunStream events={[]} running startedAt={pending.createdAt}/></div></div></section>}
+ {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} project={project}/><div className="assistant-turn"><Identity/><div className="assistant-turn-body"><RunStream events={[]} running startedAt={pending.createdAt}/></div></div></section>}
  </div>;
 }
