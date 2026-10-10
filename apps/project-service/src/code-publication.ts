@@ -9,6 +9,18 @@ import {digest,workspacePath} from '../../../packages/project-db/src/workspace-s
 import {timelineChanges} from '../../../packages/project-db/src/activity';
 import {probe,fingerprint} from './media';
 import {validateSceneSource,inlineLocalAssets} from './scene-source';
+import {compileScene,isEngineScene,type CompileError} from './engine-compile';
+
+/** Compile errors as the agent sees them: one line per error with its file position. */
+export const formatCompileErrors=(errors:CompileError[])=>'The scene code does not compile:\n'+errors.slice(0,12).map(e=>`${e.file}:${e.line}:${e.column} ${e.text}`).join('\n');
+/** Copies a compiled scene's resources into the project's content-addressed store and records them beside the bundle. */
+export function storeEngineScene(projectFolder:string,root:string,compiled:{bundle:string;map:string;resources:Record<string,string>},directory:string){
+ const store=join(projectFolder,'Media/Engine/files'),files:Record<string,string>={};mkdirSync(store,{recursive:true});mkdirSync(directory,{recursive:true});
+ for(const [key,rel] of Object.entries(compiled.resources)){const bytes=readFileSync(join(root,rel)),hash=digest(bytes),target=join(store,hash);if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,bytes);renameSync(temp,target);}files[key]=hash;}
+ const write=(name:string,text:string)=>{const target=join(directory,name);if(existsSync(target)&&readFileSync(target,'utf8')===text)return;const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);};
+ write('scene.js',compiled.bundle);if(compiled.map)write('scene.js.map',compiled.map);write('resources.json',JSON.stringify({files}));
+ return join(directory,'scene.js');
+}
 
 /** Candidate validation and immutable ingestion happen before the single SQLite commit. */
 export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId:string,ffprobe:string):Promise<PublicationReceipt|undefined>{
@@ -19,7 +31,16 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  if(candidate.timeline.id!==db.timeline().id)throw new Error('The document belongs to another project.');
  if(new Set(candidate.outputs.map(o=>o.id)).size!==candidate.outputs.length)throw new Error('Output IDs must be unique.');
  const outputs=new Map<string,Asset>(),assets=db.footage().assets;
- const sceneAsset=(sourcePath:string,name:string,size:{width:number;height:number;fps:number;durationInFrames:number})=>{
+ type Size={width:number;height:number;fps:number;durationInFrames:number};type EngineOptions={props?:Record<string,unknown>;transparent?:boolean;assets?:string[]};
+ // Engine scenes (.tsx/.ts/.jsx/.js) compile into one bundle for the scene engine; nothing runs here.
+ const engineAsset=async(sourcePath:string,name:string,size:Size,extra:EngineOptions)=>{
+  const compiled=await compileScene(root,{entry:sourcePath,mode:'publish'});if(compiled.errors.length)throw new Error(formatCompileErrors(compiled.errors));
+  const revision=digest(JSON.stringify({scene:compiled.hash,...size,props:extra.props??null,transparent:!!extra.transparent}));
+  const target=storeEngineScene(db.folder,root,compiled,join(db.folder,'Media/Generated',revision));
+  return AssetSchema.parse({id:'code_'+revision,filename:name,kind:'video',originalPath:target,fingerprint:revision,durationSec:size.durationInFrames/size.fps,fps:size.fps,width:size.width,height:size.height,status:'ready',scene:{format:'engine',revisionId:revision,durationInFrames:size.durationInFrames,engine:{version:compiled.version,chunks:compiled.chunks,props:extra.props,assets:[...new Set([...compiled.assetRefs,...extra.assets??[]])],music:[],files:Object.keys(compiled.resources).length,transparent:!!extra.transparent}}});
+ };
+ const sceneAsset=async(sourcePath:string,name:string,size:Size,extra:EngineOptions={})=>{
+  if(isEngineScene(sourcePath))return engineAsset(sourcePath,name,size,extra);
   const html=inlineLocalAssets(readFileSync(workspacePath(root,sourcePath),'utf8'),sourcePath,root);
   validateSceneSource(html);
   const hash=digest(JSON.stringify({html,width:size.width,height:size.height,fps:size.fps,frames:size.durationInFrames})),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'scene.html');
@@ -31,8 +52,10 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
   if(output.kind!=='scene'&&!output.path.replaceAll('\\','/').startsWith('output/'))throw new Error('Declare generated assets under output/.');
   const path=workspacePath(root,output.path);let asset:Asset;
   if(output.kind==='scene'){
-   if(!output.width||!output.height||!output.fps||!output.durationInFrames)throw new Error('A live scene needs width, height, fps and durationInFrames.');
-   asset=sceneAsset(output.path,output.id,{width:output.width,height:output.height,fps:output.fps,durationInFrames:output.durationInFrames});
+   // Engine scenes default to the project's frame size and rate; every scene needs its length.
+   const settings=candidate.timeline.settings,engine=isEngineScene(output.path),width=output.width??(engine?settings.width:undefined),height=output.height??(engine?settings.height:undefined),fps=output.fps??(engine?settings.fps:undefined);
+   if(!width||!height||!fps||!output.durationInFrames)throw new Error('A scene output needs durationInFrames'+(engine?'':', width, height and fps')+'.');
+   asset=await sceneAsset(output.path,output.id,{width,height,fps,durationInFrames:output.durationInFrames},{props:output.props,transparent:output.transparent,assets:output.assets});
   }else{
    const info=await probe(path,ffprobe);if(info.kind!==output.kind||!Number.isFinite(info.durationSec)||info.durationSec<=0)throw new Error(`Output ${output.id} is not valid ${output.kind} media.`);
    const hash=await fingerprint(path),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'media'+extname(path).toLowerCase());mkdirSync(directory,{recursive:true});if(!existsSync(target))copyFileSync(path,target);
@@ -47,7 +70,8 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  for(const assetId of new Set([...candidate.timeline.spine,...candidate.timeline.music,...candidate.timeline.attached.flatMap(i=>i.source?[i.source]:[])].map(c=>c.assetId))){
   const old=assets.find(a=>a.id===assetId),source=old?.creation?.sourcePath;
   if(!old?.scene||!source||!existsSync(workspacePath(root,source)))continue;
-  const fresh=sceneAsset(source,old.filename,{width:old.width!,height:old.height!,fps:old.fps!,durationInFrames:old.scene.durationInFrames});
+  // Engine scenes recompile from all their inputs, so a change to any imported helper or resource refreshes them too.
+  const fresh=await sceneAsset(source,old.filename,{width:old.width!,height:old.height!,fps:old.fps!,durationInFrames:old.scene.durationInFrames},{props:old.scene.engine?.props,transparent:old.scene.engine?.transparent,assets:old.scene.engine?.assets});
   if(fresh.id!==old.id){fresh.creation={kind:'code',processId:process.id,outputId:old.creation!.outputId,sourcePath:source};refreshed.set(assetId,fresh);}
  }
  const timeline=structuredClone(candidate.timeline),all=new Map([...assets,...outputs.values(),...refreshed.values()].map(a=>[a.id,a]));

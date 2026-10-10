@@ -1,7 +1,9 @@
 import {z} from 'zod';
 import {TimelineSchema} from '@dream/timeline';
 
-export const WorkspaceOutputSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),path:z.string().min(1),kind:z.enum(['scene','image','audio']),fps:z.number().positive().optional(),width:z.number().int().positive().max(7680).optional(),height:z.number().int().positive().max(7680).optional(),durationInFrames:z.number().int().positive().optional()});
+// props: values passed to the scene component (one component can serve many shots); assets: project asset IDs the
+// scene shows; transparent: the scene has no background, for overlays.
+export const WorkspaceOutputSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),path:z.string().min(1),kind:z.enum(['scene','image','audio']),fps:z.number().positive().optional(),width:z.number().int().positive().max(7680).optional(),height:z.number().int().positive().max(7680).optional(),durationInFrames:z.number().int().positive().optional(),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).max(200).optional(),transparent:z.boolean().optional()});
 export const WorkspaceDocumentSchema=z.object({format:z.literal('dream-workspace'),version:z.literal(1),baseVersionId:z.string().min(1),timeline:TimelineSchema,outputs:z.array(WorkspaceOutputSchema).default([])});
 export type WorkspaceDocument=z.infer<typeof WorkspaceDocumentSchema>;
 export const ProcessRequestSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),projectId:z.string(),workspace:z.string(),command:z.string().min(1).max(32000),cwd:z.string().default('.'),timeoutMs:z.number().int().min(1000).max(3600000).default(600000)});
