@@ -4,7 +4,8 @@ import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {codeGateway,planningScript} from '../fixtures/code-gateway';
 const executable=resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe');
-const planRoute=()=>({route:'plan',intelligence:'opus',complexity:'normal',approvalQuote:null});
+// After a stop, the router reads a message that carries on with the stopped request as continue.
+const planRoute=(body:any)=>JSON.parse(body.messages[0].content).interrupted?{route:'continue',intelligence:'opus',complexity:'normal',approvalQuote:null}:{route:'plan',intelligence:'opus',complexity:'normal',approvalQuote:null};
 
 test('chat planning survives reload, waits for approval and groups the approved workflow into one undo',async()=>{
  const gateway=await codeGateway({script:planningScript(false),route:planRoute,transientOnce:true,shortSession:true}),profile=mkdtempSync(resolve(tmpdir(),'dream-plan-profile-')),folder=mkdtempSync(resolve(tmpdir(),'dream-plan-project-'));
@@ -22,7 +23,7 @@ test('chat planning survives reload, waits for approval and groups the approved 
  }finally{await app.close();await gateway.close();}
 });
 
-test('a blocked plan stays paused after reload and the same composer resumes with feedback',async()=>{
+test('a blocked plan stays paused after reload and a follow-up message continues it with feedback',async()=>{
  const gateway=await codeGateway({script:planningScript(true),route:planRoute}),profile=mkdtempSync(resolve(tmpdir(),'dream-blocked-profile-')),folder=mkdtempSync(resolve(tmpdir(),'dream-blocked-project-'));
  writeFileSync(resolve(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'local-fixture'}));
  const app=await electron.launch({executablePath:executable,args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});
@@ -32,7 +33,7 @@ test('a blocked plan stays paused after reload and the same composer resumes wit
   await expect.poll(async()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).aiStatus),{timeout:60000}).toBe('interrupted');
   const versions=await page.evaluate(async()=>(await window.dream.command({type:'state'})).versions.length);
   await page.reload();await page.getByRole('button',{name:'Tasks',exact:true}).click();const progress=page.getByLabel('Tasks in progress');await expect(progress.getByText('Paused',{exact:true})).toBeVisible();await expect(progress.getByText('Done',{exact:true})).toHaveCount(1);
-  await expect(page.getByLabel('Continue saved request')).toBeChecked();await page.getByLabel('Ask Dream to edit').fill('Square format is confirmed; continue.');await page.getByRole('button',{name:'Send prompt'}).click();
+  await expect(page.getByLabel('Continue saved request')).toHaveCount(0);await page.getByLabel('Ask Dream to edit').fill('Square format is confirmed; continue.');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(async()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).aiStatus),{timeout:60000}).toBe('complete');await expect(progress.getByText('Done',{exact:true})).toHaveCount(2);
   const state=await page.evaluate(async()=>window.dream.command({type:'state'}));expect(state.versions).toHaveLength(versions);expect(state.messages.some(m=>m.role==='user'&&m.text==='Square format is confirmed; continue.')).toBe(true);
  }finally{await app.close();await gateway.close();}

@@ -186,3 +186,35 @@ it('does not accept completion after a publication when later changes are unpubl
   expect(limited.outcome.status).toBe('blocked');expect(limited.outcome.summary).toContain('step limit');
  }finally{db.close();}
 });
+
+it('rebuilds a scene on the timeline when its source file is edited and published, without re-declaring it',async()=>{
+ const db=fixture(),ws=workspaceFor(db);try{
+  await ws.initialize();const path=join(ws.root,'project.json'),doc=JSON.parse(readFileSync(path,'utf8'));writeFileSync(join(ws.root,'src/title.html'),scene('blue title'));
+  doc.outputs=[{id:'title',path:'src/title.html',kind:'scene',width:640,height:360,fps:30,durationInFrames:60}];doc.timeline.spine=[{id:'title',assetId:'output:title',srcIn:0,srcOut:2,speed:1,audio:{mute:true},reason:'Title'}];writeFileSync(path,JSON.stringify(doc));
+  await ws.execute('publish_project',{},'first','turn',new AbortController().signal);const before=db.timeline().spine[0].assetId;
+  // The revision only edits the scene file; project.json is untouched (outputs were emptied by the first publication).
+  await ws.execute('edit_file',{path:'src/title.html',oldText:'blue title',newText:'sunset title'},'edit','turn',new AbortController().signal);
+  const second=await ws.execute('publish_project',{},'second','turn',new AbortController().signal),after=db.timeline().spine[0].assetId;
+  expect(after).not.toBe(before);expect(second.publication.versionId).toBe(db.head());expect(readFileSync(db.footage().assets.find(a=>a.id===after)!.originalPath,'utf8')).toContain('sunset title');expect(db.footage().assets.find(a=>a.id===after)!.durationSec).toBe(2);expect(ws.unpublishedChanges()).toEqual([]);
+ }finally{db.close();}
+});
+
+it('plans with Opus and, when the user says "do it", runs the approved plan with Opus leading Haiku workers',async()=>{
+ const {approvesPlan}=await import('../../packages/orchestrator/src/code-director');
+ for(const yes of ['do it','Edit','looks good, go ahead','ok','Apply the plan.'])expect(approvesPlan(yes)).toBe(true);
+ for(const no of ['make the title red','looks good but make it shorter','edit the second step to use blue',''])expect(approvesPlan(no)).toBe(false);
+ const db=fixture();try{
+  const calls:{purpose:string;model:string}[]=[];let lead=0,worker=0;
+  const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
+  director.inference=async(model,_s,_m,_t,_turn,_f,purpose='execution')=>{calls.push({purpose,model});
+   if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'plan',intelligence:'opus',complexity:'normal',reason:'Plan',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='planning')return toolUse('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Title card',goal:'Add a title card',steps:[{id:'title',title:'Add the title card',instruction:'Create the title card',acceptance:'Title visible',review:false}],assumptions:[]}});
+   if(purpose==='lead')return ++lead===1?toolUse('assign','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Create it and publish.',publish:true}]}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});
+   return ++worker===1?toolUse('pub','publish_project',{}):toolUse('wdone','finish',{status:'complete',summary:'Published.'});};
+  await director.message('Plan a title card for the video',[],'plan');expect(db.getMeta('ai_status')).toBe('awaiting_approval');
+  await director.message('do it');expect(db.getMeta('ai_status')).toBe('complete');
+  expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.director);expect(calls.filter(c=>c.purpose==='lead').every(c=>c.model===models.lead)).toBe(true);expect(calls.filter(c=>c.purpose==='worker').every(c=>c.model===models.worker)).toBe(true);expect(lead).toBe(2);expect(worker).toBe(2);
+  expect(db.state().messages.some(m=>m.role==='user'&&m.text==='do it')).toBe(true);
+ }finally{db.close();}
+});

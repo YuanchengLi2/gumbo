@@ -16,7 +16,7 @@ export const AssetSchema = z.object({
   understanding:z.object({status:z.enum(['queued','running','partial','complete','interrupted','waiting_for_account','waiting_for_connection','waiting_for_permission','failed']),observedThroughSec:z.number().nonnegative().default(0),summary:z.string().optional(),error:z.string().optional(),policy:z.string()}).optional(),
   sequence:z.object({directory:z.string(),frameCount:z.number().int().positive(),fps:z.number().positive(),revisionId:z.string().regex(/^[a-f0-9]{64}$/)}).optional(),
   scene:z.object({format:z.literal('html'),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive()}).optional(),
-  creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string()}).optional(),
+  creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string(),sourcePath:z.string().optional()}).optional(),
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional()}).optional()
 });
 export type Asset = z.infer<typeof AssetSchema>;

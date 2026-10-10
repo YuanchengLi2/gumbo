@@ -54,7 +54,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  context(query:string){const selected=this.index.search(query);this.db.event('workspace.context',{availableCharacters:selected.availableCharacters,selectedCharacters:selected.selectedCharacters,selectedFiles:selected.hits.map(h=>h.path)});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
-  return{workspace:'Workspace',baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
+  return{workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.footage().assets){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;

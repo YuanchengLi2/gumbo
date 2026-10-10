@@ -11,25 +11,28 @@ import {assertToolExchanges,repairSavedExchanges} from './tool-exchanges';
 import {toolIdentity} from './tool-identity';
 import {rememberDecision} from './project-memory';
 
-export type WorkerTask={id:string;title:string;brief:string;writes:string[];publish:boolean};
+export type WorkerTask={id:string;title:string;brief:string;mode?:'build'|'research';writes:string[];publish:boolean};
+/** A mode change within one turn: Haiku alone hands the rest to the Opus director, or the director hands the rest to Haiku alone. */
+export type ModeSwitch={to:'lead'|'solo';handoff:string;reason?:string};
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
+export type AgentResult={outcome:EditOutcome;plan?:TaskPlan;switch?:ModeSwitch};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;publication?:Publication};
-type Checkpoint={mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[]};
+type Checkpoint={mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];switch?:ModeSwitch};
 const RESULT_LIMIT=24000;
 // Coarse identity groups retries of the same target even when inputs differ (rewritten file content, tweaked command flags).
 const coarseKey=(name:string,input:any)=>name+':'+String(input?.path??input?.output??input?.assetId??(typeof input?.command==='string'?input.command.slice(0,120):'')??'');
-const modeSuffix=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: planning. Inspect using read-only tools and return the requested plan with finish. Keep the plan as short as the request allows: one step per distinct user-visible change; a small addition is usually a single step.':role==='readonly'?'\nCurrent mode: answering. Answer this question directly; a normal final text response completes the turn.':role==='lead'?'':'\nCurrent mode: execution. You are authorized to write files, install dependencies, bundle code and publish live scenes. Statements about read-only mode in earlier conversation are historical and do not restrict this request.';
+const modeSuffix=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: planning. Inspect using read-only tools and return the requested plan with finish. Keep the plan as short as the request allows: one step per distinct user-visible change; a small addition is usually a single step.':role==='readonly'?'\nCurrent mode: answering. Answer this question directly; a normal final text response completes the turn.':role==='lead'||role==='worker'?'':'\nCurrent mode: execution. You are authorized to write files, install dependencies, bundle code and publish live scenes. Statements about read-only mode in earlier conversation are historical and do not restrict this request.';
 const publicationOf=(result:any)=>result?.publication?{versionId:result.publication.versionId,assets:result.publication.assets,processId:result.publication.processId,unchanged:result.publication.unchanged}:undefined;
 
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;consult?:(question:string,key:string)=>Promise<string>;readOnly?:boolean;planning?:boolean;writes?:string[];canPublish?:boolean;taskId?:string;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}){
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;consult?:(question:string,key:string)=>Promise<string>;readOnly?:boolean;planning?:boolean;writes?:string[];canPublish?:boolean;canPropose?:boolean;research?:boolean;canSwitch?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
- const toolOptions={canConsult:!!options.consult&&role!=='lead'&&role!=='worker',canPublish:role!=='worker'||!!options.canPublish},allowed=allowedTools(role,toolOptions),tools=toolsFor(role,toolOptions);
+ const toolOptions={canConsult:!!options.consult&&role!=='lead'&&role!=='worker',canPublish:role!=='worker'||!!options.canPublish,canPropose:!!options.canPropose,research:!!options.research,canSwitch:!!options.canSwitch},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions),tools=options.bare?[]:toolsFor(role,toolOptions);
  const maxSteps=role==='lead'?engineBudgets.leadSteps:engineBudgets.agentSteps;
  await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.text+'\nProject context: '+JSON.stringify({projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy',workspace:workspace.context(options.text)})}],results:[],completed:{},model:options.model,failures:{}};
- const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...patch});if(event)publish('ai.activity',{turnId,event});};
+ const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...(options.parent?{parent:options.parent}:{}),...patch});if(event)publish('ai.activity',{turnId,event});};
  checkpoint.model=options.model;
- const ownsTasks=phase==='main'&&(role==='solo'||role==='lead');
+ const ownsTasks=options.ownsTasks??(phase==='main'&&(role==='solo'||role==='lead'));
  const hasPendingTasks=()=>ownsTasks&&db.turnActivity(turnId)?.tasks?.some(t=>t.status!=='complete');
  const completeTasks=()=>{if(!ownsTasks)return;const tasks=db.turnActivity(turnId)?.tasks;if(tasks?.some(t=>t.status!=='complete')){const done=tasks.map(t=>({...t,status:'complete' as const}));db.setTasks(turnId,done);publish('ai.tasks',{turnId,tasks:done});}};
  // The current head must have been published (or validated unchanged) within this phase, directly or by a delegated worker.
@@ -38,6 +41,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  const unpublished=()=>workspace.unpublishedChanges?.()??[];
  const publishedHead=()=>{const found=headPublication();return found&&!unpublished().length?found:undefined;};
  const needsPublication=()=>!readOnly&&!planning&&role!=='worker';
+ // The director never publishes: when nothing is waiting to be published, the engine confirms the unchanged project itself, without a model call.
+ const confirmUnchanged=async(id:string)=>{if(role!=='lead'||unpublished().length)return;const confirmId=id+':confirm';const result=await workspace.execute('publish_project',{},confirmId,turnId,signal);if(result?.publication?.versionId!==db.head())return;checkpoint.completed[confirmId]={saved:true,publication:publicationOf(result)};save();return{toolCallId:confirmId};};
+ const switched=()=>({outcome:{status:'blocked' as const,summary:checkpoint.switch!.reason??'Continuing in the other mode.',evidence:[],nextAction:'Continue in the next mode.'},switch:checkpoint.switch});
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
  const conclude=(outcome:EditOutcome)=>{checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
@@ -52,6 +58,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  if(checkpoint.feedback&&checkpoint.pending){closeBatch();save();}
  // The next approved plan step continues the same conversation. Earlier steps' publications cannot complete it.
  if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
+ if(checkpoint.switch&&!checkpoint.feedback)return switched();
  if(checkpoint.outcome)return{outcome:checkpoint.outcome,plan:checkpoint.plan};
  for(;;){
   signal.throwIfAborted();
@@ -70,14 +77,15 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];save();
    if(['refusal','model_context_window_exceeded'].includes(response.stop_reason)){conclude({status:'blocked',summary:response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n')||'The provider could not complete this request.',evidence:[],nextAction:response.stop_reason==='refusal'?'Revise the request before continuing.':'Continue with a smaller, focused scope.'});closeBatch();save();return{outcome:checkpoint.outcome!};}
    if(!checkpoint.pending!.length){
-    const answer=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim(),current=publishedHead(),nudges=checkpoint.nudges??0;delete checkpoint.pending;
+    const answer=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim(),nudges=checkpoint.nudges??0;delete checkpoint.pending;
+    const current=publishedHead()??(answer&&response.stop_reason==='end_turn'&&!hasPendingTasks()?await confirmUnchanged('text:'+(checkpoint.steps??0)):undefined);
     if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||role==='worker'||current&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||role==='worker'||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
     if(nudges>=engineBudgets.textNudges){
      // Stop nudging: accept a published edit, otherwise report honestly instead of looping.
      conclude(!planning&&current&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:answer||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
     }
     checkpoint.nudges=nudges+1;
-    checkpoint.messages.push({role:'user',content:planning?'Return the editable plan with finish.':role==='lead'?'Continue leading: delegate the remaining work, verify it, or call finish (complete once published, or blocked with a concrete reason).':'Continue the requested work using the available capabilities, or call finish (complete once published, or blocked with a concrete reason).'});save();continue;
+    checkpoint.messages.push({role:'user',content:planning?'Return the editable plan with finish.':role==='lead'?'Continue directing: dispatch workers for what remains, or call finish (complete once the work is published, or blocked with a concrete reason).':'Continue the requested work using the available capabilities, or call finish (complete once published, or blocked with a concrete reason).'});save();continue;
    }
    checkpoint.nudges=0;
   }
@@ -96,9 +104,10 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       if(planning&&input.status==='complete'&&!input.plan)throw new Error('Return the requested editable plan with finish.');
       let evidence=input.evidence.filter((e:any)=>checkpoint.completed[e.toolCallId]);
       if(input.status==='complete'&&needsPublication()){
-       const current=publishedHead(),pending=current?[]:unpublished();
+       const current=publishedHead()??await confirmUnchanged(call.id),pending=current?[]:unpublished();
+       if(!current&&role==='lead')throw new Error(`Workers left changes that are not published (${pending.slice(0,8).join(', ')}). Delegate an integration task with publish:true before finishing.`);
        if(!current&&pending.length&&headPublication())throw new Error(`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`);
-       if(!current)throw new Error(role==='lead'?'The current revision has not been published in this request. Call publish_project (an unchanged project returns a no-change receipt) or delegate a task with publish:true before finishing.':'Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.');
+       if(!current)throw new Error('Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.');
        if(!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
       }
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
@@ -107,6 +116,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       validateDelegation(input.tasks);
       const reports=await options.runWorkers(input.tasks,call.id);
       result={reports,publication:[...reports].reverse().find(r=>r.publication)?.publication};
+     }else if(call.name==='switch_to_orchestrated'||call.name==='hand_off'){
+      checkpoint.switch=call.name==='hand_off'?{to:'solo',handoff:input.brief}:{to:'lead',handoff:input.handoff,reason:input.reason};result={switching:true};
      }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='consult_director'){if(!options.consult)throw new Error('Director consultation is unavailable within director mode.');result={guidance:await options.consult(input.question,call.id)};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await workspace.execute(call.name,input,call.id,turnId,signal,role==='worker'?{writes:options.writes??[],canPublish:!!options.canPublish,taskId:options.taskId}:undefined);
      if(result?.process&&result.process.status!=='complete')throw new Error(`Command ${result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
@@ -115,12 +126,14 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      if(signal.aborted||error instanceof FileApprovalRequired)throw error;
      const message=(error as Error).message,count=(checkpoint.failures[operationKey]??0)+1,similar=((checkpoint.coarse??={})[coarse]??0)+1;checkpoint.failures[operationKey]=count;checkpoint.coarse[coarse]=similar;
      result={error:message,diagnosisRequired:count>=2||similar>=3};db.saveState(receiptKey,result);activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,call.input)??call.name,status:'failed',detail:message});
-     if((count===2||similar===3)&&options.consult&&role==='solo'&&substantiveFailure(error)){const adviceKey=operationKey+':'+call.id;if(!checkpoint.consulted?.includes(adviceKey)){checkpoint.advice={key:adviceKey,question:`Diagnose this repeated failure and direct a revised approach. Request: ${options.text}\nTool: ${call.name}\nInput: ${JSON.stringify(call.input).slice(0,6000)}\nError: ${message}`};db.event('ai.director_requested',{turnId,reason:message,model:models.director});}}
+     if((count===2||similar===3)&&options.canSwitch&&role==='solo'&&substantiveFailure(error)&&!checkpoint.outcome){checkpoint.switch={to:'lead',reason:'Repeated failure',handoff:`The editor working alone kept failing at the same step. Request: ${options.text.slice(0,4000)}\nLast step: ${call.name} ${JSON.stringify(call.input).slice(0,3000)}\nError: ${message.slice(0,2000)}\nFiles written so far are still in the workspace; nothing after the last publication is published.`};db.event('ai.director_requested',{turnId,reason:message,model:models.lead});}
+     else if((count===2||similar===3)&&options.consult&&role==='solo'&&substantiveFailure(error)){const adviceKey=operationKey+':'+call.id;if(!checkpoint.consulted?.includes(adviceKey)){checkpoint.advice={key:adviceKey,question:`Diagnose this repeated failure and direct a revised approach. Request: ${options.text}\nTool: ${call.name}\nInput: ${JSON.stringify(call.input).slice(0,6000)}\nError: ${message}`};db.event('ai.director_requested',{turnId,reason:message,model:models.director});}}
      if(count>=4||similar>=5)conclude({status:'blocked',summary:'Repeated attempts could not complete this step: '+message,evidence:[],nextAction:'Resolve the diagnosed failure, then resume with the saved source and logs.'});
     }
    }else if(!result.error){checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};if(call.name==='finish'&&result.finished&&!checkpoint.outcome){const input:any=parseCodeTool('finish',call.input,readOnly,allowed);conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence:input.evidence}:{status:'blocked',summary:input.summary,evidence:input.evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;}}
    db.setMeta('workspace-receipt-summary:'+receiptKey,JSON.stringify({receipt:receiptKey,tool:call.name,path:call.input?.path,command:call.input?.command,status:result?.error?'failed':'complete',error:result?.error,publication:result?.publication?{versionId:result.publication.versionId,changes:result.publication.changes}:undefined,process:result?.process?{id:result.process.id,status:result.process.status,output:String(result.process.output??'').slice(-2000)}:undefined}));db.db.prepare('INSERT OR IGNORE INTO context_dirty VALUES(?,?)').run('execution',receiptKey);
    const content=result?.content??JSON.stringify(result);checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content:typeof content==='string'&&content.length>RESULT_LIMIT?JSON.stringify({excerpt:content.slice(0,RESULT_LIMIT-2000),receipt:receiptKey,instruction:'Use search or read_file with scope receipt for relevant details; full result is archived.'}):content});save();
+   if(checkpoint.switch){closeBatch();save();return switched();}
    const outcome=checkpoint.outcome as EditOutcome|undefined;
    if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}if(role!=='worker')activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}
   }

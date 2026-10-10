@@ -2,13 +2,13 @@ import type {ProjectDB} from '@dream/project-db';
 import type {PublicActivity} from '@dream/contracts';
 import {toolActivity,toolDetail} from './activity';
 
-/** Provider blocks and actual executions share stable activity IDs. No synthetic thought text. */
+/** Provider blocks and actual executions share stable activity IDs. No synthetic thought text: under the updates display a thinking block carries only the model's own progress note, never its reasoning. */
 export class RunStream {
  private blocks=new Map<number,{type:string;id:string;name?:string;text:string;json:string}>();
  private updates=false;private last=0;private emitted=new Map<string,string>();
- constructor(private db:ProjectDB,private turnId:string,private requestId:string,private publish?:(type:string,payload:unknown)=>void,private showProse=true){}
+ constructor(private db:ProjectDB,private turnId:string,private requestId:string,private publish?:(type:string,payload:unknown)=>void,private showProse=true,private parent?:string){}
  // Each write re-serializes the turn's activity log and crosses IPC; identical drafting updates (long tool inputs) are skipped.
- emit(patch:Omit<PublicActivity,'sequence'>){const signature=JSON.stringify(patch);if(this.emitted.get(patch.id)===signature)return;this.emitted.set(patch.id,signature);const event=this.db.activityEvent(this.turnId,{...patch,requestId:this.requestId});if(event)this.publish?.('ai.activity',{turnId:this.turnId,event});}
+ emit(patch:Omit<PublicActivity,'sequence'>){const signature=JSON.stringify(patch);if(this.emitted.get(patch.id)===signature)return;this.emitted.set(patch.id,signature);const event=this.db.activityEvent(this.turnId,{...patch,requestId:this.requestId,...(this.parent?{parent:this.parent}:{})});if(event)this.publish?.('ai.activity',{turnId:this.turnId,event});}
  accept({event,data}:{event:string;data:any}){
   if(event==='dream_policy'){this.updates=data.thinkingDisplay==='updates';return;}
   if(data.type==='content_block_start'){
@@ -25,7 +25,7 @@ export class RunStream {
  }
  private flush(index:number,done=false){
   const b=this.blocks.get(index);if(!b)return;
-  if(this.showProse&&b.type==='text'&&b.text)this.emit({id:b.id,kind:'commentary',text:b.text,status:done?'complete':'streaming'});
+  if(this.showProse&&(b.type==='text'||b.type==='thinking'&&this.updates)&&b.text.trim())this.emit({id:b.id,kind:'commentary',text:b.text,status:done?'complete':'streaming'});
   if(b.type==='tool_use'){
    let input:any={};try{input=JSON.parse(b.json);}catch{}
    this.emit({id:'tool:'+b.id,kind:'action',text:toolActivity(b.name,input)??'Preparing '+(b.name??'an action').replaceAll('_',' '),tool:b.name,detail:toolDetail(b.name,input,b.json),status:done?'ready':'drafting'});
@@ -36,6 +36,8 @@ export class RunStream {
   const updates=body.dream_policy?.thinkingDisplay==='updates',terminal=body.content?.some((b:any)=>b.type==='tool_use'&&b.name==='finish')||body.stop_reason==='end_turn'&&!body.content?.some((b:any)=>b.type==='tool_use');
   body.content?.forEach((block:any,index:number)=>{
    if(block.type==='text'&&block.text)this.emit({id:`${this.requestId}:text:${index}`,kind:terminal?'terminal':'commentary',text:block.text,status:'complete'});
+   // Progress notes precede the action they describe, so they stay visible even in the final response.
+   if(block.type==='thinking'&&updates&&String(block.thinking??'').trim())this.emit({id:`${this.requestId}:thinking:${index}`,kind:'commentary',text:block.thinking,status:'complete'});
   });
  }
  interrupt(reason:string){for(const b of this.blocks.values())if(b.type==='tool_use')this.emit({id:'tool:'+b.id,kind:'action',text:toolActivity(b.name,{})??'Preparing an action',tool:b.name,status:'interrupted',detail:reason});}

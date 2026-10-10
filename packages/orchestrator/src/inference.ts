@@ -17,6 +17,8 @@ type Dependencies={fetch?:typeof fetch;wait?:(ms:number,signal?:AbortSignal)=>Pr
 const MAX_OUTPUT=engineBudgets.maxOutput,TRANSIENT_RETRIES=3,IDLE_MS=90_000,HARD_MS=20*60_000;
 // Execution-side purposes hand a still-truncated response back to the agent; others report a split request.
 const AGENT_PURPOSES=['execution','worker','planning','answering','lead'];
+// Worker phases are named <lead phase>:worker:<call>:<task>; their activity nests under that task's row.
+const workerParent=(phase?:string)=>phase?.includes(':worker:')?'worker:'+phase.split(':worker:').at(-1):undefined;
 function validResponse(value:any):value is InferenceResponse {
  const ids=Array.isArray(value?.content)?value.content.filter((b:any)=>b?.type==='tool_use').map((b:any)=>b.id):[];
  return value&&Array.isArray(value.content)&&new Set(ids).size===ids.length&&typeof value.stop_reason==='string'&&value.content.every((block:any)=>
@@ -82,7 +84,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   if(recovered){receipt.response=recovered;receipt.status=recovered.stop_reason==='max_tokens'?'truncated':'complete';db.saveState(key,receipt);}
   else{await cancelRemote();receipt={id:randomUUID(),resume,attempt:receipt.attempt+1,capacity:receipt.capacity,transientRetries:receipt.transientRetries??0,status:'prepared'};db.saveState(key,receipt);}
  }
- if(receipt.status==='complete'&&receipt.response){if(input.turnId&&input.purpose!=='routing')new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose)&&input.purpose!=='answering').finish(receipt.response);session.record(receipt.response.content);if(!receipt.usageRecorded){receipt.usageRecorded=true;db.event('ai.usage',{turnId:input.turnId,requestId:receipt.id,model:input.model,pricingVersion:'anthropic-2026-10-07',usage:receipt.response.usage,stopReason:receipt.response.stop_reason});db.saveState(key,receipt);}return receipt.response;}
+ if(receipt.status==='complete'&&receipt.response){if(input.turnId&&input.purpose!=='routing')new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)).finish(receipt.response);session.record(receipt.response.content);if(!receipt.usageRecorded){receipt.usageRecorded=true;db.event('ai.usage',{turnId:input.turnId,requestId:receipt.id,model:input.model,pricingVersion:'anthropic-2026-10-07',usage:receipt.response.usage,stopReason:receipt.response.stop_reason});db.saveState(key,receipt);}return receipt.response;}
  signal?.throwIfAborted();
  const prefixHash=createHash('sha256').update(JSON.stringify({model:input.model,system:input.system,tools:input.tools,profile:input.profile})).digest('hex'),prefixKey='cache-prefix:'+input.turnId+':'+input.model+':'+(input.phase??'main');const previousPrefix=db.getMeta(prefixKey);if(previousPrefix!==prefixHash){db.setMeta(prefixKey,prefixHash);db.event('ai.cache_prefix',{turnId:input.turnId,model:input.model,prefixHash,changed:!!previousPrefix,reason:'Prompt, capability set, or intelligence profile changed; actual reuse is reported by provider usage.'});}
  const metricsKey='inference-context:'+fingerprint;
@@ -114,7 +116,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   }
   signal?.throwIfAborted();if(receipt.attempt>0&&options.connect){const renewed=await options.connect();if(renewed.url!==config.url||accountScope(renewed)!==accountScope(config))throw new Error('The AI connection changed. Resume to use the new account configuration.');config=renewed;}signal?.throwIfAborted();receipt.status='inflight';save();
   let response:Response,body:any;
-  const live=input.turnId&&input.purpose!=='routing'?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose)&&input.purpose!=='answering'):undefined;
+  const live=input.turnId&&input.purpose!=='routing'?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)):undefined;
   // Idle watchdog instead of a total timeout: long generations are fine while events keep arriving (the gateway pings every 5s).
   const idle=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;const touch=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>idle.abort(Object.assign(new Error('The AI stream stopped sending data.'),{code:'idle_timeout'})),dependencies.idleMs??IDLE_MS);};
   try{

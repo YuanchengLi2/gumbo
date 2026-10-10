@@ -91,7 +91,9 @@ try{
   if(!process.argv.includes('--simple-only'))results.push(await scenario('Creative build (Opus leads Haiku workers)',"Create a 4-second animated title card that says 'Dream Engine' over a slowly moving gradient, followed by a 3-second outro card that says 'Thanks for watching'. Put both on the timeline in that order.",()=>sceneClips()>=2?undefined:`timeline has ${sceneClips()} scene clips`,{render:'creative'}));
   // --suite chains the requests a real session sends: revise the build, ask about it, then plan and approve an addition.
   if(process.argv.includes('--suite')&&!results.some(r=>r.problem)){
-   results.push(await scenario('Follow-up revision',"Make the 'Dream Engine' title text larger and change its gradient to sunset orange and pink.",before=>project.state().versions.length>before?undefined:'no new version was published',{render:'revision'}));
+   // A revision must change what is on screen, not just publish a version.
+   const scenesBeforeRevision=JSON.stringify(project.timeline().spine.map(c=>c.assetId));
+   results.push(await scenario('Follow-up revision',"Make the 'Dream Engine' title text larger and change its gradient to sunset orange and pink.",before=>project.state().versions.length<=before?'no new version was published':JSON.stringify(project.timeline().spine.map(c=>c.assetId))===scenesBeforeRevision?'the published version still shows the old scenes':undefined,{render:'revision'}));
    results.push(await scenario('Question (read-only)','What is on the timeline right now, and how long is it in total?',before=>project.state().versions.length!==before?'a question changed the project':String((project.state().messages.filter(m=>m.role==='assistant').at(-1)?.report as any)?.summary??'').trim()?undefined:'no answer'));
    results.push(await scenario('Planned addition (plan, approve, execute)',"Plan a 3-second end card after the outro that says 'Subscribe for more' in the same style.",before=>project.state().versions.length>before&&sceneClips()>=3?undefined:`scene clips ${sceneClips()}, versions ${project.state().versions.length}`,{plan:true,render:'planned'}));
   }

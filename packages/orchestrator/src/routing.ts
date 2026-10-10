@@ -1,11 +1,18 @@
 import {z} from 'zod';
 /** Only exact localized instructions take the inexpensive executor by default. */
-export function routeCodeRequest(text:string,intent:'auto'|'plan'){
+export function routeCodeRequest(text:string,intent:'auto'|'plan',interrupted=false){
  const planning=intent==='plan'||/^(?:please\s+)?(?:plan\b|help me plan\b|discuss\b)/i.test(text);
+ // Carrying on with a stopped request; anything else after a stop is a new request.
+ const continuing=interrupted&&intent!=='plan'&&/^(?:(?:ok(?:ay)?|yes|please)[,.!]?\s+)?(?:continue|keep going|resume|go on|carry on|try again|retry)\b/i.test(text.trim());
  const question=/^(?:what|why|how|does|is|are|explain|can you explain)\b/i.test(text)&&! /\b(?:then|and)\s+(?:make|change|create|edit|shorten|render|apply|implement)\b/i.test(text);
+ // Something to read before anything is built (a script, ideas, an outline or copy), with no request to build it now.
+ const toRead=/\b(?:write|draft|think of|come up with|give me|suggest|brainstorm|make|show me)\b[^.?!]{0,40}\b(?:script|ideas?|outline|copy|concepts?|voiceover|storyboard)\b/i;
+ const build=/\b(?:create|edit|shorten|render|apply|implement|build|animate|add|put|place|turn it into|make (?:it|the video|a video|an? (?:animated|short|video|clip|intro|scene)))\b/i;
+ const reply=question||toRead.test(text)&&(/\b(?:first|before)\b/i.test(text)||!build.test(text));
  const exact=/\b\d+(?:\.\d+)?\s*(?:seconds?|secs?|s\b|db\b|%|pixels?|px|fps)|[“"].+[”"]/.test(text)&&/^(?:please\s+)?(?:trim|split|delete|remove|mute|unmute|set|change|move|replace|shorten)\b/i.test(text)&&! /urgent|elegant|feel|story|restructure|cinematic|better|beautiful|opening animation/i.test(text);
  const requiresPacing=/^(?:please\s+)?(?:shorten|trim)\b/i.test(text)&&! /\b(?:from|first|last|start|end|only clip)\b/i.test(text);
- return {route:planning?'plan':question?'question':'local',intelligence:exact&&!requiresPacing||question?'haiku':'opus',complexity:exact&&!requiresPacing?'simple':question?'normal':'difficult',reason:exact&&!requiresPacing?'Exact localized change.':question?'Read-only project question.':'Open-ended creative direction or implementation.',requestedChanges:question?[]:[text]};
+ if(continuing)return {route:'continue',intelligence:'haiku',complexity:'normal',reason:'Carry on with the stopped request.',requestedChanges:[] as string[]};
+ return {route:planning?'plan':reply?'question':'local',intelligence:exact&&!requiresPacing||reply?'haiku':'opus',complexity:exact&&!requiresPacing?'simple':reply?'normal':'difficult',reason:exact&&!requiresPacing?'Exact localized change.':reply?'The user wants something to read.':'Open-ended creative direction or implementation.',requestedChanges:reply?[]:[text]};
 }
 export const RoutingSchema=z.object({route:z.enum(['local','structural','build','question','clarify','plan']),intelligence:z.enum(['sonnet','opus']).default('sonnet'),approvalRequested:z.boolean().default(false),approvalQuote:z.string().max(300).default(''),requestedChanges:z.array(z.string().min(1).max(1000)).max(12).default([]),complexity:z.enum(['simple','normal','difficult']).default('normal'),reason:z.string().max(500).default('Execute with Sonnet; consult the director if needed.'),capabilities:z.array(z.enum(['footage','visual','audio','history','files'])).max(5).default([]),queries:z.array(z.string().min(1).max(120)).max(3).default([])});
 export type Routing=z.infer<typeof RoutingSchema>;

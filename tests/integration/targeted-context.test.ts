@@ -44,7 +44,7 @@ function fixture(count=1){const folder=mkdtempSync(join(tmpdir(),'dream-retrieva
 
 it('retrieves late project records without sending a large timeline and invalidates changed chunks after reopening',()=>{
  const f=fixture(200);let db=f.db;try{
-  const context=new ProjectContext(db),packet=JSON.stringify(context.initial('Refine the amethyst ending',['c199']));expect(packet.length).toBeLessThan(19000);expect(packet).toContain('c199');expect(packet).not.toContain('C:/private');expect(packet).not.toContain('c100');
+  const context=new ProjectContext(db),packet=JSON.stringify(context.initial('Refine the amethyst ending',['c199']));expect(packet.length).toBeLessThan(19000);expect(packet).toContain('c199');expect(packet).not.toContain('C:/private');expect(packet).not.toContain('"c100"');
   const matches=context.search('amethyst');expect(matches.some(m=>m.owner==='c199')).toBe(true);expect(context.read('clip:c199:0')).toMatchObject({owner:'c199'});
   const page=context.page({section:'timeline',offset:190,limit:6}) as any;expect(page.items).toHaveLength(6);expect(page.nextOffset).toBe(196);expect(page.total).toBe(200);
   const count=db.db.prepare('SELECT COUNT(*) AS n FROM context_chunks').get();context.initial('Again');expect(db.db.prepare('SELECT COUNT(*) AS n FROM context_chunks').get()).toEqual(count);

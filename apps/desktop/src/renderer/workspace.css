@@ -43,6 +43,12 @@
 
 .run-removed,.run-added{display:block;white-space:pre-wrap}.run-removed{color:#eab3ad;background:#55282833}.run-added{color:#a3d4b0;background:#254f3233}.run-file{margin:6px 0 6px 20px}.run-media{display:flex;gap:9px;align-items:center;padding:9px 12px;margin:6px 0;border:1px solid #ffffff12;border-radius:8px}.run-media small{margin-left:auto;opacity:.6}
 
-/* Room for a complete edit request, growing with the message. */
-.composer textarea{min-height:112px;max-height:280px;overflow-y:auto}.sidebar .composer textarea{min-height:112px}.home-composer textarea{min-height:120px}
+/* Two lines to start, growing with the message. */
+.composer textarea{min-height:44px;max-height:200px;overflow-y:auto}.sidebar .composer textarea{min-height:44px}.home-composer textarea{min-height:120px;max-height:280px}
 .run-progress{color:#514a5c;font-size:13px;line-height:1.75;white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0 10px}.progress-cursor{display:inline-block;width:5px;height:13px;margin-left:4px;border-radius:2px;background:#9586b0;vertical-align:middle;animation:breathe 1.2s ease-in-out infinite}
+/* Grouped steps and worker tasks in the activity stream. */
+.run-group,.run-task{min-width:0;color:#99939f;font-size:11px}.run-group>summary,.run-task>summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none;padding:3px 0}.run-group>summary::-webkit-details-marker,.run-task>summary::-webkit-details-marker{display:none}.run-group>summary>svg,.run-task>summary>svg{flex:none}.run-group>summary>span,.run-task-title{min-width:0;overflow-wrap:anywhere}.run-group>summary>small{color:#b3aebb;flex:none}.run-group[open]>summary .run-disclosure,.run-task[open]>summary .run-disclosure{transform:rotate(90deg)}.run-group.failed,.run-task.failed{color:#a46b56}
+.run-group-items{padding-left:21px}.run-group-items .stream-action{margin:4px 0}
+.run-task>summary{color:#5f586b;font-size:12px}.run-task-title{display:flex;flex-direction:column;gap:2px}.run-task-live{color:#a39dab;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.run-task-body{margin:4px 0 6px 6px;padding-left:14px;border-left:1px solid #ebe8f0;display:flex;flex-direction:column;gap:4px}.run-task-body .run-progress{font-size:12px;color:#6d6678;margin:3px 0}
+.turn-error{font-size:12px;color:#a46b56;margin:10px 0}

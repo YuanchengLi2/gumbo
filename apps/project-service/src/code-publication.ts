@@ -19,27 +19,39 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  if(candidate.timeline.id!==db.timeline().id)throw new Error('The document belongs to another project.');
  if(new Set(candidate.outputs.map(o=>o.id)).size!==candidate.outputs.length)throw new Error('Output IDs must be unique.');
  const outputs=new Map<string,Asset>(),assets=db.footage().assets;
+ const sceneAsset=(sourcePath:string,name:string,size:{width:number;height:number;fps:number;durationInFrames:number})=>{
+  const html=inlineLocalAssets(readFileSync(workspacePath(root,sourcePath),'utf8'),sourcePath,root);
+  validateSceneSource(html);
+  const hash=digest(JSON.stringify({html,width:size.width,height:size.height,fps:size.fps,frames:size.durationInFrames})),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'scene.html');
+  mkdirSync(directory,{recursive:true});if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,html,'utf8');renameSync(temp,target);}
+  if(readFileSync(target,'utf8')!==html)throw new Error('Scene copy failed verification.');
+  return AssetSchema.parse({id:'code_'+hash,filename:name,kind:'video',originalPath:target,fingerprint:hash,durationSec:size.durationInFrames/size.fps,fps:size.fps,width:size.width,height:size.height,status:'ready',scene:{format:'html',revisionId:hash,durationInFrames:size.durationInFrames}});
+ };
  for(const output of candidate.outputs){
   if(output.kind!=='scene'&&!output.path.replaceAll('\\','/').startsWith('output/'))throw new Error('Declare generated assets under output/.');
   const path=workspacePath(root,output.path);let asset:Asset;
   if(output.kind==='scene'){
    if(!output.width||!output.height||!output.fps||!output.durationInFrames)throw new Error('A live scene needs width, height, fps and durationInFrames.');
-   const html=inlineLocalAssets(readFileSync(path,'utf8'),output.path,root);
-   validateSceneSource(html);
-   const hash=digest(JSON.stringify({html,width:output.width,height:output.height,fps:output.fps,frames:output.durationInFrames})),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'scene.html');
-   mkdirSync(directory,{recursive:true});if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,html,'utf8');renameSync(temp,target);}
-   if(readFileSync(target,'utf8')!==html)throw new Error('Scene copy failed verification.');
-   asset=AssetSchema.parse({id:'code_'+hash,filename:output.id,kind:'video',originalPath:target,fingerprint:hash,durationSec:output.durationInFrames/output.fps,fps:output.fps,width:output.width,height:output.height,status:'ready',scene:{format:'html',revisionId:hash,durationInFrames:output.durationInFrames}});
+   asset=sceneAsset(output.path,output.id,{width:output.width,height:output.height,fps:output.fps,durationInFrames:output.durationInFrames});
   }else{
    const info=await probe(path,ffprobe);if(info.kind!==output.kind||!Number.isFinite(info.durationSec)||info.durationSec<=0)throw new Error(`Output ${output.id} is not valid ${output.kind} media.`);
    const hash=await fingerprint(path),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'media'+extname(path).toLowerCase());mkdirSync(directory,{recursive:true});if(!existsSync(target))copyFileSync(path,target);
    if(await fingerprint(target)!==hash)throw new Error('Generated media copy failed verification.');
    asset=AssetSchema.parse({id:'code_'+hash,filename:output.id+extname(path),...info,originalPath:target,fingerprint:hash,status:'ready',playback:{ready:true,audio:info.hasAudio?'original':'none'}});
   }
-  asset.creation={kind:'code',processId:process.id,outputId:output.id};outputs.set('output:'+output.id,asset);
+  asset.creation={kind:'code',processId:process.id,outputId:output.id,...(output.kind==='scene'?{sourcePath:output.path}:{})};outputs.set('output:'+output.id,asset);
  }
- const timeline=structuredClone(candidate.timeline),all=new Map([...assets,...outputs.values()].map(a=>[a.id,a]));
- const bind=(clip:{assetId:string;srcIn:number;srcOut:number})=>{clip.assetId=outputs.get(clip.assetId)?.id??clip.assetId;const asset=all.get(clip.assetId);if(!asset)throw new Error(`Unknown asset ${clip.assetId}.`);if(clip.srcOut<=clip.srcIn||asset.kind!=='image'&&clip.srcOut>asset.durationSec+1/Math.max(asset.fps,30))throw new Error(`Source range exceeds ${asset.filename}.`);};
+ // Editing a scene's source and publishing must update the preview: a scene on the timeline whose file changed since it was
+ // built is rebuilt from the current file with the same size and duration, and the timeline is pointed at the new build.
+ const refreshed=new Map<string,Asset>();
+ for(const assetId of new Set([...candidate.timeline.spine,...candidate.timeline.music,...candidate.timeline.attached.flatMap(i=>i.source?[i.source]:[])].map(c=>c.assetId))){
+  const old=assets.find(a=>a.id===assetId),source=old?.creation?.sourcePath;
+  if(!old?.scene||!source||!existsSync(workspacePath(root,source)))continue;
+  const fresh=sceneAsset(source,old.filename,{width:old.width!,height:old.height!,fps:old.fps!,durationInFrames:old.scene.durationInFrames});
+  if(fresh.id!==old.id){fresh.creation={kind:'code',processId:process.id,outputId:old.creation!.outputId,sourcePath:source};refreshed.set(assetId,fresh);}
+ }
+ const timeline=structuredClone(candidate.timeline),all=new Map([...assets,...outputs.values(),...refreshed.values()].map(a=>[a.id,a]));
+ const bind=(clip:{assetId:string;srcIn:number;srcOut:number})=>{clip.assetId=outputs.get(clip.assetId)?.id??refreshed.get(clip.assetId)?.id??clip.assetId;const asset=all.get(clip.assetId);if(!asset)throw new Error(`Unknown asset ${clip.assetId}.`);if(clip.srcOut<=clip.srcIn||asset.kind!=='image'&&clip.srcOut>asset.durationSec+1/Math.max(asset.fps,30))throw new Error(`Source range exceeds ${asset.filename}.`);};
  timeline.spine.forEach(bind);timeline.music.forEach(bind);timeline.attached.forEach(item=>{if(item.source)bind(item.source);});
  const ids=[...timeline.spine,...timeline.attached,...timeline.music].map(i=>i.id);if(new Set(ids).size!==ids.length)throw new Error('Timeline item IDs must be unique.');
  const resolved=resolveTimeline(timeline,{...db.footage(),assets:[...all.values()]});if(!Number.isFinite(resolved.durationSec)||resolved.warnings.some(w=>w.code==='anchor_removed'))throw new Error('The timeline has invalid timing or missing anchors.');
@@ -50,7 +62,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  for(const path of new Set([...Object.keys(oldFiles),...Object.keys(snapshot.files)]))if(oldFiles[path]!==snapshot.files[path]){const before=oldFiles[path]?Buffer.from(db.blobs.get(oldFiles[path]),'base64').toString('utf8'):'',after=snapshot.files[path]?Buffer.from(db.blobs.get(snapshot.files[path]),'base64').toString('utf8'):'';files.push({path,beforeHash:oldFiles[path],afterHash:snapshot.files[path],before:before.slice(0,6000),after:after.slice(0,6000),truncated:before.length>6000||after.length>6000});}
  return db.db.transaction(()=>{
   if(db.head()!==candidate.baseVersionId)throw new Error('The project changed while outputs were being inspected.');
-  for(const asset of outputs.values())db.saveAsset(asset);
+  for(const asset of [...outputs.values(),...refreshed.values()])db.saveAsset(asset);
   const versionId=db.writeVersion(timeline,db.head(),changes.slice(0,3).join('; ')||'Saved project updates',turnId),branch=db.getMeta('branch')??'main';
   // Store the canonical document with immutable IDs so collect/undo never need
   // a previous run's scratch outputs to rebuild the edit.

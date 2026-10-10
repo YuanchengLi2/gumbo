@@ -2,7 +2,9 @@ import type {IntelligenceProfile} from '@dream/contracts';
 export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string},failures=0):IntelligenceProfile{
  const role=purpose==='routing'?'router':purpose==='execution'||purpose==='worker'||purpose==='lead'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
  const complexity=failures>=2||routing?.complexity==='difficult'?'difficult':routing?.complexity==='simple'?'simple':'normal';
- return{version:1,role,complexity,effort:role==='router'||complexity==='simple'&&role!=='consultation'?'low':complexity==='difficult'?'high':'medium',reason:failures>=2?'Repeated substantive failure requires deeper diagnosis.':routing?.reason??'Match reasoning to the current task.'};
+ // The director only decides and writes briefs, so medium effort suffices; it rises only after repeated substantive failures.
+ const effort=role==='router'||complexity==='simple'&&role!=='consultation'?'low':purpose==='lead'?failures>=2?'high':'medium':complexity==='difficult'?'high':'medium';
+ return{version:1,role,complexity,effort,reason:failures>=2?'Repeated substantive failure requires deeper diagnosis.':routing?.reason??'Match reasoning to the current task.'};
 }
 // max_tokens caps thinking plus visible output together. Streaming removes the timeout reason to keep these small.
 export const outputAllowance=(p:IntelligenceProfile)=>p.role==='router'?2048:p.effort==='low'?16384:32768;

@@ -4,24 +4,55 @@ This document describes the production engine in `packages/orchestrator/src/code
 
 ## Who does the work
 
-| Request | Model | Role |
-|---|---|---|
-| Simple exact change (trim, split, mute, caption fix, a setting, a small scene tweak) | Haiku 5.5 | **solo**: inspects, edits and publishes alone. It can call `consult_director` (an Opus read-only consultation) when stuck or when the task turns out to need direction, and repeated failures of the same step request that consultation automatically. |
-| Question | Haiku 5.5, or Opus 5.5 when routed `opus` | **readonly**: answers directly. |
-| Anything creative, multi-part or open-ended, and approved plans (all steps in one continuing conversation) | Opus 5.5 | **lead**: inspects, decides, plans tasks, delegates, verifies and finishes. It cannot write files or run commands; it may call publish_project to publish what workers prepared or to confirm that nothing needs to change. |
-| Work assigned by the lead | Haiku 5.5 | **worker**: one isolated conversation per task, starting from the lead's brief. |
-| Explicit planning | Opus 5.5 | **readonly** planner returning an editable plan. |
+Opus orchestrates and Haiku does the work. A request runs in one of two working modes, and can switch between them.
 
-Routing (`classify` in `code-director.ts`): exact local instructions skip the classifier; everything else is classified by Haiku with a provider JSON schema. A failed or malformed classification falls back to the local heuristic instead of failing the request. `intelligence: haiku` means solo, `opus` means lead.
+| Mode or request | Model | Role |
+|---|---|---|
+| **Haiku alone** (the default for edits) | Haiku 5.5 | **solo**: inspects, edits, publishes and replies. It can call `switch_to_orchestrated` with a written handoff when the request turns out to need multi-part direction, and it switches automatically after repeated substantive failures of the same step. `consult_director` asks Opus one question; Opus answers with no tools, from the question and the project overview. |
+| **Opus-orchestrated** (multi-part creative work) | Opus 5.5 | **lead**: decides, writes self-contained briefs, dispatches workers, reviews their reports and finishes. Its only tools are `delegate`, `update_tasks`, `remember_decision`, `finish` and `hand_off`. It never inspects, writes, runs or publishes anything. When nothing is waiting to be published, the engine confirms the unchanged project without a model call. `hand_off` gives the rest of the request back to Haiku alone. |
+| Work dispatched by the lead | Haiku 5.5 | **worker**: one isolated conversation per task. Research tasks are read-only and report findings; build tasks write, run commands and publish when assigned. |
+| A reply: a question, a script, ideas or feedback | Haiku 5.5, or Opus 5.5 when the router judges it creative | **readonly**: answers directly. Opus replies with no tools. |
+| Explicit planning, and approved plans | Opus 5.5 | **readonly** planner returning an editable plan; each approved step is directed by the lead in one continuing conversation, without mode switches. |
+
+Routing (`classify` in `code-director.ts`): exact local instructions and "continue" phrasing skip the classifier; everything else is classified by Haiku with a provider JSON schema. A failed or malformed classification falls back to the local heuristic (`routeCodeRequest`) instead of failing the request. Routes:
+
+- `question`: the user wants something to read and no change now.
+- `local`: create or change the project now.
+- `plan`: explicit planning.
+- `continue`: only while a stopped request exists. It resumes that request's conversation with the message as feedback.
+
+Every other message after a stop starts a new request; the stopped request's drafts stay in the workspace. `intelligence: haiku` (the default) starts Haiku alone, and `opus` starts the orchestrated mode. The router also receives the stopped request (`interrupted`) and the mode of the previous request (`previousMode`). `continue` is in the gateway's routing schema; it went live with `dream-gateway` version 23 on October 9.
+
+## Mode switches
+
+`switch_to_orchestrated` and `hand_off` end the current mode's conversation. The engine records the switch (`modes:<turn>:main`, event `ai.mode_switch`) and starts the next mode as a new phase of the same turn (`main:mode-1`, `main:mode-2`). Its first message carries the original request and the handoff, so the director still learns everything through text rather than by inspecting. A request switches at most twice (`engineBudgets.modeSwitches`). The last mode owns the task list and the completion; a resume continues the last mode.
 
 ## Delegation
 
-The lead's `delegate` tool takes one to four tasks `{id,title,brief,writes,publish}`. A single task may set `publish:true`: it owns `project.json` and publishes. More than one task runs in parallel; parallel tasks must declare disjoint `writes` path prefixes, may not write `project.json` and may not publish (`validateDelegation`). The engine enforces each worker's scope at execution. Parallel tasks never publish because publication restores the workspace from the published snapshot, which would remove another worker's unpublished files. Commands and publication run one at a time within the workspace (`CodeWorkspace.exclusive`), so concurrent dependency installs cannot collide.
+The lead's `delegate` tool takes one to four tasks `{id,title,brief,mode,writes,publish}`:
+
+- `mode:'research'` tasks are read-only (list, search, read, view media, transcripts, finish). They need no `writes`, never publish, and run in parallel with anything. Reviews are research against a checklist.
+- Among build tasks, a single one may set `publish:true`: it owns `project.json` and publishes. When it is the only build task, it may also call `propose_file_changes`, which pauses the request for the user's approval and resumes the same worker afterwards.
+- Parallel build tasks must declare disjoint `writes` path prefixes, and may not write `project.json` or publish (`validateDelegation`). The engine enforces each worker's scope at execution. Parallel tasks never publish because publication restores the workspace from the published snapshot, which would remove another worker's unpublished files.
+
+Commands and publication run one at a time within the workspace (`CodeWorkspace.exclusive`), so concurrent dependency installs cannot collide. The project overview includes the absolute `workspaceFolder`, so briefs and file proposals never need a worker round-trip to learn it.
 
 An approved plan runs as one lead conversation: each step is appended as a new message, so the lead keeps its project context and the prompt cache is read rather than rewritten. Publications from earlier steps cannot complete a later step. Plans are kept to one step per distinct user-visible change.
 
-Workers do not receive the source-frame overview; their brief must be self-contained, and they can call `view_media`. Every worker uses the same system prompt, with its scope in the task message, so workers share a cached prefix. A worker that ends with text instead of `finish` reports that text. Worker errors other than cancellation, file permission, quota and authentication are returned to the lead as blocked reports, so the lead can re-delegate with a better brief.
+Workers do not receive the source-frame overview; their brief must be self-contained, and they can call `view_media`. Every worker uses the same system prompt, with its mode and scope in the task message, so workers share a cached prefix. A worker that ends with text instead of `finish` reports that text. Worker errors other than cancellation, file permission, quota and authentication are returned to the lead as blocked reports, so the lead can re-delegate with a better brief.
 
+## What the user sees
+
+Every role follows the same update rule:
+
+- Before its first action, it says in one sentence what it is about to do.
+- While working, it adds a brief update when it learns something that matters or changes direction.
+- When the request involves a script or copy, it writes that out before building.
+- It finishes with a one-to-three-sentence recap.
+
+Opus 5.5 returns between-tool notes as `thinking` blocks. The gateway requests `display:"updates"`, so these blocks hold only progress notes, never reasoning, and `RunStream` shows them as commentary. Under any other display, thinking is never shown.
+
+Worker activity carries `parent: worker:<call>:<task>` and is nested under that task's row. Consecutive actions fold into one expandable row. A finished request ends with the agent's recap; a reply ends with the answer.
 ## The agent loop
 
 Each phase (lead, solo, worker, consultation) is a checkpointed conversation. Tool calls and results are persisted as complete pairs; a replayed call ID returns its saved receipt and never repeats an effect. The loop:
@@ -30,9 +61,9 @@ Each phase (lead, solo, worker, consultation) is a checkpointed conversation. To
 - nudges a text-only response at most twice, then completes if the current revision is published or reports the text as a blocker;
 - treats repeated failures of the same tool on the same file or command as one problem (`coarseKey`), even when inputs differ, and stops after five;
 - on truncation, inference first retries with double the output allowance (up to 64K); only then is the agent told to split the work, and three truncations end the step;
-- completes only when the current head was published (or validated unchanged) in this phase, directly or by a worker. Unknown evidence IDs are dropped, the publication receipt is added automatically, and the task list is marked complete.
+- completes only when the current head was published (or validated unchanged) in this phase, directly or by a worker; for the lead, the engine validates an unchanged project itself, and refuses `finish` while worker changes are unpublished. Unknown evidence IDs are dropped, the publication receipt is added automatically, and the task list is marked complete.
 
-Nothing renders during chat. Publication validates and copies scene code, and the live player runs it immediately; only Export renders frames. `view_media` with `target: preview` returns timeline metadata. Because the agents never see frames, scenes size text relative to the frame, fit long text to its box and use flex or grid layout so elements cannot overlap, and the lead reviews the scene source for these. Files on the user computer are read with `list_files`, `search` and `read_file` (scope computer) and changed only through `propose_file_changes`, which pauses for the user's approval and resumes with the decision; workers cannot change computer files. The request's attached media and timeline selection are part of the first message's project context.
+Nothing renders during chat. Publication validates and copies scene code, and the live player runs it immediately; only Export renders frames. `view_media` with `target: preview` returns timeline metadata. Because the agents never see frames, scenes size text relative to the frame, fit long text to its box and use flex or grid layout so elements cannot overlap, and a review worker checks the scene source for these. Files on the user computer are read with `list_files`, `search` and `read_file` (scope computer) and changed only through `propose_file_changes`, which pauses for the user's approval and resumes with the decision. Under the director, only a build worker delegated as the only build task may propose them. The request's attached media and timeline selection are part of the first message's project context.
 
 `run_command` never publishes. Only `publish_project` publishes; its result includes the refreshed `project.json` hash, because publication rewrites that file with the new `baseVersionId`. `edit_file` needs a unique match; its hash is optional. A stale `baseVersionId` error points to `context/published-project.json`.
 
@@ -44,7 +75,7 @@ Working targets: 90K tokens for Haiku (its price tier changes above 100K) and 18
 
 ## Inference and caching
 
-Requests stream through the Supabase gateway. Tools and system carry a one-hour cache breakpoint; the conversation uses automatic five-minute caching. Effort is fixed per role for a whole conversation, because changing effort mid-conversation invalidates the message cache. Output allowance is 16K at low effort and 32K otherwise (`max_tokens` includes thinking).
+Requests stream through the Supabase gateway. Tools and system carry a one-hour cache breakpoint; the conversation uses automatic five-minute caching. Effort is fixed per role for a whole conversation, because changing effort mid-conversation invalidates the message cache. The lead runs at medium effort, since it only decides and writes briefs. Output allowance is 16K at low effort and 32K otherwise (`max_tokens` includes thinking).
 
 The client uses a 90-second idle watchdog (the gateway pings every five seconds) instead of a total timeout. Confirmed transient failures and unconfirmed outcomes (dropped connection, gateway timeout) are cancelled server-side and retried up to three times with backoff; recovery first tries to reclaim the original response by request ID. Exhausted retries raise code `unavailable`. Quota, authentication and request conflicts are never retried.
 

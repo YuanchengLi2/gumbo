@@ -21,7 +21,7 @@ it('repairs the reported saved-history ordering without replaying effects',async
 it('queues resume feedback after a complete tool exchange',async()=>{const db=fixture();try{db.saveState('code-agent:turn:main',{protocolVersion:2,messages:[{role:'user',content:'inspect'},{role:'assistant',content:[{type:'tool_use',id:'read',name:'read_file',input:{path:'x'}}]}],pending:[{type:'tool_use',id:'read',name:'read_file',input:{path:'x'}}],results:[],completed:{},failures:{},model:models.editor});db.setMeta('resume_input:turn',JSON.stringify({count:1,text:'Use the new instructions'}));await codeAgent({...base(db),infer:async(_model,_system,messages)=>{assertToolExchanges(messages);expect(messages.at(-1).content).toBe('Use the new instructions');return{stop_reason:'end_turn',content:[{type:'text',text:'Updated.'}]};}});}finally{db.close();}});
 it('normalizes optional nulls and does not turn creative execution into plan approval',()=>{expect(parseCodeRoute({route:'plan',intelligence:'opus',complexity:'difficult',reason:'Creative work',approvalQuote:null},'Create a phone case video','auto').route).toBe('local');expect(parseCodeTool('read_file',{path:'project.json',scope:null})).toMatchObject({scope:'workspace'});expect(()=>parseCodeTool('read_file',{path:null})).toThrow();});
 it('gives the Haiku writer a working budget and accounts for both Haiku price tiers',()=>{const db=fixture();try{expect(intelligence(models.editor,'execution').role).toBe('executor');expect(intelligence(models.router,'routing').role).toBe('router');expect(budgetRequest(db,{model:models.editor,purpose:'execution',system:'Write code',messages:[{role:'user',content:'work'}],tools:[],max_tokens:8192}).target).toBe(90000);expect(budgetRequest(db,{model:models.lead,purpose:'lead',system:'Lead',messages:[{role:'user',content:'work'}],tools:[],max_tokens:8192}).target).toBe(180000);expect(usageCost(models.editor,{input_tokens:50000,output_tokens:10000},[.1,.5])).toBe(.01);expect(usageCost(models.editor,{input_tokens:100001,output_tokens:10000},[.1,.5])).toBeCloseTo(.0750005);expect(inferencePolicy(models.editor).thinking?.display).toBe('omitted');}finally{db.close();}});
-it('lets Opus lead, delegates execution to Haiku workers with role-specific tools, and saves no completion essay',async()=>{
+it('lets Opus orchestrate without doing any work, delegates execution to Haiku workers, and ends with its recap',async()=>{
  const db=fixture(),requests:{model:string;purpose:string;tools:string[]}[]=[];let leadCalls=0,workerCalls=0;
  try{
   const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
@@ -29,7 +29,7 @@ it('lets Opus lead, delegates execution to Haiku workers with role-specific tool
   director.inference=async(model,_system,_messages,tools=[],_turn,_force,purpose='execution')=>{
    requests.push({model,purpose,tools:(tools as any[]).map(t=>t.name)});
    if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'local',intelligence:'opus',complexity:'difficult',reason:'Creative scene',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
-   if(purpose==='lead')return ++leadCalls===1?{content:[{type:'tool_use',id:'assign',name:'delegate',input:{tasks:[{id:'scene',title:'Build the product scene',brief:'Create src/scene.html and publish it.',writes:[],publish:true}]}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'text',text:'Completed. This long recap should not appear after the edit.'}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='lead')return ++leadCalls===1?{content:[{type:'tool_use',id:'assign',name:'delegate',input:{tasks:[{id:'scene',title:'Build the product scene',brief:'Create src/scene.html and publish it.',writes:[],publish:true}]}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'text',text:'I added the product scene; check the title timing.'}],stop_reason:'end_turn',usage:{}};
    return ++workerCalls===1?{content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'src/scene.html',content:'<script>window.renderFrame=()=>{}</script>'}},{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Wrote and published the scene.'}}],stop_reason:'tool_use',usage:{}};
   };
   await director.message('Create an elegant product scene');
@@ -37,9 +37,9 @@ it('lets Opus lead, delegates execution to Haiku workers with role-specific tool
   expect(requests.map(r=>r.purpose)).toEqual(['routing','lead','worker','worker','lead']);
   expect(requests.filter(r=>r.purpose==='lead').every(r=>r.model===models.lead)).toBe(true);expect(requests.filter(r=>r.purpose==='worker').every(r=>r.model===models.worker)).toBe(true);
   const lead=requests.find(r=>r.purpose==='lead')!,worker=requests.find(r=>r.purpose==='worker')!;
-  expect(lead.tools).toContain('delegate');expect(lead.tools).not.toContain('write_file');expect(lead.tools).toContain('publish_project');expect(lead.tools).not.toContain('edit_file');expect(lead.tools).not.toContain('run_command');
+  expect(lead.tools.sort()).toEqual(['delegate','finish','hand_off','remember_decision','update_tasks']);
   expect(worker.tools).toContain('publish_project');expect(worker.tools).not.toContain('delegate');expect(worker.tools).not.toContain('update_tasks');
-  const final=db.state().messages.filter(m=>m.role==='assistant').at(-1)!;expect(final.text).toBe('');expect(final.report).toMatchObject({kind:'completion'});
+  const final=db.state().messages.filter(m=>m.role==='assistant').at(-1)!;expect(final.text).toBe('I added the product scene; check the title timing.');expect(final.report).toMatchObject({kind:'completion'});
  }finally{db.close();}
 });
 it('lets Haiku complete a simple exact edit alone without consulting Opus',async()=>{

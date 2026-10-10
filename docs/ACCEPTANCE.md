@@ -435,3 +435,34 @@ Simple exact requests run on Haiku alone; creative, multi-part and planned work 
 - The deployed gateway was not changed: the production deploy was not permitted in this session.
 - Live session suite (`scripts/smoke-engine-local.ts --suite`), five requests in one project: simple edit (Haiku, $0.001), creative build (Opus lead, $0.19), follow-up revision (routed Haiku; once Haiku consulted Opus, $0.015-$0.15), read-only question (Haiku, $0.002, no new version) and a planned addition (Opus planner, approval, execution, $0.60-$0.67). All passed in both runs. Running approved plans as one lead conversation cut per-step cache writes from about 31K to 17K tokens. Reports: artifacts/engine-local-1791581500612 and artifacts/engine-local-1791581990784.
 - The packaged desktop suite passed again (8 passed, 1 skipped) on a package rebuilt with single-conversation plan execution.
+
+## Opus orchestrates, Haiku works; routed follow-ups — October 9, 2026
+
+Prompted by the Minecraft run:
+- Opus explored 16 times itself and cost $0.95 of $0.97.
+- "wait can you make a script for it first" was folded into the stopped build by the default-on "Continue saved request" option.
+- Opus's progress notes never reached the stream.
+
+Design: `docs/CODE-ENGINE.md`; decision: `DECISIONS.md`.
+
+- TypeScript: passed.
+- Full suite: 63 files, 185 tests passed. In one parallel run, vitest also reported an internal worker RPC timeout (`onTaskUpdate`) that is not tied to any test. `targeted-context` had a pre-existing flaky assertion (a random version ID could contain `c100`), now an exact clip-ID match.
+- New `tests/integration/orchestration.test.ts` (6 tests):
+  - routing of scripts, ideas and "continue";
+  - a script request after a stop answered as a new turn by a tool-less Opus;
+  - "continue" resuming the stopped conversation without classification;
+  - research and build workers with their tool sets and nested activity;
+  - Haiku-only to director and back, with handoffs and the two-switch limit;
+  - auto-switch after repeated failures;
+  - the director's no-change finish confirmed by the engine, and its refusal while worker changes are unpublished.
+- Packaged desktop suite on `C:\Users\yuanc\dream-build\engine-oct9-orchestrator`: 8 passed, 1 skipped (live cloud journey). Two assertions changed on purpose:
+  - the finished turn now shows its recap;
+  - the composer starts at 40-80 px instead of at least 112 px.
+  The blocked-plan journey now continues through a routed message instead of the removed checkbox.
+- A packaged-app capture of an orchestrated fixture run showed:
+  - director prose;
+  - one row per worker task, with its notes and folded steps;
+  - the closing recap.
+- Not yet verified:
+  - a live provider run of the new roles (`scripts/smoke-engine-local.ts`, spends money);
+- Gateway: `dream-gateway` deployed to `qewguvfkkwvdoqptiljd` on October 9. Version 23 is active, and the downloaded live source carries the `continue` route; it is otherwise identical to the previous deployed version 21. No migrations were required.

@@ -19,8 +19,8 @@ export function Conversation({project}:{project:ProjectState}){
  return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><article key={m.id} className="message user"><div>{!!m.assetIds?.length&&<div className="message-attachments">{m.assetIds.map(id=><span key={id}>{project.footage.assets.find(a=>a.id===id)?.filename??'Media'}</span>)}</div>}<p>{m.text}</p></div></article>)}
  {(events.length>0||last||running)&&<div className="assistant-turn"><div className="assistant-identity"><DreamMark/><span>Dream</span></div><div className="assistant-turn-body"><RunStream events={events} running={running}/>
  {running&&!events.length&&<div className="chat-thinking"><LoaderCircle size={13} className="spin"/>Understanding your request</div>}
- {!running&&last?.text&&(last.report as any)?.kind!=='completion'&&<div className="turn-answer"><MessageText text={last.text}/></div>}
- {!running&&!!activity?.changes.length&&<details className="turn-summary" aria-label="Change summary"><summary>Saved changes<span>{editingChanges(activity.changes).length}</span></summary><ul>{editingChanges(activity.changes).map((change,i)=><li key={i}>{change}</li>)}</ul></details>}
+ {!running&&last?.text&&<div className="turn-answer"><MessageText text={last.text}/></div>}
+ {!running&&!!activity?.changes.length&&<details className="turn-summary" aria-label="Change summary"><summary>Changes<span>{editingChanges(activity.changes).length}</span></summary><ul>{editingChanges(activity.changes).map((change,i)=><li key={i}>{change}</li>)}</ul></details>}
  </div></div>}</section>;
  })}</div>;
 }
