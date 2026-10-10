@@ -29,7 +29,7 @@ it('lets Opus run Haiku workers in parallel within disjoint write scopes, then i
     if(leadCalls===1)return toolUse('parallel','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Write src/title/scene.html.',writes:['src/title']},{id:'outro',title:'Build the outro',brief:'Write src/outro/scene.html.',writes:['src/outro']}]});
     if(leadCalls===2){expect(JSON.stringify(resultOf(messages,'parallel'))).toContain('Wrote the title');return toolUse('integrate','delegate',{tasks:[{id:'timeline',title:'Place both scenes',brief:'Declare both scenes and place them on the spine, then publish.',publish:true}]});}
     return{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Added the title and outro.'}}],stop_reason:'tool_use',usage:{}};}
-   const brief=String(messages[0].content).split('\n')[0],task=brief.includes('title card')?'title':brief.includes('outro')?'outro':'timeline',n=workerCalls[task]=(workerCalls[task]??0)+1;seen[task]=messages;
+   const head=messages[0].content,brief=(typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text).split('\n')[0],task=brief.includes('title card')?'title':brief.includes('outro')?'outro':'timeline',n=workerCalls[task]=(workerCalls[task]??0)+1;seen[task]=messages;
    if(task!=='timeline'&&n===1){arrived++;if(arrived===2)release();await barrier;return{content:[{type:'tool_use',id:task+'-json',name:'write_file',input:{path:'project.json',content:'{}'}},{type:'tool_use',id:task+'-stray',name:'write_file',input:{path:'src/shared.js',content:'x'}},{type:'tool_use',id:task+'-write',name:'write_file',input:{path:`src/${task}/scene.html`,content:scene(task)}}],stop_reason:'tool_use',usage:{}};}
    if(task!=='timeline')return{content:[{type:'tool_use',id:task+'-finish',name:'finish',input:{status:'complete',summary:`Wrote the ${task} scene at src/${task}/scene.html.`}}],stop_reason:'tool_use',usage:{}};
    if(n===1){const doc=JSON.parse(readFileSync(join(ws.root,'project.json'),'utf8'));doc.outputs=['title','outro'].map(id=>({id,path:`src/${id}/scene.html`,kind:'scene',width:640,height:360,fps:30,durationInFrames:60}));doc.timeline.spine=['title','outro'].map(id=>({id,assetId:'output:'+id,srcIn:0,srcOut:2,speed:1,audio:{mute:true},reason:'Scene'}));return{content:[{type:'tool_use',id:'doc',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}},{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}};}
@@ -46,7 +46,8 @@ it('lets Opus run Haiku workers in parallel within disjoint write scopes, then i
 it('rejects unsafe parallel delegations before any worker starts',()=>{
  const task=(id:string,writes:string[],publish=false)=>({id,title:id,brief:'b',writes,publish});
  expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/a/inner'])])).toThrow('overlapping');
- expect(()=>validateDelegation([task('a',['src/a'],true),task('b',['src/b'])])).toThrow('single delegated task may publish');
+ expect(()=>validateDelegation([task('a',['src/a'],true),task('b',['src/b'])])).toThrow('must come after every build task');
+ expect(()=>validateDelegation([task('a',['src/a'],true),{...task('b',['src/b'],true),after:['a']}])).toThrow('Only one task may publish');
  expect(()=>validateDelegation([task('a',['project.json']),task('b',['src/b'])])).toThrow('project.json');
  expect(()=>validateDelegation([task('a',[]),task('b',['src/b'])])).toThrow('declare writes');
  expect(()=>validateDelegation([task('a',[],true)])).not.toThrow();expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/ab'])])).not.toThrow();

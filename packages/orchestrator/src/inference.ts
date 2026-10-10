@@ -19,7 +19,8 @@ const MAX_OUTPUT=engineBudgets.maxOutput,TRANSIENT_RETRIES=3,IDLE_MS=90_000,HARD
 // Execution-side purposes hand a still-truncated response back to the agent; others report a split request.
 const AGENT_PURPOSES=['execution','worker','planning','answering','lead'];
 // Worker phases are named <lead phase>:worker:<call>:<task>; their activity nests under that task's row.
-const workerParent=(phase?:string)=>phase?.includes(':worker:')?'worker:'+phase.split(':worker:').at(-1):undefined;
+// A retried worker (phase suffix :r2) keeps its task's row.
+const workerParent=(phase?:string)=>phase?.includes(':worker:')?'worker:'+phase.split(':worker:').at(-1)!.replace(/:r\d+$/,''):undefined;
 function validResponse(value:any):value is InferenceResponse {
  const ids=Array.isArray(value?.content)?value.content.filter((b:any)=>b?.type==='tool_use').map((b:any)=>b.id):[];
  return value&&Array.isArray(value.content)&&new Set(ids).size===ids.length&&typeof value.stop_reason==='string'&&value.content.every((block:any)=>

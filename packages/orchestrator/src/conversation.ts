@@ -54,7 +54,7 @@ const previousDigest=(older:Message[])=>{for(const m of [...older].reverse()){if
 
 type Plan={cut:number;prefix:Message[]};
 /** Choose a compaction boundary at complete exchange boundaries. The prefix replaces messages before cut. */
-function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:number,keepMetadata:boolean):Plan|undefined{
+function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:number,keepMetadata:boolean,planNotes?:string):Plan|undefined{
  const cleanMessage=keepMetadata?(m:Message)=>({...m}):clean;const before=bytes(messages.map(cleanMessage));if(before<=targetBytes)return;
  const assistantIndices=messages.flatMap((m,i)=>m.role==='assistant'?[i]:[]);const last=assistantIndices.at(-1),calls=last===undefined?[]:Array.isArray(messages[last].content)?messages[last].content.filter((b:any)=>b.type==='tool_use'):[];const results=last===undefined?undefined:messages[last+1]?.content;const freshImages=Array.isArray(results)&&results.some((r:any)=>r.type==='tool_result'&&Array.isArray(r.content)&&r.content.some((b:any)=>b.type==='image'));const complete=!freshImages&&!!calls.length&&Array.isArray(results)&&calls.every((call:any)=>results.some((r:any)=>r.type==='tool_result'&&r.tool_use_id===call.id));if(assistantIndices.length<2&&!complete)return;
  let plan:Plan|undefined;
@@ -67,7 +67,7 @@ function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:
   const decisions=[...earlier?.recentAssistantNotes??[],...older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[])].slice(-8).map((t:string)=>t.slice(0,1500));
   // A later compaction carries the earlier summary forward instead of losing it.
   const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length;
-  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-20),recentReceipts:receipts.slice(-20),recentAssistantNotes:decisions};
+  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-20),recentReceipts:receipts.slice(-20),recentAssistantNotes:decisions,...(planNotes?{planNotes}:{})};
   const working=workingContext(messages,tail,targetBytes*.3);
   plan={cut,prefix:[cleanMessage(messages[0]),{role:'user',...(keepMetadata?{dreamSource:'snapshot' as const}:{}),content:JSON.stringify(digest)},...directions,...(working?[cleanMessage(working)]:[])]};
   if(bytes([...plan.prefix,...tail])<=targetBytes)break;
@@ -93,7 +93,8 @@ export function providerView(db:ProjectDB,turn:string,scope:string,messages:Mess
  if(compactToBytes===undefined||bytes(view)<=compactToBytes)return view;
  // Plan on the current view: the existing summary is carried forward and only newer exchanges are archived.
  // A view index past the saved prefix is a history index shifted by the prefix, so the new boundary maps back exactly.
- const plan=planCompaction(db,turn,view,compactToBytes,true);if(!plan)return view;
+ // The lead's latest plan notes always survive compaction, so a long run keeps its plan.
+ const plan=planCompaction(db,turn,view,compactToBytes,true,db.getMeta(`task-notes:${turn}:${scope.split(':').slice(2).join(':')}`)||undefined);if(!plan)return view;
  const cut=valid?plan.cut+saved!.cut-saved!.prefix.length:plan.cut;
  db.db.transaction(()=>{db.saveState(key,{cut,prefixHash:hash(messages.slice(0,cut).map(clean)),prefix:plan.prefix});db.event('ai.context_compacted',{turnId:turn,scope,beforeBytes:bytes(view),afterBytes:bytes([...plan.prefix,...messages.slice(cut)]),cut});})();
  return [...plan.prefix,...messages.slice(cut).map(m=>({...m}))];

@@ -15,7 +15,8 @@ export type WorkflowState=z.infer<typeof WorkflowStateSchema>;
 export function validateTaskPlan(raw:unknown){const plan=TaskPlanSchema.parse(raw);if(new Set(plan.steps.map(step=>step.id)).size!==plan.steps.length)throw new Error('Plan step IDs must be unique.');return plan;}
 
 export const WorkTaskSchema=z.object({id:z.string().min(1).max(100),title:z.string().min(1).max(200),status:z.enum(['pending','running','complete','paused','failed']),evidence:z.array(z.string()).max(20).default([])});
-export const TaskUpdateSchema=z.object({tasks:z.array(WorkTaskSchema).min(1).max(24)});
+// notes: the lead's working plan (decisions, what each task produced, what remains); kept through context compaction.
+export const TaskUpdateSchema=z.object({tasks:z.array(WorkTaskSchema).min(1).max(24),notes:z.string().max(3000).optional()});
 export type WorkTask=z.infer<typeof WorkTaskSchema>;
 export type PublicActivity={id:string;sequence:number;revision?:number;kind:'action'|'commentary'|'reasoning'|'changes'|'terminal';text:string;status:string;requestId?:string;parent?:string;tool?:string;detail?:string;changes?:string[];files?:import('./workspace').SourceChange[];media?:{id:string;name:string;kind:string}[];drafts?:{hash:string;name:string;width:number;height:number;fps:number;durationInFrames:number}[];output?:string;startedAt?:string;updatedAt?:string};
 

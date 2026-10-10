@@ -18,6 +18,8 @@ import {emptyFootage,AssetSchema,type Asset,type FootageIndex} from '@dream/foot
 import {processBatch} from '@dream/guardrails';
 import {persistAsset,hydrateAsset,hydratePath} from './paths';
 export type ProjectMeta={id:string;name:string;folder:string;createdAt:string;updatedAt:string};
+export type ContactSheetOptions={columns:number;rows:number;width:number};
+export type ContactSheet={data:string;mimeType:'image/jpeg';columns:number;rows:number;count:number;width:number;height:number};
 export type Version={id:string;parentId:string|null;summary:string;createdAt:string;turnId:string|null};
 export type Message={id:string;role:'user'|'assistant';text:string;createdAt:string;turnId?:string;report?:unknown;assetIds?:string[];activity?:TurnActivity};
 export type Job={id:string;assetId:string;step:string;status:string;percent:number;error:string|null};
@@ -41,7 +43,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS footage_fts USING fts5(id UNINDEXED,asset_id 
 
 `;
 export class ProjectDB {
- inspectSource?:SourceInspector;readonly db:Database.Database;readonly meta:ProjectMeta;readonly blobs:BlobStore;readonly executions:ExecutionStore;readonly workspace:WorkspaceStore;private versionsStore:VersionStore;private playbackCache?:{key:string;value:FootageIndex};
+ inspectSource?:SourceInspector;
+ /** Tiles frames into one grid image (set by the project service, which has ffmpeg). */
+ contactSheet?:(images:{data:string}[],options:ContactSheetOptions,signal?:AbortSignal)=>Promise<ContactSheet>;readonly db:Database.Database;readonly meta:ProjectMeta;readonly blobs:BlobStore;readonly executions:ExecutionStore;readonly workspace:WorkspaceStore;private versionsStore:VersionStore;private playbackCache?:{key:string;value:FootageIndex};
  constructor(public folder:string,name?:string){mkdirSync(join(folder,'.dream'),{recursive:true});for(const p of ['Media/Originals','Media/Proxies','Media/Analysis','Media/Generated','Exports','.dream/backups'])mkdirSync(join(folder,p),{recursive:true});this.db=new Database(join(folder,'.dream/project.sqlite'));this.db.pragma('journal_mode=WAL');this.db.pragma('foreign_keys=ON');try{migrate(this.db,schema);installVectorSearch(this.db);}catch(error){this.db.close();throw error;}
   this.blobs=new BlobStore(this.db);this.workspace=new WorkspaceStore(this);this.executions=new ExecutionStore(this.db,this.blobs);this.versionsStore=new VersionStore(this.db,this.blobs);this.versionsStore.migrateLegacy();this.migratePayloads();
   const found=this.getMeta('project');this.meta=found?{...JSON.parse(found),folder}:{id:`p_${randomUUID()}`,name:name??'Untitled project',folder,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};

@@ -34,6 +34,12 @@ export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
  currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId,{changedOnly:false});return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
+ snapshot(){const {indexRevision:_revision,recentDirection:_direction,...overview}=new ProjectContext(this.db).overview() as any;return{overview,media:this.mediaContext(),capabilities:engineCapabilities(),decisions:activeDecisions(this.db),projectDocument:'project.json'};}
+ readContext(paths:string[],maxCharacters:number){
+  const files:{path:string;text:string;truncated:boolean}[]=[];let left=maxCharacters;
+  for(const path of paths){if(left<=0)break;try{const text=readFileSync(workspacePath(this.root,path),'utf8');files.push({path,text:text.slice(0,left),truncated:text.length>left});left-=Math.min(text.length,left);}catch{files.push({path,text:'(not found)',truncated:false});}}
+  return files;
+ }
  private sceneRevisions(timeline:TimelineDocument){const assets=new Map(this.db.footage().assets.map(a=>[a.id,a]));return[...timeline.spine.map(c=>c.assetId),...timeline.attached.flatMap(i=>i.source?[i.source.assetId]:[])].map(id=>assets.get(id)).filter(a=>a?.scene?.format==='engine').map(a=>a!.scene!.revisionId);}
  /** Errors reported by scenes on the timeline (by default only those changed in this request, published since it
   * started) and by this request's current drafts. The project state shows all of them; finishing checks the changed ones. */

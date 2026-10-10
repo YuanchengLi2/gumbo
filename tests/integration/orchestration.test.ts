@@ -61,7 +61,7 @@ it('lets the director dispatch read-only research beside a build worker, which a
  const db=fixture(),calls:Call[]=[];let leadCalls=0;try{
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspaceFor(db));
   director.inference=async(model,_system,messages,tools=[],_turn,_force,purpose='execution',phase='main')=>{
-   const first=String((messages as any)[0].content);calls.push({purpose,model,phase,tools:(tools as any[]).map(t=>t.name),messages:first});
+   const head=(messages as any)[0].content,first=typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text;calls.push({purpose,model,phase,tools:(tools as any[]).map(t=>t.name),messages:first});
    if(purpose==='routing')return route({route:'local',intelligence:'opus'});
    if(purpose==='lead'){leadCalls++;
     if(leadCalls===1)return toolUse('assign','delegate',{tasks:[{id:'look',title:'Find the block textures',brief:'Which texture folders exist?',mode:'research'},{id:'scene',title:'Build the scene',brief:'Write src/scene.html and publish.',publish:true}]});

@@ -26,6 +26,10 @@ export interface CodeWorkspacePort {
  /** Errors scenes reported while playing (player or chat preview) for scenes changed in this request and its current drafts. */
  sceneErrors?(turnId?:string):{scene:string;assetId?:string;location?:string;message:string}[];
  context(query:string):unknown;
+ /** The project as every worker of one task set sees it: overview, media, capabilities and decisions; no query search. */
+ snapshot?():unknown;
+ /** Workspace files attached to a worker brief, within a total character budget. */
+ readContext?(paths:string[],maxCharacters:number):{path:string;text:string;truncated:boolean}[];
  mediaContext?():unknown;
  currentContext?():unknown;
 }
