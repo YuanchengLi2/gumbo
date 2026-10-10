@@ -46,6 +46,9 @@
       ],
       "@dream/orchestrator": [
         "packages/orchestrator/src/index.ts"
+      ],
+      "@dream/scene-engine": [
+        "packages/scene-engine/src/index.ts"
       ]
     }
   },

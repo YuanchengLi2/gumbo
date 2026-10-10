@@ -1,0 +1,39 @@
+{
+  "name": "@dream/scene-engine",
+  "version": "0.1.0",
+  "private": true,
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@fontsource/bebas-neue": "^5.2.5",
+    "@fontsource/inter": "^5.2.6",
+    "@fontsource/jetbrains-mono": "^5.2.6",
+    "@fontsource/lora": "^5.2.6",
+    "@fontsource/montserrat": "^5.2.6",
+    "@fontsource/oswald": "^5.2.6",
+    "@fontsource/playfair-display": "^5.2.6",
+    "@fontsource/poppins": "^5.2.6",
+    "@fontsource/press-start-2p": "^5.2.6",
+    "@fontsource/roboto": "^5.2.6",
+    "@fontsource/space-grotesk": "^5.2.6",
+    "@react-three/drei": "^10.7.0",
+    "@react-three/fiber": "^9.3.0",
+    "@remotion/layout-utils": "4.0.533",
+    "@remotion/noise": "4.0.533",
+    "@remotion/paths": "4.0.533",
+    "@remotion/player": "4.0.533",
+    "@remotion/shapes": "4.0.533",
+    "@remotion/three": "4.0.533",
+    "@remotion/transitions": "4.0.533",
+    "d3": "7.9.0",
+    "lucide-react": "^0.468.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.533",
+    "simplex-noise": "^4.0.3",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/d3": "^7.4.3",
+    "@types/three": "0.180.0"
+  }
+}

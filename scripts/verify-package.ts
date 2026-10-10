@@ -11,6 +11,9 @@ if(!existsSync(join(resources,'notices','OpenCut-LICENSE.txt')))throw new Error(
 const staged=join(resources,'staged'),suffix=process.platform==='win32'?'.exe':'';
 const required=[`media-runtime/ffmpeg${suffix}`,`media-runtime/ffprobe${suffix}`,`render-browser/chrome-headless-shell${suffix}`,`compositor/remotion${suffix}`,`compositor/ffmpeg${suffix}`,`compositor/ffprobe${suffix}`,'remotion/index.html','sandbox/entry.js','sandbox/react.js','sandbox/jsx-runtime.js','sandbox/remotion.js',`ingest/dream-ingest${suffix}`];
 for(const file of required)if(!existsSync(join(staged,file)))throw new Error(`Missing offline runtime ${file}`);
+// Every shipped scene engine version must be complete and match its manifest, or published scenes would not play.
+const engineRoot=join(staged,'engine');if(!existsSync(join(engineRoot,'1','manifest.json')))throw new Error('Missing scene engine runtime 1.');
+for(const version of ['1']){const engine=JSON.parse(readFileSync(join(engineRoot,version,'manifest.json'),'utf8'));for(const chunk of ['core','three','d3','icons','noise'])if(!engine.files[chunk+'.js'])throw new Error(`Scene engine ${version} is missing ${chunk}.js.`);for(const [file,entry] of Object.entries(engine.files as Record<string,{sha256:string}>))if(await fileHash(join(engineRoot,version,file))!==entry.sha256)throw new Error(`Scene engine ${version} checksum mismatch: ${file}`);}
 const vectorName=process.platform==='win32'?'sqlite-vec-windows-x64/vec0.dll':'sqlite-vec-darwin-arm64/vec0.dylib';
 if(!existsSync(join(resources,'app.asar.unpacked/node_modules',vectorName)))throw new Error('Missing platform SQLite vector extension.');
 const manifest=JSON.parse(readFileSync(join(staged,'staged-manifest.json'),'utf8'));
