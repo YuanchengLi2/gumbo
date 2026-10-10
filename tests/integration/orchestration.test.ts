@@ -72,7 +72,7 @@ it('lets the director dispatch read-only research beside a build worker, which a
   };
   await director.message('Create a scene with my Minecraft textures');expect(db.getMeta('ai_status')).toBe('complete');
   const research=calls.find(c=>c.messages.startsWith('Task (research)'))!,build=calls.find(c=>c.messages.startsWith('Task (build)'))!;
-  expect(research.tools.sort()).toEqual(['finish','list_files','read_file','read_transcript','search','view_media']);expect(research.messages).toContain('research only');
+  expect(research.tools.sort()).toEqual(['find_media','finish','list_files','read_file','read_transcript','search','view_media']);expect(research.messages).toContain('research only');
   expect(build.tools).toEqual(expect.arrayContaining(['write_file','publish_project','propose_file_changes']));expect(build.tools).not.toContain('delegate');
   expect(calls.every(c=>c.purpose!=='lead'||c.model===models.lead)).toBe(true);expect(calls.filter(c=>c.purpose==='worker').every(c=>c.model===models.worker)).toBe(true);
   // Parallel builders can neither publish nor pause the request for computer changes.

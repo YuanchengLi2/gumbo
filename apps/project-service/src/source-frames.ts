@@ -12,7 +12,7 @@ export function frameTimes(start:number,end:number,fps:number,detail:'normal'|'m
  if(first===last)return[first/rate];const count=Math.min(16,Math.max(2,Math.ceil((last-first)/rate/interval)+1));
  return [...new Set(Array.from({length:count},(_,n)=>Math.round(first+(last-first)*n/(count-1))/rate))];
 }
-function jpeg(ffmpeg:string,path:string,time:number,signal?:AbortSignal){return new Promise<Buffer>((resolve,reject)=>{
+export function jpeg(ffmpeg:string,path:string,time:number,signal?:AbortSignal){return new Promise<Buffer>((resolve,reject)=>{
  const child=spawn(ffmpeg,['-v','error','-threads','1','-ss',String(Math.max(0,time-.001)),'-i',path,'-frames:v','1','-vf',"scale=w='min(768,iw)':h='min(768,ih)':force_original_aspect_ratio=decrease",'-threads','1','-q:v','4','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{windowsHide:true,signal});let size=0;const chunks:Buffer[]=[];let error='';
  const timer=setTimeout(()=>child.kill(),30000);child.stdout.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>3_000_000)child.kill();else chunks.push(chunk);});child.stderr.on('data',chunk=>error=(error+chunk.toString()).slice(-1200));child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);const bytes=Buffer.concat(chunks);if(signal?.aborted)reject(new DOMException('Source inspection canceled','AbortError'));else if(code||bytes.length<4||bytes[0]!==255||bytes[1]!==216)reject(new Error('Source frame could not be decoded. '+error));else resolve(bytes);});
 });}

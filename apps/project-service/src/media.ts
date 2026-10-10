@@ -3,30 +3,53 @@ import {setTimeout as wait} from 'node:timers/promises';
 import {transcriptWords} from './transcript';
 import {analyzeStage} from './analysis-client';
 import {atomicArtifact} from './artifacts';
+import {mediaFacts} from '../../../packages/footage/src/capture-time';
 import {spawn} from 'node:child_process';import {createReadStream,existsSync,mkdirSync,writeFileSync,readFileSync,statSync} from 'node:fs';import {join,basename} from 'node:path';import {createHash,randomUUID} from 'node:crypto';import {ProjectDB} from '@dream/project-db';import {AssetSchema,type Asset} from '@dream/footage';
 export function run(exe:string,args:string[],signal?:AbortSignal):Promise<string>{return new Promise((resolve,reject)=>{const child=spawn(exe,args,{windowsHide:true,signal});let out='',err='';child.stdout.on('data',d=>{out+=d.toString();});child.stderr.on('data',d=>{err=(err+d.toString()).slice(-16000);});child.on('error',reject);child.on('close',code=>code===0?resolve(out):reject(new Error(`${basename(exe)} exited ${code}: ${err.slice(-1500)}`)));});}
 export async function fingerprint(path:string){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
-export async function probe(path:string,ffprobe:string){const info=JSON.parse(await run(ffprobe,['-v','error','-show_format','-show_streams','-of','json',path]));const video=info.streams.find((s:any)=>s.codec_type==='video'),audio=info.streams.find((s:any)=>s.codec_type==='audio');const image=/\.(png|jpe?g|webp|bmp)$/i.test(path);const rate=(video?.avg_frame_rate??'30/1').split('/').map(Number);return {kind:image?'image':video?'video':'audio',durationSec:image?5:Number(video?.duration??info.format.duration??audio?.duration??0),fps:video?rate[0]/(rate[1]||1)||30:0,width:video?.width??0,height:video?.height??0,hasAudio:!!audio,videoCodec:video?.codec_name,audioCodec:audio?.codec_name,rotation:Number(video?.side_data_list?.find((s:any)=>s.rotation)?.rotation??0)} as const;}
+/** When the media was captured: the phone's own creation date (with its time zone), the container's creation time, EXIF for photos, else the file time. */
+function captureTime(path:string,info:any):{capturedAt?:string;capturedAtSource?:'quicktime'|'mp4'|'exif'|'file'}{
+ const tags=[info.format?.tags,...(info.streams??[]).map((s:any)=>s.tags)].filter(Boolean),find=(name:string)=>tags.map((t:any)=>Object.entries(t).find(([k])=>k.toLowerCase()===name)?.[1]).find(Boolean) as string|undefined;
+ const apple=find('com.apple.quicktime.creationdate');if(apple){const date=new Date(apple.replace(/([+-]\d{2})(\d{2})$/,'$1:$2'));if(Number.isFinite(date.getTime()))return{capturedAt:date.toISOString(),capturedAtSource:'quicktime'};}
+ const facts=mediaFacts(path);if(facts.capturedAt&&facts.capturedAtSource!=='file')return{capturedAt:facts.capturedAt,capturedAtSource:facts.capturedAtSource};
+ const created=find('creation_time');if(created){const date=new Date(created);if(Number.isFinite(date.getTime())&&date.getUTCFullYear()>=1995)return{capturedAt:date.toISOString(),capturedAtSource:'mp4'};}
+ return facts.capturedAt?{capturedAt:facts.capturedAt,capturedAtSource:facts.capturedAtSource}:{};
+}
+export async function probe(path:string,ffprobe:string){const info=JSON.parse(await run(ffprobe,['-v','error','-show_format','-show_streams','-of','json',path]));const video=info.streams.find((s:any)=>s.codec_type==='video'),audio=info.streams.find((s:any)=>s.codec_type==='audio');const image=/\.(png|jpe?g|webp|bmp|heic|heif|avif|tiff?|dng)$/i.test(path);const rate=(video?.avg_frame_rate??'30/1').split('/').map(Number);return {kind:image?'image':video?'video':'audio',durationSec:image?5:Number(video?.duration??info.format.duration??audio?.duration??0),fps:video?rate[0]/(rate[1]||1)||30:0,width:video?.width??0,height:video?.height??0,hasAudio:!!audio,videoCodec:video?.codec_name,audioCodec:audio?.codec_name,rotation:Number(video?.side_data_list?.find((s:any)=>s.rotation)?.rotation??0),...captureTime(path,info)} as const;}
 export class Ingest {
  private queue:{asset:Asset;step?:string}[]=[];
  private background:{asset:Asset;step?:string}[]=[];
  private preparing=new Map<string,AbortController>();private analyzing=new Map<string,AbortController>();private speeches=new Map<string,AbortController>();
  private idle:(()=>void)[]=[];private canceled=false;
+ // Transcription runs for at most two sources at a time, so a bulk import does not flood the speech service.
+ private speechQueue:Asset[]=[];
  private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;this.db.saveAsset(asset);}
  constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>){}
  recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence||asset.creation)continue;if(!asset.missing&&asset.hasAudio&&!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete'))this.startSpeech(asset);if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
- async register(path:string,copy=false,requestKey?:string,signal?:AbortSignal){
+ async register(path:string,copy=false,requestKey?:string,signal?:AbortSignal,quiet=false){
   const assetId=requestKey?'a_'+createHash('sha256').update(requestKey).digest('hex').slice(0,24):`a_${randomUUID()}`;
   const existing=this.db.footage().assets.find(a=>a.id===assetId);if(existing){if(existing.status==='failed')this.retry(existing);return existing;}
   this.canceled=false;signal?.throwIfAborted();await this.authorize?.([path],signal);if(!existsSync(path))throw new Error('The selected source no longer exists.');
-  const originalPath=path,info=statSync(path);
+  const originalPath=path,info=statSync(path),fold=(p:string)=>process.platform==='win32'?p.toLowerCase():p;
+  // The same unchanged file is imported once, whichever request brings it in again.
+  const same=this.db.footage().assets.find(a=>a.source&&fold(a.source.path)===fold(path)&&a.source.size===info.size&&a.source.modifiedAt===info.mtime.toISOString()&&!a.missing);if(same){if(same.status==='failed')this.retry(same);return same;}
   const checksum='pending:'+createHash('sha256').update(JSON.stringify([assetId,info.size,info.mtimeMs])).digest('hex');
-  const meta=await probe(originalPath,this.ffprobe);signal?.throwIfAborted();const asset=AssetSchema.parse({id:assetId,filename:basename(path),originalPath,...meta,contentType:meta.kind==='video'?'mixed':'broll',status:'registered',missing:false,waveform:[],fingerprint:checksum,copyRequested:copy,playback:{ready:canPreviewOriginal({...meta,originalPath}),video:canPreviewOriginal({...meta,originalPath})?'original':'proxy'}});asset.playback=playbackCapabilities(asset);this.db.saveAsset(asset);this.startSpeech(asset);if(asset.playback?.ready)this.onReady?.(asset);this.queue.push({asset});this.publish('state',this.db.state({bounded:true}));void this.drain();return asset;
+  const meta=await probe(originalPath,this.ffprobe);signal?.throwIfAborted();const asset=AssetSchema.parse({id:assetId,filename:basename(path),originalPath,...meta,contentType:meta.kind==='video'?'mixed':'broll',status:'registered',missing:false,waveform:[],fingerprint:checksum,copyRequested:copy,source:{path,size:info.size,modifiedAt:info.mtime.toISOString()},playback:{ready:canPreviewOriginal({...meta,originalPath}),video:canPreviewOriginal({...meta,originalPath})?'original':'proxy'}});asset.playback=playbackCapabilities(asset);this.db.saveAsset(asset);this.startSpeech(asset);if(asset.playback?.ready)this.onReady?.(asset);this.queue.push({asset});if(!quiet)this.publish('state',this.db.state({bounded:true}));void this.drain();return asset;
+ }
+ /** Registers many files, four at a time, with one state update at the end. Preparation (proxies, thumbnails, speech) continues in the background. */
+ async registerMany(paths:string[],copy:(path:string)=>boolean,requestKey:string,signal?:AbortSignal){
+  const results:({asset:Asset}|{path:string;error:string})[]=new Array(paths.length);let next=0;
+  const worker=async()=>{for(;;){const n=next++;if(n>=paths.length)return;signal?.throwIfAborted();try{results[n]={asset:await this.register(paths[n],copy(paths[n]),`${requestKey}:${n}`,signal,true)};}catch(error){signal?.throwIfAborted();results[n]={path:paths[n],error:(error as Error).message};}}};
+  try{await Promise.all(Array.from({length:Math.min(4,paths.length)},worker));}finally{this.publish('state',this.db.state({bounded:true}));}
+  return results;
  }
  private startSpeech(asset:Asset){
   if(!this.speech||!asset.hasAudio||asset.sequence||asset.generated||asset.creation||asset.durationSec<=0||this.speeches.has(asset.id))return;
+  // Clips under two seconds rarely carry usable speech and are not sent for transcription.
+  if(asset.durationSec<2){this.db.job(asset.id,'transcription','complete',100);return;}
+  if(this.speeches.size>=2){if(!this.speechQueue.some(a=>a.id===asset.id)){this.speechQueue.push(asset);this.db.job(asset.id,'transcription','queued');}return;}
   const controller=new AbortController();this.speeches.set(asset.id,controller);this.db.job(asset.id,'transcription','running');
-  void (async()=>{await this.authorize?.([asset.originalPath],controller.signal);await this.speech!({...asset},controller.signal);controller.signal.throwIfAborted();this.db.job(asset.id,'transcription','complete',100);})().catch(error=>{this.db.job(asset.id,'transcription',controller.signal.aborted?'interrupted':'failed',0,(error as Error).message);}).finally(()=>{this.speeches.delete(asset.id);this.publish('state',this.db.state({bounded:true}));void this.drain();});
+  void (async()=>{await this.authorize?.([asset.originalPath],controller.signal);await this.speech!({...asset},controller.signal);controller.signal.throwIfAborted();this.db.job(asset.id,'transcription','complete',100);})().catch(error=>{this.db.job(asset.id,'transcription',controller.signal.aborted?'interrupted':'failed',0,(error as Error).message);}).finally(()=>{this.speeches.delete(asset.id);const queued=this.speechQueue.shift();if(queued)this.startSpeech(queued);this.publish('state',this.db.state({bounded:true}));void this.drain();});
  }
  async waitUntilUsable(ids:string[],signal:AbortSignal){
   const assets=this.db.db.prepare('SELECT json FROM assets WHERE id=?'),jobs=this.db.db.prepare('SELECT step,status,error FROM jobs WHERE asset_id=?');

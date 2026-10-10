@@ -4,12 +4,13 @@ import {join,dirname,basename,extname} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {FileRequestSchema,type FileRequest,type FileResponse,type FileProposal,type FileEntry,type FileOperation} from '@dream/contracts';
 import {FileAccess,atomicJson,within} from './file-access';
+import {findMedia,type MediaFolder} from './media-catalog';
 
 const textExtensions=new Set(['.txt','.md','.json','.srt','.vtt','.csv','.tsv','.yaml','.yml','.xml','.html','.css','.js','.ts','.tsx','.jsx','.py','.log']);
 export class FileOperations {
  private searches=new Map<string,{queue:string[];query:string;root:string;seen:Set<string>}>();
  private controllers=new Set<AbortController>();private requests=new Map<string,AbortController>();private tail=Promise.resolve();
- constructor(private access:FileAccess,private profile:string,private trash:(path:string)=>Promise<void>,private render?:(operation:Extract<FileOperation,{kind:'render_video'}>,signal:AbortSignal)=>Promise<void>){access.onRevoke(()=>{this.controllers.forEach(c=>c.abort());this.searches.clear();});}
+ constructor(private access:FileAccess,private profile:string,private trash:(path:string)=>Promise<void>,private render?:(operation:Extract<FileOperation,{kind:'render_video'}>,signal:AbortSignal)=>Promise<void>,private mediaFolders:()=>MediaFolder[]=()=>[]){access.onRevoke(()=>{this.controllers.forEach(c=>c.abort());this.searches.clear();});}
  cancel(id:string){this.requests.get(id)?.abort();}
  private journal(id:string){if(!/^[a-f0-9]{64}$/.test(id))throw new Error('Invalid file operation.');return join(this.profile,'file-operations',id+'.json');}
  receipt(id:string):FileProposal{return JSON.parse(readFileSync(this.journal(id),'utf8'));}
@@ -19,6 +20,10 @@ export class FileOperations {
   if(request.action==='authorize_import')return{paths:request.paths.map(path=>this.access.assert(path))};
   if(request.action==='receipt'){const receipt=this.receipt(request.id);if(receipt.projectId&&receipt.projectId!==context.projectId)throw new Error('This receipt belongs to a different project.');return receipt;}
   if(request.action==='propose')return await this.propose(request,context,controller.signal);
+  const clock={now:new Date().toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};
+  if(request.action==='computer_status'){if(!this.access.hasComputer())return{access:false,...clock};return{access:true,...clock,folders:this.mediaFolders(),locations:this.access.locations()};}
+  // Named folders need only their own grant (a dropped folder); the familiar folders need computer access.
+  if(request.action==='find_media'){const folders=request.folders?.length?request.folders.map(folder=>({name:basename(folder),path:this.access.assert(folder)})):(this.access.roots(),this.mediaFolders().filter(folder=>folder.exists).map(({name,path})=>({name,path})));return await findMedia(folders,request,controller.signal);}
   if(!request.path&&request.action==='list')return {entries:[],roots:this.access.roots(),locations:this.access.locations()};
   if(!request.path)this.access.roots();
   const path=request.path?this.access.assert(request.path):'';

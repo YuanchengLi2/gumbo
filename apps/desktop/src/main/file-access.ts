@@ -23,6 +23,6 @@ export class FileAccess {
  onRevoke(fn:()=>void){this.listeners.add(fn);return()=>this.listeners.delete(fn);}
  hasComputer(){return this.list().some(g=>g.scope==='computer');}
  locations(){this.roots();const seen=new Set<string>();return this.knownLocations.flatMap(location=>{try{const path=this.assert(location.path);if(!existsSync(path)||seen.has(path.toLowerCase()))return[];seen.add(path.toLowerCase());return[{name:location.name,path}];}catch{return[];}});}
- assert(path:string,write=false){const target=canonicalPath(path);if([...this.projects].some(root=>within(root,target)))return target;const allowed=this.list().some(g=>(!write||g.write)&&(g.scope==='computer'||g.path&&(g.scope==='project'?within(g.path,target):g.path===target)));if(!allowed)throw new Error('FILE_PERMISSION_REQUIRED: Allow computer file access or choose this file first.');return target;}
+ assert(path:string,write=false){const target=canonicalPath(path);if([...this.projects].some(root=>within(root,target)))return target;const allowed=this.list().some(g=>(!write||g.write)&&(g.scope==='computer'||g.path&&(g.scope==='project'||g.scope==='folder'?within(g.path,target):g.path===target)));if(!allowed)throw new Error('FILE_PERMISSION_REQUIRED: Allow computer file access or choose this file first.');return target;}
  roots(){if(!this.hasComputer())throw new Error('FILE_PERMISSION_REQUIRED: Allow computer file access first.');if(process.platform!=='win32')return ['/'];return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter=>letter+':\\').filter(path=>existsSync(path));}
 }

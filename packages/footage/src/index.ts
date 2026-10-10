@@ -20,6 +20,9 @@ export const AssetSchema = z.object({
   scene:z.object({format:z.enum(['html','engine']),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive(),
    engine:z.object({version:z.number().int().positive(),chunks:z.array(z.string()).default(['core']),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).default([]),music:z.record(z.string(),z.string()).default({}),files:z.number().int().nonnegative().optional(),transparent:z.boolean().default(false)}).optional()}).optional(),
   creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string(),sourcePath:z.string().optional()}).optional(),
+  // When the media was captured (camera metadata, else file time) and which file it was imported from.
+  capturedAt:z.string().optional(),capturedAtSource:z.enum(['quicktime','mp4','exif','file']).optional(),
+  source:z.object({path:z.string(),size:z.number().nonnegative(),modifiedAt:z.string()}).optional(),
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional(),beats:z.array(z.number().nonnegative()).max(20000).optional()}).optional()
 });
 export type Asset = z.infer<typeof AssetSchema>;
