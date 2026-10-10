@@ -15,7 +15,10 @@ export const AssetSchema = z.object({
   waveform: z.array(z.number()).default([]), status: z.enum(['registered','processing','ready','failed']).default('registered'),
   understanding:z.object({status:z.enum(['queued','running','partial','complete','interrupted','waiting_for_account','waiting_for_connection','waiting_for_permission','failed']),observedThroughSec:z.number().nonnegative().default(0),summary:z.string().optional(),error:z.string().optional(),policy:z.string()}).optional(),
   sequence:z.object({directory:z.string(),frameCount:z.number().int().positive(),fps:z.number().positive(),revisionId:z.string().regex(/^[a-f0-9]{64}$/)}).optional(),
-  scene:z.object({format:z.literal('html'),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive()}).optional(),
+  // html: a legacy self-contained document. engine: compiled code run by the prebuilt scene engine; the bundle is
+  // originalPath, and resources.json beside it maps workspace resources to content-addressed files.
+  scene:z.object({format:z.enum(['html','engine']),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive(),
+   engine:z.object({version:z.number().int().positive(),chunks:z.array(z.string()).default(['core']),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).default([]),music:z.array(z.string()).default([]),files:z.number().int().nonnegative().optional(),transparent:z.boolean().default(false)}).optional()}).optional(),
   creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string(),sourcePath:z.string().optional()}).optional(),
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional()}).optional()
 });

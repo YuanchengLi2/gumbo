@@ -6,7 +6,7 @@ import {resolve} from '@dream/timeline';
 import {ReviewRenderRequestSchema,ReviewImagesSchema,type ReviewRenderRequest,type ReviewImages} from '@dream/contracts';
 import {renderServer} from './render-server';
 
-export type ReviewRuntime={renderBundle:string;browser:string;binariesDirectory:string;cacheDirectory:string;authorize?:(path:string)=>void};
+export type ReviewRuntime={renderBundle:string;browser:string;binariesDirectory:string;cacheDirectory:string;authorize?:(path:string)=>void;engineRuntime?:string;gl?:'angle'|'swangle'};
 export async function renderReview(raw:ReviewRenderRequest,runtime:ReviewRuntime,signal:AbortSignal):Promise<ReviewImages>{
  const request=ReviewRenderRequestSchema.parse(raw),resolved=resolve(request.timeline,request.footage);
  if(request.frames.some(f=>f.frame>=resolved.durationInFrames))throw new Error('Review frames are outside this version.');
@@ -20,11 +20,11 @@ export async function renderReview(raw:ReviewRenderRequest,runtime:ReviewRuntime
  if(existsSync(cache)){try{const found=ReviewImagesSchema.parse(JSON.parse(readFileSync(cache,'utf8')));if(found.versionId===request.versionId&&found.frames.every(f=>createHash('sha256').update(Buffer.from(f.data,'base64')).digest('hex')===f.sha256))return found;}catch{/* Derived artifacts can be regenerated. */}}
  const assets=new Map(request.footage.assets.map(a=>[a.id,{...a,originalPath:existsSync(a.originalPath)?a.originalPath:a.proxyPath??a.originalPath}]));
  const used=new Set([...request.timeline.spine.map(c=>c.assetId),...request.timeline.attached.flatMap(i=>i.source?[i.source.assetId]:[]),...request.timeline.music.map(m=>m.assetId)]);for(const [id,asset]of assets)if(used.has(id))runtime.authorize?.(asset.originalPath);
- const server=await renderServer(assets,runtime.authorize);const {cancel,cancelSignal}=makeCancelSignal();signal.addEventListener('abort',cancel,{once:true});
+ const server=await renderServer(assets,runtime.authorize,{engineRuntime:runtime.engineRuntime});const {cancel,cancelSignal}=makeCancelSignal();signal.addEventListener('abort',cancel,{once:true});
  let browser:Awaited<ReturnType<typeof openBrowser>>|undefined;
  try{
-  signal.throwIfAborted();browser=await openBrowser('chrome',{browserExecutable:runtime.browser});signal.throwIfAborted();
-  const inputProps={timeline:request.timeline,footage:request.footage,media:server.media,exporting:true};
+  signal.throwIfAborted();browser=await openBrowser('chrome',{browserExecutable:runtime.browser,chromiumOptions:runtime.gl?{gl:runtime.gl}:{}});signal.throwIfAborted();
+  const inputProps={timeline:request.timeline,footage:request.footage,media:server.media,exporting:true,engineBase:server.engineBase};
   const options={serveUrl:runtime.renderBundle,inputProps,browserExecutable:runtime.browser,binariesDirectory:runtime.binariesDirectory,puppeteerInstance:browser};
   const composition=await selectComposition({...options,id:'Dream'});const frames:ReviewImages['frames']=[];
   for(const frame of request.frames){

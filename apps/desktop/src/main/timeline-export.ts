@@ -38,8 +38,8 @@ async function exportEditableTimelineUnlocked(state:ProjectState,window:BrowserW
  const copy=async(path:string)=>{signal.throwIfAborted();authorize(path);const cached=copies.get(path);if(cached)return cached;if(!existsSync(path))throw new Error('Relink '+basename(path)+' before exporting.');const name=copies.size+'-'+safe(basename(path));await copyMedia(path,join(staging,name),signal);copies.set(path,join(finalAssets,name));return join(finalAssets,name);};
  const render=async(t:TimelineDocument,name:string,start:number,end:number,alpha=false)=>{
   signal.throwIfAborted();progress('Preparing '+name);
-  server??=await renderServer(new Map(state.footage.assets.map(a=>[a.id,a])),path=>authorize(path));
-  const props={timeline:t,footage:state.footage,media:server.media,audioMedia:server.audioMedia,exporting:true,transparentBackground:alpha};
+  server??=await renderServer(new Map(state.footage.assets.map(a=>[a.id,a])),path=>authorize(path),{engineRuntime:join(paths.staged,'engine')});
+  const props={timeline:t,footage:state.footage,media:server.media,audioMedia:server.audioMedia,exporting:true,transparentBackground:alpha,engineBase:server.engineBase};
   const options={serveUrl:paths.renderBundle,id:'Dream',inputProps:props,browserExecutable:existsSync(paths.browser)?paths.browser:undefined,binariesDirectory:compositorDirectory()};
   const composition=await selectComposition(options),cancel=makeCancelSignal();const stop=()=>cancel.cancel();signal.addEventListener('abort',stop,{once:true});
   try{await renderMedia({...options,composition,inputProps:props,outputLocation:join(staging,name),codec:alpha?'prores':'h264',...(alpha?{proResProfile:'4444' as const,pixelFormat:'yuva444p10le' as const}:{}),imageFormat:'png',muted:true,frameRange:[Math.round(start*fps),Math.max(Math.round(start*fps),Math.round(end*fps)-1)],cancelSignal:cancel.cancelSignal,concurrency:2});}finally{signal.removeEventListener('abort',stop);}
