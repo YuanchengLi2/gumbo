@@ -87,7 +87,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.write('context/project-schema.json',JSON.stringify(WorkspaceDocumentSchema.toJSONSchema(),null,2));
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
- context(query:string){const selected=this.index.search(query);this.db.event('workspace.context',{availableCharacters:selected.availableCharacters,selectedCharacters:selected.selectedCharacters,selectedFiles:selected.hits.map(h=>h.path)});
+ // At most six code excerpts of 2,000 characters: enough to find the relevant files, which search and read_file open fully.
+ context(query:string){const found=this.index.search(query,6),selected={...found,hits:found.hits.map((hit:any)=>({...hit,text:String(hit.text).slice(0,2000)}))};this.db.event('workspace.context',{availableCharacters:selected.availableCharacters,selectedCharacters:selected.selectedCharacters,selectedFiles:selected.hits.map(h=>h.path)});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
   return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
@@ -141,7 +142,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    const asset=this.db.footage().assets.find(a=>a.id===input.assetId);if(!asset)throw new Error('Unknown project asset.');if(!asset.hasAudio)throw new Error('This media has no audio track.');
    await this.options.ensureTranscript?.(asset.id,signal);this.refreshContext();
    const all=this.db.footage().words.filter(w=>w.assetId===asset.id).sort((a,b)=>a.start-b.start),offset=input.offset??0,limit=input.limit??300;
-   return{assetId:asset.id,filename:asset.filename,revision:digest(JSON.stringify(all)),status:(this.db.db.prepare("SELECT status FROM jobs WHERE asset_id=? AND step='transcription'").get(asset.id) as any)?.status??'unavailable',coverage:this.db.loadState('speech-coverage:'+asset.id),words:all.slice(offset,offset+limit),totalWords:all.length,nextOffset:offset+limit<all.length?offset+limit:null};
+   return{assetId:asset.id,filename:asset.filename,revision:digest(JSON.stringify(all)),status:(this.db.db.prepare("SELECT status FROM jobs WHERE asset_id=? AND step='transcription'").get(asset.id) as any)?.status??'unavailable',coverage:this.db.loadState('speech-coverage:'+asset.id),words:all.slice(offset,offset+limit).map(w=>({id:w.id,text:w.text,start:w.start,end:w.end,...(w.speaker&&w.speaker!=='unknown'?{speaker:w.speaker}:{}),...(w.confidence<.5?{uncertain:true}:{})})),totalWords:all.length,nextOffset:offset+limit<all.length?offset+limit:null};
   }
   if(name==='find_media'){
    if(!this.options.files)throw new Error('Computer file access is unavailable.');

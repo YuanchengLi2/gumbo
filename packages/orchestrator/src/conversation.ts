@@ -35,11 +35,14 @@ const describe=(entry:Entry,turn:string)=>({id:entry.id,receipt:prefix(turn)+ent
 /** Older user messages that stay authoritative after compaction: real instructions and feedback, the two latest
  * pieces of director advice, and only the newest project-state snapshot. Engine nudges are dropped, and media images
  * shown at the start become a short note, so the prefix shrinks instead of growing with every compaction. */
-function keptDirections(older:Message[],tail:Message[],budget:number,cleanMessage:(m:Message)=>Message){
- const kept:Message[]=[],tailStatus=tail.some(m=>m.dreamSource==='media-status');let status=false,advice=0,media=false,used=0;
+function keptDirections(db:ProjectDB,older:Message[],tail:Message[],budget:number,cleanMessage:(m:Message)=>Message){
+ // Status messages after the first report only changes, so the newest dropped one is kept as the full state it stands for,
+ // unless the remaining messages begin with a full state of their own.
+ const firstInTail=tail.find(m=>m.dreamSource==='media-status'),tailStatus=!!firstInTail&&!(firstInTail as any).dreamStateKey;
+ const kept:Message[]=[];let status=false,advice=0,media=false,used=0;
  for(let m of [...older].reverse()){
   if(m.role!=='user'||isSnapshot(m)||Array.isArray(m.content)&&m.content.some((b:any)=>b.type==='tool_result')||m.dreamSource==='nudge')continue;
-  if(m.dreamSource==='media-status'){if(tailStatus||status)continue;status=true;}
+  if(m.dreamSource==='media-status'){if(tailStatus||status)continue;status=true;const key=(m as any).dreamStateKey,full=key?db.getMeta(key):undefined;if(full)m={role:'user',dreamSource:'media-status',content:full};}
   else if(m.dreamSource==='media'||m.dreamSource==='media-note'){
    if(media)continue;media=true;
    const images=Array.isArray(m.content)?m.content.filter((b:any)=>b.type==='image').length:0;
@@ -63,7 +66,7 @@ function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:
   const cut=keep?assistantIndices[assistantIndices.length-keep]:last!+2,older=messages.slice(1,cut);
   // Only complete results enter the archive. The entire latest assistant message stays verbatim.
   const entries=archive(db,turn,older),tail=messages.slice(cut),earlier=previousDigest(older);
-  const directions=keptDirections(older,tail,targetBytes*.15,cleanMessage);
+  const directions=keptDirections(db,older,tail,targetBytes*.15,cleanMessage);
   const decisions=[...earlier?.recentAssistantNotes??[],...older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[])].slice(-8).map((t:string)=>t.slice(0,1500));
   // A later compaction carries the earlier summary forward instead of losing it.
   const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length;

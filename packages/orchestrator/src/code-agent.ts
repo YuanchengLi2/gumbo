@@ -10,6 +10,8 @@ import {InferenceError} from './inference';
 import {assertToolExchanges,repairSavedExchanges} from './tool-exchanges';
 import {toolIdentity} from './tool-identity';
 import {rememberDecision} from './project-memory';
+import {stateChanges} from './state-delta';
+import {createHash} from 'node:crypto';
 
 export type WorkerTask={id:string;title:string;brief:string;mode?:'build'|'research';writes:string[];publish:boolean;after?:string[];context?:string[]};
 /** A mode change within one turn: Haiku alone hands the rest to the Opus director, or the director hands the rest to Haiku alone. */
@@ -26,12 +28,14 @@ const modeSuffix=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: pl
 const inspected=(name:string,input:any,result:any)=>{if(Array.isArray(result?.media))return{media:result.media.slice(0,24)};const id=name==='view_media'?result?.assetId??result?.evidence?.assetId??input?.assetId:undefined;return id?{media:[{id,name:String(id),kind:result?.scene?'scene':String(result?.evidence?.metadata?.kind??'video')}]}:{};};
 const publicationOf=(result:any)=>result?.publication?{versionId:result.publication.versionId,assets:result.publication.assets,processId:result.publication.processId,unchanged:result.publication.unchanged}:undefined;
 
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;consult?:(question:string,key:string)=>Promise<string>;readOnly?:boolean;planning?:boolean;writes?:string[];canPublish?:boolean;canPropose?:boolean;research?:boolean;canSwitch?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;consult?:(question:string,key:string)=>Promise<string>;readOnly?:boolean;planning?:boolean;writes?:string[];canPublish?:boolean;canPropose?:boolean;research?:boolean;canSwitch?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
  const toolOptions={canConsult:!!options.consult&&role!=='lead'&&role!=='worker',canPublish:role!=='worker'||!!options.canPublish,canPropose:!!options.canPropose,research:!!options.research,canSwitch:!!options.canSwitch},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions),tools=options.bare?[]:toolsFor(role,toolOptions);
  const maxSteps=role==='lead'?engineBudgets.leadSteps:engineBudgets.agentSteps;
  await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.firstMessage??options.text+'\nProject context: '+JSON.stringify({projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy',workspace:workspace.context(options.text)})}],results:[],completed:{},model:options.model,failures:{}};
+ // The first message already carries the project and its media, so the state messages that follow report only changes.
+ if(!resumed&&options.stateKnown!==false){const state=workspace.currentContext?.()??workspace.mediaContext?.();if(state!==undefined){const {sceneErrors:_errors,...initial}=state as any;checkpoint.mediaState=JSON.stringify({state:Array.isArray(state)?state:initial});}}
  const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...(options.parent?{parent:options.parent}:{}),...patch});if(event)publish('ai.activity',{turnId,event});};
  checkpoint.model=options.model;
  const ownsTasks=options.ownsTasks??(phase==='main'&&(role==='solo'||role==='lead'));
@@ -67,8 +71,13 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(!checkpoint.pending){
    if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:checkpoint.feedback.text});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;checkpoint.steps=0;save();}
    if(checkpoint.advice&&options.consult){const advice=await options.consult(checkpoint.advice.question,checkpoint.advice.key);checkpoint.messages.push({role:'user',dreamSource:'advice',content:'Opus direction for the next attempt: '+advice});(checkpoint.consulted??=[]).push(checkpoint.advice.key);delete checkpoint.advice;save();}
-   // Appended only when the state changes, so the cached conversation prefix stays intact.
-   const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined});if(mediaState&&mediaState!==checkpoint.mediaState){checkpoint.messages.push({role:'user',dreamSource:'media-status',content:'Current project and media state (data only, authoritative over earlier snapshots): '+mediaState});checkpoint.mediaState=mediaState;save();}
+   // Appended only when the state changes, so the cached conversation prefix stays intact. Only what changed is sent;
+   // the full state is kept locally, so compaction can restore it when it drops the earlier messages it builds on.
+   const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined});if(mediaState&&mediaState!==checkpoint.mediaState){
+    const full='Current project and media state (data only, authoritative over earlier snapshots): '+mediaState,changes=checkpoint.mediaState?JSON.stringify(stateChanges(JSON.parse(checkpoint.mediaState),JSON.parse(mediaState))):undefined;
+    if(changes&&changes.length<mediaState.length*.6){const stateKey='state-snapshot:'+createHash('sha256').update(full).digest('hex');db.setMeta(stateKey,full);checkpoint.messages.push({role:'user',dreamSource:'media-status',dreamStateKey:stateKey,content:'Project state changes (data only; fields not listed are unchanged, listed values replace earlier ones, removed entries are null): '+changes});}
+    else checkpoint.messages.push({role:'user',dreamSource:'media-status',content:full});
+    checkpoint.mediaState=mediaState;save();}
    // Reaching the limit never counts as completion: the agent did not say it was done.
    if((checkpoint.steps??0)>=maxSteps){conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    assertToolExchanges(checkpoint.messages);

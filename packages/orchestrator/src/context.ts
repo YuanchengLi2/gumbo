@@ -32,7 +32,7 @@ export class ProjectContext {
   const edges=/\b(last|end|ending|outro)\b/i.test(query)?t.spine.slice(-3):t.spine.slice(0,3);
   for(const c of [...t.spine.filter(c=>wanted.has(c.id)),...edges].slice(0,4)){add(`clip:${c.id}:0`);add(`asset:${c.assetId}:0`);if(c.beatId)add(`beat:${c.beatId}:0`);}
   const hits=this.search(query,6);for(const h of hits)if(h.kind==='conversation'||picked.size<10)picked.set(h.id,h);
-  const relevant:unknown[]=[];let remaining=14000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
+  const relevant:unknown[]=[];let remaining=9000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
   const footage=p.search(terms(query).join(' ')).slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
   // Follow-ups ("do that", "make it bluer") depend on the preceding exchange.
   const previous=p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 6").all() as {id:string;role:string;text:string}[];
