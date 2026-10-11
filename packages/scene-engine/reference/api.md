@@ -4,7 +4,7 @@ A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose de
 
 ## Declaring a scene
 
-In `project.json`, add an output and place it on the timeline as `output:<id>`:
+Declare an output (in the `outputs` of `edit_timeline`) and place it on the timeline as `output:<id>`:
 
 ```json
 {"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150,"props":{"title":"Launch day"}}
@@ -15,9 +15,28 @@ In `project.json`, add an output and place it on the timeline as `output:<id>`:
 - `transparent: true` gives the scene no background, for overlays placed on `attached` above footage.
 - `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
 
+## Changing the timeline (edit_timeline)
+
+Every timeline change is an action, applied in order and published in one step. A new scene is declared and placed in the same call:
+
+```json
+{"outputs":[{"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150}],
+ "actions":[
+  {"type":"insert_clip","position":0,"clip":{"id":"shot0","assetId":"output:intro","srcIn":0,"srcOut":5,"audio":{"mute":true}}},
+  {"type":"trim_clip","clipId":"shot2","srcIn":12.5,"srcOut":18},
+  {"type":"move_clip","clipId":"shot3","position":{"after":"shot0"}},
+  {"type":"set_framing","clipId":"shot2","framing":{"mode":"fill","exposure":-0.3,"contrast":1.2,"saturation":0.6,"temperature":-0.3}},
+  {"type":"set_transition","clipId":"shot3","transition":{"type":"crossfade","durationSec":0.5}},
+  {"type":"set_captions","captions":{"style":"clean"}},
+  {"type":"add_music","music":{"id":"bed","assetId":"output:theme","srcIn":0,"srcOut":20,"start":{"kind":"project","at":"start","offsetSec":0},"gainDb":-12}}
+ ]}
+```
+
+Other actions: `split_clip` (`atSec` or `wordId`, `newClipId`), `delete_clips`, `replace_clip_source`, `set_speed` (0.25 to 4), `set_clip_audio`, `add_item`, `update_item`, `remove_item`, `update_music`, `remove_music`, `set_project_settings`. If an action is wrong, nothing is applied and the error says which action and why. Edit `project.json` directly only for what no action expresses; then keep `format`, `version`, `baseVersionId` and `timeline.id` exactly as they are and never write it from scratch.
+
 ## Timeline items (complete examples)
 
-Change `project.json` in place: read it, then edit the parts you change (edit_file), or write back the whole document you read with your changes. Keep `format`, `version`, `baseVersionId` and `timeline.id` exactly as they are; never write the document from scratch. The `timeline` in `project.json` has `spine` (clips that play one after another and set the video's length), `attached` (overlays and sound effects placed in time), `music` and `settings`. Every item has a unique `id`; times are in seconds.
+The `timeline` has `spine` (clips that play one after another and set the video's length), `attached` (overlays and sound effects placed in time), `music` and `settings`. Every item has a unique `id`; times are in seconds.
 
 ```json
 {"spine":[

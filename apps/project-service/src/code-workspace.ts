@@ -25,6 +25,7 @@ import type {ComputerStatus} from '@dream/contracts';
 import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
 import {importResources} from './resource-import';
+import {applyTimelineActions} from './timeline-actions';
 import {workerRenderer} from './sound-outputs';
 import {sfxCatalog,describeScore,SoundDesignSchema} from '@dream/procedural-media';
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
@@ -33,7 +34,7 @@ import {prepareProjectPackages} from './project-packages';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
-const workspaceReadme=['# Dream workspace','','Scenes are React components in src/ that the Dream scene engine runs; music and sound effects are score and sound files in src/music/ and src/sfx/. Declare them as outputs in project.json and place them on the timeline as output:<id>; the engine reference in your instructions has a complete example of every timeline item.','','check_outputs compiles scenes and checks score files as drafts the user can see; publish_project compiles and publishes to the live player. Nothing renders until Export.','','Files from the computer go into resources/ with import_resources. Installed npm packages are bundled into scenes. Context files are refreshed from Dream.',''].join('\n');
+const workspaceReadme=['# Dream workspace','','Scenes are React components in src/ that the Dream scene engine runs; music and sound effects are score and sound files in src/music/ and src/sfx/. Declare them as outputs and place them on the timeline as output:<id> with edit_timeline, which also makes every other timeline change; the engine reference in your instructions has a complete example of every timeline item.','','check_outputs compiles scenes and checks score files as drafts the user can see; publish_project compiles and publishes to the live player. Nothing renders until Export.','','Files from the computer go into resources/ with import_resources. Installed npm packages are bundled into scenes. Context files are refreshed from Dream.',''].join('\n');
 export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
@@ -187,6 +188,35 @@ export class CodeWorkspace implements CodeWorkspacePort {
    this.db.recordFileChanges(turnId,result.id,fileChanges(result));
    return{proposal:{id:result.id,title:result.title,status:result.status,completed:result.completed,changes:result.changes.length}};
   }
+  // Timeline actions change project.json without the agent rewriting it: each action is checked, nothing applies unless all
+  // pass, and the result publishes in the same step unless publish is false.
+  if(name==='edit_timeline')return this.exclusive(async()=>{
+   const file=join(this.root,'project.json'),receiptKey='workspace-timeline-call:'+callId,identity=digest(JSON.stringify({actions:input.actions,outputs:input.outputs})),intent=this.db.loadState<any>(receiptKey);
+   const current=existsSync(file)?readFileSync(file,'utf8'):'';let changes:string[];
+   if(intent){
+    // A resumed call re-applies nothing: it restores the document the interrupted call wrote, then publishes it.
+    if(intent.identity!==identity)throw new Error('Timeline call ID belongs to a different edit.');
+    const published=!!this.db.db.prepare('SELECT 1 FROM workspace_publications WHERE id=?').get(callId);
+    if(!published&&digest(current)!==intent.afterHash){if(digest(current)!==intent.beforeHash)throw new Error('project.json changed after the interrupted timeline edit. Repeat the edit.');this.write('project.json',intent.content);}
+    changes=intent.changes;
+   }else{
+    let document:any;try{document=WorkspaceDocumentSchema.parse(JSON.parse(current));}catch(error){throw new Error('project.json is not a valid project document, so the actions cannot be applied: '+(error as Error).message.slice(0,500));}
+    const head=this.db.head();
+    // A document behind the published version with nothing of its own simply starts from the published timeline.
+    if(document.baseVersionId!==head){
+     let untouched=false;try{untouched=!document.outputs.length&&JSON.stringify(document.timeline)===JSON.stringify(this.db.timeline(document.baseVersionId));}catch{}
+     if(!untouched)throw new Error(`project.json is based on version ${document.baseVersionId}, but the published version is now ${head}, and it holds unpublished changes. Read context/published-project.json and reapply them.`);
+     document={format:'dream-workspace',version:1,baseVersionId:head,timeline:this.db.timeline(),outputs:[]};
+    }
+    const result=applyTimelineActions(document,input.actions,input.outputs,this.db.footage()),content=JSON.stringify(result.document,null,2);
+    this.db.saveState(receiptKey,{identity,beforeHash:digest(current),afterHash:digest(content),content,changes:result.changes});this.write('project.json',content);changes=result.changes;
+   }
+   if(input.publish===false)return{changes,published:false,note:'Applied to project.json. Call publish_project to publish it together with your other changes.'};
+   const now=new Date().toISOString(),run:ProcessResult={id:callId,status:'complete',exitCode:0,startedAt:now,finishedAt:now,output:'',logPath:'',isolation:'windows-appcontainer',commandHash:digest(callId)};
+   let publication;try{publication=await this.publish(run,turnId,callId);}catch(error){throw new Error(`The timeline change is saved in project.json but could not be published: ${(error as Error).message}
+Fix that, then call publish_project (do not repeat the actions).`);}
+   return{changes,publication,projectJson:{hash:digest(readFileSync(file,'utf8')),baseVersionId:this.db.head()}};
+  });
   if(name==='publish_project')return this.exclusive(async()=>{
    const now=new Date().toISOString(),result:ProcessResult={id:callId,status:'complete',exitCode:0,startedAt:now,finishedAt:now,output:'',logPath:'',isolation:'windows-appcontainer',commandHash:digest(callId)};
    const publication=await this.publish(result,turnId,callId),document=join(this.root,'project.json');

@@ -28,4 +28,7 @@ export const OpSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('set_story_beats'),beats:z.array(z.object({id:z.string(),purpose:z.string(),targetSec:z.number().positive().optional()})),...reason})
 ]);
 export type Op=z.infer<typeof OpSchema>;
+/** The same operations as agent actions: a reason is optional there, because the step's progress label already explains it. */
+export const ActionSchema=z.discriminatedUnion('type',OpSchema.options.map(option=>option.extend({reason:z.string().max(300).optional()})) as unknown as [typeof OpSchema.options[number],...typeof OpSchema.options[number][]]);
+export type Action=z.input<typeof ActionSchema>;
 export const BatchSchema=z.object({requestId:z.string(),expectedVersionId:z.string(),turnId:z.string().optional(),label:z.string().min(1),ops:z.array(OpSchema).min(1).max(50)});

@@ -176,3 +176,10 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 - Spending-limit, quota and sign-in errors from workers end the request instead of being returned to the lead as task errors to retry.
 - When the router fails, the request starts with Haiku (which can still call the director) instead of falling back to the local guess, which sent every open-ended request to Opus without notice.
 - Every time Opus takes part in a request is recorded as an ai.escalation event with its kind (route, switch, consult, plan) and reason, so live runs show how often it happens and why.
+
+## October 10, 2026 — Timeline actions for the agent
+
+- The agent changes the timeline with edit_timeline: the same typed operations the manual editor uses (insert, trim, split, move, delete and replace clips, speed, framing and grade, clip audio, transitions, overlays and sound effects, captions, music, settings), plus outputs to declare new scenes, music and sound so actions can place them as output:<id>. Live sessions showed most failures and much of the cost came from the agent reading and rewriting the whole project.json for every edit, including a run that invented a new timeline ID.
+- Actions apply in order and nothing applies unless every action passes. Each is checked as it is applied; an error names the action and the problem, with the IDs that exist when it named one that does not. The result is then checked against the sources: every asset or declared output exists, every range lies inside its source, every changed item has a length and a clip to stand on, and a deleted clip may not strand items anchored to it.
+- The call publishes in the same step (publish:false defers to publish_project, for changes that go with new code), and returns a compact list of what changed instead of the document. A repeated or resumed call replays its saved document and publication instead of applying its actions twice.
+- Code is written only for new visuals, music and sound. project.json is edited directly only for what no action expresses. Only the solo editor and a publishing worker get the tool; the director still never edits.
