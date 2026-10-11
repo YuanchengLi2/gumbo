@@ -54,3 +54,12 @@ it('starts every request with the same cached briefing, followed by the request 
   expect(first[1].text.startsWith('Make it warmer\nProject context: ')).toBe(true);expect(first[1].text).toContain('"now"');expect(first[1].text).toContain('Beach.mp4 2s-6s');
  }finally{db.close();}
 });
+
+it('keeps the cached briefing the same when the agent rewrites its notes or makes new media',async()=>{
+ const {briefing}=await import('../../packages/orchestrator/src/code-agent');
+ const base={capabilities:{},environment:{},computer:{access:false,now:'t1'},media:[{assetId:'a',filename:'a.mp4'},{assetId:'b',filename:'b.mp4'}]};
+ const later={...base,computer:{access:false,now:'t2'},media:[{assetId:'a',filename:'a.mp4',seen:'A beach at sunset'},{assetId:'b',filename:'b.mp4'},{assetId:'code_1',filename:'title.tsx',kind:'video'}]};
+ const first=briefing(base,'Make it warmer',{}) as any[],second=briefing(later,'Add a title',{}) as any[];
+ expect(second[0].text).toBe(first[0].text);
+ expect(second[1].text).toContain('"sourceNotes":{"a":"A beach at sunset"}');expect(second[1].text).toContain('"generatedMedia":[{"assetId":"code_1"');
+});

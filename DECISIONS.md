@@ -282,3 +282,7 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 
 - In the first long-form run (a 38-minute talk), cloud transcription reached 84 percent in 56 seconds, then one chunk upload failed with "fetch failed" and the whole transcription was marked failed: only an explicit busy reply was retried. A dropped connection or a server error (5xx) is now retried up to four times with a growing wait (2, 4, 8 seconds); a refusal still fails at once and a later retry resumes from the saved chunks.
 - Measured on that import: the clip was ready to edit in 4 seconds (the agent started 5 seconds after import); playback audio took 24 seconds and the waveform 9, both in the background; the footage map was still running after two minutes on the 1080p original when the test runner was stopped.
+
+## October 11, 2026 — The cached briefing actually stays the same
+
+- In the second live run the cached briefing was read from cache by only one request of eight: the media list inside it changed almost every request, because the agent rewrites its notes on sources as it works and every new title or music track it makes joins the list. Source notes now travel as sourceNotes and media the agent made as generatedMedia in the request block, so the cached media list changes only when the user imports something or a source's footage map finishes.
