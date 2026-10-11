@@ -8,7 +8,9 @@ export function intelligence(model:string,purpose:string,routing?:{complexity?:s
  // The director only decides and writes briefs, so medium effort suffices; it rises only after repeated substantive failures.
  const automatic=role==='router'||complexity==='simple'&&role!=='consultation'?'low':purpose==='lead'?failures>=2?'high':'medium':purpose==='worker'&&extra.workerMode&&extra.workerMode!=='build'?'low':complexity==='difficult'?'high':'medium';
  // An effort the user picked in the composer applies to every model in the request except the router.
- const picked=chosen&&role!=='router'?chosen:automatic,effort=extra.lower?levels[Math.max(0,levels.indexOf(picked)-extra.lower)]:picked;
+ // DREAM_BUILD_WORKER_EFFORT overrides build workers only, for measuring effort against speed, cost and quality.
+ const override=purpose==='worker'&&extra.workerMode==='build'&&['low','medium','high'].includes(process.env.DREAM_BUILD_WORKER_EFFORT??'')?process.env.DREAM_BUILD_WORKER_EFFORT as 'low'|'medium'|'high':undefined;
+ const picked=chosen&&role!=='router'?chosen:override??automatic,effort=extra.lower?levels[Math.max(0,levels.indexOf(picked)-extra.lower)]:picked;
  return{version:1,role,complexity,effort,reason:failures>=2?'Repeated substantive failure requires deeper diagnosis.':routing?.reason??'Match reasoning to the current task.'};
 }
 /** A task budget the model can see, so it paces itself and finishes instead of being cut off. Router and consultations have none. */

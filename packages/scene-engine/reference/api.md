@@ -59,7 +59,7 @@ The `timeline` in `project.json` has `spine` (clips that play one after another 
 | `<FitText>` | Text that fills its parent box at the largest size that fits, wrapping as needed. It cannot overflow. Props: `fontFamily`, `fontWeight`, `maxFontSize`, `minFontSize`, `lineHeight`, `align`, `verticalAlign`, `style`. |
 | `<SafeArea inset={0.05}>` | Full-frame flex column inset from the edges; keeps content clear of crops. |
 | `fonts`, `loadFont(family, weight)` | Bundled families: Inter, Roboto, Montserrat, Poppins, Oswald, Bebas Neue, Playfair Display, Lora, Space Grotesk, JetBrains Mono, Press Start 2P. Use them by name in CSS. |
-| `<Scene3D>` | A 3D canvas the size of the scene with a camera aimed at the origin, key and fill lights and studio reflections. Props: `camera` (`{position:[x,y,z],fov}`), `background`, `lights={false}`, `environment={false}`, `shadows`, `orthographic`. Children are React Three Fiber elements. |
+| `<Scene3D>` | A 3D canvas the size of the scene with a camera aimed at the origin, key and fill lights and studio reflections. Props: `camera` (`{position:[x,y,z],fov}`), `background` (a CSS colour; leave it out for a see-through canvas over the scene's own background), `lights={false}`, `environment={false}`, `shadows`, `orthographic`. Children are React Three Fiber elements. |
 | `useTexture(url, {filter, repeat})` | Load an image as a texture (suspends until ready). `filter:'nearest'` keeps hard pixel edges when magnified; `repeat:[x,y]` tiles it. |
 | `useBeats(musicOutputId)` | Beat times of a music output listed in the scene's `music`: `beats`, `index`, `sinceBeat`, `pulse(decay)`, `isOnBeat(frames)`. |
 

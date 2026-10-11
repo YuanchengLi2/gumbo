@@ -52,3 +52,10 @@ it('serves registered scenes, resources by content hash and project media, and n
  for(const bad of ['/runtime/1/../../clip.mp4','/runtime/1/%2e%2e/%2e%2e/clip.mp4','/scene/clip/index.html','/scene/scene_1/files/missing.png','/scene/scene_1/media/scene_1','/scene/scene_1/../clip.mp4','/other/x','/draft/'+'c'.repeat(32)+'/index.html'])expect(route(bad).kind,bad).toBe('missing');
  drafts.set('c'.repeat(32),sceneFromAsset(scene)!);drafts.set('d'.repeat(32),sceneFromAsset(scene)!);expect(route('/draft/'+'c'.repeat(32)+'/index.html').kind).toBe('missing');expect(route('/draft/'+'d'.repeat(32)+'/index.html').kind).toBe('html');
 });
+
+it('treats a transparent or missing 3D background as a see-through canvas and reports colours three.js cannot read',async()=>{
+ const {canvasBackground}=await import('../../packages/scene-engine/src/runtime/api/three');
+ expect(canvasBackground()).toBeUndefined();expect(canvasBackground('transparent')).toBeUndefined();expect(canvasBackground(' None ')).toBeUndefined();
+ expect(canvasBackground('#0b1e3a')).toBe('#0b1e3a');expect(canvasBackground('rgb(10, 20, 30)')).toBe('rgb(10, 20, 30)');
+ expect(()=>canvasBackground('ocean-ish')).toThrow('is not a colour');
+});

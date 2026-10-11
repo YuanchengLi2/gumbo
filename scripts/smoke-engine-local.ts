@@ -1,7 +1,7 @@
 // Live check of the agent engine against the real Anthropic API, through this repository's gateway code served on
 // localhost. No Supabase project, account or deployment is involved. Requires ANTHROPIC_API_KEY (environment,
 // .env.local or .secrets/anthropic.env). Spending stops at --budget=<usd> (default 3).
-// Usage: pnpm exec tsx scripts/smoke-engine-local.ts [--simple-only|--long|--suite|--minecraft|--today] [--budget=3]
+// Usage: pnpm exec tsx scripts/smoke-engine-local.ts [--simple-only|--long|--suite|--minecraft|--today|--eval|--request="..."] [--budget=3]
 // --minecraft repeats the October 10 baseline request shape (a multi-shot voxel explainer with music); --today asks for a short
 // from clips captured today in a fixture camera folder. --eval runs ten everyday requests in one project (title, chart, 3D,
 // footage montage, music, a setting, a question, a scene edit, a timing change and a computer-file proposal). Each result lists cost, tokens and time per caller (lead and each worker).
@@ -131,6 +131,8 @@ try{
   ];
   for(const [name,request,check,options] of steps){results.push(await scenario(name,request,check,options));if(spent()>budget)break;}
  }
+ // --request="..." runs any one request in a fresh project and renders frames of the result.
+ else if(process.argv.some(a=>a.startsWith('--request='))){const text=process.argv.find(a=>a.startsWith('--request='))!.slice(10);results.push(await scenario('Custom request',text,()=>project.timeline().spine.length?undefined:'the timeline is empty',{render:'request'}));}
  else if(process.argv.includes('--minecraft'))results.push(await scenario('Voxel explainer (baseline shape: 34 min, $2.14 on October 10)',"Make a 20-second explainer called 'What is Claude?' in a blocky voxel style: five shots with a blocky world, a blocky character, a camera that moves through the scene, and a caption per shot ('Meet Claude', 'It reads your request', 'It plans the work', 'It builds it with you', 'Ask it anything'). Add upbeat chiptune music under the whole video. Put everything on the timeline in order.",()=>sceneClips()>=5?undefined:`timeline has ${sceneClips()} scene clips`,{render:'voxel'}));
  else if(process.argv.includes('--today')){
   // Three clips "shot today" at different times, copied from the fixture video, in a camera folder find_media searches.
