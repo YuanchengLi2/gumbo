@@ -72,6 +72,10 @@ Nothing runs scene code in the background. Writing scene code returns a compile 
 
 Music is a score file (`src/music/*.score.json`) in compact notation (drum step patterns, note strings, chord progressions, arpeggios, sections, repeats) or a full score document; Dream expands and validates it, naming the field and token at fault. Sound effects are a sound design file or a named preset. Synthesis runs in the procedural audio worker and is cached by content. Music assets carry beat times that a scene reads with `useBeats(name)`. Scenes are silent; sound goes on the timeline.
 
+## The footage map
+
+Every imported video or image is analyzed once in the background after it is ready (`apps/project-service/src/footage-map.ts`). One ffmpeg pass at 320 px and 10 fps finds cuts, frozen and black stretches, blur, brightness, motion and camera shake; shots between cuts carry these measurements and their problems. One Haiku call then looks at a contact sheet of up to sixteen shots and describes each (what it shows, framing, tags, energy, usable) and flags what measurements cannot see: player controls, recorder or desktop windows, pause icons, burned-in text, watermarks, letterboxing. Loudness is measured per source too. The media list carries each source's map (shots and problems, frozen and black stretches, where usable footage ends), the timeline outline says what each placed clip shows, and `edit_timeline` warns, without blocking, about flagged footage, unanalyzed sources, slow motion below half speed, one clip over 40% of the video and repeated footage.
+
 ## Media from the computer
 
 - `find_media` finds photos, videos and audio by capture date: today, yesterday, this week, the last 7 days, or explicit dates, in the computer's local time.
@@ -104,7 +108,7 @@ Each phase is a checkpointed conversation. Tool calls and results are persisted 
 
 ## Context
 
-- **Lead and solo**: the first message carries the request, the project overview, an outline of the timeline in order, the project notes, recent conversation, relevant indexed chunks (9,000 characters), up to six code excerpts of 2,000 characters, decisions, the media list (with what earlier requests saw in each source), engine capabilities and the computer status (access, media folders, local date and time zone).
+- **Lead and solo**: the first message is two blocks. The first, cached so the next request within five minutes reads it, holds what changes rarely: capabilities, environment, the computer and the media list with its footage map. The second carries the request, the project overview, an outline of the timeline in order, the project notes, recent conversation, relevant indexed chunks (9,000 characters), the authored files by name (no code excerpts), decisions, the media list (with what earlier requests saw in each source), engine capabilities and the computer status (access, media folders, local date and time zone).
 - **Project notes and source notes**: `finish` takes optional `notes` (what the user wants for the video overall; editors and directors only) and `sourceNotes` (what each inspected source shows and where). Both are saved with the project and shown to every later request, at no extra model call.
 - **Lead, readonly and planning**: these also receive the source map on their first request:
   - a one-line-per-source catalog, in capture order when known;
@@ -132,6 +136,10 @@ The gateway features above (one-hour lead cache, task budgets, summarized Haiku 
 ## Workspace and publication
 
 `Workspace/project.json` is a version-1 `dream-workspace` document with `baseVersionId`, the timeline and `outputs` (scenes, images, audio, music, sound effects). The agent changes it with `edit_timeline`: the manual editor's typed operations plus output declarations, applied in order and checked against the sources (every asset or output exists, every range lies inside its source, changed items have a length and a clip to stand on, deleted clips strand nothing); if any fails, nothing applies and the error names the action. The call publishes in the same step and returns a compact list of changes; a replayed call restores its saved document instead of applying the actions again. Publication validates the document, compiles scenes, synthesizes music and sound, copies files into hash-addressed storage, resolves asset references, and saves the timeline, source snapshot, assets and receipt in one SQLite transaction. Replaying a completed call cannot create another version. Undo, redo, restore and branch changes restore the workspace sources with the version.
+
+## Sound and colour
+
+Clip sound is levelled toward -18 LUFS from each source's measured loudness (at most 12 dB either way; `settings.autoLevel` false turns it off), in the shared audio manifest so preview and Export match; music keeps its own gain. Export then normalizes the mix to -14 LUFS with true peaks below -1.5 dBTP in two passes, copying the picture. Colour temperature is an SVG colour matrix that scales red against blue, defined once per temperature in the composition. Effect items on footage (`slow_push`, `punch_zoom`, `shake`, `grade`) need no code and are documented in the engine reference.
 
 ## Runtime
 
