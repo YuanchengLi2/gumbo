@@ -528,5 +528,5 @@ These ran `scripts/smoke-engine-local.ts` against the real Anthropic API through
 - Not run: the live cloud desktop spec `code-agent-live.spec.ts`.
 
 **Not yet verified**
-- Gateway: the cacheTtl, task budget, summarized Haiku progress and costUsd features need `supabase functions deploy dream-gateway`. The `continue` route is already live in version 23. Until deployment the app runs without these features.
+- Gateway: `dream-gateway` version 24 was deployed to `qewguvfkkwvdoqptiljd` on October 10 with the one-hour lead cache, task budgets, summarized Haiku progress and costUsd in receipts. No migrations were needed. The health endpoint reports the service configured; a signed-in live request through the deployed gateway has not been run yet.
 - HEIC import depends on the staged ffmpeg build. When it cannot decode HEIC, `import_media` reports those files as failed with the reason.
