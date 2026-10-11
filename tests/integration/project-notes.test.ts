@@ -32,3 +32,14 @@ it('keeps the notes an editor writes when finishing and shows them to the next r
   await director.message('Add a crossfade to the first clip');expect(seen.at(-1)).toContain('gloomy, cinematic mood');
  }finally{db.close();}
 });
+
+it('keeps what the agent saw in each source and lists it with the media for later requests',async()=>{
+ const db=fixture();try{
+  const {CodeWorkspace}=await import('../../apps/project-service/src/code-workspace');const {codeAgent}=await import('../../packages/orchestrator/src/code-agent');
+  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));
+  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'What is in my footage?',model:'claude-haiku-5-5',readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async()=>({content:[{type:'tool_use',id:'f',name:'finish',input:{status:'complete',summary:'Beach footage.',sourceNotes:[{assetId:'v',note:'Sunset beach: wide shots 0-8s, shaky handheld 8-12s, close waves 12-20s.'},{assetId:'missing',note:'Ignored.'}]}}]})});
+  const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg:'unavailable',ffprobe:'unavailable'},()=>{});
+  expect(ws.mediaContext()[0]).toMatchObject({assetId:'v',seen:'Sunset beach: wide shots 0-8s, shaky handheld 8-12s, close waves 12-20s.'});
+  expect(Object.keys(JSON.parse(db.getMeta('source-notes')!))).toEqual(['v']);
+ }finally{db.close();}
+});

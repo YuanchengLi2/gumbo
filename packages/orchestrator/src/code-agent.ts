@@ -135,6 +135,8 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
       // The editor or director keeps the project notes that carry the user's wishes into later requests; workers never write them.
       if(input.notes?.trim()&&role!=='worker'&&!phase.startsWith('direction-'))db.setMeta('preferences',input.notes.trim());
+      // What the agent saw in each source stays with the project, so later requests read it instead of looking again.
+      if(input.sourceNotes?.length){const known=new Set(db.footage().assets.map(a=>a.id)),saved=JSON.parse(db.getMeta('source-notes')??'{}');for(const n of input.sourceNotes)if(known.has(n.assetId))saved[n.assetId]=n.note.trim();db.setMeta('source-notes',JSON.stringify(saved));}
      }else if(call.name==='delegate'){
       if(!options.runWorkers)throw new Error('Delegation is unavailable in this phase.');
       validateDelegation(input.tasks);
