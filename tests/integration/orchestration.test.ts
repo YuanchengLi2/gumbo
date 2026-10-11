@@ -127,3 +127,10 @@ it('refuses a director finish while worker changes are unpublished',async()=>{
   expect(seen[1]).toContain('Delegate an integration task with publish:true');expect(seen[1]).toContain('src/intro/scene.html');expect(result.outcome.status).toBe('complete');
  }finally{db.close();}
 });
+
+it('keeps the lead on the five-minute cache until a wait for workers outlasts it',async()=>{
+ const {leadCache,noteWorkerWait}=await import('../../packages/orchestrator/src/code-director');const db=fixture();try{
+  expect(leadCache(db,'turn')).toEqual({});noteWorkerWait(db,'turn',180_000);expect(leadCache(db,'turn')).toEqual({});
+  noteWorkerWait(db,'turn',300_000);expect(leadCache(db,'turn')).toEqual({cacheTtl:'1h'});expect(leadCache(db,'other')).toEqual({});
+ }finally{db.close();}
+});

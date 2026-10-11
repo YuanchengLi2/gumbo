@@ -157,3 +157,4 @@ This entry supersedes earlier statements that Sonnet executes or that Opus execu
   - check_outputs also checks score and sound files: length in bars and seconds, sections, each track's loop length, and tracks that drift against the bar line. Workers no longer write their own scripts to count bars.
   - The workspace README and environment note no longer point at the retired HTML scene guide; older projects get the new README.
   - Review renders always receive the engine runtime, so a renderer without it fails loudly instead of timing out on scene frames.
+- The lead's conversation cache is five minutes until a wait for workers in the request outlasts that (four minutes), then one hour. Live runs showed short requests where the one-hour write (twice the five-minute price) was most of the cost and never paid back. System prompts and tools keep their one-hour cache across requests.
