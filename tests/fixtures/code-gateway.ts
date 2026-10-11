@@ -22,6 +22,8 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   let content:any[];
   if(tools.includes('submit_video_summary'))content=[{type:'tool_use',id:'video-summary',name:'submit_video_summary',input:{summary:'A changing synthetic calibration pattern.',evidenceIds:JSON.parse(body.messages[0].content).records.map((r:any)=>r.id)}}];
   else if(tools.includes('submit_observation'))content=[{type:'tool_use',id:'observation',name:'submit_observation',input:{summary:'Synthetic color-pattern source.',events:[],scene:{framing:'Full-frame calibration pattern',cameraMotion:'None',tags:['calibration'],energy:'low',usableAsBroll:false},continuity:'Synthetic calibration footage',inspectMore:[]}}];
+  // The footage map's one look at a source's shots, answered for every shot it lists.
+  else if(body.purpose==='footage_map'){const shots=[...String(body.messages?.[0]?.content?.[0]?.text??'').matchAll(/(\d+) = /g)].map(m=>Number(m[1]));content=[{type:'text',text:JSON.stringify({summary:'Synthetic calibration footage.',shots:shots.map(n=>({n,description:'A changing synthetic calibration pattern',framing:'graphic',tags:['calibration'],energy:'low',usable:true,problems:[]}))})}];}
   else if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
   // Real responses never reuse tool IDs; make scripted IDs unique per response.
   else{const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
@@ -64,7 +66,9 @@ export function planningScript(blockOnce=false):Script{
   if(body.purpose==='planning')return[use('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Format plan',goal:'Prepare a square 60 fps edit',steps:[{id:'timing',title:'Set timing',instruction:'Set 60 fps',acceptance:'60 fps',review:false},{id:'square',title:'Set format',instruction:'Set square dimensions',acceptance:'1080 square',review:false}],assumptions:[]}})];
   if(body.purpose==='lead'){
    // Approved steps continue one lead conversation; the latest step message decides the step.
-   const messages:any[]=body.messages??[],at=messages.findLastIndex(m=>typeof m.content==='string'&&m.content.includes('Current step:')),current=String(messages[at]?.content??''),id=current.includes('Set 60 fps')?'timing':'square',since=messages.slice(at).filter(m=>m.role==='assistant').length;
+   // A message is plain text or, for the first one, the cached briefing followed by the request.
+   const text=(m:any)=>typeof m?.content==='string'?m.content:Array.isArray(m?.content)?m.content.map((b:any)=>b.text??'').join('\n'):'';
+   const messages:any[]=body.messages??[],at=messages.findLastIndex(m=>text(m).includes('Current step:')),current=text(messages[at]),id=current.includes('Set 60 fps')?'timing':'square',since=messages.slice(at).filter(m=>m.role==='assistant').length;
    if(since===0)return[use(id+'-assign','delegate',{tasks:[{id,title:id==='timing'?'Set the frame rate':'Set the square format',brief:'fixture-step:'+id,publish:true}]})];
    if(blockOnce&&id==='square'&&!all.includes('Square format is confirmed'))return finish(id+'-paused','Square format saved; confirmation needed.','Confirm the square format before continuing.');
    return finish(id+'-done','Approved step saved.');
