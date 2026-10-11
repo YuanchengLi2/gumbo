@@ -51,3 +51,10 @@ it('replaces the workspace guide of projects from before the scene engine',async
   await ws.initialize();const readme=readFileSync(join(root,'Workspace/README.md'),'utf8');expect(readme).not.toContain('live-scenes');expect(readme).toContain('scene engine');
  }finally{db.close();}
 });
+
+it('keeps the project timeline identity when a rewritten project.json carries a made-up timeline id',async()=>{
+ const {root,db,ws}=fixture();try{await ws.initialize();const id=db.timeline().id;
+  const doc=JSON.parse(readFileSync(join(root,'Workspace/project.json'),'utf8'));doc.timeline={...doc.timeline,id:'my-edit',settings:{...doc.timeline.settings,fps:24}};writeFileSync(join(root,'Workspace/project.json'),JSON.stringify(doc));
+  await ws.execute('publish_project',{},'p1','turn',signal);expect(db.timeline().id).toBe(id);expect(db.timeline().settings.fps).toBe(24);
+ }finally{db.close();}
+});

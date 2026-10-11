@@ -17,7 +17,7 @@ In `project.json`, add an output and place it on the timeline as `output:<id>`:
 
 ## Timeline items (complete examples)
 
-The `timeline` in `project.json` has `spine` (clips that play one after another and set the video's length), `attached` (overlays and sound effects placed in time), `music` and `settings`. Every item has a unique `id`; times are in seconds.
+Change `project.json` in place: read it, then edit the parts you change (edit_file), or write back the whole document you read with your changes. Keep `format`, `version`, `baseVersionId` and `timeline.id` exactly as they are; never write the document from scratch. The `timeline` in `project.json` has `spine` (clips that play one after another and set the video's length), `attached` (overlays and sound effects placed in time), `music` and `settings`. Every item has a unique `id`; times are in seconds.
 
 ```json
 {"spine":[

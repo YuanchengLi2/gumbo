@@ -29,9 +29,12 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  if(process.status!=='complete'||process.exitCode!==0)throw new Error('Only a successful process can publish.');
  const replay=db.db.prepare('SELECT json FROM workspace_publications WHERE id=?').get(process.id) as any;if(replay)return JSON.parse(replay.json);
  const root=join(db.folder,'Workspace');let raw:unknown;try{raw=JSON.parse(readFileSync(workspacePath(root,'project.json'),'utf8'));}catch(error){throw new Error('project.json is not valid JSON: '+(error as Error).message);}
- const parsed=WorkspaceDocumentSchema.safeParse(raw);if(!parsed.success)throw new Error(documentErrors(parsed.error));const candidate=parsed.data,documentHash=digest(JSON.stringify(candidate));
+ const parsed=WorkspaceDocumentSchema.safeParse(raw);if(!parsed.success)throw new Error(documentErrors(parsed.error));const candidate=parsed.data;
  if(candidate.baseVersionId!==db.head())throw new Error(`The project changed: project.json is based on version ${candidate.baseVersionId}, but the published version is now ${db.head()}. Read context/published-project.json for the current timeline and baseVersionId, then reapply your change in project.json on top of it.`);
- if(candidate.timeline.id!==db.timeline().id)throw new Error('The document belongs to another project.');
+ // A document based on this project's current version is this project's, so a different timeline ID can only be one the
+ // agent made up while rewriting project.json; the project keeps its own.
+ if(candidate.timeline.id!==db.timeline().id)candidate.timeline.id=db.timeline().id;
+ const documentHash=digest(JSON.stringify(candidate));
  if(new Set(candidate.outputs.map(o=>o.id)).size!==candidate.outputs.length)throw new Error('Output IDs must be unique.');
  const outputs=new Map<string,Asset>(),assets=db.footage().assets;
  type Size={width:number;height:number;fps:number;durationInFrames:number};type EngineOptions={props?:Record<string,unknown>;transparent?:boolean;assets?:string[];music?:Record<string,string>};
