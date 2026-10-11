@@ -17,6 +17,7 @@ import {withinScopes,normalizeScope} from '../../../packages/orchestrator/src/co
 import {WorkspaceIndex} from '../../../packages/project-db/src/workspace-index';
 import {ProjectContext} from '../../../packages/orchestrator/src/context';
 import {timelineOutline} from '../../../packages/orchestrator/src/timeline-outline';
+import {mapLines,usableUntil,type Asset,type Shot} from '@dream/footage';
 import {FileApprovalRequired} from '../../../packages/orchestrator/src/file-tools';
 import {toolActivity,fileChanges} from '../../../packages/orchestrator/src/activity';
 import {inspectMedia} from './media-evidence';
@@ -76,7 +77,14 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.refreshContext();if(!this.db.workspace.snapshot(this.db.head()))this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);
  }
  // Media is listed in capture order when known, so "in the order I shot it" needs no extra lookups.
- mediaContext(){let notes:Record<string,string>={};try{notes=JSON.parse(this.db.getMeta('source-notes')??'{}');}catch{}return captureOrder(this.db.footage().assets).map(asset=>({assetId:asset.id,filename:asset.filename,kind:asset.kind,durationSec:asset.durationSec,...(asset.capturedAt?{capturedAt:asset.capturedAt}:{}),...(notes[asset.id]?{seen:notes[asset.id]}:{}),path:relative(this.db.folder,asset.originalPath).replaceAll('\\','/').startsWith('Media/')?relative(this.root,asset.originalPath).replaceAll('\\','/'):`../Sources/${asset.id}/${basename(asset.originalPath)}`,transcript:asset.hasAudio?{status:(this.db.db.prepare("SELECT status FROM jobs WHERE asset_id=? AND step='transcription'").get(asset.id) as any)?.status??'not_started',wordCount:(this.db.db.prepare("SELECT COUNT(*) AS n FROM index_records WHERE kind='words' AND json_extract(json,'$.assetId')=?").get(asset.id) as any).n,readWith:'read_transcript'}:undefined}));}
+ /** A source's footage map for the agent: what its shots show and what is wrong with them, or that it is not analyzed yet. */
+ private footageMapEntry(asset:Asset,shots:Shot[],limit:number){
+  if(asset.kind==='audio'||asset.scene||asset.generated)return{};
+  const map=asset.footageMap;if(!map)return{map:'Not analyzed yet: look at a range with view_media before choosing it.'};
+  const until=usableUntil(asset,shots),ranges=(list:[number,number][])=>list.map(([a,b])=>`${a.toFixed(1)}-${b.toFixed(1)}s`);
+  return{map:{...(map.summary?{summary:map.summary}:{}),shots:mapLines(asset,shots,limit),...(map.frozen.length?{frozen:ranges(map.frozen)}:{}),...(map.black.length?{black:ranges(map.black)}:{}),...(until<asset.durationSec-.5?{usableUntilSec:until}:{}),...(map.status==='signals'?{note:'Measured only; the shots were not described.'}:{})}};
+ }
+ mediaContext(){let notes:Record<string,string>={};try{notes=JSON.parse(this.db.getMeta('source-notes')??'{}');}catch{}const footage=this.db.footage(),visual=footage.assets.filter(a=>a.kind!=='audio'&&!a.scene&&!a.generated).length,perSource=Math.max(3,Math.min(12,Math.floor(150/Math.max(1,visual))));return captureOrder(footage.assets).map(asset=>({assetId:asset.id,filename:asset.filename,kind:asset.kind,durationSec:asset.durationSec,...(asset.capturedAt?{capturedAt:asset.capturedAt}:{}),...this.footageMapEntry(asset,footage.shots,perSource),...(notes[asset.id]?{seen:notes[asset.id]}:{}),path:relative(this.db.folder,asset.originalPath).replaceAll('\\','/').startsWith('Media/')?relative(this.root,asset.originalPath).replaceAll('\\','/'):`../Sources/${asset.id}/${basename(asset.originalPath)}`,transcript:asset.hasAudio?{status:(this.db.db.prepare("SELECT status FROM jobs WHERE asset_id=? AND step='transcription'").get(asset.id) as any)?.status??'not_started',wordCount:(this.db.db.prepare("SELECT COUNT(*) AS n FROM index_records WHERE kind='words' AND json_extract(json,'$.assetId')=?").get(asset.id) as any).n,readWith:'read_transcript'}:undefined}));}
  private refreshContext(){
   const footage=this.db.footage();this.write('context/assets.json',JSON.stringify(captureOrder(footage.assets).map(a=>({id:a.id,filename:a.filename,kind:a.kind,durationSec:a.durationSec,hasAudio:a.hasAudio,capturedAt:a.capturedAt,width:a.width,height:a.height,fps:a.fps,source:a.source?.path,path:relative(this.db.folder,a.originalPath).replaceAll('\\','/').startsWith('Media/')?relative(this.root,a.originalPath).replaceAll('\\','/'):`../Sources/${a.id}/${basename(a.originalPath)}`,sequence:a.sequence?{fps:a.sequence.fps,frameCount:a.sequence.frameCount,pattern:'%06d.png'}:undefined})),null,2));
   for(const asset of footage.assets)this.write(`context/transcripts/${asset.id}.json`,JSON.stringify({coverage:this.db.loadState('speech-coverage:'+asset.id)??null,words:footage.words.filter(w=>w.assetId===asset.id)}));
@@ -194,13 +202,13 @@ export class CodeWorkspace implements CodeWorkspacePort {
   // pass, and the result publishes in the same step unless publish is false.
   if(name==='edit_timeline')return this.exclusive(async()=>{
    const file=join(this.root,'project.json'),receiptKey='workspace-timeline-call:'+callId,identity=digest(JSON.stringify({actions:input.actions,outputs:input.outputs})),intent=this.db.loadState<any>(receiptKey);
-   const current=existsSync(file)?readFileSync(file,'utf8'):'';let changes:string[];
+   const current=existsSync(file)?readFileSync(file,'utf8'):'';let changes:string[],warnings:string[]=[];
    if(intent){
     // A resumed call re-applies nothing: it restores the document the interrupted call wrote, then publishes it.
     if(intent.identity!==identity)throw new Error('Timeline call ID belongs to a different edit.');
     const published=!!this.db.db.prepare('SELECT 1 FROM workspace_publications WHERE id=?').get(callId);
     if(!published&&digest(current)!==intent.afterHash){if(digest(current)!==intent.beforeHash)throw new Error('project.json changed after the interrupted timeline edit. Repeat the edit.');this.write('project.json',intent.content);}
-    changes=intent.changes;
+    changes=intent.changes;warnings=intent.warnings??[];
    }else{
     let document:any;try{document=WorkspaceDocumentSchema.parse(JSON.parse(current));}catch(error){throw new Error('project.json is not a valid project document, so the actions cannot be applied: '+(error as Error).message.slice(0,500));}
     const head=this.db.head();
@@ -211,13 +219,15 @@ export class CodeWorkspace implements CodeWorkspacePort {
      document={format:'dream-workspace',version:1,baseVersionId:head,timeline:this.db.timeline(),outputs:[]};
     }
     const result=applyTimelineActions(document,input.actions,input.outputs,this.db.footage()),content=JSON.stringify(result.document,null,2);
-    this.db.saveState(receiptKey,{identity,beforeHash:digest(current),afterHash:digest(content),content,changes:result.changes});this.write('project.json',content);changes=result.changes;
+    this.db.saveState(receiptKey,{identity,beforeHash:digest(current),afterHash:digest(content),content,changes:result.changes,warnings:result.warnings});this.write('project.json',content);changes=result.changes;warnings=result.warnings;
    }
-   if(input.publish===false)return{changes,published:false,note:'Applied to project.json. Call publish_project to publish it together with your other changes.'};
+   // Warnings never block an edit: the agent fixes them or says in its recap why it kept them.
+   const review=warnings.length?{warnings,instruction:'Fix these with another edit_timeline call, or say in your recap why you kept them.'}:{};
+   if(input.publish===false)return{changes,...review,published:false,note:'Applied to project.json. Call publish_project to publish it together with your other changes.'};
    const now=new Date().toISOString(),run:ProcessResult={id:callId,status:'complete',exitCode:0,startedAt:now,finishedAt:now,output:'',logPath:'',isolation:'windows-appcontainer',commandHash:digest(callId)};
    let publication;try{publication=await this.publish(run,turnId,callId);}catch(error){throw new Error(`The timeline change is saved in project.json but could not be published: ${(error as Error).message}
 Fix that, then call publish_project (do not repeat the actions).`);}
-   return{changes,publication,projectJson:{hash:digest(readFileSync(file,'utf8')),baseVersionId:this.db.head()}};
+   return{changes,...review,publication,projectJson:{hash:digest(readFileSync(file,'utf8')),baseVersionId:this.db.head()}};
   });
   if(name==='publish_project')return this.exclusive(async()=>{
    const now=new Date().toISOString(),result:ProcessResult={id:callId,status:'complete',exitCode:0,startedAt:now,finishedAt:now,output:'',logPath:'',isolation:'windows-appcontainer',commandHash:digest(callId)};

@@ -23,12 +23,20 @@ export const AssetSchema = z.object({
   // When the media was captured (camera metadata, else file time) and which file it was imported from.
   capturedAt:z.string().optional(),capturedAtSource:z.enum(['quicktime','mp4','exif','file']).optional(),
   source:z.object({path:z.string(),size:z.number().nonnegative(),modifiedAt:z.string()}).optional(),
+  // The footage map: problems found across the whole source (frozen or black stretches), a one-line summary from one
+  // look at its shots, and how far analysis got. Shots carry the per-shot detail.
+  footageMap:z.object({version:z.number().int(),status:z.enum(['signals','complete']),summary:z.string().optional(),frozen:z.array(z.tuple([z.number(),z.number()])).default([]),black:z.array(z.tuple([z.number(),z.number()])).default([]),error:z.string().optional()}).optional(),
+  // Integrated loudness of the source's audio (EBU R128), so clips can be evened out and the mix normalized.
+  loudnessLufs:z.number().optional(),
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional(),beats:z.array(z.number().nonnegative()).max(20000).optional()}).optional()
 });
 export type Asset = z.infer<typeof AssetSchema>;
 export const WordSchema = z.object({id:z.string(),assetId:z.string(),text:z.string(),start:z.number().nonnegative(),end:z.number().positive(),confidence:z.number().min(0).max(1),speaker:z.string().default('unknown'),pauseBefore:z.number().nonnegative().default(0)});
 export type Word = z.infer<typeof WordSchema>;
-export const ShotSchema = z.object({id:z.string(),assetId:z.string(),start:z.number(),end:z.number(),framePaths:z.array(z.string()).default([]),log:z.object({description:z.string(),framing:z.string(),tags:z.array(z.string()),energy:z.enum(['low','medium','high']),usableAsBroll:z.boolean()}).optional()});
+export const ShotSchema = z.object({id:z.string(),assetId:z.string(),start:z.number(),end:z.number(),framePaths:z.array(z.string()).default([]),log:z.object({description:z.string(),framing:z.string(),tags:z.array(z.string()),energy:z.enum(['low','medium','high']),usableAsBroll:z.boolean()}).optional(),
+  // Measured on the source: brightness 0-1, blur and motion as reported by ffmpeg, shake in pixels per frame at analysis size,
+  // the share of the shot that is frozen or black, and problems from the measurements and the look at the shot.
+  quality:z.object({brightness:z.number(),blur:z.number().optional(),motion:z.number().optional(),shake:z.number().optional(),frozen:z.number(),black:z.number(),problems:z.array(z.string()).default([])}).optional()});
 export type Shot = z.infer<typeof ShotSchema>;
 export const FaceSchema = z.object({id:z.string(),assetId:z.string(),samples:z.array(z.object({t:z.number(),box:z.tuple([z.number(),z.number(),z.number(),z.number()])})),speaker:z.string().optional()});
 export type FaceTrack = z.infer<typeof FaceSchema>;
@@ -46,3 +54,4 @@ export function serializeFootage(index:FootageIndex): string {
 }
 
 export * from './understanding';
+export * from './map';

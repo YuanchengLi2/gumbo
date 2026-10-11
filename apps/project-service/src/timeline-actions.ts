@@ -1,7 +1,7 @@
 import {ZodError} from 'zod';
-import {apply,EditError,ActionSchema,type Op,type TimelineDocument,type Anchor} from '@dream/timeline';
+import {apply,resolve,EditError,ActionSchema,type Op,type TimelineDocument,type Anchor} from '@dream/timeline';
 import {documentDelta} from '../../../packages/timeline/src/document-delta';
-import type {FootageIndex} from '@dream/footage';
+import {rangeProblems,usableUntil,problemWords,type FootageIndex} from '@dream/footage';
 import {WorkspaceOutputSchema,type WorkspaceDocument} from '@dream/contracts';
 
 type Output=WorkspaceDocument['outputs'][number];
@@ -59,6 +59,29 @@ export function timelineChangeLines(before:TimelineDocument,after:TimelineDocume
  return lines.length>limit?[...lines.slice(0,limit),`…and ${lines.length-limit} more changes.`]:lines;
 }
 
+/** What is questionable in an edit that is otherwise valid, so the agent can fix it or say why it kept it: placed ranges
+ * that the footage map marks frozen, black, dark, blurry, shaky or showing junk (player controls, recorder windows...),
+ * ranges of sources not analyzed yet, slow motion below half speed, one clip taking most of the video, and the same
+ * footage used twice. Only what this edit changed is judged, plus the clip lengths and repeats it leads to. */
+export function placementWarnings(before:TimelineDocument,after:TimelineDocument,footage:FootageIndex){
+ const out:string[]=[],assets=new Map(footage.assets.map(a=>[a.id,a])),unmapped=new Set<string>();
+ const clips=changed(before.spine,after.spine),items=changed(before.attached,after.attached),touched=new Set(clips.map(c=>c.id));
+ const check=(what:string,assetId:string,srcIn:number,srcOut:number)=>{
+  const asset=assets.get(assetId);if(!asset||asset.scene||asset.generated||asset.kind==='audio')return;
+  if(!asset.footageMap){unmapped.add(asset.filename);return;}
+  const found=rangeProblems(asset,footage.shots,srcIn,srcOut);
+  for(const problem of [...new Set(found.map(f=>f.problem))]){const parts=found.filter(f=>f.problem===problem),start=Math.min(...parts.map(f=>f.start)),end=Math.max(...parts.map(f=>f.end));out.push(`${what} shows ${problemWords[problem]??problem} (${asset.filename} ${seconds(start)}-${seconds(end)}).`);}
+  const until=usableUntil(asset,footage.shots);if(found.length&&srcOut>until+.3)out.push(`Usable footage in ${asset.filename} ends at ${seconds(until)}.`);
+ };
+ for(const clip of clips){check(`clip ${clip.id}`,clip.assetId,clip.srcIn,clip.srcOut);if(clip.speed<.5)out.push(`clip ${clip.id} plays at ${clip.speed}x: slow motion below half speed looks stretched, so use it only when asked for.`);}
+ for(const item of items)if(item.source)check(`item ${item.id}`,item.source.assetId,item.source.srcIn,item.source.srcOut);
+ const resolved=resolve(after,footage),total=resolved.durationSec;
+ if(total>=15&&after.spine.length>=3)for(const clip of resolved.clips)if(touched.has(clip.id)&&(clip.end-clip.start)/total>.4)out.push(`clip ${clip.id} is ${seconds(clip.end-clip.start)} of a ${seconds(total)} video: one shot that long usually drags.`);
+ const spine=after.spine;for(let i=0;i<spine.length;i++)for(let j=i+1;j<spine.length;j++){const a=spine[i],b=spine[j],shared=Math.min(a.srcOut,b.srcOut)-Math.max(a.srcIn,b.srcIn);if(a.assetId===b.assetId&&shared>1&&(touched.has(a.id)||touched.has(b.id))&&!assets.get(a.assetId)?.scene)out.push(`clips ${a.id} and ${b.id} show the same footage (${assets.get(a.assetId)?.filename??a.assetId} ${seconds(Math.max(a.srcIn,b.srcIn))}-${seconds(Math.min(a.srcOut,b.srcOut))}).`);}
+ if(unmapped.size)out.push(`${[...unmapped].join(', ')} ${unmapped.size>1?'are':'is'} not analyzed yet: look at the placed ranges with view_media.`);
+ return[...new Set(out)].slice(0,12);
+}
+
 /** Applies agent actions to a workspace document in order. Nothing is applied unless every action and every check passes. */
 export function applyTimelineActions(document:WorkspaceDocument,actions:unknown[],outputs:unknown[]|undefined,footage:FootageIndex){
  const declared=[...document.outputs];
@@ -71,5 +94,5 @@ export function applyTimelineActions(document:WorkspaceDocument,actions:unknown[
  }
  const found=problems(document.timeline,timeline,declared,footage);
  if(found.length)throw new Error('Nothing was applied, because:\n'+found.slice(0,10).join('\n'));
- return{document:{...document,timeline,outputs:declared},changes:timelineChangeLines(document.timeline,timeline)};
+ return{document:{...document,timeline,outputs:declared},changes:timelineChangeLines(document.timeline,timeline),warnings:placementWarnings(document.timeline,timeline,footage)};
 }

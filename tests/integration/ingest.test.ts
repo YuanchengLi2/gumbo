@@ -16,6 +16,9 @@ it('imports real media and retries only the chosen stage while preserving comple
   await ingest.register(resolve('artifacts/fixtures/source.mp4'));await ingest.drain();
   const asset=db.footage().assets[0];expect(asset.status).toBe('ready');expect(asset.waveform.length).toBeGreaterThan(0);expect(asset.audioPath).toBeTruthy();
   expect(asset.playback).toMatchObject({ready:true,video:'original'});expect(asset.proxyPath).toBeUndefined();
+  // Without a model to look at the shots, the footage map still carries every measurement; loudness is measured too.
+  expect(asset.footageMap).toMatchObject({version:1,status:'signals'});expect(db.footage().shots.filter(s=>s.assetId===asset.id&&s.quality).length).toBeGreaterThan(0);
+  expect(asset.loudnessLufs).toBeLessThan(0);expect(db.state().jobs.filter(j=>['footage_map','loudness'].includes(j.step)).map(j=>j.status)).toEqual(['complete','complete']);
   const before=statSync(asset.audioPath!).mtimeMs,cursor=db.state().eventCursor;
   ingest.retry(asset,'waveform');await ingest.drain();
   expect(statSync(asset.audioPath!).mtimeMs).toBe(before);
