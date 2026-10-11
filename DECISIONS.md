@@ -213,3 +213,8 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 ## October 10, 2026 — What the agent saw stays with the project
 
 - The plan assumed footage descriptions were already saved; they are not (the visual-understanding job is not wired into the app and its jobs are retired when a project opens). Instead, finish takes optional sourceNotes: one short line per source the agent looked at, saying what it shows and where. They are saved per source (a new note replaces the old one) and listed as seen in the media list of every later request, so follow-ups like "swap the last clip for one that fits the mood better" can choose from what was already seen and look with view_media only for what the notes do not cover. The notes are written in the call that already ends the request; nothing scans footage in the background.
+
+## October 10, 2026 — Reads in one response run together
+
+- When one response asks for several reads (read_file, view_media, read_transcript, search) before any other call, they start together and their results are still recorded in order. read_transcript waits up to two minutes while a source is still being transcribed, so transcripts of several clips just imported, which used to wait one after another, now overlap; looks at several clips extract their frames in parallel. A read that comes after a write in the same response still runs after it.
+- The editor is told transcription runs in the background, to ask for several transcripts or looks in one step, and to skip transcripts of sources whose speech does not matter to the request, so a first cut on visuals does not wait for speech.

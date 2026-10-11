@@ -22,6 +22,9 @@ export type AgentResult={outcome:EditOutcome;plan?:TaskPlan;switch?:ModeSwitch};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;publication?:Publication;changedFiles?:string[];outputs?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
 type Checkpoint={mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];switch?:ModeSwitch};
 const RESULT_LIMIT=24000;
+// Reads that one response asks for together start together (their results are still recorded in order), so looks at
+// several clips or transcripts that are still being made overlap instead of waiting one after another.
+const PARALLEL_READS=new Set(['read_file','view_media','read_transcript','search']);
 // Coarse identity groups retries of the same target even when inputs differ (rewritten file content, tweaked command flags).
 const coarseKey=(name:string,input:any)=>name+':'+String(input?.path??input?.output??input?.assetId??(typeof input?.command==='string'?input.command.slice(0,120):'')??'');
 const modeSuffix=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: planning. Inspect using read-only tools and return the requested plan with finish. Keep the plan as short as the request allows: one step per distinct user-visible change; a small addition is usually a single step.':role==='readonly'?'\nCurrent mode: answering. Answer this question directly; a normal final text response completes the turn.':role==='lead'||role==='worker'?'':'\nCurrent mode: execution. You are authorized to write files, install dependencies, bundle code and publish live scenes. Statements about read-only mode in earlier conversation are historical and do not restrict this request.';
@@ -108,6 +111,10 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
    }
    checkpoint.nudges=0;
   }
+  const scopeFor=()=>role==='worker'?{writes:options.writes??[],canPublish:!!options.canPublish,taskId:options.taskId,parent:options.parent}:undefined,started=new Map<string,Promise<any>>();
+  // Only the reads before the first other call: a read after a write in the same response must see that write.
+  const remaining=checkpoint.pending!.slice(checkpoint.results.length),firstOther=remaining.findIndex(call=>!PARALLEL_READS.has(call.name)),reads=(firstOther<0?remaining:remaining.slice(0,firstOther)).filter(call=>!db.loadState(key+':call:'+call.id));
+  if(reads.length>1)for(const call of reads){let input:any;try{input=parseCodeTool(call.name,call.input,readOnly,allowed);}catch{continue;}const work=workspace.execute(call.name,input,call.id,turnId,signal,scopeFor());work.catch(()=>{});started.set(call.id,work);}
   for(let n=checkpoint.results.length;n<checkpoint.pending!.length;n++){
    signal.throwIfAborted();const call=checkpoint.pending![n],receiptKey=key+':call:'+call.id,operationKey=toolIdentity(call.name,call.input),identityKey=receiptKey+':identity',coarse=coarseKey(call.name,call.input);const priorIdentity=db.getMeta(identityKey);if(priorIdentity&&priorIdentity!==operationKey)throw new Error('A tool request ID was reused for different instructions. No additional change was executed.');if(!priorIdentity)db.setMeta(identityKey,operationKey);let result=db.loadState<any>(receiptKey);
    if(!result){
@@ -145,7 +152,7 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
      }else if(call.name==='switch_to_orchestrated'||call.name==='hand_off'){
       checkpoint.switch=call.name==='hand_off'?{to:'solo',kind:'handoff',handoff:input.brief}:{to:'lead',kind:'orchestrate',handoff:input.handoff,reason:input.reason};result={switching:true};
      }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='consult_director'){if(!options.consult)throw new Error('Director consultation is unavailable within director mode.');result={guidance:await options.consult(input.question,call.id)};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
-     else result=await workspace.execute(call.name,input,call.id,turnId,signal,role==='worker'?{writes:options.writes??[],canPublish:!!options.canPublish,taskId:options.taskId,parent:options.parent}:undefined);
+     else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
      if(result?.process&&result.process.status!=='complete')throw new Error(`Command ${result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      delete checkpoint.failures[operationKey];if(checkpoint.coarse)delete checkpoint.coarse[coarse];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
     }catch(error){
