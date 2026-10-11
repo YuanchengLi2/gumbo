@@ -58,6 +58,19 @@ The `timeline` has `spine` (clips that play one after another and set the video'
 - A music item needs `srcIn`, `srcOut` and a `start` anchor; `gainDb` defaults to -18 and music ducks under speech automatically.
 - Overlay `params`: `x` and `y` (0 to 1, the center), `scale`, `rotation`, `opacity`, `fit` (`"cover"` or `"contain"`).
 
+## Effects on footage (no code)
+
+An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`:
+
+```json
+{"type":"add_item","item":{"id":"push1","type":"effect","component":"slow_push","start":{"kind":"clip","clipId":"shot2","at":"start"},"end":{"kind":"clip","clipId":"shot2","at":"end"},"params":{"amount":0.08}}}
+```
+
+- `slow_push`: a slow zoom in across each clip it covers (a Ken Burns move); `amount` is the extra scale by the end of the clip, 0.05 to 0.15.
+- `punch_zoom`: holds the picture zoomed in by `amount` (0.1 to 0.25), for emphasis on a beat or a line.
+- `shake`: camera shake of strength `amount` (0.05 to 0.3), for an impact moment.
+- `grade`: a colour layer over every clip it covers, with `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged) and `temperature` (-1 cool to 1 warm). Use it to grade a stretch of several clips at once; for one clip, set the grade on the clip with `set_framing`.
+
 ## Available imports (no install needed)
 
 - `react`; `remotion`: `useCurrentFrame`, `useVideoConfig`, `interpolate`, `spring`, `Easing`, `Sequence`, `Series`, `AbsoluteFill`, `Img`, `random(seed)`, `interpolateColors`, `Loop`, `Freeze`.

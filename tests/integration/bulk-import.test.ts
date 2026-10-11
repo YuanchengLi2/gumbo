@@ -22,7 +22,8 @@ it('imports many files at once, reuses an unchanged file across requests, record
   expect((await ingest.register(a,false,'second-request')).id).toBe(first.id);
   utimesSync(a,new Date('2026-10-10T09:00:00Z'),new Date('2026-10-10T09:00:00Z'));expect((await ingest.register(a,false,'third-request')).id).not.toBe(first.id);
  }finally{await ingest.drain().catch(()=>{});db.close();}
-});
+// Background analysis (including the footage map) finishes before the project closes, which takes longer under a full parallel run.
+},90_000);
 
 it('gives the agent find_media results marked with what is already imported, and imports in capture order with contact sheets',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-bulk-tools-')),db=new ProjectDB(folder,'Tools');
