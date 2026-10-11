@@ -488,7 +488,7 @@ Baseline from the October 10 Minecraft explainer run, before this work:
 
 **Verified**
 - `pnpm typecheck` is clean.
-- `pnpm test`: 79 files and 246 tests pass. New coverage includes:
+- `pnpm test`: 80 files and 251 tests pass. New coverage includes:
   - markdown rendering;
   - permission and effort routing;
   - compaction hysteresis and the Haiku cap;
@@ -509,11 +509,24 @@ Baseline from the October 10 Minecraft explainer run, before this work:
   - the existing chat, planning, computer-access, editor-flow, live-scene and manual journeys.
 - Package checks: `scripts/verify-package.ts` passes, including the engine manifest hashes. `scripts/diagnose-package.mjs` reports the runtime modules, composition bundle, scene engine and export browser present. The diagnosis previously probed `@remotion/bundler`, which is a build-time dependency and not shipped; that check was replaced.
 
+**Live provider runs (October 10, approved $5 budget, $0.87 spent)**
+
+These ran `scripts/smoke-engine-local.ts` against the real Anthropic API through this repository's gateway code on localhost, so the new gateway features were active even though the deployed gateway has not been updated.
+
+| Run | Time | Cost | Model calls | Thinking share | Cutoffs | Haiku over 100K | Failed tools |
+|---|---|---|---|---|---|---|---|
+| Voxel explainer, baseline on October 10 | 34 min | $2.14 | 113 | 0.76 | 2 thinking-only | 12 | about 20 |
+| Voxel explainer, first run | 5.5 min | $0.32 | 39 | 0.61 | 0 | 0 | 4 |
+| Voxel explainer, after the guidance fixes | 5.3 min | $0.20 | 16 | 0.62 | 0 | 0 | 0 |
+| Today's footage to a short | 1.8 min | $0.19 | 11 | 0.30 | 0 | 0 | 0 |
+| Ten everyday requests (all passed) | 2.4 min total | $0.16 total | 43 | 0 to 0.54 | 0 | 0 | 0 |
+
+- Targets for the voxel explainer: time (at most 15 minutes), cost (at most $0.90), cutoffs, Haiku calls and failed tools are met. The thinking share (0.62) misses the 0.5 target: most output is the scene worker thinking before writing one large scene file. Cost is already well under target, so effort was not lowered at the expense of the scenes.
+- The first run's transcript drove the guidance fixes: workers searched the schema for timeline item shapes, failed to publish sound effects three times (the effects were then dropped), wrote throwaway scripts to count bars, and opened the retired HTML scene guide. After the fixes the music worker took 2 calls instead of 12 and the timeline worker 5 instead of 16.
+- Export of the rerun renders all five shots with the blocky world, character, moving camera, a caption per shot, the house build and the sunset ending. In two shots the camera passes through a tree and hides the character, a flaw in the scene the agent wrote; nothing renders during chat, so it is visible only in the player and on Export.
+- The today's-footage run imported only the three clips captured today, cut them in capture order behind a title card with a whoosh, and noted that the fixture clips look like test patterns.
+- Not run: the live cloud desktop spec `code-agent-live.spec.ts`.
+
 **Not yet verified**
-- Live provider runs. They spend money and need approval and a budget:
-  - `pnpm exec tsx scripts/smoke-engine-local.ts --minecraft`: the voxel explainer comparison. Targets are at most 15 minutes, at most $0.90, a thinking share of at most 0.5, no thinking-only cutoffs, no Haiku calls over 100K and at most 5 failed tools.
-  - `--today`: the today's-footage short.
-  - `--eval`: ten everyday requests.
-  - The live cloud desktop spec `code-agent-live.spec.ts`.
 - Gateway: the cacheTtl, task budget, summarized Haiku progress and costUsd features need `supabase functions deploy dream-gateway`. The `continue` route is already live in version 23. Until deployment the app runs without these features.
 - HEIC import depends on the staged ffmpeg build. When it cannot decode HEIC, `import_media` reports those files as failed with the reason.
