@@ -28,7 +28,7 @@ export function usageCost(model:string,usage:Record<string,any>,price:[number,nu
  // Cache reads: Opus 5.5 $0.20 on $4 input; Sonnet 5.5 $0.20 on $2 input.
  const readMultiplier=model==='claude-opus-5-5'?.05:.1;
  const written=usage.cache_creation_input_tokens??0,hour=Math.min(written,Number(usage.cache_creation?.ephemeral_1h_input_tokens??0));
- return((usage.input_tokens??0)*price[0]+(usage.output_tokens??0)*price[1]+(usage.cache_read_input_tokens??0)*price[0]*readMultiplier+(written-hour)*price[0]*1.25+hour*price[0]*2)/1e6;
+ return((usage.input_tokens??0)*price[0]+(usage.output_tokens??0)*price[1]+(usage.cache_read_input_tokens??0)*price[0]*readMultiplier+(written-hour)*price[0]*1.25+hour*price[0]*2)/1e6+Number(usage.server_tool_use?.web_search_requests??0)*.01;
 }
 export function promptEstimate(value:any):number{if(value?.type==='image')return 1600;if(typeof value==='string')return Math.ceil(new TextEncoder().encode(value).length/3);if(Array.isArray(value))return value.reduce((n,v)=>n+promptEstimate(v),0);if(value&&typeof value==='object')return Object.entries(value).reduce((n,[k,v])=>n+Math.ceil(k.length/3)+promptEstimate(v),0);return 1;}
 

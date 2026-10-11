@@ -9,7 +9,7 @@ export const WorkspaceDocumentSchema=z.object({format:z.literal('dream-workspace
 export type WorkspaceDocument=z.infer<typeof WorkspaceDocumentSchema>;
 export const ProcessRequestSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),projectId:z.string(),workspace:z.string(),command:z.string().min(1).max(32000),cwd:z.string().default('.'),timeoutMs:z.number().int().min(1000).max(3600000).default(600000)});
 export type ProcessRequest=z.infer<typeof ProcessRequestSchema>;
-export type ProcessResult={id:string;status:'complete'|'failed'|'cancelled'|'interrupted';exitCode:number|null;startedAt:string;finishedAt:string;output:string;logPath:string;isolation:'windows-appcontainer';commandHash:string};
+export type ProcessResult={id:string;status:'complete'|'failed'|'cancelled'|'interrupted';exitCode:number|null;startedAt:string;finishedAt:string;output:string;logPath:string;isolation:'windows-appcontainer'|'local';commandHash:string};
 export type ProcessRunner=(request:ProcessRequest,signal:AbortSignal,onOutput:(text:string)=>void)=>Promise<ProcessResult>;
 export type SourceSnapshot={hash:string;files:Record<string,string>};
 // Publications record which files changed and by how many lines; the text itself comes from file_diff on demand.

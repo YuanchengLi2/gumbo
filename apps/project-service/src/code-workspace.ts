@@ -28,6 +28,7 @@ import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
 import {importResources} from './resource-import';
 import {applyTimelineActions} from './timeline-actions';
+import {fetchPage} from './web-fetch';
 import {workerRenderer} from './sound-outputs';
 import {sfxCatalog,describeScore,SoundDesignSchema} from '@dream/procedural-media';
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
@@ -120,6 +121,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    const path=workspacePath(this.root,input.path??'.');return readdirSync(path,{withFileTypes:true}).filter(f=>!f.isSymbolicLink()).slice(input.offset??0,(input.offset??0)+200).map(f=>({name:f.name,kind:f.isDirectory()?'directory':'file'}));
   }
   if(name==='search'){if(input.scope==='computer'){if(!this.options.files)throw new Error('Computer file access is unavailable.');const result=await this.options.files({action:'search',query:input.query,path:input.path} as any,signal);if('permissionRequired'in result)throw new FileApprovalRequired();return result;}this.refreshContext();if(input.path)return searchWorkspace(this.root,input.path,input.query);return{source:this.index.search(input.query),project:new ProjectContext(this.db).search(input.query,12)};}
+  if(name==='fetch_url')return fetchPage(input.url,input.maxCharacters,signal);
   if(name==='read_file'){
    if(input.scope==='project')return new ProjectContext(this.db).read(input.path,undefined,input.startLine??1,(input.startLine??1)+(input.limit??200)-1);
    if(input.scope==='receipt'){if(!/^(?:code-agent:|context:|workspace-draft:)/.test(input.path))throw new Error('Use a saved execution or draft receipt key.');const saved=this.db.loadState<any>(input.path);if(!saved)throw new Error('Receipt not found.');const lines=JSON.stringify(saved,(_key,value)=>value?.type==='image'?{type:'image',archived:true}:value,2).split('\n'),start=input.startLine??1;return{path:input.path,totalLines:lines.length,startLine:start,text:lines.slice(start-1,start-1+(input.limit??200)).join('\n')};}

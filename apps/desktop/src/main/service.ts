@@ -30,5 +30,7 @@ export class ProjectService {
  }
  command(command:unknown):Promise<any>{return new Promise((resolve,reject)=>{const id=randomUUID();this.pending.set(id,{resolve,reject});this.child.postMessage({id,command});});}
  config(config:{whisperModel?:string;analysisConnectionChanged?:boolean;analysisEnabled?:boolean}){this.child.postMessage({config});}
+ /** Commands run on the user's computer whenever this says so (computer access allowed). */
+ allowLocalCommands(check:()=>boolean){this.creation.local=check;}
  close(){this.creation.stop();return new Promise<void>(resolve=>{const timer=setTimeout(()=>{this.child.kill();resolve();},10000);this.child.once('exit',()=>{clearTimeout(timer);resolve();});this.child.postMessage({close:true});});}
 }

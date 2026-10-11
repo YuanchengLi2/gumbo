@@ -1,0 +1,55 @@
+import {it,expect} from 'vitest';
+import {mkdtempSync,mkdirSync,readFileSync,existsSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {createServer} from 'node:http';
+import {ProjectDB} from '@dream/project-db';
+import {models,usageCost} from '@dream/config';
+import {CodeRuntime} from '../../apps/desktop/src/main/code-runtime';
+import {pageText,privateAddress,fetchPage} from '../../apps/project-service/src/web-fetch';
+import {Director,webSearchTool} from '../../packages/orchestrator/src/code-director';
+import {codeAgent} from '../../packages/orchestrator/src/code-agent';
+import {usageCost as gatewayCost} from '../../supabase/functions/dream-gateway/inference-policy';
+
+it('runs a command on the user\'s computer when computer access is allowed, without the app\'s secrets',async()=>{
+ const project=mkdtempSync(join(tmpdir(),'dream-local-')),workspace=join(project,'Workspace');mkdirSync(workspace);
+ const runtime=new CodeRuntime({creation:join(project,'missing-runtime'),ffmpeg:join(project,'bin','ffmpeg.exe'),ffprobe:'',browser:''});runtime.local=()=>true;
+ process.env.DREAM_TEST_SECRET='hidden';process.env.SUPABASE_SERVICE_KEY='hidden';
+ try{
+  const seen:string[]=[];
+  const result=await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from %COMPUTERNAME% & echo [%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%] & cd',cwd:'.',timeoutMs:30000},new AbortController().signal,text=>seen.push(text));
+  expect(result).toMatchObject({status:'complete',exitCode:0,isolation:'local'});
+  expect(result.output).toContain('hello from '+process.env.COMPUTERNAME);expect(result.output).toContain('[%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%]');expect(result.output.toLowerCase()).toContain(workspace.toLowerCase());
+  expect(seen.join('')).toContain('hello');expect(existsSync(join(project,'.dream','processes','local1.json'))).toBe(true);
+  // A replayed request returns its receipt instead of running again.
+  expect((await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from %COMPUTERNAME% & echo [%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%] & cd',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{})).output).toBe(result.output);
+  const failed=await runtime.run({id:'local2',projectId:'p',workspace,command:'exit /b 3',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{});expect(failed).toMatchObject({status:'failed',exitCode:3});
+ }finally{delete process.env.DREAM_TEST_SECRET;delete process.env.SUPABASE_SERVICE_KEY;}
+},60_000);
+
+it('reads a page as text and refuses addresses on this computer or its network',async()=>{
+ expect(pageText('<html><head><title>Model news</title><style>p{}</style></head><body><script>x()</script><h1>Claude</h1><p>Fast &amp; cheap</p></body></html>')).toEqual({title:'Model news',text:'Claude\nFast & cheap'});
+ for(const address of ['127.0.0.1','10.1.2.3','192.168.1.5','172.20.0.1','::1','fd00::1'])expect(privateAddress(address),address).toBe(true);
+ expect(privateAddress('8.8.8.8')).toBe(false);
+ const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<title>Local</title>secret');});await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
+ try{await expect(fetchPage(`http://127.0.0.1:${(server.address() as any).port}/`,20000,new AbortController().signal)).rejects.toThrow(/this computer/);await expect(fetchPage('http://localhost:1/',20000,new AbortController().signal)).rejects.toThrow(/this computer/);}
+ finally{server.close();}
+});
+
+it('gives every agent with tools web search in its model\'s version, resumes a paused search, and counts searches in the cost',async()=>{
+ expect(webSearchTool(models.editor).type).toBe('web_search_20250305');expect(webSearchTool(models.sonnet).type).toBe('web_search_20260209');expect(webSearchTool(models.director).type).toBe('web_search_20260209');
+ const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.editor,usage)).toBeCloseTo(gatewayCost(models.editor,usage,[.1,.5]));expect(usageCost(models.editor,usage)).toBeGreaterThan(.03);
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-web-')));
+ try{
+  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const sent:any[]=[];
+  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'What did Anthropic release this week?',model:models.editor,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));
+   return sent.length===1?{content:[{type:'server_tool_use',id:'s1',name:'web_search',input:{query:'Anthropic release'}},{type:'web_search_tool_result',tool_use_id:'s1',content:[]}],stop_reason:'pause_turn'}:{content:[{type:'text',text:'A new model.'}],stop_reason:'end_turn'};}});
+  // The paused turn is sent back unchanged, with nothing added after it.
+  expect(sent).toHaveLength(2);expect(sent[1].at(-1).role).toBe('assistant');expect(sent[1].at(-1).content[0].type).toBe('server_tool_use');
+  expect(db.turnActivity('turn')?.events?.some((e:any)=>e.tool==='web_search'&&e.detail==='Anthropic release')??JSON.stringify(db.db.prepare("SELECT json FROM activity_events").all()).includes('Searching the web')).toBe(true);
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{});let tools:any[]=[];
+  (director as any).infer=async(_m:string,_s:string,_msgs:unknown[],given:any[])=>{tools=given;return{content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{}};};
+  await director.inference(models.editor,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main',false);
+  expect(tools.map(t=>t.name)).toEqual(['web_search','read_file']);
+ }finally{db.close();}
+});
