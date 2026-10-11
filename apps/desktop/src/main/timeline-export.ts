@@ -1,3 +1,4 @@
+import {frameFormat,renderConcurrency} from './render-settings';
 import {withExportLock} from './export-lock';
 import {authoredFiles,workspacePath,digest} from '../../../../packages/project-db/src/workspace-store';
 import {readFileSync} from 'node:fs';
@@ -42,7 +43,7 @@ async function exportEditableTimelineUnlocked(state:ProjectState,window:BrowserW
   const props={timeline:t,footage:state.footage,media:server.media,audioMedia:server.audioMedia,exporting:true,transparentBackground:alpha,engineBase:server.engineBase};
   const options={serveUrl:paths.renderBundle,id:'Dream',inputProps:props,browserExecutable:existsSync(paths.browser)?paths.browser:undefined,binariesDirectory:compositorDirectory()};
   const composition=await selectComposition(options),cancel=makeCancelSignal();const stop=()=>cancel.cancel();signal.addEventListener('abort',stop,{once:true});
-  try{await renderMedia({...options,composition,inputProps:props,outputLocation:join(staging,name),codec:alpha?'prores':'h264',...(alpha?{proResProfile:'4444' as const,pixelFormat:'yuva444p10le' as const}:{}),imageFormat:'png',muted:true,frameRange:[Math.round(start*fps),Math.max(Math.round(start*fps),Math.round(end*fps)-1)],cancelSignal:cancel.cancelSignal,concurrency:2});}finally{signal.removeEventListener('abort',stop);}
+  try{await renderMedia({...options,composition,inputProps:props,outputLocation:join(staging,name),codec:alpha?'prores':'h264',...(alpha?{proResProfile:'4444' as const,pixelFormat:'yuva444p10le' as const}:{}),...frameFormat(alpha),muted:true,frameRange:[Math.round(start*fps),Math.max(Math.round(start*fps),Math.round(end*fps)-1)],cancelSignal:cancel.cancelSignal,concurrency:renderConcurrency()});}finally{signal.removeEventListener('abort',stop);}
   return join(finalAssets,name);
  };
  const visualBase={...timeline,trackSettings:{...timeline.trackSettings,video:{...timeline.trackSettings?.video,hidden:false}},captions:undefined,music:[],attached:timeline.attached.filter(i=>i.type==='effect')};
