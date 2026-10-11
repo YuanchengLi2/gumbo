@@ -43,3 +43,14 @@ it('keeps what the agent saw in each source and lists it with the media for late
   expect(Object.keys(JSON.parse(db.getMeta('source-notes')!))).toEqual(['v']);
  }finally{db.close();}
 });
+
+it('starts every request with the same cached briefing, followed by the request and what it depends on',async()=>{
+ const db=fixture();try{
+  const {CodeWorkspace}=await import('../../apps/project-service/src/code-workspace');const {briefing}=await import('../../packages/orchestrator/src/code-agent');
+  const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg:'unavailable',ffprobe:'unavailable'},()=>{});await ws.initialize();
+  const first=briefing(ws.context('Make it warmer'),'Make it warmer',{projectTitle:'Notes'}) as any[],second=briefing(ws.context('Swap the first two clips'),'Swap the first two clips',{projectTitle:'Notes'}) as any[];
+  expect(first[0].cache_control).toEqual({type:'ephemeral'});expect(first[0].text).toBe(second[0].text);
+  expect(first[0].text).toContain('Beach.mp4');expect(first[0].text).not.toContain('"now"');expect(first[0].text).not.toContain('Make it warmer');
+  expect(first[1].text.startsWith('Make it warmer\nProject context: ')).toBe(true);expect(first[1].text).toContain('"now"');expect(first[1].text).toContain('Beach.mp4 2s-6s');
+ }finally{db.close();}
+});

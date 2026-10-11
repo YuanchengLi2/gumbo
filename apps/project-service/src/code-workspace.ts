@@ -96,8 +96,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.write('context/project-schema.json',JSON.stringify(WorkspaceDocumentSchema.toJSONSchema(),null,2));
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
- // At most six code excerpts of 2,000 characters: enough to find the relevant files, which search and read_file open fully.
- context(query:string){const found=this.index.search(query,6),selected={...found,hits:found.hits.map((hit:any)=>({...hit,text:String(hit.text).slice(0,2000)}))};this.db.event('workspace.context',{availableCharacters:selected.availableCharacters,selectedCharacters:selected.selectedCharacters,selectedFiles:selected.hits.map(h=>h.path)});
+ // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
+ context(query:string){const found=this.index.search(query,6),selected={files:found.files,note:'Authored files; search finds code by content and read_file opens it.'};this.db.event('workspace.context',{availableCharacters:found.availableCharacters,files:found.files.length});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
   return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
