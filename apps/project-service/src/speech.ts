@@ -73,8 +73,11 @@ export class CloudSpeech {
  }
  private async request(bytes:Uint8Array,signal:AbortSignal):Promise<SpeechResult>{
   for(let attempt=0;attempt<4;attempt++){
-   const config=await this.connection(signal),response=await this.fetcher(config.url+'/transcribe',{method:'POST',headers:{Authorization:`Bearer ${config.token}`,'Content-Type':'audio/wav'},body:new Blob([new Uint8Array(bytes)]),signal:AbortSignal.any([signal,AbortSignal.timeout(105_000)])});
-   const result=await response.json() as any;
+   // A dropped connection or a server error is retried with a growing wait, so one hiccup does not fail a long transcription.
+   const config=await this.connection(signal);let response:Response,result:any;
+   try{response=await this.fetcher(config.url+'/transcribe',{method:'POST',headers:{Authorization:`Bearer ${config.token}`,'Content-Type':'audio/wav'},body:new Blob([new Uint8Array(bytes)]),signal:AbortSignal.any([signal,AbortSignal.timeout(105_000)])});result=await response.json().catch(()=>({}));}
+   catch(error){signal.throwIfAborted();if(attempt<3){await wait(2000*2**attempt,undefined,{signal});continue;}throw new Error('Cloud transcription could not be reached: '+(error as Error).message);}
+   if(response.status>=500&&attempt<3){await wait(2000*2**attempt,undefined,{signal});continue;}
    if(response.ok){if(!Array.isArray(result.words))throw new Error('Cloud transcription returned invalid words.');return result;}
    if((response.status===409||response.status===429)&&result.retryAfterMs&&attempt<3){await wait(Math.min(30000,Math.max(1000,result.retryAfterMs)),undefined,{signal});continue;}
    throw new Error(typeof result.error==='string'?result.error:'Cloud transcription failed. Retry to resume saved chunks.');
