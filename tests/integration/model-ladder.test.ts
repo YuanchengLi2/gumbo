@@ -24,7 +24,7 @@ it('moves a failing request one step up: Haiku to Sonnet alone, Sonnet to the Op
 });
 
 it('recognizes plain follow-up edits, but not questions, scripts or calls for a stronger model',()=>{
- for(const edit of ['Make it feel more gloomy and cinematic.','Add short crossfades between the clips and speed up the middle clip a little.','Now cut anything shaky','Swap the last clip for a different video from my computer that fits the mood better.','Put quiet, moody instrumental music under the whole video.'])expect(plainEdit(edit),edit).toBe(true);
+ for(const edit of ['Extend the last clip by 30 seconds.','Make it feel more gloomy and cinematic.','Add short crossfades between the clips and speed up the middle clip a little.','Now cut anything shaky','Swap the last clip for a different video from my computer that fits the mood better.','Put quiet, moody instrumental music under the whole video.'])expect(plainEdit(edit),edit).toBe(true);
  for(const other of ['How long is the video now?','Make a script for it first','Make it better, ask the director','Could you make it warmer?','I think the opening is slow','Plan a three-part teaser'])expect(plainEdit(other),other).toBe(false);
 });
 

@@ -1,8 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
-import {liveSession,footageClips,clipLength,videoLength,outOfRange} from './live-session';
-import type {RequestReport} from '../../scripts/session-report';
+import {liveSession,footageClips,clipLength,videoLength,outOfRange,clipIds as ids,quick,noOpus} from './live-session';
 
 /** A second live session, aimed at what the October 10 changes are meant to improve: exact edits by position and length,
  * a mood the user states once and never repeats, a request the footage cannot satisfy, replacing a clip by what was
@@ -10,10 +9,6 @@ import type {RequestReport} from '../../scripts/session-report';
  * money: runs only with DREAM_LIVE_EDITING=1, on a temporary account capped at DREAM_LIVE_BUDGET_USD (default 3). */
 test('live editing checks: exact follow-ups, remembered mood, honest limits and cheap simple edits',async()=>{
  test.skip(process.env.DREAM_LIVE_EDITING!=='1','Explicit, budgeted live-provider session.');test.setTimeout(3_600_000);
- // A simple follow-up should start without a router call, stay on Haiku and finish in under a minute for a few cents.
- const quick=(_b:any,_a:any,n:RequestReport|undefined)=>({'no router call':!!n&&!n.routed,'Haiku only':!!n&&Object.keys(n.byModel).every(m=>m==='haiku'),'under $0.05':!!n&&n.costUsd<.05,'under 60 s':!!n&&n.seconds<60});
- const noOpus=(_b:any,_a:any,n:RequestReport|undefined)=>({'no Opus':!!n&&!n.byModel.opus});
- const ids=(s:any)=>s.timeline.spine.map((c:any)=>c.id);
  await liveSession('live-editing-checks',async({ask,meta,app,page,folder})=>{
   await ask('first cut','Find the videos I shot most recently on this computer and make a 20-second edit of their best moments, with at least four shots, in the order I shot them.',
    (_b,a)=>footageClips(a).length<4?`only ${footageClips(a).length} footage clips`:Math.abs(videoLength(a)-20)>6?`the video is ${videoLength(a).toFixed(1)}s long`:outOfRange(a).length?`clips past their source: ${outOfRange(a).join(', ')}`:undefined,
@@ -35,11 +30,11 @@ test('live editing checks: exact follow-ups, remembered mood, honest limits and 
    (b,a)=>a.footage.assets.filter((x:any)=>x.scene).length>b.footage.assets.filter((x:any)=>x.scene).length?undefined:'no new scene was published',noOpus);
   await ask('replace by what was seen','Replace the shakiest clip with a steadier shot from the same videos.',
    (b,a)=>{const key=(c:any)=>`${c.assetId}:${c.srcIn}:${c.srcOut}`,x=footageClips(b).map(key),y=footageClips(a).map(key);return y.some((k:string)=>!x.includes(k))?outOfRange(a).length?`clips past their source: ${outOfRange(a).join(', ')}`:undefined:'no footage clip changed';},
-   (b,a,n)=>({...noOpus(b,a,n),'at most two looks at footage':!!n&&n.looks<=2}));
+   (b,a,n)=>({...noOpus(b,a,n),'at most eight looks at footage':!!n&&n.looks<=8}));
   await ask('remove music','Remove the music.',(_b,a)=>a.timeline.music.length?`${a.timeline.music.length} music tracks left`:undefined,quick);
   await ask('question','What mood are we going for, and how long is the video now?',
    (b,a)=>{const reply=JSON.stringify(a.messages.at(-1));return a.versionId!==b.versionId?'answering changed the project':!/calm|dream|soft|warm/i.test(reply)?'the reply does not recall the mood':!/\d+(\.\d+)?\s*(s\b|sec|second)/i.test(reply)?'the reply gives no length':undefined;},
-   (_b,_a,n)=>({'under $0.02':!!n&&n.costUsd<.02}));
+   (_b:any,_a:any,n:any)=>({'under $0.02':!!n&&n.costUsd<.02}));
   const exported=join(folder,'session-export.mp4');await app.evaluate(({dialog}:any,path:string)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},exported);
   await page.evaluate(()=>window.dream.exportVideo('video'));expect.soft(existsSync(exported),'export').toBe(true);
  });

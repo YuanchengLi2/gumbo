@@ -53,7 +53,7 @@ export function nextMode(current:{role:Mode;model:string},change:{to:Mode;kind?:
  return{role:'lead',model:models.sonnet};
 }
 /** A plain follow-up edit: an instruction to change the video, not a question, plan, script or a call for a stronger model. */
-export const plainEdit=(text:string)=>text.length<400&&/^(?:(?:ok(?:ay)?|now|also|and|please|then)[,]?\s+)*(?:add|make|put|cut|trim|remove|delete|drop|swap|replace|change|move|speed|slow|open|start|end|use|shorten|lengthen|mute|unmute|fade|grade|colou?r|crop|zoom|split|reorder|insert|turn|give|set|apply|lower|raise|increase|decrease|keep|caption|title|tighten|brighten|darken|warm|cool|boost|reduce|fix)\b/i.test(text.trim())&&!/\?|\b(?:opus|sonnet|director|plan|script|ideas?|concepts?|outline|storyboard)\b/i.test(text);
+export const plainEdit=(text:string)=>text.length<400&&/^(?:(?:ok(?:ay)?|now|also|and|please|then)[,]?\s+)*(?:add|make|put|cut|trim|remove|delete|drop|swap|replace|change|move|speed|slow|open|start|end|use|shorten|lengthen|mute|unmute|fade|grade|colou?r|crop|zoom|split|reorder|insert|turn|give|set|apply|lower|raise|increase|decrease|keep|caption|title|tighten|brighten|darken|warm|cool|boost|reduce|fix|extend|stretch|shrink|rotate|flip)\b/i.test(text.trim())&&!/\?|\b(?:opus|sonnet|director|plan|script|ideas?|concepts?|outline|storyboard)\b/i.test(text);
 /** The lead's conversation cache: five minutes until a wait for workers in this request has outlasted that, then one hour
  * (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
 /** The lead's view of the source map: the text catalog without images (workers look at the footage themselves). */
