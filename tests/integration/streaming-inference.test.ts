@@ -7,7 +7,6 @@ import {infer} from '../../packages/orchestrator/src/inference';
 import {readMessageStream} from '../../supabase/functions/_shared/stream';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
 // Historical journal compatibility; new execution is covered by code-agent.test.ts.
-import {Director} from '../../packages/orchestrator/src/legacy-director';
 
 const event=(type:string,data:any={})=>({type,...data});
 function events(stop='tool_use',partial=false){return[
@@ -45,23 +44,6 @@ it('automatically increases creative output capacity without executing truncated
   const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{fetch:async(_url,init)=>{capacities.push(JSON.parse(String(init?.body)).max_tokens);return streamed(capacities.length===1?events('max_tokens',true):events());}});
   expect(capacities).toEqual([8192,16384]);expect(response.content[1].input).toEqual({definition:'Dream \u03c0 \ud83c\udfac'});expect(db.state().versions).toHaveLength(1);
   const usage=db.db.prepare("SELECT json FROM events WHERE type='ai.usage'").all() as {json:string}[];expect(usage).toHaveLength(2);expect(usage.map(row=>JSON.parse(row.json).stopReason)).toEqual(['max_tokens','tool_use']);
- }finally{db.close();}
-});
-
-it('the editing loop commits only the complete replacement response after a truncated batch',async()=>{
- const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-stream-edit-')),'Stream edit');let calls=0;
- const toolEvents=(id:string,name:string,input:any,stop='tool_use')=>[
-  event('message_start',{message:{content:[],usage:{input_tokens:10,output_tokens:1}}}),
-  event('content_block_start',{index:0,content_block:{type:'tool_use',id,name,input:{}}}),
-  event('content_block_delta',{index:0,delta:{type:'input_json_delta',partial_json:JSON.stringify(input)}}),
-  event('content_block_stop',{index:0}),event('message_delta',{delta:{stop_reason:stop},usage:{output_tokens:20}}),event('message_stop')
- ];
- try{
-  const director=new Director(db,async()=>({url:'https://fixture.invalid',token:'fixture'}),()=>{});
-  director.inference=(model,system,messages,tools=[],turnId)=>infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input:{model,system,messages,tools,turnId,purpose:'routine',max_tokens:8192},resume:0},{fetch:async()=>{
-   calls++;return streamed(calls<=2?toolEvents(calls===1?'discarded':'final','apply_ops',{label:'Final frame rate',ops:[{type:'set_project_settings',settings:{fps:calls===1?60:24},reason:'Requested'}]},calls===1?'max_tokens':'tool_use'):toolEvents('report','report',{status:'complete',summary:'Frame rate saved.',evidence:[{toolCallId:'final',finding:'24 fps saved.'}]}));
-  }});
-  await director.edit('Set 24 fps','turn',[],false);expect(calls).toBe(3);expect(db.timeline().settings.fps).toBe(24);expect(db.state().versions).toHaveLength(2);expect(db.db.prepare('SELECT id FROM requests WHERE id=?').get('ai:turn:discarded')).toBeUndefined();
  }finally{db.close();}
 });
 

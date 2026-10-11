@@ -5,7 +5,6 @@ import {mkdtempSync,readFileSync,existsSync,readdirSync} from 'node:fs';
 import {join,resolve as pathResolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {ProjectDB} from '@dream/project-db';
-import {Director} from '../../packages/orchestrator/src/legacy-director';
 import {AssetSchema} from '@dream/footage';
 import {arrangeScore,SoundDesignSchema} from '@dream/procedural-media';
 import {MediaLibrary} from '../../apps/project-service/src/library';
@@ -50,18 +49,4 @@ it('renders a custom layered sound and places it without a manual add step',asyn
   const sound=SoundDesignSchema.parse({schemaVersion:1,id:'custom-sound',title:'Soft descending ping',seed:22,durationSec:.4,layers:[{id:'tone',wave:'sine',startSec:0,durationSec:.4,frequencyHz:800,endFrequencyHz:300,gainDb:-6,pan:-.3,attackSec:.01,releaseSec:.3,filterHz:4000}]});
   const result=await library.generate({type:'create_sfx',sound,requestId:'custom',expectedVersionId:db.head()});expect(result.placed).toBe(true);expect(library.get(result.revisionId).sound).toEqual(sound);expect(db.timeline().attached[0].source?.assetId).toBe(result.assetId);
  }finally{await library.close();db.close();}
-});
-
-it('resumes a canceled AI generation tool without skipping it or repeating earlier mutations',async()=>{
- const fixtureState=fixture('ai-resume'),db=fixtureState.db;await fixtureState.library.close();let director:Director|undefined,cancelOnce=true;
- const engine=new EditingEngine(db,{audioWorker:worker},(type)=>{if(type==='state'&&cancelOnce&&db.state().jobs.some(j=>j.step==='creation'&&j.status==='queued')){cancelOnce=false;director!.cancel();}});
- try{
-  director=new Director(db,async()=>({url:'unused',token:'unused'}),()=>{},undefined,engine);let editorCalls=0;
-  director.inference=async(_model,_system,_messages,tools)=>{
-   if(tools?.some((t:any)=>t.name==='select_route'))return{content:[{type:'tool_use',id:'route',name:'select_route',input:{route:'local'}}],stop_reason:'tool_use',usage:{}};
-   editorCalls++;return{content:editorCalls===1?[{type:'tool_use',id:'fps',name:'apply_ops',input:{label:'Set frame rate',ops:[{type:'set_project_settings',settings:{fps:60},reason:'User requested'}]}},{type:'tool_use',id:'score',name:'create_score',input:{document:score()}}]:[{type:'tool_use',id:'done',name:'report',input:{summary:'Created the score.',status:'complete',evidence:[{toolCallId:'score',finding:'Score rendered and placed.'}]}}],stop_reason:'tool_use',usage:{}};
-  };
-  await director.message('Add a score and set 60 fps');expect(db.state().aiStatus).toBe('interrupted');expect(db.timeline().settings.fps).toBe(60);expect(db.timeline().music).toHaveLength(0);expect(JSON.parse(db.getMeta('editor_checkpoint')!).processed).toBe(1);
-  await director.resume();expect(db.state().aiStatus).toBe('complete');expect(db.timeline().music).toHaveLength(1);expect(editorCalls).toBe(2);expect(engine.list('audio')).toHaveLength(1);db.undo();expect(db.timeline().settings.fps).toBe(30);expect(db.timeline().music).toHaveLength(0);
- }finally{await engine.close();db.close();}
 });

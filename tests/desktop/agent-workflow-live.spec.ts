@@ -3,11 +3,14 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
+import {sessionReport,formatReport} from '../../scripts/session-report';
 
 /** A real editing session in the packaged app against the deployed gateway: the agent finds the user's own footage on
  * this computer, cuts it, reorders, grades, adds motion graphics, music, captions and transitions, swaps a clip, answers
  * a question and exports. Every request is a follow-up in one project, as a person would work. Spends real money:
- * runs only with DREAM_LIVE_WORKFLOW=1, on a temporary account capped at DREAM_LIVE_BUDGET_USD (default 3). */
+ * runs only with DREAM_LIVE_WORKFLOW=1, on a temporary account capped at DREAM_LIVE_BUDGET_USD (default 3).
+ * Each step records its cost, model calls, largest context and moves to Opus; session-report.txt compares the whole
+ * session with an earlier one when DREAM_LIVE_COMPARE names that session's folder. */
 test('live agentic editing session on footage found on this computer',async()=>{
  test.skip(process.env.DREAM_LIVE_WORKFLOW!=='1','Explicit, budgeted live-provider session.');test.setTimeout(3_600_000);
  const ref='qewguvfkkwvdoqptiljd',url=`https://${ref}.supabase.co`,keyCommand=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase projects api-keys --project-ref ${ref} --output json`],{encoding:'utf8',windowsHide:true});if(keyCommand.status)throw new Error('Live configuration unavailable.');
@@ -30,8 +33,9 @@ test('live agentic editing session on footage found on this computer',async()=>{
    const before=await state(),started=Date.now();await page.evaluate(text=>window.dream.command({type:'message',text}),text);
    let after:any;await expect.poll(async()=>{after=await state();return['complete','interrupted','awaiting_file_permission','failed'].includes(after.aiStatus)&&after.experience?.turnId!==before.experience?.turnId?after.aiStatus:'running';},{timeout:1_200_000,intervals:[3000]}).not.toBe('running');
    const problem=after.aiStatus!=='complete'?`status ${after.aiStatus}`:check(before,after),reply=after.messages.filter((m:any)=>m.role==='assistant').at(-1);
-   const step={name,request:text,status:after.aiStatus,problem,seconds:Math.round((Date.now()-started)/1000),versionChanged:after.versionId!==before.versionId,reply:reply?.report?.summary??reply?.text,spine:after.timeline.spine.map((c:any)=>({assetId:c.assetId,filename:after.footage.assets.find((a:any)=>a.id===c.assetId)?.filename,srcIn:c.srcIn,srcOut:c.srcOut,speed:c.speed,framing:c.framing,transitionIn:c.transitionIn})),attached:after.timeline.attached.length,music:after.timeline.music.length,captions:after.timeline.captions?.style};
-   steps.push(step);writeFileSync(join(folder,'session.json'),JSON.stringify(steps,null,2));console.log(`${problem?'FAILED':'passed'} ${name} in ${step.seconds}s${problem?': '+problem:''}`);
+   const numbers=(()=>{try{return sessionReport(folder).find(r=>r.turnId===after.experience?.turnId);}catch{return undefined;}})();
+   const step={name,request:text,status:after.aiStatus,problem,seconds:Math.round((Date.now()-started)/1000),costUsd:numbers?.costUsd,calls:numbers?.calls,byModel:numbers?.byModel,maxContextTokens:numbers?.maxContextTokens,escalations:numbers?.escalations,compactions:numbers?.compactions,versionChanged:after.versionId!==before.versionId,reply:reply?.report?.summary??reply?.text,spine:after.timeline.spine.map((c:any)=>({assetId:c.assetId,filename:after.footage.assets.find((a:any)=>a.id===c.assetId)?.filename,srcIn:c.srcIn,srcOut:c.srcOut,speed:c.speed,framing:c.framing,transitionIn:c.transitionIn})),attached:after.timeline.attached.length,music:after.timeline.music.length,captions:after.timeline.captions?.style};
+   steps.push(step);writeFileSync(join(folder,'session.json'),JSON.stringify(steps,null,2));console.log(`${problem?'FAILED':'passed'} ${name} in ${step.seconds}s${numbers?` for $${numbers.costUsd.toFixed(3)} (${numbers.calls} calls)`:''}${problem?': '+problem:''}`);
    expect.soft(problem,name).toBeUndefined();return after;
   };
   const footageClips=(s:any)=>s.timeline.spine.filter((c:any)=>{const a=s.footage.assets.find((x:any)=>x.id===c.assetId);return a&&!a.scene&&a.kind!=='audio';});
@@ -47,6 +51,7 @@ test('live agentic editing session on footage found on this computer',async()=>{
   const exported=join(folder,'session-export.mp4');await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},exported);
   const exportStarted=Date.now();await page.evaluate(()=>window.dream.exportVideo('video'));expect.soft(existsSync(exported),'export').toBe(true);
   steps.push({name:'export',seconds:Math.round((Date.now()-exportStarted)/1000),file:exported,exists:existsSync(exported)});writeFileSync(join(folder,'session.json'),JSON.stringify(steps,null,2));
+  const report=formatReport(sessionReport(folder),process.env.DREAM_LIVE_COMPARE?sessionReport(resolve(process.env.DREAM_LIVE_COMPARE)):undefined);writeFileSync(join(folder,'session-report.txt'),report);console.log(report);
   console.log('Live editing session evidence:',folder);
  }finally{await app?.close();if(userId)await api('/auth/v1/admin/users/'+userId,undefined,'DELETE').catch(()=>{});await api('/rest/v1/dream_invites?email=eq.'+encodeURIComponent(email),undefined,'DELETE').catch(()=>{});}
 });
