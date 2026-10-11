@@ -48,7 +48,7 @@ it('retrieves older user direction and enforces revision checks and irreducible 
   const source=db.message('user','Amethyst titles must be violet, never orange.');for(let n=0;n<6;n++)db.message('assistant','Unrelated message '+n);
   db.setMeta('workflow:approved',JSON.stringify({plan:{goal:'Keep Amethyst typography restrained'},status:'complete',approvedVersion:db.head()}));
   const context=new ProjectContext(db);expect(context.search('restrained',6,{kind:'workflow'})[0]?.owner).toBe('approved');expect(JSON.stringify(context.initial('Amethyst titles'))).toContain('never orange');
-  rememberDecision(db,{sourceId:source.id,scope:'titles',text:source.text});expect(()=>rememberDecision(db,{sourceId:source.id,scope:'titles',text:'Use red'})).toThrow('actual user');
+  rememberDecision(db,{sourceId:source.id,scope:'titles',text:source.text});expect(()=>rememberDecision(db,{sourceId:source.id,scope:'titles',text:'Use red'})).toThrow("the user's own words");
   const hit=context.search('Amethyst')[0] as any;expect(()=>context.read(hit.id,'outdated')).toThrow('changed');
   expect(budgetRequest(db,{model:'claude-sonnet-5-5',purpose:'routine',system:'Instructions',tools:[],messages:[{role:'user',content:'x'.repeat(500000)}],max_tokens:8192}).needsCount).toBe(true);
  }finally{db.close();}

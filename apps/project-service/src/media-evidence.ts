@@ -22,7 +22,9 @@ export async function inspectMedia(db:ProjectDB,input:{path?:string;assetId?:str
  }
  const samples=Math.min(input.motion?12:6,Math.max(1,Math.ceil(end-start))),frames:{timestamp:number;path?:string;sha256?:string}[]=[];
  if(asset&&!asset.sequence&&asset.kind!=='audio'&&db.inspectSource){
-  const inspected=await db.inspectSource({assetId:asset.id,startSec:start,endSec:end,detail:input.motion?'motion':end-start>8?'preview':'normal'},signal);
+  // Motion and normal detail cover at most 8 seconds and a scene-aware overview 60; a longer range is sampled more coarsely rather than refused.
+  const span=end-start,detail=span>60?'preview':span>8?'overview':input.motion?'motion':'normal';
+  const inspected=await db.inspectSource({assetId:asset.id,startSec:start,endSec:end,detail},signal);if(input.motion&&span>8)content.push({type:'text',text:`Motion detail covers at most 8 seconds, so these ${span.toFixed(0)} seconds are sampled more coarsely; look at a shorter range for frame-by-frame motion.`});
   frames.push(...inspected.frames.map(frame=>({timestamp:frame.timeSec,sha256:frame.sha256})));
   // Five or more frames arrive tiled on contact sheets of up to twelve: the same moments for about a quarter of the image
   // tokens. A range of a second or two still returns full-size frames for close checks.
