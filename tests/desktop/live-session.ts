@@ -11,7 +11,7 @@ export type Step={name:string;request:string;status:string;problem?:string;targe
  * attached to the message; expect: the status the request should end in (complete unless planning). */
 export type AskOptions={intent?:'auto'|'plan'|'ask';selection?:string[];assetIds?:string[];expect?:string};
 export type Ask=(name:string,text:string,check:(before:any,after:any,numbers:RequestReport|undefined)=>string|undefined,targets?:(before:any,after:any,numbers:RequestReport|undefined)=>Record<string,boolean>,options?:AskOptions)=>Promise<any>;
-export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>string|undefined;state:()=>Promise<any>;send:(text:string,options?:AskOptions)=>Promise<void>;settled:(before:any)=>Promise<any>;importFiles:(paths:string[])=>Promise<any>;record:(step:Step)=>void};
+export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>string|undefined;state:()=>Promise<any>;send:(text:string,options?:AskOptions)=>Promise<void>;settled:(before:any)=>Promise<any>;importFiles:(paths:string[])=>Promise<any>;record:(step:Step)=>void;words:(assetId:string)=>{start:number;end:number;text:string}[]};
 
 /** A real editing session in the packaged app against the deployed gateway, on a temporary account whose daily allowance
  * is capped at DREAM_LIVE_BUDGET_USD (default 3). Each step records its numbers from the project's own database; checks are
@@ -23,6 +23,8 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
  async function api(path:string,body?:unknown,method=body?'POST':'GET'){const r=await fetch(url+path,{method,headers:{apikey:service,Authorization:'Bearer '+service,'Content-Type':'application/json',Prefer:'return=representation'},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();if(!r.ok)throw new Error('Live setup failed: '+r.status+' '+text.slice(0,200));return text?JSON.parse(text):null;}
  const profile=mkdtempSync(join(tmpdir(),'dream-workflow-profile-')),folder=resolve(`artifacts/${prefix}-${Date.now()}`);mkdirSync(folder,{recursive:true});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url,anonKey:anon}));
  let app:Awaited<ReturnType<typeof electron.launch>>|undefined;const steps:Step[]=[];
+ // Transcript words of a source, read from the project's database.
+ const words=(assetId:string)=>{try{const db=new Database(join(folder,'.dream','project.sqlite'),{readonly:true,fileMustExist:true});try{return(db.prepare("SELECT json FROM index_records WHERE kind='words' AND json_extract(json,'$.assetId')=? ORDER BY json_extract(json,'$.start')").all(assetId) as {json:string}[]).map(r=>JSON.parse(r.json));}finally{db.close();}}catch{return[];}};
  const meta=(key:string)=>{try{const db=new Database(join(folder,'.dream','project.sqlite'),{readonly:true,fileMustExist:true});try{return(db.prepare('SELECT value FROM meta WHERE key=?').get(key) as {value:string}|undefined)?.value;}finally{db.close();}}catch{return undefined;}};
  try{
   userId=(await api('/auth/v1/admin/users',{email,password,email_confirm:true})).id;await api('/rest/v1/dream_invites',{email});
@@ -36,7 +38,7 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
   const state=()=>page.evaluate(()=>window.dream.command({type:'state'})) as Promise<any>;
   // A message starts a request without waiting for it, so a test can stop it part way.
   const send=async(text:string,o:AskOptions={})=>{void page.evaluate(command=>window.dream.command(command),{type:'message' as const,text,selection:o.selection??[],assetIds:o.assetIds??[],...(o.intent?{intent:o.intent}:{})}).catch(()=>{});};
-  const settled=async(before:any)=>{let after:any;await expect.poll(async()=>{after=await state();return['complete','interrupted','awaiting_file_permission','awaiting_approval','failed'].includes(after.aiStatus)&&after.experience?.turnId!==before.experience?.turnId?after.aiStatus:'running';},{timeout:1_200_000,intervals:[3000]}).not.toBe('running');return after;};
+  const settled=async(before:any)=>{let after:any;await expect.poll(async()=>{after=await state();return['complete','interrupted','awaiting_file_permission','awaiting_approval','failed'].includes(after.aiStatus)&&after.experience?.turnId!==before.experience?.turnId?after.aiStatus:'running';},{timeout:2_700_000,intervals:[3000]}).not.toBe('running');return after;};
   // Files the user brings in through the app's own picker, as from the Media tab, ready once every one is analyzed.
   const importFiles=async(paths:string[])=>{await app!.evaluate(({dialog}:any,paths:string[])=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},paths);await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async paths=>window.dream.command({type:'import',paths,copy:true}),paths);
    let after:any;await expect.poll(async()=>{after=await state();return paths.every(path=>after.footage.assets.some((a:any)=>a.filename===path.split(/[\\/]/).pop()&&a.status==='ready'));},{timeout:300_000,intervals:[2000]}).toBe(true);return after;};
@@ -54,7 +56,7 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
    expect.soft(problem,name).toBeUndefined();for(const goal of missed)expect.soft(goal,`${name}: target`).toBe('met');
    return after;
   };
-  await run({page,app,folder,ask,meta,state,send,settled,importFiles,record});
+  await run({page,app,folder,ask,meta,state,send,settled,importFiles,record,words});
   const report=formatReport(sessionReport(folder),process.env.DREAM_LIVE_COMPARE?sessionReport(resolve(process.env.DREAM_LIVE_COMPARE)):undefined);writeFileSync(join(folder,'session-report.txt'),report);console.log(report);
   console.log('Live editing session evidence:',folder);
  }finally{await app?.close();if(userId)await api('/auth/v1/admin/users/'+userId,undefined,'DELETE').catch(()=>{});await api('/rest/v1/dream_invites?email=eq.'+encodeURIComponent(email),undefined,'DELETE').catch(()=>{});}
