@@ -1,6 +1,6 @@
 # Code creation engine
 
-This document describes the production engine as of October 10, 2026: the orchestrator (`packages/orchestrator/src/code-director.ts`, `code-agent.ts`, `task-graph.ts`), the scene engine (`packages/scene-engine`) and the workspace that compiles and publishes their work (`apps/project-service/src/code-workspace.ts`). `legacy-director.ts` is retained only for historical tests and older serialized projects; it is not the production director.
+This document describes the production engine as of October 10, 2026: the orchestrator (`packages/orchestrator/src/code-director.ts`, `code-agent.ts`, `task-graph.ts`), the scene engine (`packages/scene-engine`) and the workspace that compiles and publishes their work (`apps/project-service/src/code-workspace.ts`).
 
 ## The division of labor
 
@@ -9,7 +9,7 @@ The agent writes only the code for the video. Everything else is the engine's jo
 | The agent writes | The engine provides |
 |---|---|
 | Scene components (React, Remotion timing, three.js through React Three Fiber, d3, SVG, Canvas, CSS) | One prebuilt runtime with those libraries, bundled fonts, project media and resources by name, frame-exact video, textures, a ready 3D scene, fit-to-box text, safe areas and beat timing |
-| `project.json`: what plays when (clips, overlays, scenes, music, sound) | Compilation in milliseconds, publication, versions and undo, the live player and Export |
+| Timeline actions (`edit_timeline`): what plays when (clips, grade, transitions, overlays, scenes, music, sound, captions) | Checking each action against the sources, compilation in milliseconds, publication, versions and undo, the live player and Export |
 | Score files (`src/music/*.score.json`) and sound designs | Expansion, validation and synthesis into audio assets with beat times |
 | Which media to use | Finding media on the computer by capture date, importing, proxies, thumbnails, transcripts, contact sheets |
 
@@ -17,19 +17,21 @@ Nothing renders during chat. Published scenes run live in the right panel; only 
 
 ## Who does the work
 
-Opus directs and Haiku does the work. A request runs in one of two working modes and can switch between them.
+Haiku starts every request and does the work; a stronger model takes over only when Haiku fails or the request builds several new pieces at once. A request runs in one of two working modes, solo or directed, and can move between them.
 
 | Mode or request | Model | Role |
 |---|---|---|
-| **Haiku alone** (the default for edits) | Haiku 5.5 | **solo**: inspects, edits, publishes and replies. It can call `switch_to_orchestrated` with a written handoff when the request needs multi-part direction, and it switches automatically after repeated substantive failures of the same step. `consult_director` asks Opus one question; Opus answers with no tools. |
-| **Opus-directed** (multi-part creative work) | Opus 5.5 | **lead**: decides, writes self-contained briefs, dispatches a task graph of workers, reads their reports and finishes. Its only tools are `delegate`, `update_tasks`, `remember_decision`, `finish` and `hand_off`. It never inspects, writes, runs or publishes anything. |
+| **Working alone** (the default) | Haiku 5.5, then Sonnet 5.5 | **solo**: inspects, edits, publishes and replies. When the engine sees Haiku fail (the same tool error twice, the step limit, repeated output cut-offs) Sonnet continues alone from a handoff; when Sonnet fails the same way, the Opus director takes over. `switch_to_orchestrated` asks for a Sonnet director when the request needs several new pieces built together. `consult_director` asks the next model up one question, answered with no tools. |
+| **Directed** (several new pieces at once) | Sonnet 5.5, or Opus 5.5 | **lead**: decides, writes self-contained briefs, dispatches a task graph of workers, reads their reports and finishes. Its only tools are `delegate`, `update_tasks`, `remember_decision`, `finish` and `hand_off`. It never inspects, writes, runs or publishes anything. A Sonnet director whose workers keep failing hands the request to Opus once. Opus directs from the start only a whole new video made from nothing, or when the user asks for Opus or the director. |
 | Work dispatched by the lead | Haiku 5.5 | **worker**: one isolated conversation per task. Research tasks are read-only and report facts; build tasks write and, when assigned, publish. |
-| A reply: a question, a script, ideas | Haiku 5.5, or Opus 5.5 when the router judges it creative | **readonly**: answers directly. Opus replies with no tools. |
+| A reply: a question, a script, ideas | Haiku 5.5, or Sonnet 5.5 for scripts and concepts | **readonly**: answers directly. Sonnet replies with no tools. |
 | Planning, and approved plans | Opus 5.5 | **readonly** planner returning an editable plan; an approved plan runs as one continuing lead conversation. |
+
+Every move to a model above Haiku is recorded as an `ai.escalation` event with its kind (route, switch, consult, plan) and reason; `scripts/session-report.ts` lists them per request.
 
 ### Routing, permission modes and effort
 
-Exact local instructions and "continue" phrasing skip the classifier; everything else is classified by Haiku with a provider JSON schema, falling back to the local heuristic (`routeCodeRequest`) if classification fails. Routes are `question`, `local`, `plan` and `continue` (only while a stopped request exists).
+Exact local instructions, "continue" phrasing and plain follow-up edits on a titled project with a timeline (`plainEdit`: "make it warmer", "add crossfades") skip the classifier and start with Haiku. Everything else is classified by Haiku with a provider JSON schema, falling back to Haiku and the local heuristic (`routeCodeRequest`) if classification fails. Routes are `question`, `local`, `plan` and `continue` (only while a stopped request exists); intelligence is haiku, sonnet or opus, and the app turns an Opus route on an existing timeline or for a question into Sonnet unless the request names Opus or the director.
 
 The composer chooses the permission mode and the effort:
 
@@ -91,23 +93,27 @@ Every role says in one sentence what it is about to do, adds brief updates when 
 
 Each phase is a checkpointed conversation. Tool calls and results are persisted as complete pairs; a replayed call ID returns its saved receipt and never repeats an effect.
 
-- **Step limits**: 100 model calls for the lead and 80 for other roles. Hitting the limit reports a blocker, never completion.
+- **Spending limit**: each request may spend $2 (`DREAM_REQUEST_BUDGET_USD`), checked before every model call; at the limit it stops as interrupted with its work saved, and each resume allows the same amount again.
+- **Step limits**: 100 model calls for the lead and 80 for other roles. Haiku or Sonnet working alone hands over to the next model at the limit; otherwise it reports a blocker, never completion.
 - **Text-only responses**: nudged at most twice. Engine nudges are tagged and dropped at compaction.
-- **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`).
+- **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`). The second failure moves a solo request up the ladder (or asks the next model up when switching is not available); the third identical failure, or the fourth similar one, ends the request as blocked.
+- **Parallel reads**: the reads at the start of a response (`read_file`, `view_media`, `read_transcript`, `search`) run together; results are recorded in order.
 - **Truncation**: a response cut off with visible content retries with double the output allowance, up to 64K, scoped to its phase. A response that only thought is not retried with more room: the agent is told to act in one concrete step, and the phase's effort steps down. Three truncations end the step.
 - **Over-long fields**: prose fields (summary, brief, query, title) are shortened instead of failing the call. Paths and code are never trimmed.
 - **Completion**: only when the current head was published (or validated unchanged) in this phase with no unpublished changes and no scene errors. The lead keeps plan notes (`update_tasks.notes`) that survive compaction.
 
 ## Context
 
-- **Lead and solo**: the first message carries the request, the project overview, recent conversation, relevant indexed chunks, decisions, engine capabilities and the computer status (access, media folders, local date and time zone).
+- **Lead and solo**: the first message carries the request, the project overview, an outline of the timeline in order, the project notes, recent conversation, relevant indexed chunks (9,000 characters), up to six code excerpts of 2,000 characters, decisions, the media list (with what earlier requests saw in each source), engine capabilities and the computer status (access, media folders, local date and time zone).
+- **Project notes and source notes**: `finish` takes optional `notes` (what the user wants for the video overall; editors and directors only) and `sourceNotes` (what each inspected source shows and where). Both are saved with the project and shown to every later request, at no extra model call.
 - **Lead, readonly and planning**: these also receive the source map on their first request:
   - a one-line-per-source catalog, in capture order when known;
   - one 4x3 contact sheet per shown source;
   - a catalog sheet with one frame per source for nine or more sources.
-- **State changes**: when the project or media state changes, a state message is appended, never edited.
+- **State changes**: when the project or media state changes, a message with only the changed fields (and the media or decision records added, changed or removed) is appended, never edited. The full state is kept locally under each message; compaction restores it when it drops the messages a change report builds on.
+- **Looks at footage**: `view_media` returns five or more frames tiled on 4x3 contact sheets; a range of a second or two returns full-size frames. Transcript words carry only id, text, start and end (plus speaker or an uncertainty flag).
 
-Compaction targets are 80K tokens for Haiku (never sent more than 96K, so it stays below the 100K long-context price) and 180K for Opus.
+Compaction targets are 80K tokens for Haiku (never sent more than 96K, so it stays below the 100K long-context price) and 180K for Sonnet and Opus.
 
 - **Measurement**: the last response's real prompt size calibrates the byte estimate. The token-count endpoint is called only without a calibration or near the target.
 - **Compaction**: an overrun compacts to half the target from the current sticky view. It carries the earlier summary forward and keeps only real instructions, the two latest pieces of director advice and the newest state snapshot. Following steps then append to a stable cached prefix.
@@ -125,7 +131,7 @@ The gateway features above (one-hour lead cache, task budgets, summarized Haiku 
 
 ## Workspace and publication
 
-`Workspace/project.json` is a version-1 `dream-workspace` document with `baseVersionId`, the timeline and `outputs` (scenes, images, audio, music, sound effects). Publication validates the document, compiles scenes, synthesizes music and sound, copies files into hash-addressed storage, resolves asset references, and saves the timeline, source snapshot, assets and receipt in one SQLite transaction. Replaying a completed call cannot create another version. Undo, redo, restore and branch changes restore the workspace sources with the version.
+`Workspace/project.json` is a version-1 `dream-workspace` document with `baseVersionId`, the timeline and `outputs` (scenes, images, audio, music, sound effects). The agent changes it with `edit_timeline`: the manual editor's typed operations plus output declarations, applied in order and checked against the sources (every asset or output exists, every range lies inside its source, changed items have a length and a clip to stand on, deleted clips strand nothing); if any fails, nothing applies and the error names the action. The call publishes in the same step and returns a compact list of changes; a replayed call restores its saved document instead of applying the actions again. Publication validates the document, compiles scenes, synthesizes music and sound, copies files into hash-addressed storage, resolves asset references, and saves the timeline, source snapshot, assets and receipt in one SQLite transaction. Replaying a completed call cannot create another version. Undo, redo, restore and branch changes restore the workspace sources with the version.
 
 ## Runtime
 
@@ -133,4 +139,4 @@ The Windows host runs commands in an AppContainer with project-specific identity
 
 ## Verification
 
-`pnpm test` and `pnpm typecheck` cover the engine end to end with fixture gateways. The packaged desktop specs (`pnpm exec playwright test tests/desktop`) cover the player, export, drag-and-drop, planning and the agent. `pnpm exec tsx scripts/smoke-engine-local.ts --budget=<usd>` runs real requests against the Anthropic API through this repository's gateway code on localhost and reports cost and time per phase. Results are recorded in `docs/ACCEPTANCE.md`.
+`pnpm test` and `pnpm typecheck` cover the engine end to end with fixture gateways. The live session spec (`tests/desktop/agent-workflow-live.spec.ts`, only with `DREAM_LIVE_WORKFLOW=1`) records each step's cost, model calls, largest context and escalations and writes `session-report.txt`, compared with `DREAM_LIVE_COMPARE` when set; `tsx scripts/session-report.ts <folder> [--compare <older>]` reports any saved project. The packaged desktop specs (`pnpm exec playwright test tests/desktop`) cover the player, export, drag-and-drop, planning and the agent. `pnpm exec tsx scripts/smoke-engine-local.ts --budget=<usd>` runs real requests against the Anthropic API through this repository's gateway code on localhost and reports cost and time per phase. Results are recorded in `docs/ACCEPTANCE.md`.
