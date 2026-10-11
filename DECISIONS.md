@@ -168,3 +168,11 @@ This entry supersedes earlier statements that Sonnet executes or that Opus execu
 
 ## Export renders JPEG frames at machine concurrency
 Opaque exports render JPEG frames (quality 90) instead of PNG and run half the CPU cores at once (2 to 8) instead of a fixed 2; transparent ProRes layers keep PNG; DREAM_RENDER_CONCURRENCY still overrides. Measured on the 30 s live session project (1080p60 sources, grade, transitions, scenes): 483 s before, 214 s after, with no visible difference. scripts/benchmark-export.ts times the export path for any project.
+
+## October 10, 2026 — Request safety limits
+
+- Every request has a spending limit, $2 by default (DREAM_REQUEST_BUDGET_USD). It is checked before each model call from the request's recorded cost; at the limit the request stops as interrupted with the work so far saved, and each resume allows the same amount again. Before this only the account's daily allowance applied, so one stuck request could use most of a day's budget.
+- The same failing tool call three times (or a similar one four times) ends the request as blocked, one attempt sooner than before; the second failure still asks the director or hands over first.
+- Spending-limit, quota and sign-in errors from workers end the request instead of being returned to the lead as task errors to retry.
+- When the router fails, the request starts with Haiku (which can still call the director) instead of falling back to the local guess, which sent every open-ended request to Opus without notice.
+- Every time Opus takes part in a request is recorded as an ai.escalation event with its kind (route, switch, consult, plan) and reason, so live runs show how often it happens and why.

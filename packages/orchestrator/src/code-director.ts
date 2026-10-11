@@ -46,7 +46,9 @@ type Mode='lead'|'solo';type ModeRecord={phases:{role:Mode;phase:string;handoff?
 export const leadMediaBlocks=(blocks:any[])=>[...blocks.filter(b=>b.type!=='image'),...(blocks.some(b=>b.type==='image')?[{type:'text',text:'Contact sheets of the footage go to the workers, not to you: brief them to look (view_media) and report what they see.'}]:[])];
 export const leadCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('lead-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
 export const noteWorkerWait=(db:ProjectDB,turnId:string,ms:number)=>{if(ms>240_000)db.setMeta('lead-long-wait:'+turnId,'1');};
-const fatalWorkerError=(error:unknown,signal:AbortSignal)=>signal.aborted||error instanceof FileApprovalRequired||error instanceof InferenceError&&['quota','authentication','request_conflict'].includes(error.code);
+const fatalWorkerError=(error:unknown,signal:AbortSignal)=>signal.aborted||error instanceof FileApprovalRequired||error instanceof InferenceError&&['quota','authentication','request_conflict','request_budget'].includes(error.code);
+/** Spending limit for one request, in dollars. Each resume allows the same amount again, so a stopped request can always continue. */
+export const requestBudgetUsd=(resumes=0)=>{const base=Number(process.env.DREAM_REQUEST_BUDGET_USD);return(Number.isFinite(base)&&base>0?base:2)*(resumes+1);};
 export class Director {
  private controller:AbortController|null=null;
  constructor(private db:ProjectDB,private config:(signal?:AbortSignal)=>Promise<AIConfig>,private publish:(type:string,payload:any)=>void,private renderReview?:ReviewRenderer,private engine?:EditingEnginePort,private files?:FileService,private importComputer?:(paths:string[],requestId:string,signal?:AbortSignal)=>Promise<unknown>,private workspace?:CodeWorkspacePort){}
@@ -79,6 +81,8 @@ export class Director {
   // Effort is pinned per role for the whole conversation: changing it mid-conversation resets the prompt cache.
   // The lead thinks harder after repeated worker failures; a phase that spent a whole response thinking steps its effort down.
   const failures=purpose==='lead'&&turnId?Number(this.db.getMeta('worker-failures:'+turnId)??0):0,lower=turnId?Number(this.db.getMeta(`effort-override:${turnId}:${phase}`)??0):0;
+  // A request stops at its spending limit before the next call; completed work stays saved and a resume continues it.
+  if(turnId){const resumes=Number(this.db.getMeta('resume_count:'+turnId)??0),limit=requestBudgetUsd(resumes),spent=this.db.turnUsage(turnId).costUsd;if(spent>=limit){this.db.event('ai.request_budget',{turnId,spentUsd:spent,limitUsd:limit});throw new InferenceError(`This request reached its $${limit.toFixed(2)} spending limit ($${spent.toFixed(2)} used). Completed work is saved; resume to continue with another $${requestBudgetUsd(0).toFixed(2)}.`,'request_budget');}}
   const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,failures,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
   // A one-hour cache write costs twice a five-minute one, so the lead switches to it only once a wait for workers in this
   // request has outlasted the five-minute cache; short requests keep the cheaper cache.
@@ -92,7 +96,7 @@ export class Director {
   if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Dream build.');
   this.db.setPhase(turnId,planning?'planning':readOnly?'answering':'editing');const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
   const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
-  if(planning)return codeAgent({...common,planning:true,model:models.director,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
+  if(planning){this.escalated(turnId,'plan',models.director,'The user asked for a plan first.');return codeAgent({...common,planning:true,model:models.director,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});}
   // Opus replies from the overview it is given and never inspects anything itself; Haiku answers with the read-only tools.
   if(readOnly)return codeAgent({...common,readOnly:true,model:route.intelligence==='opus'?models.director:models.editor,bare:route.intelligence==='opus',infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'answering',phase)});
   // Approved plans stay with the director for every step.
@@ -111,7 +115,7 @@ export class Director {
     :await codeAgent({...common,role:'solo',model:models.editor,consult:(issue,key)=>this.direction('Original request: '+text+'\nHaiku asks: '+issue,turnId,'consult-'+key),infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'execution',current.phase,false)});
    if(!result.switch)return result;
    const next={role:result.switch.to,phase:`${phase}:mode-${record.phases.length}`,handoff:result.switch.handoff};record={phases:[...record.phases,next]};
-   this.db.db.transaction(()=>{this.db.saveState(key,record);this.db.event('ai.mode_switch',{turnId,from:current.role,to:next.role,reason:result.switch!.reason});})();
+   this.db.db.transaction(()=>{this.db.saveState(key,record);this.db.event('ai.mode_switch',{turnId,from:current.role,to:next.role,reason:result.switch!.reason});if(next.role==='lead')this.escalated(turnId,'switch',models.lead,result.switch!.reason??'The editor handed the request to the director.');})();
    this.activity(turnId,'mode:'+next.phase,{kind:'action',tool:'switch_mode',text:next.role==='lead'?'Planning the remaining parts':'Finishing the remaining change directly',status:'complete'});
   }
  }
@@ -169,7 +173,7 @@ ${file.text}`).join('');
  }
  /** A one-shot Opus answer to Haiku's question. It has no tools: the question and the project overview are everything it uses. */
  private async direction(text:string,turnId:string,key:string){
-  const phase='direction-'+key;
+  const phase='direction-'+key;this.escalated(turnId,'consult',models.director,text.slice(-500));
   const result=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:'Provide creative or technical direction for this request: '+text,model:models.director,readOnly:true,bare:true,system:'You are the Opus creative director within Dream. Haiku is implementing this request and asked for direction. You cannot inspect anything: answer from the question and the project overview. Visuals are engine scenes: React components (Remotion timing, three.js, d3, bundled fonts, project media) that the Dream scene engine runs, published with publish_project; music and sound effects are written as score and sound files; audio and source video belong on the shared timeline. Workers never build renderers or other infrastructure. Never direct frame rendering, PNG sequences, video encoding or rendered previews during chat; published code appears live and only Export renders. Give a concise implementation brief with concrete creative decisions and checks, under eight points. If a decision depends on a fact you were not given, say what Haiku should check. Do not write the implementation or ask for plan approval. Return your brief as a normal final answer.',signal:this.signal(),publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'consultation',phase,false)});
   if(result.outcome.status==='blocked')throw new BlockedEditError(result.outcome);return result.outcome.summary;
  }
@@ -184,14 +188,18 @@ ${file.text}`).join('');
    return parseCodeRoute(JSON.parse(raw),text,intent,!!stopped);
   }catch(error){
    // Routing is advisory: a failed or malformed classification falls back to the local heuristic instead of failing the request.
-   if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication'].includes(error.code))throw error;
-   this.db.event('ai.route_fallback',{turnId,error:(error as Error).message});return local;
+   if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;
+   // A failed classification never sends the request to Opus by default: Haiku starts and can still call the director.
+   this.db.event('ai.route_fallback',{turnId,error:(error as Error).message});return local.intelligence==='opus'?{...local,intelligence:'haiku' as const,reason:'Routing was unavailable; Haiku starts and can call the director.'}:local;
   }
  }
  private recordRoute(turnId:string,route:any){
   if(route.projectTitle&&!this.db.getMeta('project_title_source')){this.db.rename(route.projectTitle);this.db.setMeta('project_title_source','ai');this.publish('state',this.db.state({bounded:true}));}
   this.db.setMeta('routing:'+turnId,JSON.stringify(route));this.db.event('ai.routed',{turnId,...route});
+  if(route.intelligence==='opus')this.escalated(turnId,'route',route.route==='question'?models.director:models.lead,route.reason??'Routed to the director.');
  }
+ /** Every time Opus takes part in a request, with the reason, so live runs show how often it happens and why. */
+ private escalated(turnId:string,kind:'route'|'switch'|'consult'|'plan',model:string,reason:string){this.db.event('ai.escalation',{turnId,kind,model,reason:String(reason).slice(0,500)});}
  async runTurn(text:string,turnId:string,selection:string[],intent:RequestIntent='auto'){
   if(this.db.getMeta('route:'+turnId)==='workflow'){await this.workflow(turnId);return;}
   let route=this.db.loadState<any>('routing:'+turnId);
