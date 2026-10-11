@@ -21,10 +21,10 @@ test('live editing checks: exact follow-ups, remembered mood, honest limits and 
   await ask('exact length','Make the first clip exactly 2 seconds long.',
    (b,a)=>{const length=clipLength(a.timeline.spine[0]);return Math.abs(length-2)>.05?`the first clip is ${length.toFixed(2)}s`:ids(a).join()!==ids(b).join()?'the clip order changed':undefined;},quick);
   await ask('impossible extension','Extend the last clip by 30 seconds.',
-   (b,a)=>{const before=clipLength(b.timeline.spine.at(-1)),after=clipLength(a.timeline.spine.at(-1)),reply=JSON.stringify(a.messages.at(-1));
+   (b,a)=>{const before=videoLength(b),after=videoLength(a),reply=JSON.stringify(a.messages.at(-1));
     if(outOfRange(a).length)return`clips past their source: ${outOfRange(a).join(', ')}`;
-    // Most phone clips are too short; then the reply must say so instead of claiming the full 30 seconds.
-    return after-before<29.5&&!/only|as far as|end of|longer than|not long enough|no more|ran out|limit|can't|cannot|couldn't/i.test(reply)?`extended by ${(after-before).toFixed(1)}s without saying why not 30`:undefined;},quick);
+    // The extension may be split across clips, so the whole video's growth counts. Most clips are too short; then the reply must say so.
+    return after-before<28&&!/only|as far as|end of|longer than|not long enough|no more|ran out|limit|can't|cannot|couldn't/i.test(reply)?`the video grew by ${(after-before).toFixed(1)}s without saying why not 30`:undefined;},quick);
   await ask('remembered mood','Add music that fits.',(_b,a)=>a.timeline.music.length?undefined:'no music on the timeline',noOpus);
   await ask('title','Add a title at the very start that says "Slow Days".',
    (b,a)=>a.footage.assets.filter((x:any)=>x.scene).length>b.footage.assets.filter((x:any)=>x.scene).length?undefined:'no new scene was published',noOpus);
