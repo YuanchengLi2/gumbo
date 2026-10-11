@@ -47,13 +47,29 @@ export function parseJitter(text:string,fps=ANALYSIS_FPS){
  return moves.map((move,i)=>{const window=moves.slice(Math.max(0,i-half),i+half+1),x=window.reduce((n,v)=>n+v[0],0)/window.length,y=window.reduce((n,v)=>n+v[1],0)/window.length;return{t:i/fps,px:Math.hypot(move[0]-x,move[1]-y)};});
 }
 
-/** One decode at analysis size measures the whole source. Runs at roughly 15 times real time on 1080p video. */
-export async function measureSignals(ffmpeg:string,source:string,duration:number,dir:string,signal:AbortSignal):Promise<Signals>{
- const meta='footage-map.txt',motion='footage-map.trf';
+/** One decode at analysis size measures a source, or the section [from,to) of it with times kept in the source's terms.
+ * Runs at roughly 15 times real time on 1080p video. */
+export async function measureSignals(ffmpeg:string,source:string,duration:number,dir:string,signal:AbortSignal,section?:{from:number;to:number;name:string}):Promise<Signals>{
+ const meta=`footage-map${section?'-'+section.name:''}.txt`,motion=`footage-map${section?'-'+section.name:''}.trf`,from=section?.from??0;
  // File names stay relative to the working directory: a Windows drive colon would end the filter option.
- await ffmpegIn(ffmpeg,['-hide_banner','-v','error','-i',source,'-an','-vf',`fps=${ANALYSIS_FPS},scale=320:-2,scdet=threshold=10,freezedetect=n=0.003:d=1,blackdetect=d=0.4:pix_th=0.1,blurdetect,signalstats,vidstabdetect=shakiness=5:accuracy=9:fileformat=ascii:result=${motion},metadata=print:file=${meta}`,'-f','null','-'],dir,signal);
- try{return{...parseFrameMetadata(readFileSync(join(dir,meta),'utf8'),duration),jitter:existsSync(join(dir,motion))?parseJitter(readFileSync(join(dir,motion),'utf8')):[]};}
- finally{for(const file of [meta,motion])rmSync(join(dir,file),{force:true});}
+ await ffmpegIn(ffmpeg,['-hide_banner','-v','error',...(section?['-ss',String(section.from),'-t',String(section.to-section.from)]:[]),'-i',source,'-an','-vf',`fps=${ANALYSIS_FPS},scale=320:-2,scdet=threshold=10,freezedetect=n=0.003:d=1,blackdetect=d=0.4:pix_th=0.1,blurdetect,signalstats,vidstabdetect=shakiness=5:accuracy=9:fileformat=ascii:result=${motion},metadata=print:file=${meta}`,'-f','null','-'],dir,signal);
+ try{
+  const measured={...parseFrameMetadata(readFileSync(join(dir,meta),'utf8'),(section?.to??duration)-from),jitter:existsSync(join(dir,motion))?parseJitter(readFileSync(join(dir,motion),'utf8')):[]};
+  if(!from)return measured;const shift=([a,b]:[number,number]):[number,number]=>[a+from,b+from];
+  return{cuts:measured.cuts.map(t=>t+from),frozen:measured.frozen.map(shift),black:measured.black.map(shift),samples:measured.samples.map(s=>({...s,t:s.t+from})),jitter:measured.jitter.map(j=>({...j,t:j.t+from}))};
+ }finally{for(const file of [meta,motion])rmSync(join(dir,file),{force:true});}
+}
+
+/** Sections measured one after another join into the whole: a frozen or black stretch running across a boundary is one. */
+export function joinSignals(parts:Signals[]):Signals{
+ const ranges=(list:[number,number][][])=>list.flat().sort((a,b)=>a[0]-b[0]).reduce<[number,number][]>((out,r)=>{const last=out.at(-1);if(last&&r[0]-last[1]<=.25)last[1]=Math.max(last[1],r[1]);else out.push([r[0],r[1]]);return out;},[]);
+ return{cuts:parts.flatMap(p=>p.cuts),frozen:ranges(parts.map(p=>p.frozen)),black:ranges(parts.map(p=>p.black)),samples:parts.flatMap(p=>p.samples),jitter:parts.flatMap(p=>p.jitter)};
+}
+
+/** Sections of a long source: a short first one so its opening is mapped within moments, then four-minute ones. */
+export function mapSections(duration:number){
+ const sections:{from:number;to:number}[]=[];for(let from=0;from<duration;){const to=Math.min(duration,from+(from===0?60:240));sections.push({from,to:duration-to<20?duration:to});from=sections.at(-1)!.to;}
+ return sections;
 }
 
 const overlap=(a:[number,number],start:number,end:number)=>Math.max(0,Math.min(a[1],end)-Math.max(a[0],start));
@@ -93,13 +109,26 @@ export function describeWithModel(db:ProjectDB,connect:(signal?:AbortSignal)=>Pr
 
 const visualProblems=new Set(['player_controls','recorder_window','desktop','pause_icon','text_overlay','watermark','letterbox','blurry','dark','obstructed']);
 
+type Mapped={shots:Shot[];map:NonNullable<Asset['footageMap']>};
+const measuredMap=(signals:Signals):NonNullable<Asset['footageMap']>=>({version:FOOTAGE_MAP_VERSION,status:'signals',frozen:signals.frozen.map(([a,b])=>[round(a)!,round(b)!]),black:signals.black.map(([a,b])=>[round(a)!,round(b)!])});
+
 /** Measures a source, then describes its shots with one look. Without a look (no connection, or it failed) the map
- * still carries every measurement, and status says so. */
-export async function mapFootage(options:{ffmpeg:string;asset:Asset;dir:string;signal:AbortSignal;describe?:Describe;contactSheet?:ProjectDB['contactSheet']}):Promise<{shots:Shot[];map:NonNullable<Asset['footageMap']>}>{
+ * still carries every measurement, and status says so. A long source is measured in sections, three at a time, and
+ * onProgress receives the map of the stretch measured from the start each time it grows, so editing can begin on the
+ * opening while the rest is measured. */
+export async function mapFootage(options:{ffmpeg:string;asset:Asset;dir:string;signal:AbortSignal;describe?:Describe;contactSheet?:ProjectDB['contactSheet'];onProgress?:(partial:Mapped)=>void}):Promise<Mapped>{
  const {ffmpeg,asset,dir,signal}=options,source=asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath;
- const signals:Signals=asset.kind==='image'?{cuts:[],frozen:[],black:[],samples:[],jitter:[]}:await measureSignals(ffmpeg,source,asset.durationSec,dir,signal);
+ let signals:Signals={cuts:[],frozen:[],black:[],samples:[],jitter:[]};
+ if(asset.kind!=='image'){
+  const sections=mapSections(asset.durationSec),measured:(Signals|undefined)[]=sections.map(()=>undefined);let next=0,reported=0;
+  const worker=async()=>{while(next<sections.length){const n=next++,section=sections[n];measured[n]=await measureSignals(ffmpeg,source,asset.durationSec,dir,signal,sections.length>1?{...section,name:String(n)}:undefined);
+   let done=0;while(done<sections.length&&measured[done])done++;
+   if(done>reported&&done<sections.length&&options.onProgress){reported=done;const until=sections[done-1].to,joined=joinSignals(measured.slice(0,done) as Signals[]);options.onProgress({shots:shotsFrom(asset.id,joined,until),map:{...measuredMap(joined),analyzedUntilSec:round(until)}});}}};
+  await Promise.all(Array.from({length:Math.min(3,sections.length)},worker));
+  signals=joinSignals(measured as Signals[]);
+ }
  const shots=asset.kind==='image'?[{id:`${asset.id}:map0`,assetId:asset.id,start:0,end:asset.durationSec,framePaths:[],quality:{brightness:.5,frozen:0,black:0,problems:[]}} as Shot]:shotsFrom(asset.id,signals,asset.durationSec);
- const map:NonNullable<Asset['footageMap']>={version:FOOTAGE_MAP_VERSION,status:'signals',frozen:signals.frozen.map(([a,b])=>[round(a)!,round(b)!]),black:signals.black.map(([a,b])=>[round(a)!,round(b)!])};
+ const map=measuredMap(signals);
  if(!options.describe||!options.contactSheet)return{shots,map};
  try{
   // The shots that are looked at: all of them up to sixteen, otherwise sixteen spread evenly through the source.

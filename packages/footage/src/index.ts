@@ -25,7 +25,7 @@ export const AssetSchema = z.object({
   source:z.object({path:z.string(),size:z.number().nonnegative(),modifiedAt:z.string()}).optional(),
   // The footage map: problems found across the whole source (frozen or black stretches), a one-line summary from one
   // look at its shots, and how far analysis got. Shots carry the per-shot detail.
-  footageMap:z.object({version:z.number().int(),status:z.enum(['signals','complete']),summary:z.string().optional(),frozen:z.array(z.tuple([z.number(),z.number()])).default([]),black:z.array(z.tuple([z.number(),z.number()])).default([]),error:z.string().optional()}).optional(),
+  footageMap:z.object({version:z.number().int(),status:z.enum(['signals','complete']),analyzedUntilSec:z.number().nonnegative().optional(),summary:z.string().optional(),frozen:z.array(z.tuple([z.number(),z.number()])).default([]),black:z.array(z.tuple([z.number(),z.number()])).default([]),error:z.string().optional()}).optional(),
   // Integrated loudness of the source's audio (EBU R128), so clips can be evened out and the mix normalized.
   loudnessLufs:z.number().optional(),
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional(),beats:z.array(z.number().nonnegative()).max(20000).optional()}).optional()

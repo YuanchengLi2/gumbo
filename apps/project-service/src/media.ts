@@ -56,14 +56,16 @@ export class Ingest {
   const assets=this.db.db.prepare('SELECT json FROM assets WHERE id=?'),jobs=this.db.db.prepare('SELECT step,status,error FROM jobs WHERE asset_id=?');
   for(;;){signal.throwIfAborted();let ready=true;for(const id of ids){const row=assets.get(id) as {json:string}|undefined;if(!row)throw new Error('Imported media is missing.');const asset=AssetSchema.parse(JSON.parse(row.json));if(asset.playback?.ready)continue;const required=[...(asset.kind==='video'&&asset.playback?.video!=='original'?['proxy']:[]),...(asset.hasAudio?['playback_audio']:[])];const states=jobs.all(id) as {step:string;status:string;error?:string}[];if(asset.status==='failed')throw new Error(states.find(j=>j.step==='analysis')?.error??'Media preparation failed.');for(const step of required){const job=states.find(j=>j.step===step);if(job?.status==='failed')throw new Error(job.error??`Could not prepare ${asset.filename}.`);if(job?.status!=='complete')ready=false;}}if(ready)return;await wait(100,undefined,{signal});}
  }
- async ensureTranscript(assetId:string,signal:AbortSignal){
+ /** Starts or resumes transcription and waits until it is complete or, while it runs, until enough() says the part being
+  * read is there (it is saved chunk by chunk), for at most 45 seconds: the caller works with what has arrived. */
+ async ensureTranscript(assetId:string,signal:AbortSignal,enough:()=>boolean=()=>false){
   const asset=this.db.footage().assets.find(a=>a.id===assetId);if(!asset?.hasAudio)throw new Error('This media has no audio track.');
   const job=()=>this.db.state().jobs.find(j=>j.assetId===assetId&&j.step==='transcription');
   if(job()?.status==='complete')return;
   if(!this.speech)throw new Error('Transcription is unavailable.');
   this.startSpeech(asset);
-  const deadline=Date.now()+120000;
-  for(;;){signal.throwIfAborted();const current=job();if(current?.status==='complete')return;if(current&&['failed','interrupted'].includes(current.status))throw new Error(current.error??'Transcription could not finish.');if(Date.now()>deadline)throw new Error('Transcription is still in progress. Read the transcript again shortly.');await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},200);const abort=()=>{clearTimeout(timer);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});});}
+  const deadline=Date.now()+45000;
+  for(;;){signal.throwIfAborted();const current=job();if(current?.status==='complete'||enough()||Date.now()>deadline)return;if(current&&['failed','interrupted'].includes(current.status))throw new Error(current.error??'Transcription could not finish.');await new Promise<void>((resolve,reject)=>{const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},200);const abort=()=>{clearTimeout(timer);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});});}
  }
  modelsChanged(){if(!process.env.DREAM_WHISPER_MODEL)return;const state=this.db.state();for(const asset of state.footage.assets)if(state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='waiting_for_model'))this.retry(asset,'transcription');}
  retry(asset:Asset,step?:string){this.canceled=false;if(this.speech&&step==='transcription'){this.startSpeech(asset);return;}if(this.queue.some(a=>a.asset.id===asset.id)||this.background.some(a=>a.asset.id===asset.id)||this.preparing.has(asset.id)||this.analyzing.has(asset.id))return;asset.status='registered';this.db.saveAsset(asset);this.db.job(asset.id,'analysis','queued');this.queue.push({asset,step:step==='analysis'?undefined:step});void this.drain();}
@@ -126,7 +128,8 @@ export class Ingest {
   // Context needs source frames and optional speech, not model-dependent indexing jobs.
   if(a.kind==='image')this.db.replaceRecords('shots',a.id,[{id:`${a.id}:shot0`,assetId:a.id,start:0,end:a.durationSec,framePaths:a.thumbnailPath?[a.thumbnailPath]:[]}]);
   // The footage map: measured problems and one look at the shots, so edits are chosen from what the footage shows.
-  if(a.kind==='video'||a.kind==='image')await stage('footage_map',async()=>{const result=await mapFootage({ffmpeg:this.ffmpeg,asset:a,dir,signal,describe:this.describe,contactSheet:this.db.contactSheet?.bind(this.db)});this.db.replaceRecords('shots',a.id,result.shots);a.footageMap=result.map;},undefined,`:map-${FOOTAGE_MAP_VERSION}${this.describe?':look':''}`);
+  // Its opening is saved as soon as it is measured, and the map grows from there.
+  if(a.kind==='video'||a.kind==='image')await stage('footage_map',async()=>{const result=await mapFootage({ffmpeg:this.ffmpeg,asset:a,dir,signal,describe:this.describe,contactSheet:this.db.contactSheet?.bind(this.db),onProgress:partial=>{signal.throwIfAborted();this.db.replaceRecords('shots',a.id,partial.shots);a.footageMap=partial.map;this.save(a);this.db.job(a.id,'footage_map','running',Math.round((partial.map.analyzedUntilSec??0)/a.durationSec*100));publish();}});this.db.replaceRecords('shots',a.id,result.shots);a.footageMap=result.map;},undefined,`:map-${FOOTAGE_MAP_VERSION}${this.describe?':look':''}`);
   if(a.hasAudio&&a.audioPath&&existsSync(a.audioPath))await stage('loudness',async()=>{a.loudnessLufs=await measureLoudness(this.ffmpeg,a.audioPath!,signal);},undefined,':loudness-1');
   const sidecar=process.env.DREAM_INGEST_BINARY;
   for(const name of [...(requested==='shots'?['shots' as const]:[]),...(requested==='audio_features'?['audio_features' as const]:[])]){
