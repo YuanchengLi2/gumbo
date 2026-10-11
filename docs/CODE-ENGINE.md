@@ -97,7 +97,7 @@ Every role says in one sentence what it is about to do, adds brief updates when 
 
 Each phase is a checkpointed conversation. Tool calls and results are persisted as complete pairs; a replayed call ID returns its saved receipt and never repeats an effect.
 
-- **Spending limit**: each request may spend $2 (`DREAM_REQUEST_BUDGET_USD`), checked before every model call; at the limit it stops as interrupted with its work saved, and each resume allows the same amount again.
+- **Spending limit**: each request may spend $3 (`DREAM_REQUEST_BUDGET_USD`), checked before every model call; at the limit it stops as interrupted with its work saved, and each resume allows the same amount again.
 - **Step limits**: 100 model calls for the lead and 80 for other roles. Haiku or Sonnet working alone hands over to the next model at the limit; otherwise it reports a blocker, never completion.
 - **Text-only responses**: nudged at most twice. Engine nudges are tagged and dropped at compaction.
 - **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`). The second failure moves a solo request up the ladder (or asks the next model up when switching is not available); the third identical failure, or the fourth similar one, ends the request as blocked.

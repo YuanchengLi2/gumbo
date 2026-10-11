@@ -1,6 +1,6 @@
 # Dream scene engine
 
-A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose default export draws one frame. Dream runs it: loading, frame timing, playback, seeking, fonts, media access, 3D setup and export are handled for you. Write only the code for the video itself. Do not write renderers, loaders, frame loops, bundlers or build steps. This reference is complete: you do not need to search the workspace for engine, score or project-document formats.
+A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose default export draws one frame. Dream runs it: loading, frame timing, playback, seeking, fonts, media access, 3D setup and export are handled for you. You do not need to write renderers, loaders, frame loops or build steps for scenes; anything else a scene needs, install it. This reference is complete: you do not need to search the workspace for engine, score or project-document formats.
 
 ## Declaring a scene
 

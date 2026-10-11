@@ -56,3 +56,14 @@ it('gives timeline actions to editors and the publishing worker only',()=>{
  // Actions are checked where they are applied, so a malformed one still reaches the workspace and gets a precise error.
  expect(parseCodeTool('edit_timeline',{actions:[{type:'trim_clip',clipId:'a',srcOut:'x'}]}).actions).toHaveLength(1);
 });
+
+it('places media the agent produced with its own tools, such as a cleaned-up recording, as a video output',async()=>{
+ const {db,root}=await fixture();try{
+  const {spawnSync}=await import('node:child_process'),{mkdirSync}=await import('node:fs'),ffmpeg=(await import('ffmpeg-static')).default!,ffprobe=(await import('ffprobe-static')).default.path;
+  const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg,ffprobe},()=>{});await ws.initialize();
+  mkdirSync(join(root,'Workspace/output'),{recursive:true});
+  const made=spawnSync(ffmpeg,['-y','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=30:d=3','-f','lavfi','-i','sine=frequency=300:duration=3','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',join(root,'Workspace/output/clean.mp4')],{windowsHide:true});expect(made.status).toBe(0);
+  await edit(ws,'c1',{outputs:[{id:'clean',path:'output/clean.mp4',kind:'video'}],actions:[{type:'insert_clip',position:0,clip:{id:'a',assetId:'output:clean',srcIn:0,srcOut:3}}]});
+  const placed=db.footage().assets.find(a=>a.id===db.timeline().spine[0].assetId)!;expect(placed).toMatchObject({kind:'video',hasAudio:true});expect(placed.durationSec).toBeCloseTo(3,0);
+ }finally{db.close();}
+},60_000);
