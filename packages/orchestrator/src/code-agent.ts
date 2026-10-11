@@ -133,6 +133,8 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
       const broken=input.status==='complete'&&!planning&&!options.research?workspace.sceneErrors?.(turnId)??[]:[];
       if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them${role==='lead'?' through a build worker':''} and publish again before finishing.`);
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
+      // The editor or director keeps the project notes that carry the user's wishes into later requests; workers never write them.
+      if(input.notes?.trim()&&role!=='worker'&&!phase.startsWith('direction-'))db.setMeta('preferences',input.notes.trim());
      }else if(call.name==='delegate'){
       if(!options.runWorkers)throw new Error('Delegation is unavailable in this phase.');
       validateDelegation(input.tasks);

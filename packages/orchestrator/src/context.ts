@@ -2,6 +2,7 @@ import {syncContext} from '../../project-db/src/context-index';
 import {activeDecisions} from './project-memory';
 import {z} from 'zod';
 import {resolve} from '@dream/timeline';
+import {timelineOutline} from './timeline-outline';
 import type {ProjectDB} from '@dream/project-db';
 
 type Chunk={id:string;kind:string;owner:string;text:string;hash:string};
@@ -36,7 +37,7 @@ export class ProjectContext {
   const footage=p.search(terms(query).join(' ')).slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
   // Follow-ups ("do that", "make it bluer") depend on the preceding exchange.
   const previous=p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 6").all() as {id:string;role:string;text:string}[];
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),relevant,footageHits:footage,preferences:(p.getMeta('preferences')??'').slice(0,1600),recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,1500)})),retrieval:{available:['timeline','assets','footage','conversation','library','code','preferences','task_plan','outline','decision','workflow','observation'],search:'search (scope project)',read:'read_file with scope project and a chunk id',timeline:'project.json'}};
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,1500)})),retrieval:{available:['timeline','assets','footage','conversation','library','code','preferences','task_plan','outline','decision','workflow','observation'],search:'search (scope project)',read:'read_file with scope project and a chunk id',timeline:'project.json'}};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();

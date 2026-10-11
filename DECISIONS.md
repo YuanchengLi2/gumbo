@@ -204,3 +204,8 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 - A plain follow-up edit (an instruction such as "make it warmer" or "add crossfades", not a question, a plan, a script or a call for a stronger model) on a titled project with a timeline goes straight to Haiku without a router call, which saves a round trip before work starts.
 - Every move to a model above Haiku is an ai.escalation event with its kind and reason, and each mode switch records the models on both sides.
 - Planning requests (plan first) and approved plans still run with Opus, since the user asked for them explicitly.
+
+## October 10, 2026 — Project notes and timeline outline
+
+- Every request starts with an outline of the video in order: one line per clip with its place on the timeline, source and range, speed, framing, grade and transition, then overlays, sound effects, music and captions. Follow-ups such as "the middle clip" or "the title" can be acted on without reading project.json or looking at the footage again. Workers get the same outline in their snapshot.
+- The editor or director keeps project notes: finish takes optional notes (what the user wants for this video overall, such as mood, style, pacing, likes and dislikes, and lasting decisions), which replace the previous notes and appear as projectNotes in every later request. They are written in the call that already ends the request, so they cost no extra model call. Workers and consultations never write them. Verbatim user preferences still go through remember_decision.

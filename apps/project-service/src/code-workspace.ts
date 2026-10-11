@@ -16,6 +16,7 @@ import {contentHash} from '../../../packages/project-db/src/blob-store';
 import {withinScopes,normalizeScope} from '../../../packages/orchestrator/src/code-tools';
 import {WorkspaceIndex} from '../../../packages/project-db/src/workspace-index';
 import {ProjectContext} from '../../../packages/orchestrator/src/context';
+import {timelineOutline} from '../../../packages/orchestrator/src/timeline-outline';
 import {FileApprovalRequired} from '../../../packages/orchestrator/src/file-tools';
 import {toolActivity,fileChanges} from '../../../packages/orchestrator/src/activity';
 import {inspectMedia} from './media-evidence';
@@ -39,7 +40,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
  currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId,{changedOnly:false});return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
- snapshot(){const {indexRevision:_revision,recentDirection:_direction,...overview}=new ProjectContext(this.db).overview() as any;return{overview,media:this.mediaContext(),capabilities:engineCapabilities(),computer:this.computerContext(),decisions:activeDecisions(this.db),projectDocument:'project.json'};}
+ snapshot(){const {indexRevision:_revision,recentDirection:_direction,...overview}=new ProjectContext(this.db).overview() as any;return{overview,timeline:timelineOutline(this.db.timeline(),this.db.footage()),projectNotes:(this.db.getMeta('preferences')??'').slice(0,1600)||undefined,media:this.mediaContext(),capabilities:engineCapabilities(),computer:this.computerContext(),decisions:activeDecisions(this.db),projectDocument:'project.json'};}
  readContext(paths:string[],maxCharacters:number){
   const files:{path:string;text:string;truncated:boolean}[]=[];let left=maxCharacters;
   for(const path of paths){if(left<=0)break;try{const text=readFileSync(workspacePath(this.root,path),'utf8');files.push({path,text:text.slice(0,left),truncated:text.length>left});left-=Math.min(text.length,left);}catch{files.push({path,text:'(not found)',truncated:false});}}
