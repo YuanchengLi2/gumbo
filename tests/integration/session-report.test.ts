@@ -17,5 +17,5 @@ it('reports each request of a session with its cost, model calls, largest contex
  expect(rows).toHaveLength(2);
  expect(rows[0]).toMatchObject({request:'Make it gloomy',status:'complete',calls:2,maxContextTokens:20050,escalations:[{kind:'switch',model:'opus',reason:'Repeated failure'}],byModel:{haiku:{calls:1},opus:{calls:1}}});
  expect(rows[0].costUsd).toBeCloseTo(.21);
- const text=formatReport(rows,rows);expect(text).toContain('Opus (switch): Repeated failure');expect(text).toContain('Total: $0.212 (Opus $0.200)');
+ const text=formatReport(rows,rows);expect(text).toContain('opus (switch): Repeated failure');expect(text).toContain('Total: $0.212 (Opus $0.200)');
 });

@@ -1,5 +1,5 @@
 /** Per-request numbers for an editing session, read from a project's own database: time, cost, model calls, the largest
- * context sent, moves to Opus and compactions. Usage: tsx scripts/session-report.ts <project folder> [--compare <older folder>]
+ * context sent, moves to a stronger model and compactions. Usage: tsx scripts/session-report.ts <project folder> [--compare <older folder>]
  * The live session test writes the same report after each step. Opens the database read-only, so it works on a copy or
  * on a project the app has open. */
 import Database from 'better-sqlite3';
@@ -28,7 +28,7 @@ export function sessionReport(folder:string):RequestReport[]{
 const money=(n:number)=>'$'+n.toFixed(3);
 export function formatReport(rows:RequestReport[],older?:RequestReport[]){
  const lines=rows.map((r,i)=>{const o=older?.[i],delta=(now:number,before:number|undefined,format:(n:number)=>string)=>before===undefined?'':` (${now<=before?'':'+'}${format(now-before)})`;
-  return[`${String(i+1).padStart(2)}. ${r.request.slice(0,60)}`,`    ${r.status}, ${r.seconds}s${delta(r.seconds,o?.seconds,n=>Math.round(n)+'s')}, ${money(r.costUsd)}${delta(r.costUsd,o?.costUsd,money)}, ${r.calls} calls${delta(r.calls,o?.calls,String)} [${Object.entries(r.byModel).map(([m,v])=>`${m} ${v.calls}`).join(', ')}], largest context ${Math.round(r.maxContextTokens/1000)}K${delta(r.maxContextTokens,o?.maxContextTokens,n=>Math.round(n/1000)+'K')}, ${Math.round(r.cacheReadShare*100)}% cached`,...r.escalations.map(e=>`    Opus (${e.kind}): ${e.reason}`),...(r.compactions?[`    ${r.compactions} compaction${r.compactions>1?'s':''}`]:[]),...(r.budgetStops?['    stopped at the request spending limit']:[])].join('\n');});
+  return[`${String(i+1).padStart(2)}. ${r.request.slice(0,60)}`,`    ${r.status}, ${r.seconds}s${delta(r.seconds,o?.seconds,n=>Math.round(n)+'s')}, ${money(r.costUsd)}${delta(r.costUsd,o?.costUsd,money)}, ${r.calls} calls${delta(r.calls,o?.calls,String)} [${Object.entries(r.byModel).map(([m,v])=>`${m} ${v.calls}`).join(', ')}], largest context ${Math.round(r.maxContextTokens/1000)}K${delta(r.maxContextTokens,o?.maxContextTokens,n=>Math.round(n/1000)+'K')}, ${Math.round(r.cacheReadShare*100)}% cached`,...r.escalations.map(e=>`    ${e.model} (${e.kind}): ${e.reason}`),...(r.compactions?[`    ${r.compactions} compaction${r.compactions>1?'s':''}`]:[]),...(r.budgetStops?['    stopped at the request spending limit']:[])].join('\n');});
  const total=(list:RequestReport[])=>({cost:list.reduce((n,r)=>n+r.costUsd,0),seconds:list.reduce((n,r)=>n+r.seconds,0),opus:list.reduce((n,r)=>n+(r.byModel.opus?.costUsd??0),0)});
  const now=total(rows),before=older?total(older.slice(0,rows.length)):undefined;
  lines.push(`Total: ${money(now.cost)} (Opus ${money(now.opus)}), ${now.seconds}s`+(before?` — before: ${money(before.cost)} (Opus ${money(before.opus)}), ${before.seconds}s`:''));

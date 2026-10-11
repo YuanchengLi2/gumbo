@@ -43,7 +43,7 @@ it('answers a request for a script after a stop as a new turn, and continues the
   await director.message('Create a Minecraft animated short about Claude');expect(db.getMeta('ai_status')).toBe('interrupted');const first=pending(db);
   await director.message('wait can you make a script for it first');
   expect(calls.filter(c=>c.purpose==='routing').at(-1)!.messages).toContain('Create a Minecraft animated short about Claude');
-  const answer=calls.at(-1)!;expect(answer).toMatchObject({purpose:'answering',model:models.director,tools:[]});
+  const answer=calls.at(-1)!;expect(answer).toMatchObject({purpose:'answering',model:models.sonnet,tools:[]});
   expect(db.getMeta('ai_status')).toBe('complete');expect(pending(db)).not.toBe(first);
   expect(db.state().messages.at(-1)).toMatchObject({role:'assistant',text:'Script: Steve opens a chest and finds Claude, who explains what it can do.'});
   expect(db.state().messages.filter(m=>m.turnId===first&&m.role==='user')).toHaveLength(1);
@@ -81,7 +81,7 @@ it('lets the director dispatch read-only research beside a build worker, which a
  }finally{db.close();}
 });
 
-it('switches between Haiku alone and the director with a handoff each way, at most twice per request',async()=>{
+it('switches between Haiku alone and a Sonnet director with a handoff each way, at most twice per request',async()=>{
  const db=fixture(),calls:Call[]=[];try{
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspaceFor(db));
   director.inference=async(model,_system,messages,tools=[],_turn,_force,purpose='execution',phase='main')=>{
@@ -93,7 +93,7 @@ it('switches between Haiku alone and the director with a handoff each way, at mo
   };
   await director.message('Make an intro, a demo and an outro that flow together');expect(db.getMeta('ai_status')).toBe('complete');
   const lead=calls.find(c=>c.purpose==='lead')!,last=calls.filter(c=>c.purpose==='execution').at(-1)!;
-  expect(lead.model).toBe(models.lead);expect(lead.messages).toContain('Wrote the intro scene; nothing is published yet.');expect(lead.tools).toContain('hand_off');
+  expect(lead.model).toBe(models.sonnet);expect(lead.messages).toContain('Wrote the intro scene; nothing is published yet.');expect(lead.tools).toContain('hand_off');
   expect(last.phase).toBe('main:mode-2');expect(last.messages).toContain('Publish it and set it to 3 seconds.');expect(last.tools).not.toContain('switch_to_orchestrated');
   expect(calls.find(c=>c.phase==='main'&&c.purpose==='execution')!.tools).toContain('switch_to_orchestrated');
   expect(db.loadState<any>('modes:'+pending(db)+':main').phases.map((p:any)=>p.role)).toEqual(['solo','lead','solo']);
@@ -102,7 +102,7 @@ it('switches between Haiku alone and the director with a handoff each way, at mo
  }finally{db.close();}
 });
 
-it('hands a repeatedly failing Haiku edit to the director, who finishes an unchanged project without publishing itself',async()=>{
+it('moves a repeatedly failing edit from Haiku to Sonnet and then to the Opus director, who finishes an unchanged project without publishing itself',async()=>{
  const db=fixture(),calls:Call[]=[],executed:string[]=[];try{
   const workspace={...workspaceFor(db,executed),execute:async(name:string)=>{executed.push(name);if(name==='write_file')throw new Error('The scene file could not be written: disk full');return{publication:{versionId:db.head(),assets:[],unchanged:true}};}};
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
@@ -113,8 +113,10 @@ it('hands a repeatedly failing Haiku edit to the director, who finishes an uncha
    return toolUse('w'+calls.length,'write_file',{path:'src/title.html',content:'<p>Title</p>'});
   };
   await director.message('Add a title card that says Hello');
-  expect(db.getMeta('ai_status')).toBe('complete');expect(calls.filter(c=>c.purpose==='execution')).toHaveLength(2);
-  expect(calls.find(c=>c.purpose==='lead')!.messages).toContain('kept failing');
+  expect(db.getMeta('ai_status')).toBe('complete');expect(calls.filter(c=>c.purpose==='execution').map(c=>c.model)).toEqual([models.editor,models.editor,models.sonnet,models.sonnet]);
+  const lead=calls.find(c=>c.purpose==='lead')!;expect(lead.model).toBe(models.director);expect(lead.messages).toContain('kept failing');
+  expect(db.loadState<any>('modes:'+pending(db)+':main').phases.map((p:any)=>`${p.role}:${p.model}`)).toEqual([`solo:${models.editor}`,`solo:${models.sonnet}`,`lead:${models.director}`]);
+  expect(db.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type='ai.escalation'").get()).toMatchObject({n:2});
   // The director never received a publishing tool; the engine confirmed the unchanged project.
   expect(calls.find(c=>c.purpose==='lead')!.tools).not.toContain('publish_project');expect(executed.filter(n=>n==='publish_project')).toHaveLength(1);
  }finally{db.close();}
