@@ -60,6 +60,20 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  const unpublished=()=>workspace.unpublishedChanges?.()??[];
  const publishedHead=()=>{const found=headPublication();return found&&!unpublished().length?found:undefined;};
  const needsPublication=()=>!readOnly&&!planning&&role!=='worker';
+ // One gate for every way an edit can end complete: the finish call, a plain reply and running out of nudges. It names
+ // what still stands in the way: an unpublished head, scenes that failed while playing, must-fix checks not kept with a
+ // reason, or delegated work left blocked. Unfinished work is never reported as done.
+ const completionBlocker=(kept:Set<string>=new Set()):string|undefined=>{
+  if(!needsPublication())return;
+  const current=publishedHead(),pending=current?[]:unpublished();
+  if(!current&&pending.length&&headPublication())return`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`;
+  if(!current)return'Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.';
+  const broken=workspace.sceneErrors?.(turnId)??[];
+  if(broken.length)return`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them and publish again before finishing.`;
+  const open=(workspace.editChecks?.(turnId)?.mustFix??[]).filter(c=>!kept.has(c.id));
+  if(open.length)return`The published edit still has: ${open.slice(0,8).map(c=>`[${c.id}] ${c.text}`).join(' ')}${open.length>8?` …and ${open.length-8} more.`:''} Fix these and publish again, or keep one by listing its id with a reason in kept.`;
+  if(checkpoint.blockedTasks?.length)return`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`;
+ };
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
  const conclude=(outcome:EditOutcome)=>{checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
@@ -102,14 +116,14 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    if(['refusal','model_context_window_exceeded'].includes(response.stop_reason)){conclude({status:'blocked',summary:response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n')||'The provider could not complete this request.',evidence:[],nextAction:response.stop_reason==='refusal'?'Revise the request before continuing.':'Continue with a smaller, focused scope.'});closeBatch();save();return{outcome:checkpoint.outcome!};}
    if(!checkpoint.pending!.length){
     const answer=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim(),nudges=checkpoint.nudges??0;delete checkpoint.pending;
-    const current=publishedHead();
-    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||role==='worker'||current&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||role==='worker'||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
+    const current=publishedHead(),blocker=completionBlocker();
+    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||role==='worker'||current&&!blocker&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||role==='worker'||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
     if(nudges>=engineBudgets.textNudges){
-     // Stop nudging: accept a published edit, otherwise report honestly instead of looping.
-     conclude(!planning&&current&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:answer||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
+     // Stop nudging: accept a published edit that passes the gate, otherwise report honestly instead of looping.
+     conclude(!planning&&current&&!blocker&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:[answer,blocker].filter(Boolean).join('\n\n')||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':blocker?'Resume to fix what is listed, then finish.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
     }
     checkpoint.nudges=nudges+1;
-    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':'Continue the requested work using the available capabilities, or call finish (complete once published, or blocked with a concrete reason).'});save();continue;
+    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':current&&blocker?`The request is not finished: ${blocker} Then call finish.`:'Continue the requested work using the available capabilities, or call finish (complete once published, or blocked with a concrete reason).'});save();continue;
    }
    checkpoint.nudges=0;
   }
@@ -132,21 +146,13 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       if(planning&&input.status==='complete'&&!input.plan)throw new Error('Return the requested editable plan with finish.');
       let evidence=input.evidence.filter((e:any)=>checkpoint.completed[e.toolCallId]);
       if(input.status==='complete'&&needsPublication()){
-       const current=publishedHead(),pending=current?[]:unpublished();
-       if(!current&&pending.length&&headPublication())throw new Error(`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`);
-       if(!current)throw new Error('Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.');
+       const blocker=completionBlocker(new Set((input.kept??[]).map((k:any)=>k.check)));if(blocker)throw new Error(blocker);
+       const current=publishedHead()!;
        if(!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
       }
-      // Scenes changed in this request that failed while playing must be fixed first (errors come from the visible player and chat previews).
-      const broken=input.status==='complete'&&!planning?workspace.sceneErrors?.(turnId)??[]:[];
-      if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them and publish again before finishing.`);
-      // What this request published may not keep footage used twice, a cut inside a word or long silence unless the agent
-      // keeps it with a reason, and work delegated in it may not be left blocked: unfinished work is never reported as done.
-      if(input.status==='complete'&&!planning&&role!=='worker'){
-       const kept=new Set((input.kept??[]).map((k:any)=>k.check)),open=(workspace.editChecks?.(turnId)?.mustFix??[]).filter(c=>!kept.has(c.id));
-       if(open.length)throw new Error(`The published edit still has: ${open.slice(0,8).map(c=>`[${c.id}] ${c.text}`).join(' ')}${open.length>8?` …and ${open.length-8} more.`:''} Fix these and publish again, or keep one by listing its id with a reason in kept.`);
-       if(checkpoint.blockedTasks?.length)throw new Error(`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`);
-      }
+      // A helper's scenes that failed while playing must be fixed before it reports done (errors come from the visible player and chat previews).
+      const broken=input.status==='complete'&&role==='worker'?workspace.sceneErrors?.(turnId)??[]:[];
+      if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them before finishing.`);
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
       // The editing agent keeps the project notes that carry the user's wishes into later requests; helpers never write them.
       if(input.notes?.trim()&&role!=='worker')db.setMeta('preferences',input.notes.trim());

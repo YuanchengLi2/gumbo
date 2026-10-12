@@ -78,7 +78,7 @@ it('stops at the step limit and after bounded nudges instead of looping',async()
   let reads=0;const capped=await codeAgent({...base,phase:'loop',infer:async()=>toolUse('read'+reads++,'list_files',{path:'.'})});
   expect(capped.outcome.status).toBe('blocked');expect(capped.outcome.summary).toContain('step limit');expect(reads).toBe(80);
   let texts=0;const talker=await codeAgent({...base,phase:'talk',infer:async()=>{texts++;return{content:[{type:'text',text:'I would change the opening.'}],stop_reason:'end_turn',usage:{}};}});
-  expect(texts).toBe(3);expect(talker.outcome).toMatchObject({status:'blocked',summary:'I would change the opening.'});
+  expect(texts).toBe(3);expect(talker.outcome.status).toBe('blocked');expect(talker.outcome.summary).toContain('I would change the opening.');expect(talker.outcome.summary).toContain('Publish the current revision');
   let worker=0;const report=await codeAgent({...base,phase:'worker',role:'worker',infer:async()=>{worker++;return{content:[{type:'text',text:'Wrote src/intro/scene.html.'}],stop_reason:'end_turn',usage:{}};}});
   expect(worker).toBe(1);expect(report.outcome).toMatchObject({status:'complete',summary:'Wrote src/intro/scene.html.'});
  }finally{db.close();}

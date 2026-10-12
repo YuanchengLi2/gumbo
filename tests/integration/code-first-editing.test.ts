@@ -72,6 +72,37 @@ it('will not finish while the published edit has unresolved must-fix checks, and
  }finally{db.close();}
 },60_000);
 
+it('never reports an edit with must-fix checks as done when the agent just stops with a reply: it is told why, then the request ends blocked',async()=>{
+ const {root,db,ws}=await fixture();try{
+  const doc=document(root);doc.timeline.spine=[clip('a',1.2,7),clip('b',2,5)];
+  let step=0;const nudges:string[]=[];
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Cut the talk',model:models.agent,signal:signal(),publish:()=>{},infer:async(_model:string,_system:string,messages:any[])=>{
+   step++;const last=messages.at(-1);if(last?.dreamSource==='nudge')nudges.push(String(last.content));
+   if(step===1)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}}]};
+   if(step===2)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'publish',name:'publish_project',input:{}}]};
+   // What Haiku did in the live run: say it is not finished, and end the turn anyway.
+   return{stop_reason:'end_turn',content:[{type:'text',text:'The cut is published, but it isn\'t finished: some silences remain.'}]};
+  }} as any);
+  expect(nudges.length).toBeGreaterThan(0);expect(nudges[0]).toContain('The request is not finished');expect(nudges[0]).toContain('[repeat:a:b]');
+  expect(result.outcome.status).toBe('blocked');expect(result.outcome.summary).toContain('The published edit still has');
+  expect((result.outcome as any).nextAction).toContain('fix');
+ }finally{db.close();}
+},60_000);
+
+it('completes an edit when the agent stops with a reply once everything is published and nothing is left to fix',async()=>{
+ const {root,db,ws}=await fixture();try{
+  const doc=document(root);doc.timeline.spine=[clip('a',2.2,4)];
+  let step=0;
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Trim the opening',model:models.agent,signal:signal(),publish:()=>{},infer:async()=>{
+   step++;
+   if(step===1)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}}]};
+   if(step===2)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'publish',name:'publish_project',input:{}}]};
+   return{stop_reason:'end_turn',content:[{type:'text',text:'Trimmed the opening.'}]};
+  }} as any);
+  expect(result.outcome).toMatchObject({status:'complete',summary:'Trimmed the opening.'});expect(step).toBe(3);
+ }finally{db.close();}
+},60_000);
+
 it('lets the agent look at an image its code made',async()=>{
  const {root,db,ws}=await fixture({ffmpeg:ffmpeg!,ffprobe:ffprobe.path});try{
   mkdirSync(join(root,'Workspace/output'),{recursive:true});const sheet=join(root,'Workspace/output/sheet.png');
