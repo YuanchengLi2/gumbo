@@ -56,3 +56,25 @@ it('continues the provider request after subscriber loss and saves its full resu
  await first.stream!.cancel();complete();await first.finished;expect(records.get('durable').status).toBe('completed');
  const replay=await handleAI(body,'user',{db,key:'fixture',requests,fetcher:async()=>{throw new Error('Must not generate twice');}});expect(replay.body.content[1].name).toBe('create_visual');expect(providerCalls).toBe(1);expect(updates).toHaveLength(1);
 });
+
+it('records a response that cannot be decoded with what the stream showed, then retries it',async()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-stream-failure-')),'Stream failure');let attempts=0;
+ try{
+  const input={model:'claude-sonnet-5-5',system:'Edit',messages:[{role:'user',content:'Edit'}],tools:[],turnId:'turn',purpose:'execution',phase:'main',max_tokens:8192};
+  // The first stream stops a tool call's block without ever closing it, then ends the message.
+  const broken=events().filter(e=>!(e.type==='content_block_stop'&&e.index===1));
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{wait:async()=>{},fetch:async url=>{
+   if(!String(url).endsWith('/ai'))return Response.json({},{status:404});
+   return streamed(attempts++===0?broken:events());}});
+  expect(response.stop_reason).toBe('tool_use');expect(attempts).toBe(2);
+  const failed=(db.db.prepare("SELECT json FROM events WHERE type='ai.inference_failed'").all() as {json:string}[]).map(r=>JSON.parse(r.json));
+  expect(failed).toHaveLength(1);expect(failed[0]).toMatchObject({turnId:'turn',model:'claude-sonnet-5-5',code:'invalid_stream',diagnostics:{openBlocks:[1]}});
+  expect(failed[0].diagnostics.recent).toEqual(expect.arrayContaining(['content_block_delta','message_stop']));expect(failed[0].diagnostics.blocks).toEqual(['thinking','tool_use']);
+ }finally{db.close();}
+});
+
+it('names a stream event that is not JSON as an invalid stream, with what arrived',async()=>{
+ const body=new TextEncoder().encode('event: message_start\ndata: {"type":"message_start","message":{"content":[],"usage":{}}}\n\nevent: content_block_delta\ndata: {"type":"content_bl\n\n');
+ const failure=await readMessageStream(new Response(new ReadableStream({start(c){c.enqueue(body);c.close();}}),{headers:{'Content-Type':'text/event-stream'}})).then(()=>undefined,error=>error);
+ expect(failure).toMatchObject({code:'invalid_stream',diagnostics:{event:'content_block_delta',snippet:'{"type":"content_bl',recent:['message_start']}});
+});

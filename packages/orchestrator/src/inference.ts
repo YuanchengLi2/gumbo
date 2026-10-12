@@ -167,6 +167,8 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
    touch();
    body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();live?.accept(event);}):await response.json();
   }catch(error){
+   // Every failed attempt is recorded with what the stream showed, so a failure can be diagnosed after the run.
+   if(!signal?.aborted)db.event('ai.inference_failed',{turnId:input.turnId,phase:input.phase??'main',purpose:input.purpose,model:input.model,attempt:receipt.attempt,transientRetries:receipt.transientRetries??0,code:(error as any).code??(error as Error).name,message:String((error as Error).message).slice(0,500),diagnostics:(error as any).diagnostics});
    live?.interrupt((error as Error).message);receipt.status='uncertain';receipt.error=(error as Error).message;receipt.diagnostics=(error as any).diagnostics;receipt.errorCode=(error as any).code;save();
    if(signal?.aborted){await cancelRemote();signal.throwIfAborted();}
    const recovered=await recover();
