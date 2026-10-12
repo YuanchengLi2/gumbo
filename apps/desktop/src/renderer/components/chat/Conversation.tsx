@@ -1,9 +1,9 @@
 import {editingChanges} from '../../editing-language';
-import {RunStream} from './RunStream';
+import {RunStream,clock} from './RunStream';
 import React from 'react';
+import {ChevronRight} from 'lucide-react';
 import type {ProjectState,Message,TurnActivity} from '@dream/project-db';
 import type {PublicActivity} from '@dream/contracts';
-import {DreamMark} from '../home/HomeScreen';
 import {MessageText} from './MessageText';
 import {useEditor} from '../../store/editor';
 import {MediaTile} from '../media/MediaTile';
@@ -14,7 +14,15 @@ function UserMessage({text,assetIds,selection,project}:{text:string;assetIds?:st
  const asset=(id?:string)=>id?project.footage.assets.find(a=>a.id===id):undefined;
  return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div></article>;
 }
-const Identity=()=><div className="assistant-identity"><DreamMark/><span>Figjam</span></div>;
+
+/** A change as a short pill: "Added 7 clips" reads "+7 clips", "Removed a transition" reads "− transition". */
+const pill=(change:string)=>change.replace(/^Added (\d+) /,'+$1 ').replace(/^Removed (\d+) /,'−$1 ').replace(/^Added (?:an? |the )?/,'+ ').replace(/^Removed (?:an? |the )?/,'− ');
+const steps=(events:PublicActivity[])=>events.filter(e=>e.kind==='action'&&e.tool!=='finish').length;
+/** How long a finished request worked: from the message to the last thing it did. */
+function workedFor(messages:Message[],events:PublicActivity[]){
+ const times=[...messages.map(m=>m.createdAt),...events.flatMap(e=>[e.startedAt,e.updatedAt])].map(t=>t?Date.parse(t):NaN).filter(Number.isFinite);
+ return times.length>1?clock(Math.max(...times)-Math.min(...times)):undefined;
+}
 
 export function Conversation({project}:{project:ProjectState}){
  const commentary=useEditor(s=>s.commentary),pending=useEditor(s=>s.pending),groups:{id:string;turnId?:string;messages:Message[]}[]=[],byTurn=new Map<string,typeof groups[number]>();
@@ -29,12 +37,16 @@ export function Conversation({project}:{project:ProjectState}){
  // The closing note streams like any other note and hands over to the formatted answer once it is saved, so text never blinks out.
  const answered=!running&&!!last?.text;
  events=events.flatMap(e=>e.kind==='terminal'?answered||!e.text.trim()?[]:[{...e,kind:'commentary' as const}]:[e]).filter(e=>e.status!=='discarded'&&!(e.kind==='commentary'&&answered&&e.text.trim()===last!.text.trim())).sort((a,b)=>a.sequence-b.sequence);
+ // While it works the stream is open; once done it folds into one line above the answer, as in Cursor.
+ const count=steps(events),shown=events.some(e=>e.kind==='action'&&e.tool!=='finish'||e.kind==='commentary'&&e.text.trim()),time=workedFor(group.messages,events),stopped=['interrupted','failed'].includes(activity?.status??'');
+ const changes=!running?editingChanges(activity?.changes??[]):[];
  return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} selection={m.selection} project={project}/>)}
- {(events.length>0||last||running)&&<div className="assistant-turn"><Identity/><div className="assistant-turn-body"><RunStream events={events} running={running} assets={project.footage.assets}/>
+ {(events.length>0||last||running)&&<div className="assistant-turn">
+ {running?<RunStream events={events} running assets={project.footage.assets}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={project.footage.assets}/></details>}
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
- {!running&&!!activity?.changes.length&&<details className="turn-summary" aria-label="Change summary"><summary>Changes<span>{editingChanges(activity.changes).length}</span></summary><ul>{editingChanges(activity.changes).map((change,i)=><li key={i}>{change}</li>)}</ul></details>}
- </div></div>}</section>;
+ {changes.length>0&&<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>}
+ </div>}</section>;
  })}
- {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} project={project}/><div className="assistant-turn"><Identity/><div className="assistant-turn-body"><RunStream events={[]} running startedAt={pending.createdAt}/></div></div></section>}
+ {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} project={project}/><div className="assistant-turn"><RunStream events={[]} running startedAt={pending.createdAt}/></div></section>}
  </div>;
 }

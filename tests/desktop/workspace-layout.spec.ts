@@ -18,5 +18,8 @@ test('shows the editing workspace on a real project',async()=>{
   await expect(page.locator('.workspace-header, .editor-workspace').first()).toBeVisible({timeout:30000});
   await page.waitForTimeout(2500);await shot('workspace.png');
   const clip=page.locator('.assistant-timeline .track.video .timeline-item').nth(2);if(await clip.count()){await clip.click();await page.waitForTimeout(400);await shot('workspace-selected.png');}
+  // A finished request's steps, opened, and the mode menu.
+  const work=page.locator('.turn-work>summary').last();if(await work.count()){await work.click();await work.scrollIntoViewIfNeeded();await page.waitForTimeout(400);await shot('workspace-stream.png');}
+  await page.getByRole('button',{name:/^Permissions:/}).click();await page.waitForTimeout(300);await shot('workspace-menu.png');
  }finally{await app.close();}
 });

@@ -423,3 +423,13 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - A command that runs to its end is a result whatever its exit code, as in a terminal: the agent reads the exit code and output, nothing is marked failed or counted toward repeated failures. Only a stop, a timeout or a crash (a negative exit code) is an error.
 - check_outputs with nothing to check answers with an empty list and a note instead of an error, and publishing a non-scene output outside output/ names the output, its kind and path, and both fixes (move it under output/, or declare a live scene as kind "scene").
 - The creation runtime was restaged and passed qualification, with a new check for quoting, pipes and the Unix tools.
+
+## October 12, 2026 — The agent sidebar follows Cursor
+
+- A quiet header holds Chat and Media as text tabs and version history as an icon; the "Figjam" name row above each answer is gone.
+- The user's message is a bubble on the right. The agent's notes are plain text; each step is one grey line with an icon for its kind (reading, searching, writing, running, publishing, looking); the live step shimmers, a failed one is red.
+- A finished request folds into one line, "Worked for 49s · 11 steps" (or "Stopped after …"), above its answer; it opens to the full stream. A request that ended without an answer stays open. Its changes follow as small pills ("+7 clips", "− transition").
+- The composer is one box: the timeline selection and attachments as small tiles inside it, the text, then + · mode · model and a round send button. Mode and model are plain text menus (Edit, Plan, Ask; Opus, Sonnet, Haiku). The run monitor and to-dos sit on top of the box like a tab, and "jump to latest" is a small round button on the chat's bottom edge.
+- The sidebar uses the system UI font (Segoe UI); the rest of the app is unchanged.
+- Timeline: a spare row for a new track keeps one height and only lights up during a drag; opening it moved every track under the cursor, so drops landed on the wrong row.
+- After a stop, a message that ends with "continue" (after the feedback it carries) carries on with the stopped request, as one that starts with it already did.

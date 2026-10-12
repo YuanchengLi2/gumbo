@@ -27,7 +27,7 @@ export function clipLooks(t:TimelineDocument,f:FootageIndex):Item[]{
 }
 export const reason='Manual edit';
 export function manualItems(t:TimelineDocument,f:FootageIndex):Item[]{const r=resolve(t,f),assets=new Map(f.assets.map(a=>[a.id,a.filename]));const attachedLabel=(i:{component:string;params:Record<string,unknown>;source?:{assetId:string}},look:Look)=>look==='effect'?effectNames[i.component]??i.component.replaceAll('_',' '):look==='filter'?gradeLabel(i.params as Grade):String(i.params.text??(i.source?assets.get(i.source.assetId)??i.source.assetId.replace(/^output:/,''):undefined)??i.component);return[
- ...r.clips.map(c=>({look:'clip' as const,id:c.id,kind:'clip' as const,track:'video',start:c.start,end:c.end,label:assets.get(c.assetId)??c.id,assetId:c.assetId})),
+ ...r.clips.map(c=>({look:(f.assets.find(a=>a.id===c.assetId)?.scene?'graphic':'clip') as Look,id:c.id,kind:'clip' as const,track:'video',start:c.start,end:c.end,label:assets.get(c.assetId)??c.id,assetId:c.assetId})),
  ...r.items.map(i=>{const look=itemLook(i,f);return{id:i.id,kind:'item' as const,look,track:lookTrack(look,i.layer),start:i.timelineStart,end:i.timelineEnd,label:attachedLabel(i,look),assetId:i.source?.assetId};}),
  ...r.music.map(m=>({look:'music' as const,id:m.id,kind:'music' as const,track:'music:'+(m.layer??0),start:m.timelineStart,end:m.timelineEnd,label:assets.get(m.assetId)??m.id,assetId:m.assetId})),
  ...(t.captions?r.words.map(w=>({look:'caption' as const,id:w.id,kind:'caption' as const,track:'captions',start:w.start,end:w.end,label:w.text})):[])
