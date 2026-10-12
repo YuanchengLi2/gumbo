@@ -148,3 +148,25 @@ it('places media the agent produced with its own tools, such as a cleaned-up rec
   const placed=db.footage().assets.find(a=>a.id===db.timeline().spine[0].assetId)!;expect(placed).toMatchObject({kind:'video',hasAudio:true});expect(placed.durationSec).toBeCloseTo(3,0);
  }finally{db.close();}
 },60_000);
+
+it('streams the agent\'s edit to the editor as project.json changes, before it is published, and clears it on publish',async()=>{
+ const {root,db}=await fixture(),events:any[]=[];
+ const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg:'unavailable',ffprobe:'unavailable'},(type:string,payload:any)=>{if(type==='workspace.draft')events.push(payload.draft);});await ws.initialize();
+ try{
+  const doc=document(root);doc.timeline.spine=[clip('a',1.2,7),clip('b',8,10)];
+  // A scene declared but not built yet shows as a placeholder of its declared length.
+  doc.outputs=[{id:'intro',path:'src/intro.tsx',kind:'scene',durationInFrames:90}];doc.timeline.spine.unshift({...clip('title',0,3),assetId:'output:intro'});
+  await ws.execute('write_file',{path:'project.json',content:JSON.stringify(doc)},'w1','turn',signal());
+  const draft=events.at(-1);expect(draft.timeline.spine.map((c:any)=>c.id)).toEqual(['title','a','b']);
+  expect(draft.pending).toEqual([{assetId:'output:intro',outputId:'intro',kind:'scene',path:'src/intro.tsx'}]);expect(draft.assets[0]).toMatchObject({id:'output:intro',durationSec:3});
+  // Half-written: the error comes back with no timeline, so the editor keeps the last good draft.
+  await ws.execute('write_file',{path:'project.json',content:'{"format":"dream-'},'w2','turn',signal());
+  expect(events.at(-1)).toMatchObject({error:expect.stringContaining('being written')});expect(events.at(-1).timeline).toBeUndefined();
+  // Publishing makes it the edit: the draft clears.
+  doc.outputs=[];doc.timeline.spine=[clip('a',1.2,4)];await ws.execute('write_file',{path:'project.json',content:JSON.stringify(doc)},'w3','turn',signal());
+  expect(events.at(-1).timeline.spine.map((c:any)=>c.id)).toEqual(['a']);
+  await ws.execute('publish_project',{},'p1','turn',signal());expect(events.at(-1)).toBeNull();
+  // An unchanged file is not sent again.
+  const count=events.length;await ws.execute('write_file',{path:'notes.txt',content:'x'},'w4','turn',signal());expect(events.length).toBe(count);
+ }finally{db.close();}
+},60_000);

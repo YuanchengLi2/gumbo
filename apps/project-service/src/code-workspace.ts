@@ -22,6 +22,7 @@ import type {Asset} from '@dream/footage';
 import {FileApprovalRequired} from '../../../packages/orchestrator/src/file-tools';
 import {toolActivity,fileChanges} from '../../../packages/orchestrator/src/activity';
 import {inspectMedia,wordLines,coverageSummary} from './media-evidence';
+import {workspaceDraft} from './workspace-draft';
 import {jpeg} from './source-frames';
 import {captureOrder} from '../../../packages/orchestrator/src/media-context';
 import type {ComputerStatus} from '@dream/contracts';
@@ -114,7 +115,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  /** While a command runs, keeps context/ current: a transcript file is rewritten whenever its transcription advances, and
   * assets.json (with the Sources/ copies) whenever a source is added, so code that waits for a long recording's words or
   * a new import reads them as they arrive. Between tool calls refreshContext rewrites everything. */
- private followContext(){
+ private followContext(turnId?:string){
   const coverage=(id:string)=>JSON.stringify(this.db.loadState('speech-coverage:'+id)??null),sourceIds=()=>this.db.footage().assets.map(a=>a.id).join();
   const seen=new Map(this.db.footage().assets.map(a=>[a.id,coverage(a.id)]));let sources=sourceIds(),syncing=false;
   const timer=setInterval(()=>{try{
@@ -122,8 +123,14 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(now!==sources&&!syncing){sources=now;syncing=true;void this.sources(new AbortController().signal).catch(()=>{}).finally(()=>{syncing=false;});this.refreshContext();for(const a of this.db.footage().assets)seen.set(a.id,coverage(a.id));return;}
    const changed=[...seen].filter(([id,before])=>{const after=coverage(id);if(after===before)return false;seen.set(id,after);return true;});
    if(changed.length){const footage=this.db.footage();for(const [id] of changed)this.writeTranscript(id,footage);}
-  }catch{}},2000);
-  return()=>clearInterval(timer);
+  }catch{}},2000),draft=turnId?setInterval(()=>this.followDraft(turnId),400):undefined;
+  return()=>{clearInterval(timer);if(draft)clearInterval(draft);};
+ }
+ /** Streams the agent's edit to the editor whenever project.json changes, so cuts, moves and new items appear on the
+  * timeline as the agent makes them rather than all at once on publish. Only a changed file is parsed again. */
+ private draftHash?:string;
+ private followDraft(turnId:string){
+  try{const file=join(this.root,'project.json'),hash=existsSync(file)?digest(readFileSync(file,'utf8')):'';if(hash===this.draftHash)return;this.draftHash=hash;this.publishEvent('workspace.draft',{turnId,draft:workspaceDraft(this.db)});}catch{}
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
  // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
@@ -168,7 +175,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(intent){if(intent.identity!==identity)throw new Error('File call ID belongs to a different edit.');if(digest(old)===intent.afterHash)return{path:input.path,hash:intent.afterHash};if(digest(old)!==intent.beforeHash)throw new Error('The working file changed after the interrupted write. Read its current revision.');return this.write(input.path,intent.content);}
    if(input.expectedHash!==undefined&&digest(old)!==input.expectedHash)throw new Error(`The file changed since that revision (current hash ${digest(old)}); re-read the affected range before editing.`);
    if(name==='edit_file'){const matches=old.split(input.oldText).length-1;if(matches!==1)throw new Error(matches?`oldText matches ${matches} places; include more surrounding text so it matches exactly one.`:existsSync(path)?'oldText was not found in the current file; re-read the range you are editing.':'The file does not exist; use write_file to create it.');}
-   const content=name==='edit_file'?old.replace(input.oldText,input.newText):input.content;this.db.saveState(receiptKey,{identity,beforeHash:digest(old),afterHash:digest(content),content});const written=this.write(input.path,content);
+   const content=name==='edit_file'?old.replace(input.oldText,input.newText):input.content;this.db.saveState(receiptKey,{identity,beforeHash:digest(old),afterHash:digest(content),content});const written=this.write(input.path,content);if(normalizeScope(input.path)==='project.json')this.followDraft(turnId);
    // Scene code is compiled (never run) right away, so syntax and import mistakes come back with this write.
    if(isEngineScene(input.path)&&normalizeScope(input.path).startsWith('src/'))try{const compiled=await compileScene(this.root,{entry:input.path,mode:'draft'});return{...written,check:compiled.errors.length?{errors:compiled.errors.slice(0,8),note:'Compile check of this file. Errors about files you have not written yet resolve once they exist.'}:{compiles:true}};}catch{}
    return written;
@@ -264,8 +271,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
     if(commands.length){const install=await this.options.run({id:callId+'-dependencies',projectId:this.db.meta.id,workspace:this.root,command:commands.join(' && '),cwd:'.',timeoutMs:600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(install.status!=='complete')throw new Error('Dependency restoration failed: '+install.output);this.db.setMeta('workspace_dependencies',currentDependencies);}
    }
    let result:ProcessResult;
-   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext();try{result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});}finally{stopFollowing();}this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
-   output=result.output;emit(result.status);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path \"%DREAM_PYTHON_PACKAGES%\" > \"%DREAM_WORKSPACE%\\requirements.lock.txt\"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
+   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext(turnId);try{result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});}finally{stopFollowing();}this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
+   output=result.output;emit(result.status);this.followDraft(turnId);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path \"%DREAM_PYTHON_PACKAGES%\" > \"%DREAM_WORKSPACE%\\requirements.lock.txt\"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
    // Commands never publish: a check or install mid-edit must not publish a half-finished project.json. Use publish_project.
    return{process:result};
   }
@@ -306,6 +313,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   const publication=await publishWorkspace(this.db,result,turnId,this.options.ffprobe,{renderAudio:this.options.audioWorker?workerRenderer(this.options.audioWorker):undefined});
   if(!publication){const head=this.db.head(),receipt={id:result.id,versionId:head,baseVersionId:head,sourceSnapshot:this.db.workspace.snapshot(head)!,processId:result.id,assets:[],changes:[],files:[],documentHash:digest(readFileSync(join(this.root,'project.json'))),unchanged:true};this.db.db.prepare('INSERT OR IGNORE INTO workspace_publications VALUES(?,?,?)').run(result.id,result.commandHash,JSON.stringify(receipt));return receipt;}
   if(publication){this.db.workspace.queueRestore(publication.versionId);this.db.workspace.restorePending();const event=this.db.activityEvent(turnId,{id:'publication:'+callId,kind:'changes',status:'complete',text:'Updated live preview',changes:publication.changes,files:publication.files,media:[...publication.assets,...publication.refreshed??[]].map(id=>{const a=this.db.footage().assets.find(a=>a.id===id)!;return{id,name:a.filename,kind:a.scene?'scene':a.kind};})});this.publishEvent('ai.activity',{turnId,event});this.publishEvent('state',this.db.state({bounded:true}));}
+  this.followDraft(turnId);
   try{this.db.setMeta('edit-checks:'+turnId,JSON.stringify(editChecks(this.db.timeline(this.db.getMeta(baseKey)!),this.db.timeline(),this.db.footage())));}catch{}
   return publication;
  }
