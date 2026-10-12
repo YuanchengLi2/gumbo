@@ -76,3 +76,6 @@ export function planningScript(blockOnce=false):Script{
   return step===0?scriptedEdit('step-'+id,id==='timing'?'p.timeline.settings.fps=60':'p.timeline.settings.width=1080;p.timeline.settings.height=1080'):finish(id+'-worker-done','Saved the '+id+' change.');
  };
 }
+/** Finishes, keeping with a reason every must-fix check the latest publication reported (an edit that means to repeat
+ * footage or cut where the fixture's words fall). */
+export const finishKeeping=(body:any,id:string,summary:string,reason:string)=>[use(id,'finish',{status:'complete',summary,kept:(resultOf(body,'publish_project')?.checks?.mustFix??[]).map((c:any)=>({check:c.id,reason}))})];

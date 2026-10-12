@@ -5,7 +5,6 @@ import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {AssetSchema,type Asset,type Shot,emptyFootage} from '@dream/footage';
 import {emptyTimeline} from '@dream/timeline';
-import {placementWarnings} from '../../apps/project-service/src/timeline-actions';
 import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
 import {ProjectContext} from '../../packages/orchestrator/src/context';
 import {timelineOutline} from '../../packages/orchestrator/src/timeline-outline';
@@ -31,13 +30,4 @@ it('tells the agent plain facts about each source and the timeline, never what t
   const project=new ProjectContext(db).initial('black frame talk',[],['v']);
   expect(JSON.stringify(project)).not.toMatch(/footageMap|Solid black|frozen/);
  }finally{db.close();}
-});
-
-it('warns only about facts of the edit: slow motion, a dominating clip and footage used twice',()=>{
- const footage=legacy(),before=emptyTimeline('t');before.spine=[clipOf('a','v',0,4),clipOf('b','v',10,14),clipOf('c','v',20,24)];
- const slowed=placementWarnings(before,{...before,spine:[before.spine[0],before.spine[1],clipOf('c','v',50,80,.45)]},footage).join('\n');
- expect(slowed).toContain('clip c plays at 0.45x');expect(slowed).toMatch(/clip c is .* of a .* video/);expect(slowed).not.toMatch(/frozen|dark|analyzed/);
- const repeated=placementWarnings(before,{...before,spine:[...before.spine,clipOf('d','v',11,13.5),clipOf('e','n',0,3)]},footage).join('\n');
- expect(repeated).toContain('clips b and d show the same footage');expect(repeated).not.toContain('not analyzed');
- expect(placementWarnings(before,{...before,spine:[...before.spine,clipOf('f','v',40,44)]},footage)).toEqual([]);
 });

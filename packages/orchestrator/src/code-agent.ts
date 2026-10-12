@@ -20,7 +20,7 @@ export type ModeSwitch={to:'lead'|'solo';handoff:string;reason?:string;kind?:'es
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan;switch?:ModeSwitch};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;publication?:Publication;changedFiles?:string[];outputs?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
-type Checkpoint={pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];switch?:ModeSwitch};
+type Checkpoint={pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];switch?:ModeSwitch;blockedTasks?:string[]};
 const RESULT_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
@@ -154,6 +154,13 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
       // Scenes changed in this request that failed while playing must be fixed first (errors come from the visible player and chat previews).
       const broken=input.status==='complete'&&!planning&&!options.research?workspace.sceneErrors?.(turnId)??[]:[];
       if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them${role==='lead'?' through a build worker':''} and publish again before finishing.`);
+      // What this request published may not keep footage used twice, a cut inside a word or long silence unless the agent
+      // keeps it with a reason, and work delegated in it may not be left blocked: unfinished work is never reported as done.
+      if(input.status==='complete'&&!planning&&!options.research&&role!=='worker'){
+       const kept=new Set((input.kept??[]).map((k:any)=>k.check)),open=(workspace.editChecks?.(turnId)?.mustFix??[]).filter(c=>!kept.has(c.id));
+       if(open.length)throw new Error(`The published edit still has: ${open.slice(0,8).map(c=>`[${c.id}] ${c.text}`).join(' ')}${open.length>8?` …and ${open.length-8} more.`:''} Fix these and publish again, or keep one by listing its id with a reason in kept.`);
+       if(checkpoint.blockedTasks?.length)throw new Error(`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`);
+      }
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
       // The editor or director keeps the project notes that carry the user's wishes into later requests; workers never write them.
       if(input.notes?.trim()&&role!=='worker'&&!phase.startsWith('direction-'))db.setMeta('preferences',input.notes.trim());
@@ -163,6 +170,7 @@ Files written so far are still in the workspace; ${headPublication()?'the latest
       if(!options.runWorkers)throw new Error('Delegation is unavailable in this phase.');
       validateDelegation(input.tasks);
       const reports=await options.runWorkers(input.tasks,call.id);
+      const blocked=new Set(checkpoint.blockedTasks??[]);for(const r of reports){if(r.status==='blocked'||r.skipped)blocked.add(r.taskId);else blocked.delete(r.taskId);}checkpoint.blockedTasks=[...blocked];
       result={reports,publication:[...reports].reverse().find(r=>r.publication)?.publication};
      }else if(call.name==='switch_to_orchestrated'||call.name==='hand_off'){
       checkpoint.switch=call.name==='hand_off'?{to:'solo',kind:'handoff',handoff:input.brief}:{to:'lead',kind:'orchestrate',handoff:input.handoff,reason:input.reason};result={switching:true};

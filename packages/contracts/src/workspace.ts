@@ -25,6 +25,8 @@ export interface CodeWorkspacePort {
  unpublishedChanges?():string[];
  /** Errors scenes reported while playing (player or chat preview) for scenes changed in this request and its current drafts. */
  sceneErrors?(turnId?:string):{scene:string;assetId?:string;location?:string;message:string}[];
+ /** Fact checks of what this request has published so far (mustFix blocks finishing unless kept with a reason). */
+ editChecks?(turnId:string):{mustFix:{id:string;text:string}[];notes:{id:string;text:string}[]}|undefined;
  context(query:string):unknown;
  /** The project as every worker of one task set sees it: overview, media, capabilities and decisions; no query search. */
  snapshot?():unknown;

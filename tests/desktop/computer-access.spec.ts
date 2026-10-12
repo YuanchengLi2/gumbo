@@ -1,6 +1,6 @@
 import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,copyFileSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';
-import {codeGateway,scriptedEdit,finish,resultOf,type Script} from '../fixtures/code-gateway';
+import {codeGateway,scriptedEdit,finishKeeping,resultOf,type Script} from '../fixtures/code-gateway';
 test('Dream discovers and imports computer media after one inline approval',async()=>{
  const profile=mkdtempSync(join(tmpdir(),'dream-computer-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-computer-project-')),media=mkdtempSync(join(tmpdir(),'dream-computer-media-')),source=join(media,'holiday-source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);let searches=0;
  // Haiku alone: search the computer, import the found clip, place it on the timeline, publish, finish.
@@ -8,7 +8,7 @@ test('Dream discovers and imports computer media after one inline approval',asyn
   if(step===0){searches++;return[{type:'tool_use',id:'search',name:'search',input:{query:'holiday',scope:'computer',path:media}}];}
   if(step===1)return[{type:'tool_use',id:'import',name:'view_media',input:{scope:'computer',path:source}}];
   if(step===2){const asset=resultOf(body,'view_media').assetId;return scriptedEdit('use-'+Date.now(),`p.timeline.spine.push({id:'found-${Date.now()}',assetId:'${asset}',srcIn:0,srcOut:2,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'Use discovered footage'})`);}
-  return finish('done','Found and used your holiday clip.');
+  return finishKeeping(body,'done','Found and used your holiday clip.','The second request asked for the same clip again.');
  };
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:['--user-data-dir='+profile],env:{...process.env,DREAM_HEADLESS:'1'}});

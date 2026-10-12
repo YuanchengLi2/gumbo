@@ -2,37 +2,53 @@
 
 A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose default export draws one frame. Dream runs it: loading, frame timing, playback, seeking, fonts, media access, 3D setup and export are handled for you. You do not need to write renderers, loaders, frame loops or build steps for scenes; anything else a scene needs, install it. This reference is complete: you do not need to search the workspace for engine, score or project-document formats.
 
-## Declaring a scene
+## The project document
 
-Declare an output (in the `outputs` of `edit_timeline`) and place it on the timeline as `output:<id>`:
+`project.json` is the edit. Change it with code: edit it directly for a small change (one clip, one item, one setting), or write a program in any language that reads it, the sources and `context/` and writes it back; then call `publish_project`. Keep `format`, `version`, `baseVersionId` and `timeline.id` as they are, keep items you were not asked to change (the user may have made them), and never write the document from scratch.
+
+```json
+{"format":"dream-workspace","version":1,"baseVersionId":"<as read>",
+ "timeline":{"schemaVersion":1,"id":"<as read>","settings":{"fps":30,"width":1920,"height":1080},
+  "spine":[...],"attached":[...],"music":[...],"captions":{"style":"clean"}},
+ "outputs":[{"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150}]}
+```
+
+- Sources: `context/assets.json` lists every source (id, file, length, size, frame rate, sound, path your code can read). A clip's `assetId` is a source id, or `output:<id>` for something your files produce.
+- Speech: `context/transcripts/<assetId>.json` holds the timed words (`words`: id, text, start, end in source seconds) and `coverage` (how far transcription has got). Cut between words, never inside one.
+- `publish_project` validates the document (ids, sources, ranges within each source, anchors), publishes it, and returns checks of what changed: footage used twice, a cut inside a spoken word, silence over three seconds inside a clip. Fix those and publish again, or keep one with a reason in `finish.kept`.
+
+## Declaring outputs
+
+Scenes, music, sound effects and media your code produces are declared in `outputs` and placed as `output:<id>`:
 
 ```json
 {"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150,"props":{"title":"Launch day"}}
+{"id":"clean","path":"output/clean-voice.wav","kind":"audio"}
+{"id":"steady","path":"output/stabilized.mp4","kind":"video"}
 ```
 
 - Size and frame rate default to the project's; set `width`, `height` or `fps` only to differ.
 - `props` are passed to the component, so one component can serve many shots with different props.
 - `transparent: true` gives the scene no background, for overlays placed on `attached` above footage.
+- Media your programs make (processed, cropped, stabilized, cleaned, generated) goes under `output/` with kind `video`, `audio` or `image`, and is placed like any source.
 - `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
 
-## Changing the timeline (edit_timeline)
+## Clips
 
-Every timeline change is an action, applied in order and published in one step. A new scene is declared and placed in the same call:
+A clip in `spine` plays seconds `srcIn` to `srcOut` of its source; clips play one after another and set the video's length.
 
 ```json
-{"outputs":[{"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150}],
- "actions":[
-  {"type":"insert_clip","position":0,"clip":{"id":"shot0","assetId":"output:intro","srcIn":0,"srcOut":5,"audio":{"mute":true}}},
-  {"type":"trim_clip","clipId":"shot2","srcIn":12.5,"srcOut":18},
-  {"type":"move_clip","clipId":"shot3","position":{"after":"shot0"}},
-  {"type":"set_framing","clipId":"shot2","framing":{"mode":"fill","exposure":-0.3,"contrast":1.2,"saturation":0.6,"temperature":-0.3}},
-  {"type":"set_transition","clipId":"shot3","transition":{"type":"crossfade","durationSec":0.5}},
-  {"type":"set_captions","captions":{"style":"clean"}},
-  {"type":"add_music","music":{"id":"bed","assetId":"output:theme","srcIn":0,"srcOut":20,"start":{"kind":"project","at":"start","offsetSec":0},"gainDb":-12}}
- ]}
+{"id":"shot2","assetId":"<source id>","srcIn":12.5,"srcOut":18,"speed":1,
+ "framing":{"mode":"fill","scale":1.15,"x":0.5,"y":0.5,"exposure":-0.3,"contrast":1.2,"saturation":0.6,"temperature":-0.3},
+ "audio":{"gainDb":0,"fadeInSec":0.01,"fadeOutSec":0.01,"mute":false},
+ "transitionIn":{"type":"crossfade","durationSec":0.5}}
 ```
 
-Other actions: `split_clip` (`atSec` or `wordId`, `newClipId`), `delete_clips`, `replace_clip_source`, `set_speed` (0.25 to 4), `set_clip_audio`, `add_item`, `update_item`, `remove_item`, `update_music`, `remove_music`, `set_project_settings`. If an action is wrong, nothing is applied and the error says which action and why. Edit `project.json` directly only for what no action expresses; then keep `format`, `version`, `baseVersionId` and `timeline.id` exactly as they are and never write it from scratch.
+- `speed` 0.25 to 4 (sound keeps its pitch). An image clip lasts `holdSec`.
+- `framing.mode`: `fit` shows the whole picture (letterboxed when its shape differs from the frame), `fill` covers the frame and crops the overflow. `x` and `y` (0 to 1) choose which part shows when the picture does not exactly fit the frame. `scale` zooms about the centre of the frame. To show one region (a corner, a face, a speaker box), crop it yourself: process the footage into a new output, or write a scene that shows the asset at the size and place you want.
+- `framing` also takes `rotation`, `flipX`, `flipY`, `opacity`, and the grade: `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged), `temperature` (-1 cool to 1 warm).
+- `transitionIn.type`: `cut`, `crossfade`, `dip_to_black`, `whip`, `zoom_through` or `slide`.
+- `captions` (optional, on the timeline): `style` `clean`, `karaoke`, `word_pop` or `emphasis`; captions follow the spoken words of each clip.
 
 ## Timeline items (complete examples)
 
@@ -58,18 +74,18 @@ The `timeline` has `spine` (clips that play one after another and set the video'
 - A music item needs `srcIn`, `srcOut` and a `start` anchor; `gainDb` defaults to -18 and music ducks under speech automatically.
 - Overlay `params`: `x` and `y` (0 to 1, the center), `scale`, `rotation`, `opacity`, `fit` (`"cover"` or `"contain"`).
 
-## Effects on footage (no code)
+## Effects on footage (built in)
 
-An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`:
+An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`. Anything beyond these, make yourself: process the footage, or write a scene.
 
 ```json
-{"type":"add_item","item":{"id":"push1","type":"effect","component":"slow_push","start":{"kind":"clip","clipId":"shot2","at":"start"},"end":{"kind":"clip","clipId":"shot2","at":"end"},"params":{"amount":0.08}}}
+{"id":"push1","type":"effect","component":"slow_push","start":{"kind":"clip","clipId":"shot2","at":"start"},"end":{"kind":"clip","clipId":"shot2","at":"end"},"params":{"amount":0.08}}
 ```
 
 - `slow_push`: a slow zoom in across each clip it covers (a Ken Burns move); `amount` is the extra scale by the end of the clip, 0.05 to 0.15.
 - `punch_zoom`: holds the picture zoomed in by `amount` (0.1 to 0.25), for emphasis on a beat or a line.
 - `shake`: camera shake of strength `amount` (0.05 to 0.3), for an impact moment.
-- `grade`: a colour layer over every clip it covers, with `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged) and `temperature` (-1 cool to 1 warm). Use it to grade a stretch of several clips at once; for one clip, set the grade on the clip with `set_framing`.
+- `grade`: a colour layer over every clip it covers, with `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged) and `temperature` (-1 cool to 1 warm). Use it to grade a stretch of several clips at once; for one clip, set the grade in the clip's `framing`.
 
 ## Available imports (no install needed)
 
