@@ -8,7 +8,7 @@ import ffprobe from 'ffprobe-static';
 import {emptyTimeline} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
 import {normalizeLoudness} from '../../apps/desktop/src/main/export-loudness';
-import {measureLoudness} from '../../apps/project-service/src/footage-map';
+import {measureLoudness} from '../../apps/project-service/src/loudness';
 import {audioManifest,autoLevelDb} from '../../packages/composition/src/audio-manifest';
 
 const make=(file:string,audio:string[])=>{const r=spawnSync(ffmpeg!,['-y','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=30:d=4',...audio,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',file],{windowsHide:true});if(r.status)throw new Error(r.stderr.toString());return file;};

@@ -136,10 +136,3 @@ it('keeps the lead on the five-minute cache until a wait for workers outlasts it
   noteWorkerWait(db,'turn',300_000);expect(leadCache(db,'turn')).toEqual({cacheTtl:'1h'});expect(leadCache(db,'other')).toEqual({});
  }finally{db.close();}
 });
-
-it('gives the lead the text catalog of the footage without images',async()=>{
- const {leadMediaBlocks}=await import('../../packages/orchestrator/src/code-director');
- const blocks=[{type:'text',text:'catalog'},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:'x'}},{type:'text',text:'transcript'}];
- const lead=leadMediaBlocks(blocks);expect(lead.some(b=>b.type==='image')).toBe(false);expect(lead.map(b=>b.text)).toEqual(['catalog','transcript',expect.stringContaining('go to the workers')]);
- expect(leadMediaBlocks([{type:'text',text:'catalog'}])).toEqual([{type:'text',text:'catalog'}]);
-});

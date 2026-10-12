@@ -35,10 +35,11 @@ export function syncContext(p:ProjectDB){
   }
   for(const row of db.prepare('SELECT kind,owner FROM context_dirty').all() as {kind:string;owner:string}[]){
    if(row.kind==='execution'){replace('execution',row.owner,p.getMeta('workspace-receipt-summary:'+row.owner));continue;}
-   if(row.kind==='observation'){const found=db.prepare("SELECT json FROM index_records WHERE kind='observations' AND id=?").get(row.owner) as {json:string}|undefined;replace('observation',row.owner,found?JSON.parse(found.json):undefined);}
-   else if(row.kind==='workflow'){replace('workflow',row.owner,p.getMeta('workflow:'+row.owner));}
+   if(row.kind==='workflow'){replace('workflow',row.owner,p.getMeta('workflow:'+row.owner));}
    else if(row.kind==='decision'){replace('decision',row.owner,db.prepare('SELECT id,source_id AS sourceId,scope,text,supersedes FROM project_decisions WHERE id=? AND active=1').get(row.owner));}
-   else if(row.kind==='asset'){const value=db.prepare('SELECT json FROM assets WHERE id=?').get(row.owner) as {json:string}|undefined;replace(row.kind,row.owner,value?JSON.parse(value.json):undefined);}
+   else if(row.kind==='asset'){const value=db.prepare('SELECT json FROM assets WHERE id=?').get(row.owner) as {json:string}|undefined;
+    // Facts about the source only: earlier projects' footage maps and visual summaries are interpretations the agent no longer relies on.
+    const {footageMap:_map,context:_context,understanding:_understanding,...asset}=value?JSON.parse(value.json):{};replace(row.kind,row.owner,value?asset:undefined);}
    else if(row.kind==='conversation'){replace(row.kind,row.owner,db.prepare('SELECT role,text,turn_id AS turnId FROM messages WHERE id=?').get(row.owner));}
    else if(row.kind==='library'){
     const found=db.prepare('SELECT kind,json FROM library WHERE id=?').get(row.owner) as {kind:string;json:string}|undefined;const v=found?JSON.parse(found.json):undefined;

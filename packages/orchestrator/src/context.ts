@@ -34,7 +34,8 @@ export class ProjectContext {
   for(const c of [...t.spine.filter(c=>wanted.has(c.id)),...edges].slice(0,4)){add(`clip:${c.id}:0`);add(`asset:${c.assetId}:0`);if(c.beatId)add(`beat:${c.beatId}:0`);}
   const hits=this.search(query,6);for(const h of hits)if(h.kind==='conversation'||picked.size<10)picked.set(h.id,h);
   const relevant:unknown[]=[];let remaining=5000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
-  const footage=p.search(terms(query).join(' ')).slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
+  // Spoken words only: what footage shows is for the agent to look at, not an earlier description of it.
+  const footage=p.search(terms(query).join(' ')).filter(hit=>hit.kind==='words').slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
   // Follow-ups ("do that", "make it bluer") depend on the preceding exchange.
   const previous=p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 6").all() as {id:string;role:string;text:string}[];
   return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,1500)})),retrieval:{available:['timeline','assets','footage','conversation','library','code','preferences','task_plan','outline','decision','workflow','observation'],search:'search (scope project)',read:'read_file with scope project and a chunk id',timeline:'project.json'}};

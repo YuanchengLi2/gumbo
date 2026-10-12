@@ -49,7 +49,7 @@ it('gives every agent with tools web search in its model\'s version, resumes a p
   expect(db.turnActivity('turn')?.events?.some((e:any)=>e.tool==='web_search'&&e.detail==='Anthropic release')??JSON.stringify(db.db.prepare("SELECT json FROM activity_events").all()).includes('Searching the web')).toBe(true);
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{});let tools:any[]=[];
   (director as any).infer=async(_m:string,_s:string,_msgs:unknown[],given:any[])=>{tools=given;return{content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{}};};
-  await director.inference(models.editor,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main',false);
+  await director.inference(models.editor,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main');
   expect(tools.map(t=>t.name)).toEqual(['web_search','read_file']);
  }finally{db.close();}
 });

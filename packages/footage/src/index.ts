@@ -1,5 +1,4 @@
 import { z } from 'zod';
-export * from './context';
 export const AssetSchema = z.object({
   id: z.string(), filename: z.string(), kind: z.enum(['video','audio','image']),
   durationSec: z.number().nonnegative(), fps: z.number().nonnegative().default(30),
@@ -54,4 +53,3 @@ export function serializeFootage(index:FootageIndex): string {
 }
 
 export * from './understanding';
-export * from './map';

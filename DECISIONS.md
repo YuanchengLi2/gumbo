@@ -296,3 +296,11 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 ## October 11, 2026 — Editing starts while a long recording is still being transcribed
 
 - read_transcript returns the speech transcribed without gaps from the start while transcription runs, waiting at most 45 seconds for the requested page, with transcribedUntilSec; its revision stays fixed while words are appended, so pages already read stay valid. Each source's state shows how far transcription has got.
+
+## October 11, 2026 — The agent looks at footage itself; nothing pre-interprets it
+
+- The import-time footage map is gone: no measured "frozen / dark / black" labels, no one-frame-per-shot descriptions (one Haiku call per import), no preview frames warmed for the agent, no contact sheets pushed into its first message or returned by import_media, no shot descriptions in the timeline outline or in project search. In the first long-form run the map called a talk with a moving speaker in a corner box "solid black frame" and flagged every clip frozen and dark; the warnings were then ignored wholesale, and the one real warning (the hook used twice) with them.
+- What the agent gets is facts: each source's length, size, frame rate, sound, path, capture time, its own earlier notes (sourceNotes), and how far transcription has got with the file of timed words. It decides what to look at (view_media frames at the times it picks) and measures with code.
+- Cloud transcription still runs at import: it is raw data (what was said, with timings) that captions, music ducking and word anchors need, and it is a file the agent may read, not pushed into its context.
+- Kept for the player and export: playback copies, thumbnails, waveforms, loudness (auto-level). Earlier projects' maps, shot descriptions and video observations are dropped from the search indexes by a migration, and their footage_map/context/shots jobs are retired on open. The dream-context preview runtime and its staging script are removed.
+- Edit warnings keep only facts about the timeline: slow motion, a dominating clip, footage used twice.

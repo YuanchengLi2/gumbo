@@ -1,4 +1,4 @@
-import {mapFootage,measureLoudness,FOOTAGE_MAP_VERSION,type Describe} from './footage-map';
+import {measureLoudness} from './loudness';
 import {copyMedia,canPreviewOriginal,canPreviewAudio,playbackCapabilities} from './media-io';
 import {setTimeout as wait} from 'node:timers/promises';
 import {transcriptWords} from './transcript';
@@ -25,7 +25,7 @@ export class Ingest {
  // Transcription runs for at most two sources at a time, so a bulk import does not flood the speech service.
  private speechQueue:Asset[]=[];
  private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;this.db.saveAsset(asset);}
- constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>,private describe?:Describe){}
+ constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>){}
  recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence||asset.creation)continue;if(!asset.missing&&asset.hasAudio&&!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete'))this.startSpeech(asset);if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
  async register(path:string,copy=false,requestKey?:string,signal?:AbortSignal,quiet=false){
   const assetId=requestKey?'a_'+createHash('sha256').update(requestKey).digest('hex').slice(0,24):`a_${randomUUID()}`;
@@ -125,16 +125,12 @@ export class Ingest {
    }
   }
   if(!background){a.status='ready';a.playback=playbackCapabilities(a);this.save(a);publish();if(!requested)this.onReady?.(a);return;}
-  // Context needs source frames and optional speech, not model-dependent indexing jobs.
-  if(a.kind==='image')this.db.replaceRecords('shots',a.id,[{id:`${a.id}:shot0`,assetId:a.id,start:0,end:a.durationSec,framePaths:a.thumbnailPath?[a.thumbnailPath]:[]}]);
-  // The footage map: measured problems and one look at the shots, so edits are chosen from what the footage shows.
-  // Its opening is saved as soon as it is measured, and the map grows from there.
-  if(a.kind==='video'||a.kind==='image')await stage('footage_map',async()=>{const result=await mapFootage({ffmpeg:this.ffmpeg,asset:a,dir,signal,describe:this.describe,contactSheet:this.db.contactSheet?.bind(this.db),onProgress:partial=>{signal.throwIfAborted();this.db.replaceRecords('shots',a.id,partial.shots);a.footageMap=partial.map;this.save(a);this.db.job(a.id,'footage_map','running',Math.round((partial.map.analyzedUntilSec??0)/a.durationSec*100));publish();}});this.db.replaceRecords('shots',a.id,result.shots);a.footageMap=result.map;},undefined,`:map-${FOOTAGE_MAP_VERSION}${this.describe?':look':''}`);
+  // Nothing here interprets the footage for the agent: it looks at frames and measures what it needs itself.
   if(a.hasAudio&&a.audioPath&&existsSync(a.audioPath))await stage('loudness',async()=>{a.loudnessLufs=await measureLoudness(this.ffmpeg,a.audioPath!,signal);},undefined,':loudness-1');
   const sidecar=process.env.DREAM_INGEST_BINARY;
-  for(const name of [...(requested==='shots'?['shots' as const]:[]),...(requested==='audio_features'?['audio_features' as const]:[])]){
+  for(const name of requested==='audio_features'?['audio_features' as const]:[]){
    if(!sidecar||!existsSync(sidecar)){this.db.job(a.id,name,'waiting_for_runtime',0,'The local analysis runtime must be installed.');continue;}
-   await stage(name,async()=>{if(name==='audio_features'&&!a.audioPath)throw new Error('Playback audio must finish before audio analysis.');const result=await analyzeStage(sidecar,name,a,name==='audio_features'?a.audioPath!:a.originalPath,dir,signal,{mediaPipelineRevision:'dream-media-3'});if('shots' in result)this.db.replaceRecords('shots',a.id,result.shots);this.db.setMeta(`analysis:${a.id}:${name}`,JSON.stringify(result));});
+   await stage(name,async()=>{if(name==='audio_features'&&!a.audioPath)throw new Error('Playback audio must finish before audio analysis.');const result=await analyzeStage(sidecar,name,a,name==='audio_features'?a.audioPath!:a.originalPath,dir,signal,{mediaPipelineRevision:'dream-media-3'});this.db.setMeta(`analysis:${a.id}:${name}`,JSON.stringify(result));});
   }
   a.status='ready';this.save(a);const unfinished=this.db.state().jobs.some(j=>j.assetId===a.id&&['copy','proxy','playback_audio','thumbnail','waveform','transcription'].includes(j.step)&&j.status!=='complete');this.db.job(a.id,'analysis',unfinished?'partial':'complete',unfinished?0:100);publish();
  }

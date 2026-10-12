@@ -22,10 +22,10 @@ it('imports many files at once, reuses an unchanged file across requests, record
   expect((await ingest.register(a,false,'second-request')).id).toBe(first.id);
   utimesSync(a,new Date('2026-10-10T09:00:00Z'),new Date('2026-10-10T09:00:00Z'));expect((await ingest.register(a,false,'third-request')).id).not.toBe(first.id);
  }finally{await ingest.drain().catch(()=>{});db.close();}
-// Background analysis (including the footage map) finishes before the project closes, which takes longer under a full parallel run.
+// Background analysis finishes before the project closes, which takes longer under a full parallel run.
 },90_000);
 
-it('gives the agent find_media results marked with what is already imported, and imports in capture order with contact sheets',async()=>{
+it('gives the agent find_media results marked with what is already imported, and imports in capture order without pushing frames',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-bulk-tools-')),db=new ProjectDB(folder,'Tools');
  const late={id:'late',filename:'late.mp4',kind:'video',durationSec:3,fps:30,width:640,height:360,hasAudio:false,originalPath:resolve('artifacts/fixtures/source.mp4'),capturedAt:'2026-10-10T12:00:00.000Z'},early={...late,id:'early',filename:'early.mp4',capturedAt:'2026-10-10T07:00:00.000Z'};
  db.saveAsset({...early,fingerprint:'e',status:'ready',source:{path:'C:\\Camera\\early.mp4',size:1,modifiedAt:'x'}} as any);
@@ -40,6 +40,6 @@ it('gives the agent find_media results marked with what is already imported, and
   expect(found.files.map((f:any)=>f.importedAssetId)).toEqual(['early',undefined]);expect(found.next).toContain('import_media');
   const imported:any=await workspace.execute('import_media',{paths:['C:\\Camera\\late.mp4','C:\\Camera\\early.mp4','C:\\Camera\\broken.mov']},'import',db.head(),new AbortController().signal);
   expect(imported.assets).toEqual(['early','late']);expect(imported.media.map((m:any)=>m.id)).toEqual(['early','late']);expect(imported.failed).toHaveLength(1);
-  expect(imported.content.filter((b:any)=>b.type==='image')).toHaveLength(1);expect(JSON.parse(imported.content[0].text).imported.map((i:any)=>i.assetId)).toEqual(['early','late']);
+  expect(imported.content.filter((b:any)=>b.type==='image')).toHaveLength(0);expect(JSON.parse(imported.content[0].text).imported.map((i:any)=>i.assetId)).toEqual(['early','late']);
  }finally{db.close();}
 });

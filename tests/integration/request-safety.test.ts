@@ -14,7 +14,7 @@ it('stops a request at its spending limit before the next call, and a resume all
  const db=fixture();try{
   const director=new Director(db,async()=>{throw new Error('No provider call expected');},()=>{});
   db.recordUsage({requestId:'r1',turnId:'turn',model:models.editor,costUsd:requestBudgetUsd(0)+.01});
-  await expect(director.inference(models.editor,'Edit',[{role:'user',content:'Trim it'}],[],'turn',undefined,'execution','main',false)).rejects.toMatchObject({code:'request_budget'});
+  await expect(director.inference(models.editor,'Edit',[{role:'user',content:'Trim it'}],[],'turn',undefined,'execution','main')).rejects.toMatchObject({code:'request_budget'});
   expect(events(db,'ai.request_budget')).toHaveLength(1);
   expect(requestBudgetUsd(1)).toBe(requestBudgetUsd(0)*2);
  }finally{db.close();}

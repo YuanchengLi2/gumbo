@@ -15,7 +15,6 @@ export {approvesPlan};
 import {proposePlan,approvePlan,executeWorkflow} from './workflow';
 import {FileApprovalRequired} from './file-tools';
 import {BlockedEditError} from './outcomes';
-import {initialMediaContext} from './media-context';
 import {z} from 'zod';
 import {normalizeOptionalNulls} from './provider-input';
 const CodeRouteSchema=z.object({route:z.enum(['local','question','plan','continue']),intelligence:z.enum(['haiku','sonnet','opus']),complexity:z.enum(['simple','normal','difficult']),reason:z.string().max(500).default('Route based on the requested work.'),approvalQuote:z.string().max(300).optional(),projectTitle:z.string().trim().min(1).max(80).optional()});
@@ -58,8 +57,6 @@ export function nextMode(current:{role:Mode;model:string},change:{to:Mode;kind?:
 export const plainEdit=(text:string)=>text.length<400&&/^(?:(?:ok(?:ay)?|now|also|and|please|then)[,]?\s+)*(?:add|make|put|cut|trim|remove|delete|drop|swap|replace|change|move|speed|slow|open|start|end|use|shorten|lengthen|mute|unmute|fade|grade|colou?r|crop|zoom|split|reorder|insert|turn|give|set|apply|lower|raise|increase|decrease|keep|caption|title|tighten|brighten|darken|warm|cool|boost|reduce|fix|extend|stretch|shrink|rotate|flip)\b/i.test(text.trim())&&!/\?|\b(?:opus|sonnet|director|plan|script|ideas?|concepts?|outline|storyboard)\b/i.test(text);
 /** The lead's conversation cache: five minutes until a wait for workers in this request has outlasted that, then one hour
  * (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
-/** The lead's view of the source map: the text catalog without images (workers look at the footage themselves). */
-export const leadMediaBlocks=(blocks:any[])=>[...blocks.filter(b=>b.type!=='image'),...(blocks.some(b=>b.type==='image')?[{type:'text',text:'Contact sheets of the footage go to the workers, not to you: brief them to look (view_media) and report what they see.'}]:[])];
 export const leadCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('lead-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
 export const noteWorkerWait=(db:ProjectDB,turnId:string,ms:number)=>{if(ms>240_000)db.setMeta('lead-long-wait:'+turnId,'1');};
 const fatalWorkerError=(error:unknown,signal:AbortSignal)=>signal.aborted||error instanceof FileApprovalRequired||error instanceof InferenceError&&['quota','authentication','request_conflict','request_budget'].includes(error.code);
@@ -89,11 +86,7 @@ export class Director {
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
  /** One inference. The first substantive request of the user-facing phase carries the bounded source map; workers and consultations work from briefs. */
- async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',media=true,extra:{workerMode?:WorkerMode;onStream?:()=>void}={}){
-  if(media&&purpose!=='routing'&&turnId&&!(messages as any[]).some(m=>m.role==='assistant'||m.dreamSource==='media')){const all=await initialMediaContext(this.db,turnId,this.controller?.signal);
-   // The lead directs from the text catalog: images cost many times more at its price, and workers look at the footage themselves.
-   const blocks=purpose==='lead'?leadMediaBlocks(all):all;
-   if(blocks.length)(messages as any[]).push({role:'user',dreamSource:'media',content:blocks});}
+ async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',extra:{workerMode?:WorkerMode;onStream?:()=>void}={}){
   // Effort is pinned per role for the whole conversation: changing it mid-conversation resets the prompt cache.
   // The lead thinks harder after repeated worker failures; a phase that spent a whole response thinking steps its effort down.
   const failures=purpose==='lead'&&turnId?Number(this.db.getMeta('worker-failures:'+turnId)??0):0,lower=turnId?Number(this.db.getMeta(`effort-override:${turnId}:${phase}`)??0):0;
@@ -139,7 +132,7 @@ export class Director {
    const adviser=ladder[Math.min(ladder.length-1,tier(model)+1)];
    let result=current.role==='lead'
     ?await codeAgent({...common,role:'lead',model,runWorkers:(tasks,callId)=>this.runWorkers(tasks,callId,turnId,current.phase),infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'lead',current.phase)})
-    :await codeAgent({...common,role:'solo',model,consult:(issue,key)=>this.direction('Original request: '+text+'\nThe editor asks: '+issue,turnId,'consult-'+key,adviser),infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'execution',current.phase,false)});
+    :await codeAgent({...common,role:'solo',model,consult:(issue,key)=>this.direction('Original request: '+text+'\nThe editor asks: '+issue,turnId,'consult-'+key,adviser),infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'execution',current.phase)});
    // A Sonnet director whose workers kept failing hands the request to Opus once.
    if(!result.switch&&result.outcome.status==='blocked'&&current.role==='lead'&&model===models.sonnet&&canSwitch&&Number(this.db.getMeta('worker-failures:'+turnId)??0)>=2)
     result={...result,switch:{to:'lead',kind:'escalate',reason:'Workers kept failing',handoff:`The Sonnet director could not finish: ${result.outcome.summary.slice(0,3000)}${result.outcome.status==='blocked'&&result.outcome.nextAction?`\nSuggested next step: ${result.outcome.nextAction}`:''}`}};
@@ -179,7 +172,7 @@ ${file.text}`).join('');
    try{
     // The snapshot stands for the project state only while the published version is the one it describes.
     let stateKnown=false;try{stateKnown=JSON.parse(snapshot).overview?.versionId===this.db.head();}catch{}
-    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:models.worker,role:'worker',system:workerPrompt,research,canPropose,writes:research?[]:task.writes,canPublish:!research&&task.publish,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,false,{workerMode,onStream:first?streaming:undefined})});
+    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:models.worker,role:'worker',system:workerPrompt,research,canPropose,writes:research?[]:task.writes,canPublish:!research&&task.publish,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
     const saved=this.db.loadState<any>(`code-agent:${turnId}:${phase}`),completed=saved?.completed??{};
     const publication=Object.values(completed).map((r:any)=>r?.publication as Publication|undefined).filter(Boolean).at(-1);
     const changedFiles=[...new Set((saved?.messages??[]).flatMap((m:any)=>m.role==='assistant'&&Array.isArray(m.content)?m.content:[]).filter((b:any)=>b.type==='tool_use'&&completed[b.id]&&['write_file','edit_file','import_resources'].includes(b.name)).map((b:any)=>b.name==='import_resources'?String(b.input?.into??''):String(b.input?.path??'')).filter(Boolean))] as string[];
@@ -207,7 +200,7 @@ ${file.text}`).join('');
  /** A one-shot Opus answer to Haiku's question. It has no tools: the question and the project overview are everything it uses. */
  private async direction(text:string,turnId:string,key:string,model=models.director){
   const phase='direction-'+key;this.escalated(turnId,'consult',model,text.slice(-500));
-  const result=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:'Provide creative or technical direction for this request: '+text,model,readOnly:true,bare:true,system:'You are the creative director within Dream. The editor implementing this request asked for direction. You cannot inspect anything: answer from the question and the project overview. Visuals are engine scenes: React components (Remotion timing, three.js, d3, bundled fonts, project media) that the Dream scene engine runs, published with publish_project; music and sound effects are written as score and sound files; audio and source video belong on the shared timeline. Workers can download any tool and write any code a task needs, including processing audio and footage. Never direct rendering the edit itself during chat; published work appears live and only Export renders the finished video. Give a concise implementation brief with concrete creative decisions and checks, under eight points. If a decision depends on a fact you were not given, say what Haiku should check. Do not write the implementation or ask for plan approval. Return your brief as a normal final answer.',signal:this.signal(),publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'consultation',phase,false)});
+  const result=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:'Provide creative or technical direction for this request: '+text,model,readOnly:true,bare:true,system:'You are the creative director within Dream. The editor implementing this request asked for direction. You cannot inspect anything: answer from the question and the project overview. Visuals are engine scenes: React components (Remotion timing, three.js, d3, bundled fonts, project media) that the Dream scene engine runs, published with publish_project; music and sound effects are written as score and sound files; audio and source video belong on the shared timeline. Workers can download any tool and write any code a task needs, including processing audio and footage. Never direct rendering the edit itself during chat; published work appears live and only Export renders the finished video. Give a concise implementation brief with concrete creative decisions and checks, under eight points. If a decision depends on a fact you were not given, say what Haiku should check. Do not write the implementation or ask for plan approval. Return your brief as a normal final answer.',signal:this.signal(),publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'consultation',phase)});
   if(result.outcome.status==='blocked')throw new BlockedEditError(result.outcome);return result.outcome.summary;
  }
  async edit(text:string,turnId:string,selection:string[]=[],_review=false,phase='main'){return(await this.execute(text+'\nSelected: '+JSON.stringify(selection),turnId,false,false,phase)).outcome;}

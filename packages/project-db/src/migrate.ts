@@ -6,7 +6,7 @@ import {lineDelta} from '@dream/contracts';
 const addColumn=(table:string,column:string,definition:string)=>(db:Database.Database)=>{if(!(db.prepare(`PRAGMA table_info(${table})`).all() as {name:string}[]).some(c=>c.name===column))db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);};
 export function migrate(db:Database.Database,initialSchema:string){
  const current=db.pragma('user_version',{simple:true}) as number;
- const migrations:(string|((db:Database.Database)=>void))[]=[initialSchema,`CREATE TABLE IF NOT EXISTS embeddings(id TEXT NOT NULL,asset_id TEXT NOT NULL,model_id TEXT NOT NULL,dimensions INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(id,model_id)); CREATE INDEX IF NOT EXISTS embeddings_model ON embeddings(model_id,dimensions);`,addColumn('requests','identity','TEXT'),`CREATE TABLE IF NOT EXISTS context_chunks(id TEXT PRIMARY KEY,kind TEXT NOT NULL,owner TEXT NOT NULL,text TEXT NOT NULL,hash TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS context_fts USING fts5(id UNINDEXED,text);`, engineSchema,decisionSchema,workflowIndexSchema,observationIndexSchema,`INSERT INTO meta(key,value) VALUES('timeline_features','manual-v1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;`,addColumn('messages','attachments',"TEXT NOT NULL DEFAULT '[]'"), workspaceSchema, activitySchema, moveActivityEvents, sceneErrorSchema, addColumn('messages','selection',"TEXT NOT NULL DEFAULT '[]'")];
+ const migrations:(string|((db:Database.Database)=>void))[]=[initialSchema,`CREATE TABLE IF NOT EXISTS embeddings(id TEXT NOT NULL,asset_id TEXT NOT NULL,model_id TEXT NOT NULL,dimensions INTEGER NOT NULL,vector BLOB NOT NULL,PRIMARY KEY(id,model_id)); CREATE INDEX IF NOT EXISTS embeddings_model ON embeddings(model_id,dimensions);`,addColumn('requests','identity','TEXT'),`CREATE TABLE IF NOT EXISTS context_chunks(id TEXT PRIMARY KEY,kind TEXT NOT NULL,owner TEXT NOT NULL,text TEXT NOT NULL,hash TEXT NOT NULL); CREATE VIRTUAL TABLE IF NOT EXISTS context_fts USING fts5(id UNINDEXED,text);`, engineSchema,decisionSchema,workflowIndexSchema,observationIndexSchema,`INSERT INTO meta(key,value) VALUES('timeline_features','manual-v1') ON CONFLICT(key) DO UPDATE SET value=excluded.value;`,addColumn('messages','attachments',"TEXT NOT NULL DEFAULT '[]'"), workspaceSchema, activitySchema, moveActivityEvents, sceneErrorSchema, addColumn('messages','selection',"TEXT NOT NULL DEFAULT '[]'"), withoutInterpretations];
  if(current>migrations.length)throw new Error('This project was saved by a newer Dream version. Update Dream before opening it.');
  if(current>0&&current<migrations.length){const backup=db.name+`.pre-engine-v${current}.sqlite`;if(!existsSync(backup))db.prepare('VACUUM INTO ?').run(backup);}
  for(let i=current;i<migrations.length;i++)db.transaction(()=>{const step=migrations[i];if(typeof step==='string')db.exec(step);else step(db);db.pragma(`user_version=${i+1}`);})();
@@ -80,6 +80,20 @@ const workflowIndexSchema=`
 CREATE TRIGGER IF NOT EXISTS context_workflow_insert AFTER INSERT ON meta WHEN NEW.key LIKE 'workflow:%' BEGIN INSERT INTO context_dirty SELECT 'workflow',substr(NEW.key,10) WHERE NOT EXISTS(SELECT 1 FROM context_dirty WHERE kind='workflow' AND owner=substr(NEW.key,10)); END;
 CREATE TRIGGER IF NOT EXISTS context_workflow_update AFTER UPDATE ON meta WHEN NEW.key LIKE 'workflow:%' BEGIN INSERT INTO context_dirty SELECT 'workflow',substr(NEW.key,10) WHERE NOT EXISTS(SELECT 1 FROM context_dirty WHERE kind='workflow' AND owner=substr(NEW.key,10)); END;
 INSERT OR IGNORE INTO context_dirty SELECT 'workflow',substr(key,10) FROM meta WHERE key LIKE 'workflow:%';
+`;
+
+// The agent looks at footage itself: earlier projects' shot descriptions and video observations leave the indexes it
+// searches, observations stop being indexed, and asset entries are rebuilt without the footage map.
+const withoutInterpretations=`
+DROP TRIGGER IF EXISTS context_observation_insert;
+DROP TRIGGER IF EXISTS context_observation_update;
+DROP TRIGGER IF EXISTS context_observation_delete;
+DELETE FROM context_fts WHERE id IN (SELECT id FROM context_chunks WHERE kind='observation');
+DELETE FROM context_chunks WHERE kind='observation';
+DELETE FROM context_owners WHERE kind='observation';
+DELETE FROM context_dirty WHERE kind='observation';
+DELETE FROM footage_fts WHERE kind<>'words';
+INSERT INTO context_dirty SELECT 'asset',id FROM assets WHERE NOT EXISTS(SELECT 1 FROM context_dirty d WHERE d.kind='asset' AND d.owner=assets.id);
 `;
 
 const observationIndexSchema=`
