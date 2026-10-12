@@ -11,7 +11,7 @@ import {emptyTimeline} from '@dream/timeline';
 import {models} from '@dream/config';
 import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
 import {editChecks} from '../../apps/project-service/src/edit-checks';
-import {codeAgent} from '../../packages/orchestrator/src/code-agent';
+import {codeAgent,capText} from '../../packages/orchestrator/src/code-agent';
 import {allowedTools} from '../../packages/orchestrator/src/code-tools';
 
 // A 20-second source with speech: "hello" 1.0-1.5, "world" 1.6-2.0, then four seconds of silence, "again" 6.0-6.4.
@@ -106,6 +106,14 @@ it('never reports an edit as done when a delegated task ended blocked and the ag
   expect((result.outcome as any).nextAction).toContain('fix');
  }finally{db.close();}
 },60_000);
+
+it('caps the text of every result, including a look at footage that mixes text and images',()=>{
+ const look=[{type:'text',text:'x'.repeat(30_000)},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:'img'}},{type:'text',text:'y'.repeat(5_000)}];
+ const capped=capText(look,'receipt-1') as any[];
+ expect(capped.filter(b=>b.type==='text').reduce((n,b)=>n+b.text.length,0)).toBeLessThan(24_000+300);
+ expect(capped.some(b=>b.type==='image')).toBe(true);expect(capped.at(-1).text).toContain('receipt-1');
+ const small=[{type:'text',text:'short'}];expect(capText(small,'r')).toBe(small);
+});
 
 it('completes an edit when the agent stops with a reply once everything is published and nothing is left to fix',async()=>{
  const {root,db,ws}=await fixture();try{
