@@ -1,4 +1,5 @@
 import {InferenceRequests,requestStatus} from './inference-requests.ts';
+const compressedJSON='application/x-dream-json-gzip';
 import {activateAccess} from './access.ts';
 import {countTokens} from './token-count.ts';
 import {handleAI} from './ai.ts';
@@ -25,7 +26,9 @@ Deno.serve(async(req)=>{
  try{
   if(action==='transcribe'){const result=await handleTranscription(req,user.id,{db,key:Deno.env.get('GROQ_API_KEY')});return json(result.body,result.status);}
   if(Number(req.headers.get('content-length')??0)>12_000_000)return json({error:'Request too large'},413);
-  const body=await req.json();
+  // The agent's requests carry its own code, which the firewall in front of this function can block as an attack (it
+  // answers with an HTML page before the request arrives); the desktop sends them gzip-compressed, so nothing matches.
+  const body=req.headers.get('content-type')===compressedJSON?JSON.parse(await new Response(req.body!.pipeThrough(new DecompressionStream('gzip'))).text()):await req.json();
   if(action==='ai-status'||action==='ai-cancel'){if(typeof body.requestId!=='string')return json({error:'Request ID required'},400);if(action==='ai-cancel')await requests.cancel(user.id,body.requestId);const result=requestStatus(await requests.read(user.id,body.requestId));return json(result.body,result.status);}
   if(action==='admin'||action==='admin-invite'){const {data:account}=await db.from('dream_accounts').select('is_admin').eq('id',user.id).single();if(!account?.is_admin)return json({error:'Administrator access is required.'},403);if(action==='admin-invite'){const email=String(body.email??'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a valid email address.'},400);const {error}=await db.from('dream_invites').upsert({email});if(error)throw error;return json({invited:true});}const {data:accounts}=await db.from('dream_accounts').select('id,email,status,daily_budget_usd');const {data:usage}=await db.from('dream_usage').select('cost_usd').gte('created_at',new Date(new Date().setUTCHours(0,0,0,0)).toISOString());return json({accounts:accounts??[],requests:usage?.length??0,cost:(usage??[]).reduce((sum:number,u:any)=>sum+Number(u.cost_usd),0)});}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}

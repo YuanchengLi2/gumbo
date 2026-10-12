@@ -3,7 +3,7 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {infer} from '../../packages/orchestrator/src/inference';
+import {infer,requestBody} from '../../packages/orchestrator/src/inference';
 import {readMessageStream} from '../../supabase/functions/_shared/stream';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
 // Historical journal compatibility; new execution is covered by code-agent.test.ts.
@@ -31,7 +31,7 @@ it('reassembles arbitrarily split UTF-8, tool JSON and signed thinking with cumu
 it('gateway relays streams and records usage, while client cancellation retains an uncertain reservation',async()=>{
  const updates:any[]=[];const db={rpc:async()=>({data:'usage'}),from:()=>({update:(value:any)=>({eq:async()=>{updates.push(value);return{};}})})};
  const body={model:'claude-sonnet-5-5',requestId:'one',messages:[],stream:true,max_tokens:32768};
- const result=await handleAI(body,'user',{db,key:'fixture',fetcher:async(_url,init)=>{expect(JSON.parse(String(init?.body))).toMatchObject({stream:true,max_tokens:32768});return streamed(events());}});
+ const result=await handleAI(body,'user',{db,key:'fixture',fetcher:async(_url,init)=>{expect(requestBody(init?.body)).toMatchObject({stream:true,max_tokens:32768});return streamed(events());}});
  const message=await readMessageStream(new Response(result.stream,{headers:{'Content-Type':'text/event-stream'}}));expect(message.dream_request).toMatchObject({status:'completed',providerRequestId:'provider-fixture'});expect(updates).toHaveLength(1);expect(updates[0]).toMatchObject({status:'completed',input_tokens:10,output_tokens:30,cache_read_tokens:20});
  let canceled=false;const hanging=await handleAI({...body,requestId:'two'},'user',{db,key:'fixture',fetcher:async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(': keep alive\n\n'));},cancel(){canceled=true;}}),{headers:{'Content-Type':'text/event-stream'}})});
  await hanging.stream!.cancel();expect(canceled).toBe(true);expect(updates.at(-1).status).toBe('uncertain');
@@ -41,7 +41,7 @@ it('automatically increases creative output capacity without executing truncated
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-stream-')),'Streaming');const capacities:number[]=[];
  try{
   const input={model:'claude-sonnet-5-5',system:'Create an original animation',messages:[{role:'user',content:'Create'}],tools:[],turnId:'turn',purpose:'routine',max_tokens:8192};
-  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{fetch:async(_url,init)=>{capacities.push(JSON.parse(String(init?.body)).max_tokens);return streamed(capacities.length===1?events('max_tokens',true):events());}});
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{fetch:async(_url,init)=>{capacities.push(requestBody(init?.body).max_tokens);return streamed(capacities.length===1?events('max_tokens',true):events());}});
   expect(capacities).toEqual([8192,16384]);expect(response.content[1].input).toEqual({definition:'Dream \u03c0 \ud83c\udfac'});expect(db.state().versions).toHaveLength(1);
   const usage=db.db.prepare("SELECT json FROM events WHERE type='ai.usage'").all() as {json:string}[];expect(usage).toHaveLength(2);expect(usage.map(row=>JSON.parse(row.json).stopReason)).toEqual(['max_tokens','tool_use']);
  }finally{db.close();}

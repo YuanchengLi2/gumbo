@@ -23,6 +23,7 @@ it('routes text deliverables to a reply, continues only stopped work, and lets t
  expect(routeCodeRequest('come up with ideas then build it','auto').route).toBe('local');
  expect(routeCodeRequest('can you create a minecraft animated short explaining what claude is, thinking of a script under 23 seconds, make it look really good','auto').route).toBe('local');
  expect(routeCodeRequest('continue','auto',true).route).toBe('continue');expect(routeCodeRequest('ok, keep going','auto',true).route).toBe('continue');
+ expect(routeCodeRequest('Where does it still feel slow or confusing?','auto').route).toBe('question');expect(routeCodeRequest('Should I cut the ending?','auto').route).toBe('question');expect(routeCodeRequest('Can you add captions?','auto').route).toBe('local');
  expect(routeCodeRequest('continue','auto',false).route).toBe('local');expect(routeCodeRequest('Trim the first clip to 3 seconds','auto').complexity).toBe('simple');
  const parsed=(interrupted:boolean)=>parseCodeRoute({route:'continue',intelligence:'haiku',complexity:'normal',reason:'More',approvalQuote:null},'keep going','auto',interrupted).route;
  expect(parsed(true)).toBe('continue');expect(parsed(false)).toBe('local');

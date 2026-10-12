@@ -1,4 +1,5 @@
 import {RunStream} from './run-stream';
+import {gzipSync,gunzipSync} from 'node:zlib';
 import {assertToolExchanges} from './tool-exchanges';
 import {budgetRequest} from './context-budget';
 import {readMessageStream} from '../../../supabase/functions/_shared/stream';
@@ -46,6 +47,13 @@ const failure=(body:any,status:number)=>typeof body?.error==='string'?body.error
 const transientStatus=(status:number)=>[408,429,500,502,503,504,529].includes(status);
 
 /** Local response receipt closes the crash gap between inference and each caller's checkpoint. */
+/** Requests with the conversation in them travel gzip-compressed: the agent's own code (a script reading files, a shell
+ * command) can match the firewall in front of the gateway, which then blocks the request with an HTML page. */
+const compressed=(value:unknown)=>({'Content-Type':'application/x-dream-json-gzip',body:gzipSync(JSON.stringify(value))});
+/** A request body as sent, compressed or not (for fixtures standing in for the gateway). */
+export function requestBody(body:unknown){return JSON.parse(Buffer.isBuffer(body)||body instanceof Uint8Array?gunzipSync(body as Uint8Array).toString('utf8'):String(body));}
+/** A reply that should be JSON but is not (a firewall or proxy page) fails with its status and the start of its text. */
+async function replyJSON(response:Response){const text=await response.text();try{return JSON.parse(text);}catch{throw Object.assign(new Error(`The AI service answered ${response.status} with ${response.headers.get('content-type')??'no content type'} instead of a response.`),{code:'gateway_page',diagnostics:{status:response.status,contentType:response.headers.get('content-type'),snippet:text.replace(/\s+/g,' ').slice(0,300)}});}}
 export async function infer(options:{db:ProjectDB;config:ProviderConnection;input:Input;resume:number;signal?:AbortSignal;connect?:()=>Promise<ProviderConnection>;publish?:(type:string,payload:unknown)=>void},dependencies:Dependencies={}):Promise<InferenceResponse>{
  const {db,input,resume,signal,publish}=options;let config=options.config;
  assertToolExchanges(input.messages as any[]);
@@ -71,7 +79,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   const c=calibrated(budget.estimated);if(c!==undefined&&Math.abs(c-budget.target)>budget.target*.05)return c;
   signal?.throwIfAborted();const {phase:_phase,...wire}=wireInput as any;
   // Counting is advisory: when it is unavailable (rate limit, network), the conservative estimate decides instead.
-  const response=await request(config.url+'/count-tokens',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.token}`},body:JSON.stringify(wire),signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)}).catch(error=>{signal?.throwIfAborted();return error as Error;});
+  const {body:countBody,...countType}=compressed(wire),response=await request(config.url+'/count-tokens',{method:'POST',headers:{...countType,Authorization:`Bearer ${config.token}`},body:countBody,signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)}).catch(error=>{signal?.throwIfAborted();return error as Error;});
   const result=response instanceof Response?await response.json().catch(()=>({})) as any:{};
   if(!(response instanceof Response)||!response.ok||!Number.isFinite(result.input_tokens)){db.event('ai.count_fallback',{turnId:input.turnId,status:response instanceof Response?response.status:'network',estimated:budget.estimated});return budget.estimated;}
   db.setMeta(countKey,String(result.input_tokens));return result.input_tokens as number;
@@ -163,9 +171,9 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   try{
    touch();
    const {phase:_phase,...wire}=wireInput as any;
-   response=await request(`${config.url}/ai`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.token}`},body:JSON.stringify({...wire,requestId:receipt.id,stream:true,max_tokens:receipt.capacity}),signal:AbortSignal.any([...(signal?[signal]:[]),idle.signal,AbortSignal.timeout(HARD_MS)])});
+   const {body:aiBody,...aiType}=compressed({...wire,requestId:receipt.id,stream:true,max_tokens:receipt.capacity});response=await request(`${config.url}/ai`,{method:'POST',headers:{...aiType,Authorization:`Bearer ${config.token}`},body:aiBody,signal:AbortSignal.any([...(signal?[signal]:[]),idle.signal,AbortSignal.timeout(HARD_MS)])});
    touch();
-   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();if(event.event==='dream_request')providerRequestId=event.data?.providerRequestId;live?.accept(event);}):await response.json();
+   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();if(event.event==='dream_request')providerRequestId=event.data?.providerRequestId;live?.accept(event);}):await replyJSON(response);
   }catch(error){
    // Every failed attempt is recorded with what the stream showed, so a failure can be diagnosed after the run.
    if(!signal?.aborted)db.event('ai.inference_failed',{turnId:input.turnId,phase:input.phase??'main',purpose:input.purpose,model:input.model,attempt:receipt.attempt,transientRetries:receipt.transientRetries??0,code:(error as any).code??(error as Error).name,message:String((error as Error).message).slice(0,500),diagnostics:(error as any).diagnostics,providerRequestId:(error as any).diagnostics?.providerRequestId??providerRequestId});

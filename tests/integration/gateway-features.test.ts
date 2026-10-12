@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import {requestBody} from '../../packages/orchestrator/src/inference';
 import {handleAI,resetFallbackSupport} from '../../supabase/functions/dream-gateway/ai';
 import {inferencePolicy,cachedPrompt,usageCost} from '../../supabase/functions/dream-gateway/inference-policy';
 
@@ -13,7 +14,7 @@ it('uses one-hour caching for every breakpoint of a conversation waiting on help
 
 it('sends task budgets with their beta, drops them for good when the provider rejects them, and returns cost and features',async()=>{
  const sent:{beta:string;body:any}[]=[];let reject=false;
- const fetcher:typeof fetch=async(_url,init)=>{const body=JSON.parse(String(init?.body));sent.push({beta:new Headers(init?.headers).get('anthropic-beta')!,body});return reject&&body.output_config?.task_budget?Response.json({error:{type:'invalid_request_error',message:'task_budget: unknown field'}},{status:400}):Response.json(ok);};
+ const fetcher:typeof fetch=async(_url,init)=>{const body=requestBody(init?.body);sent.push({beta:new Headers(init?.headers).get('anthropic-beta')!,body});return reject&&body.output_config?.task_budget?Response.json({error:{type:'invalid_request_error',message:'task_budget: unknown field'}},{status:400}):Response.json(ok);};
  resetFallbackSupport();
  const request=(id:string,extra:any={})=>handleAI({model:'claude-haiku-5-5',messages:[{role:'user',content:'hi'}],requestId:id,max_tokens:1024,profile:{version:1,role:'executor',effort:'medium',complexity:'normal',reason:'fixture'},...extra},'user',{db,key:'fixture',fetcher});
  const first=await request('a',{taskBudget:{total:100000,remaining:60000},cacheTtl:'1h'});

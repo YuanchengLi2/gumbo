@@ -9,7 +9,7 @@ import {codeAgent} from '../../packages/orchestrator/src/code-agent';
 import {Director} from '../../packages/orchestrator/src/code-director';
 import {validateDelegation} from '../../packages/orchestrator/src/code-tools';
 import {budgetRequest} from '../../packages/orchestrator/src/context-budget';
-import {infer} from '../../packages/orchestrator/src/inference';
+import {infer,requestBody} from '../../packages/orchestrator/src/inference';
 import {assertToolExchanges} from '../../packages/orchestrator/src/tool-exchanges';
 
 const fixture=()=>new ProjectDB(mkdtempSync(join(tmpdir(),'dream-engine-')));
@@ -106,7 +106,7 @@ it('keeps the compacted provider prefix byte-identical as the conversation grows
 
 it('gives a truncated execution response more output room before involving the agent',async()=>{
  const db=fixture();try{const sizes:number[]=[];
-  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.agent,system:'Write',messages:[{role:'user',content:'Write the scene'}],tools:[],purpose:'execution',max_tokens:16384,turnId:'turn'}},{fetch:async(_url,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(sizes.length===1?{content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}}:{content:[{type:'text',text:'complete'}],stop_reason:'end_turn',usage:{}});}});
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.agent,system:'Write',messages:[{role:'user',content:'Write the scene'}],tools:[],purpose:'execution',max_tokens:16384,turnId:'turn'}},{fetch:async(_url,init)=>{sizes.push(requestBody(init?.body).max_tokens);return Response.json(sizes.length===1?{content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}}:{content:[{type:'text',text:'complete'}],stop_reason:'end_turn',usage:{}});}});
   expect(response.content[0].text).toBe('complete');expect(sizes).toEqual([16384,32768]);
  }finally{db.close();}
 });
@@ -130,7 +130,7 @@ it('enables the server-side refusal fallback for Opus, heals if the provider rej
  const {handleAI,resetFallbackSupport}=await import('../../supabase/functions/dream-gateway/ai');const {usageCost}=await import('../../supabase/functions/dream-gateway/inference-policy');
  const db={rpc:async()=>({data:'usage',error:null}),from:()=>({update:()=>({eq:async()=>({error:null})})})};
  const sent:{beta:string;fallbacks?:string}[]=[];let reject=false;
- const fetcher:typeof fetch=async(_url,init)=>{const body=JSON.parse(String(init?.body));sent.push({beta:new Headers(init?.headers).get('anthropic-beta')!,fallbacks:body.fallbacks});return reject&&body.fallbacks?Response.json({error:{type:'invalid_request_error',message:'fallbacks: not supported'}},{status:400}):Response.json({content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{input_tokens:1,output_tokens:1}});};
+ const fetcher:typeof fetch=async(_url,init)=>{const body=requestBody(init?.body);sent.push({beta:new Headers(init?.headers).get('anthropic-beta')!,fallbacks:body.fallbacks});return reject&&body.fallbacks?Response.json({error:{type:'invalid_request_error',message:'fallbacks: not supported'}},{status:400}):Response.json({content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{input_tokens:1,output_tokens:1}});};
  resetFallbackSupport();
  const request=(model:string,id:string)=>handleAI({model,messages:[{role:'user',content:'hi'}],requestId:id,max_tokens:1024},'user',{db,key:'fixture',fetcher});
  await request('claude-opus-5-5','a');await request('claude-haiku-5-5','b');

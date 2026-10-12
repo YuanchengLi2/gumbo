@@ -1,4 +1,5 @@
 import {it,expect} from 'vitest';
+import {requestBody} from '../../packages/orchestrator/src/inference';
 import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -79,7 +80,7 @@ it('compacts a 30-step Haiku worker at most twice and never sends it more than 9
  const {infer}=await import('../../packages/orchestrator/src/inference');const {estimateTokens}=await import('../../packages/orchestrator/src/context-budget');
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-haiku-worker-')),'Worker');try{
   const sizes:number[]=[];let counts=0;const real=(body:any)=>Math.round(estimateTokens({system:body.system,messages:body.messages,tools:body.tools})*.9);
-  const fetcher:typeof fetch=async(url,init)=>{const body=JSON.parse(String(init?.body));if(String(url).endsWith('/count-tokens')){counts++;return Response.json({input_tokens:real(body)});}const tokens=real(body);sizes.push(tokens);return Response.json({content:[{type:'tool_use',id:'read'+sizes.length,name:'read_file',input:{path:'src/shot'+sizes.length+'.tsx'}}],stop_reason:'tool_use',usage:{input_tokens:tokens,output_tokens:200}});};
+  const fetcher:typeof fetch=async(url,init)=>{const body=requestBody(init?.body);if(String(url).endsWith('/count-tokens')){counts++;return Response.json({input_tokens:real(body)});}const tokens=real(body);sizes.push(tokens);return Response.json({content:[{type:'tool_use',id:'read'+sizes.length,name:'read_file',input:{path:'src/shot'+sizes.length+'.tsx'}}],stop_reason:'tool_use',usage:{input_tokens:tokens,output_tokens:200}});};
   const messages:any[]=[{role:'user',content:'Build the seven shots.'}];
   for(let step=0;step<30;step++){
    const response=await infer({db,config:{url:'http://local-fixture',token:'fixture'},resume:0,input:{model:'claude-haiku-5-5',system:'Worker',messages,tools:[],turnId:'turn',purpose:'worker',phase:'main:worker:call:shots',max_tokens:16384}},{fetch:fetcher});

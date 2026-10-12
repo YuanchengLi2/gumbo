@@ -5,7 +5,7 @@ export function routeCodeRequest(text:string,intent:RequestIntent,interrupted=fa
  const planning=intent==='plan'||/^(?:please\s+)?(?:plan\b|help me plan\b|discuss\b)/i.test(text);
  // Carrying on with a stopped request; anything else after a stop is a new request.
  const continuing=interrupted&&intent==='auto'&&/^(?:(?:ok(?:ay)?|yes|please)[,.!]?\s+)?(?:continue|keep going|resume|go on|carry on|try again|retry)\b/i.test(text.trim());
- const question=/^(?:what|why|how|does|is|are|explain|can you explain)\b/i.test(text)&&! /\b(?:then|and)\s+(?:make|change|create|edit|shorten|render|apply|implement)\b/i.test(text);
+ const question=/^(?:what|what's|why|how|where|which|who|when|does|do|did|is|are|was|were|should|explain|can you explain)\b/i.test(text)&&! /\b(?:then|and)\s+(?:make|change|create|edit|shorten|render|apply|implement)\b/i.test(text);
  // Something to read before anything is built (a script, ideas, an outline or copy), with no request to build it now.
  const toRead=/\b(?:write|draft|think of|come up with|give me|suggest|brainstorm|make|show me)\b[^.?!]{0,40}\b(?:script|ideas?|outline|copy|concepts?|voiceover|storyboard)\b/i;
  const build=/\b(?:create|edit|shorten|render|apply|implement|build|animate|add|put|place|turn it into|make (?:it|the video|a video|an? (?:animated|short|video|clip|intro|scene)))\b/i;
