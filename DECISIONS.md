@@ -100,6 +100,8 @@ Opus executes subjective/complex work directly; Sonnet executes exact local work
 
 ## October 9, 2026 — Opus leads, Haiku executes
 
+_Partly replaced on October 11, 2026 by "One agent owns the edit": the lead, its relay to workers and the integration task are gone. The loop limits, commands that never publish, retries and migrations still hold._
+
 This entry supersedes earlier statements that Sonnet executes or that Opus executes subjective work directly.
 
 - Haiku 5.5 completes simple exact edits and questions alone. Opus 5.5 leads all creative, multi-part and approved-plan work: it inspects, decides, delegates to Haiku workers through `delegate`, verifies and finishes. The lead has no write or command tools; it may publish what workers prepared or confirm no change is needed. Sonnet is not used by the engine.
@@ -179,12 +181,16 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 
 ## October 10, 2026 — Timeline actions for the agent
 
+_Replaced on October 11, 2026 by "The agent edits through code; the timeline actions are gone"._
+
 - The agent changes the timeline with edit_timeline: the same typed operations the manual editor uses (insert, trim, split, move, delete and replace clips, speed, framing and grade, clip audio, transitions, overlays and sound effects, captions, music, settings), plus outputs to declare new scenes, music and sound so actions can place them as output:<id>. Live sessions showed most failures and much of the cost came from the agent reading and rewriting the whole project.json for every edit, including a run that invented a new timeline ID.
 - Actions apply in order and nothing applies unless every action passes. Each is checked as it is applied; an error names the action and the problem, with the IDs that exist when it named one that does not. The result is then checked against the sources: every asset or declared output exists, every range lies inside its source, every changed item has a length and a clip to stand on, and a deleted clip may not strand items anchored to it.
 - The call publishes in the same step (publish:false defers to publish_project, for changes that go with new code), and returns a compact list of what changed instead of the document. A repeated or resumed call replays its saved document and publication instead of applying its actions twice.
 - Code is written only for new visuals, music and sound. project.json is edited directly only for what no action expresses. Only the solo editor and a publishing worker get the tool; the director still never edits.
 
 ## October 10, 2026 — Smaller agent context
+
+_Partly replaced on October 11, 2026: the director it mentions is gone (see "One agent owns the edit"). Change-only state messages and the tiled frames of view_media still hold._
 
 - Project-state messages report only what changed. The first message already carries the project and its media, so no full state follows it; after that, each change sends the changed fields, and for media and decisions only the records added, changed or removed. The full state is saved locally under the message, and compaction restores it when it drops the earlier messages a change report builds on. A worker whose snapshot describes an older version still gets the full state first. Measured on the saved live sessions, state messages shrink by 87 to 89 percent.
 - A look at footage (view_media) with five or more frames returns them tiled on 4x3 contact sheets instead of separate images, about a quarter of the image tokens; a range of a second or two still returns full-size frames for close checks. Looks at footage were the largest results in the live sessions.
@@ -193,10 +199,14 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 
 ## October 10, 2026 — Old director removed; session numbers per request
 
+_review-packet and footage-tools were deleted on October 11, 2026 with the footage map (see "The agent looks at footage itself; nothing pre-interprets it")._
+
 - The old tool-based director (legacy-director.ts) and the modules only it used (read-loop, director-consult, design, review-loop, presentation, tool-registry, tool-context, visual-tools, media-tools) are deleted. The app had not used them since the code engine; about a fifth of the integration tests still exercised them, so a passing suite said less about the shipping app than it seemed. Each behavior those tests covered (resuming without repeating effects, file approval, truncated responses, plan approval, transient retries, compaction, undo) has a test against the current engine; tests in mixed files that did not use the old director are kept. review-packet and footage-tools stay for the smoke scripts.
 - scripts/session-report.ts reads a project's database read-only and reports each request: status, time, cost, calls per model, the largest context sent, the share read from cache, moves to Opus with their reasons, compactions and spending-limit stops; --compare puts an older session's numbers beside it. The live session test records these numbers for every step and writes session-report.txt, compared with DREAM_LIVE_COMPARE when set. The last live session before these changes: $0.70 for nine requests, $0.57 of it Opus in the first three.
 
 ## October 10, 2026 — Haiku first, then Sonnet, then Opus
+
+_Replaced on October 11, 2026 by "One agent owns the edit": a failing request continues in the same conversation on a stronger model, and there is no director._
 
 - Haiku starts every request that changes or questions an existing project. When the engine sees it fail (the same tool error twice, the step limit, or repeated output cut-offs), Sonnet takes over working alone, with the same tools and a handoff of the request, Haiku's latest notes and what is published. When Sonnet fails the same way, the Opus director takes over. Before this, Haiku's second repeated failure went straight to Opus.
 - An editor that asks for direction (switch_to_orchestrated: several new pieces built together) gets a Sonnet director with Haiku workers. A Sonnet director whose workers keep failing (two or more failed tasks) and that finishes blocked hands the request to Opus once. A consultation goes one step above the model asking: Haiku asks Sonnet, Sonnet asks Opus.
@@ -211,6 +221,8 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 - The editor or director keeps project notes: finish takes optional notes (what the user wants for this video overall, such as mood, style, pacing, likes and dislikes, and lasting decisions), which replace the previous notes and appear as projectNotes in every later request. They are written in the call that already ends the request, so they cost no extra model call. Workers and consultations never write them. Verbatim user preferences still go through remember_decision.
 
 ## October 10, 2026 — What the agent saw stays with the project
+
+_Partly replaced on October 11, 2026: the notes travel as sourceNotes in the request block (see "The cached briefing actually stays the same"), and the visual-understanding job it mentions was deleted with the footage map._
 
 - The plan assumed footage descriptions were already saved; they are not (the visual-understanding job is not wired into the app and its jobs are retired when a project opens). Instead, finish takes optional sourceNotes: one short line per source the agent looked at, saying what it shows and where. They are saved per source (a new note replaces the old one) and listed as seen in the media list of every later request, so follow-ups like "swap the last clip for one that fits the mood better" can choose from what was already seen and look with view_media only for what the notes do not cover. The notes are written in the call that already ends the request; nothing scans footage in the background.
 
@@ -233,12 +245,16 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 
 ## October 11, 2026 — The footage map: the agent sees what the footage shows
 
+_Replaced on October 11, 2026 by "The agent looks at footage itself; nothing pre-interprets it"._
+
 - The live editing-checks run showed the agent editing video from transcripts alone: the project held only words, it looked at footage in one of ten requests, and its notes on sources quoted dialogue. It extended a clip into a paused stretch and a screen-recorder window it had never seen.
 - Every imported video or image now gets a footage map in the background after it is ready (stage footage_map). One local ffmpeg pass at 320 px and 10 fps (about 15 times real time) finds cuts (scdet), frozen stretches (freezedetect, which catches a paused video), black stretches, blur, brightness, motion and camera shake (vidstabdetect; the frame-to-frame camera move minus its one-second average, so pans do not count). Shots between cuts carry their measurements and problems (frozen, black, dark, blurry, shaky); thresholds were set on real footage (sharp video blurs at about 4, soft at about 9; steady footage jitters about 1 px per frame, handheld 4). Then one inexpensive Haiku call looks at a contact sheet of up to sixteen shots and returns a line per shot (what it shows, framing, tags, energy, usable) plus problems measurements cannot see: player controls, a screen-recorder or desktop window, a pause icon, burned-in text, watermarks, letterboxing. Without a connection the map keeps every measurement and says the shots were not described. Shots are stored in the existing shot records, so search finds them by description. Loudness (EBU R128) is measured per source as well (stage loudness).
 - The media list shows each source's map (summary, shots with their problems, frozen and black stretches, where usable footage ends), within a budget of about 150 shot lines across sources; a source not analyzed yet says so. The timeline outline says what each placed clip shows and what is wrong in its range.
 - edit_timeline returns warnings with the result, never blocking: placed ranges that are frozen, black, dark, blurry, shaky or show junk (with where usable footage ends), sources not analyzed yet, slow motion below half speed, a clip over 40 percent of a video of 15 seconds or more, and the same footage used twice. The agent fixes them or says in its recap why it kept them, and is told to offer an alternative when a request cannot be met with good footage.
 
 ## October 11, 2026 — The project briefing is cached across requests
+
+_Partly replaced on October 11, 2026: the footage map is no longer in the cached block (see "The agent looks at footage itself; nothing pre-interprets it"). The two-block cached briefing still holds._
 
 - In the live run, cache writes were 56 percent of all spending: every request rebuilt a briefing of about 25,000 characters and put it after the request text, so no part of it could be read from cache by the next request. The first message is now two blocks. The first holds what changes rarely (capabilities, environment, the computer without its clock, the media list with each source's footage map) and carries a cache breakpoint, so a request within five minutes of the last reads it instead of writing it again. The second holds the request and what depends on it: the time, the timeline outline, project notes, decisions, recent conversation and related records.
 - The briefing lists authored files by name instead of carrying code excerpts (up to 12,000 characters, unrelated to most edits); search and read_file open the code a request needs. Related project records are capped at 5,000 characters, since the timeline outline and the media list now cover clips and sources.
@@ -311,3 +327,15 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 - ffmpeg and ffprobe (the app's own) are on PATH in the isolated command container as well as on the user's computer. read_file returns an image the agent's code wrote (a frame, a crop, a sheet of frames), so it can look at what it measured.
 - publish_project checks what the request changed, from the timeline and the transcript only: footage used twice, a cut inside a spoken word, silence over three seconds between words inside a clip (must fix), slow motion and a dominating clip (notes). finish complete is refused while a must-fix check is neither fixed nor listed in finish.kept with a reason, and while a task the agent delegated is still blocked or was skipped: unfinished work is not reported as done.
 - The engine reference documents the project document itself (sources, transcripts, clips and their framing, outputs) instead of actions. It states that a clip's scale zooms about the frame's centre: the agent's punch-in on a speaker in a corner box zoomed into the black slide area, so a region is cropped by processing the footage or with a scene.
+
+## October 11, 2026 — One agent owns the edit
+
+This entry supersedes the October 9 entry (Opus leads, Haiku executes) and the October 10 entry (Haiku first, then Sonnet, then Opus) where they describe a director.
+
+- One editing agent owns each request from start to finish: it looks at the footage, decides, edits project.json, publishes, checks and replies. In the first long-form run a Sonnet director relayed the work to Haiku workers through written briefs; a worker reported the pause removal blocked, and the director published and called the request done.
+- The router picks that agent's model: Haiku for changes to an existing edit and edits of short footage; Sonnet for a big edit (the first cut or a full re-edit of long footage, many sources cut into one video, or several new pieces built at once); Opus only for a whole new video made from nothing or when the user asks for Opus. The route schema is unchanged, so the gateway needs no deploy.
+- When the agent keeps failing (the same error twice, a similar one three times, its step limit, or three cut-offs), the same conversation continues on the next model up (Haiku, Sonnet, Opus) with everything it has read and done and a fresh step allowance; a resumed request keeps the stronger model. Before this, a new conversation started from a written handoff. At the top of the ladder a repeated failure asks Opus for direction instead.
+- The director (lead role, its prompt, switch_to_orchestrated, hand_off and the mode phases) is removed, and so are research workers: the agent reads in parallel itself.
+- For separate pieces that take real work (several new scenes, or scenes and music) the agent may delegate Haiku helpers as a task graph. A helper writes only its declared paths: it never edits project.json, publishes, imports media or changes the user's computer. The agent places their outputs and publishes. finish complete is still refused while a delegated task is blocked or was skipped.
+- Plan first: the Opus planner writes the plan; the approved steps run as one Sonnet editing-agent conversation (was the Opus lead).
+- consult_director asks the model one step above the asker. Effort and task budgets have no director settings left: Auto effort is low for the router and simple work, high for difficult work, medium otherwise; the editing agent sees a 120K task budget and helpers 100K. The run monitor labels the agent's costs Dream and each helper by its task.

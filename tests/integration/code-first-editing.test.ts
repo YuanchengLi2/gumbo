@@ -24,7 +24,7 @@ const document=(root:string)=>JSON.parse(readFileSync(join(root,'Workspace/proje
 const signal=()=>new AbortController().signal;
 
 it('edits only through project.json: no timeline actions for any role',()=>{
- for(const role of ['solo','lead','worker','readonly'] as const)expect([...allowedTools(role,{canPublish:true})]).not.toContain('edit_timeline');
+ for(const role of ['solo','worker','readonly'] as const)expect([...allowedTools(role,{canDelegate:true})]).not.toContain('edit_timeline');
  expect(allowedTools('solo').has('write_file')).toBe(true);expect(allowedTools('solo').has('publish_project')).toBe(true);
 });
 

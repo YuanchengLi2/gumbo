@@ -15,11 +15,11 @@ describe('composer permission and effort',()=>{
   expect(parseCodeRoute({route:'local',intelligence:'haiku',complexity:'simple'},'Mute clip 2','auto').route).toBe('local');
  });
  it('a chosen effort applies to every model except the router',()=>{
-  expect(intelligence('opus','lead',{complexity:'difficult'},0,'low').effort).toBe('low');
+  expect(intelligence('opus','execution',{complexity:'difficult'},0,'low').effort).toBe('low');
   expect(intelligence('haiku','execution',{complexity:'simple'},0,'high').effort).toBe('high');
   expect(intelligence('haiku','worker',undefined,0,'medium').effort).toBe('medium');
   expect(intelligence('haiku','routing',undefined,0,'high').effort).toBe('low');
-  expect(intelligence('opus','lead',{complexity:'difficult'},0,'').effort).toBe('medium');
+  expect(intelligence('opus','execution',{complexity:'normal'},0,'').effort).toBe('medium');
   expect(intelligence('haiku','execution',{complexity:'difficult'}).effort).toBe('high');
  });
 });

@@ -5,7 +5,7 @@ import type {ProjectState} from '@dream/project-db';
 export type LiveCommentary={turnId:string;requestId:string;text:string;status:'streaming'|'complete'|'discarded'};
 /** A sent message shown at once, until the saved conversation includes it. */
 export type PendingMessage={selection?:import('@dream/timeline').SelectionRef[];requestId:string;text:string;assetIds:string[];createdAt:string};
-/** Cost and time of the running request, per caller (the lead, or a worker's activity id) and model. */
+/** Cost and time of the running request, per caller (main for the editing agent, or a helper's activity id) and model. */
 export type UsageRow={owner:string;model:string;calls:number;cost:number;prompt:number;output:number;ms:number};
 export type TurnUsage={turnId:string;rows:UsageRow[]};
 export type Permission='auto'|'plan'|'ask';export type Effort='auto'|'low'|'medium'|'high';
@@ -34,7 +34,7 @@ export function acceptRunActivity(turnId:string,event:PublicActivity){const stor
 
 /** Adds one model call (an ai.usage event) to the running request's totals. */
 export function acceptUsage(event:{turnId?:string;model:string;parent?:string;costUsd?:number;durationMs?:number;usage?:any}){
- if(!event.turnId)return;const store=useEditor.getState(),u=event.usage??{},owner=event.parent??'lead';
+ if(!event.turnId)return;const store=useEditor.getState(),u=event.usage??{},owner=event.parent??'main';
  const rows=store.usage?.turnId===event.turnId?[...store.usage.rows]:[],index=rows.findIndex(r=>r.owner===owner&&r.model===event.model),old=rows[index]??{owner,model:event.model,calls:0,cost:0,prompt:0,output:0,ms:0};
  const row={...old,calls:old.calls+1,cost:old.cost+(event.costUsd??0),prompt:old.prompt+(u.input_tokens??0)+(u.cache_read_input_tokens??0)+(u.cache_creation_input_tokens??0),output:old.output+(u.output_tokens??0),ms:old.ms+(event.durationMs??0)};
  if(index<0)rows.push(row);else rows[index]=row;store.setUsage({turnId:event.turnId,rows});

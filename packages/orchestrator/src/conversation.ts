@@ -33,7 +33,7 @@ function archive(db:ProjectDB,turn:string,messages:Message[]){
 const describe=(entry:Entry,turn:string)=>({id:entry.id,receipt:prefix(turn)+entry.id,toolCallId:entry.toolCallId,name:entry.name,status:entry.result.is_error?'failed':'succeeded',excerpt:textOf(entry.result.content).slice(0,1000),truncated:textOf(entry.result.content).length>1000});
 
 /** Older user messages that stay authoritative after compaction: real instructions and feedback, the two latest
- * pieces of director advice, and only the newest project-state snapshot. Engine nudges are dropped, and media images
+ * pieces of advice from a stronger model, and only the newest project-state snapshot. Engine nudges are dropped, and media images
  * shown at the start become a short note, so the prefix shrinks instead of growing with every compaction. */
 function keptDirections(db:ProjectDB,older:Message[],tail:Message[],budget:number,cleanMessage:(m:Message)=>Message){
  // Status messages after the first report only changes, so the newest dropped one is kept as the full state it stands for,

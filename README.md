@@ -1,5 +1,16 @@
 # Dream
 
+## Code-first editing by one agent — October 11, 2026
+
+One editing agent owns each request, from looking at the footage to publishing and replying.
+- **It looks for itself.** Nothing interprets the footage at import. The agent gets plain facts about each source and its transcript file, looks at the frames it picks (`view_media`) and at images its own code makes (`read_file`), and measures with code.
+- **It edits with code.** Every edit is a change to `project.json`, made directly or by a program the agent writes and runs. ffmpeg, ffprobe, Node and Python are on PATH, and it may install anything else. Processed footage and generated media go under `output/`.
+- **Publishing checks the facts.** Each publication reports footage used twice, cuts inside a word and long silences. The agent cannot report the request done while one of these is neither fixed nor kept with a reason, or while a task it delegated is still blocked.
+- **The router picks the model.** Haiku handles changes and short footage. Sonnet handles big edits such as the first cut of a long recording. Opus is used only for a whole new video or when asked. A request that keeps failing continues in the same conversation on a stronger model.
+- **Helpers build separate pieces.** For several scenes, or scenes and music, Haiku helpers write the files in parallel; the agent places them and publishes.
+
+See [the engine documentation](docs/CODE-ENGINE.md) and [DECISIONS.md](DECISIONS.md).
+
 ## Scene engine, cost and computer media — October 10, 2026
 
 The agent writes only the code for the video. A prebuilt scene engine provides everything else:
@@ -8,12 +19,12 @@ The agent writes only the code for the video. A prebuilt scene engine provides e
 - compilation in milliseconds and the live player; only Export renders;
 - music written as score files and synthesized by Dream.
 
-**Orchestration.** Opus directs dependency graphs of Haiku workers that share one cached project snapshot, retry once when blocked, and report changed files, errors and cost.
+**Orchestration.** Opus directs dependency graphs of Haiku workers that share one cached project snapshot, retry once when blocked, and report changed files, errors and cost. _Replaced on October 11, 2026: one editing agent owns each request, and the task graph runs its helpers (see above)._
 
 **Cost and speed.**
 - Context is compacted with headroom and stays under Haiku's long-context price.
 - Thinking-only cutoffs lower effort instead of raising the output limit.
-- The lead's history uses a one-hour cache while workers run.
+- The lead's history uses a one-hour cache while workers run (since October 11, the editing agent's, while its helpers run).
 - The run monitor shows cost, tokens and time per caller.
 
 **Computer media.** "Use what I shot today" works: `find_media` finds photos, videos and audio by capture date in camera rolls, phone sync folders, Downloads and memory cards, and `import_media` imports them in capture order.
@@ -27,6 +38,8 @@ The agent writes only the code for the video. A prebuilt scene engine provides e
 See [the engine documentation](docs/CODE-ENGINE.md). The optional gateway features take effect after `supabase functions deploy dream-gateway`.
 
 ## Opus-led agent engine — October 9, 2026
+
+_Replaced on October 11, 2026 by one editing agent per request (see the top section)._
 
 Simple exact edits and questions are handled by Haiku alone. Creative, multi-part and planned work is led by Opus, which inspects the project, decides, and delegates self-contained tasks to Haiku workers, up to four in parallel when their files do not overlap, then verifies and finishes. The agent loop has step and nudge limits, groups repeated failures, and completes once the current revision is published. Context compaction runs only after a measured overrun and keeps a stable prefix, so prompt caching and model reasoning survive long tasks. Dropped connections are cancelled and retried automatically. Commands no longer publish; scenes can reference bundled libraries with `<script src>`, which publication inlines. Details: [engine documentation](docs/CODE-ENGINE.md). The gateway changes require `supabase functions deploy dream-gateway`.
 
@@ -123,6 +136,8 @@ pnpm exec tsx scripts/smoke-ai.ts --recovery
 The two smoke commands use dedicated temporary beta accounts and real inference; `--engine` caps its test account's daily allowance at $3. They require the linked dedicated Supabase project and staged visual/media runtimes. Reports in `artifacts/` distinguish deterministic local fixtures, live provider results and native packaged tests.
 
 ## Fast source context
+
+_Partly replaced on October 11, 2026: the source map, the visual context prepared for the agent and the scene-aware overview runtime (`stage-context.ts`, `context-requirements.txt`) are gone; the agent picks the frames it looks at. Media still registers and becomes usable before its copy finishes._
 
 New compatible media is registered from its selected local source as soon as metadata is read. Playback, the first prompt, and visual context do not wait for a full file copy, checksum, proxy, or transcription. Originals are copied and verified in the background; copying status remains available in project jobs. Unsupported playback codecs still require conversion.
 

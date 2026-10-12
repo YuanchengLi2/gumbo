@@ -15,7 +15,7 @@ export function inferencePolicy(model:string,purpose:unknown='routine',profile?:
 }
 /** Tools and system are identical across every request of a role, so they keep a one-hour cache between user requests.
  * The conversation itself uses automatic five-minute caching at its last block (longer TTLs must precede shorter ones).
- * conversationTtl '1h' is for a lead that waits many minutes on workers: every breakpoint is then one hour. */
+ * conversationTtl '1h' is for an editing agent that waits many minutes on its helpers: every breakpoint is then one hour. */
 export function cachedPrompt(system:unknown,tools:unknown,conversationTtl?:unknown){
  const longLived={type:'ephemeral',ttl:'1h'};
  return{system:typeof system==='string'?[{type:'text',text:system,cache_control:longLived}]:system,tools:Array.isArray(tools)?tools.map((tool,n)=>n===tools.length-1?{...tool,cache_control:longLived}:tool):tools,cache_control:conversationTtl==='1h'?longLived:{type:'ephemeral'}};

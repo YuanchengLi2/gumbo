@@ -1,6 +1,6 @@
 import {createServer} from 'node:http';
 
-/** Protocol fixture for the current engine (routing, solo, lead/worker, planning, video understanding).
+/** Protocol fixture for the current engine (routing, the editing agent and its helpers, planning).
  * A script receives each inference request and its step: the number of assistant turns already in that conversation,
  * so interrupted and resumed conversations continue deterministically. Real provider evidence comes from scripts/smoke-engine-local.ts.
  */
@@ -20,10 +20,7 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   if(options.delayMs)await new Promise(r=>setTimeout(r,options.delayMs));
   const tools:string[]=(body.tools??[]).map((t:any)=>t.name),step=(body.messages??[]).filter((m:any)=>m.role==='assistant').length;calls.push({purpose:body.purpose,model:body.model,tools,step});
   let content:any[];
-  if(tools.includes('submit_video_summary'))content=[{type:'tool_use',id:'video-summary',name:'submit_video_summary',input:{summary:'A changing synthetic calibration pattern.',evidenceIds:JSON.parse(body.messages[0].content).records.map((r:any)=>r.id)}}];
-  else if(tools.includes('submit_observation'))content=[{type:'tool_use',id:'observation',name:'submit_observation',input:{summary:'Synthetic color-pattern source.',events:[],scene:{framing:'Full-frame calibration pattern',cameraMotion:'None',tags:['calibration'],energy:'low',usableAsBroll:false},continuity:'Synthetic calibration footage',inspectMore:[]}}];
-  // The footage map's one look at a source's shots, answered for every shot it lists.
-  else if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
+  if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
   // Real responses never reuse tool IDs; make scripted IDs unique per response.
   else{const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
   const message={content,stop_reason:content.some(b=>b.type==='tool_use')?'tool_use':'end_turn',usage:{input_tokens:0,output_tokens:0}};
@@ -58,22 +55,19 @@ export function scriptedEdit(prefix:string,edit:string){
 }
 export const finish=(id:string,summary:string,blocked?:string)=>[use(id,'finish',blocked?{status:'blocked',summary,nextAction:blocked}:{status:'complete',summary})];
 
-/** Plan, then an Opus-led step per approved plan step, each delegating one publishing Haiku task. */
+/** Plan, then one editing-agent conversation through the approved steps: each step edits project.json by script, publishes
+ * and finishes. */
 export function planningScript(blockOnce=false):Script{
- return(body,step)=>{
-  const first=JSON.stringify(body.messages?.[0]??''),all=JSON.stringify(body.messages??[]);
+ return body=>{
+  const all=JSON.stringify(body.messages??[]);
   if(body.purpose==='planning')return[use('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Format plan',goal:'Prepare a square 60 fps edit',steps:[{id:'timing',title:'Set timing',instruction:'Set 60 fps',acceptance:'60 fps',review:false},{id:'square',title:'Set format',instruction:'Set square dimensions',acceptance:'1080 square',review:false}],assumptions:[]}})];
-  if(body.purpose==='lead'){
-   // Approved steps continue one lead conversation; the latest step message decides the step.
-   // A message is plain text or, for the first one, the cached briefing followed by the request.
-   const text=(m:any)=>typeof m?.content==='string'?m.content:Array.isArray(m?.content)?m.content.map((b:any)=>b.text??'').join('\n'):'';
-   const messages:any[]=body.messages??[],at=messages.findLastIndex(m=>text(m).includes('Current step:')),current=text(messages[at]),id=current.includes('Set 60 fps')?'timing':'square',since=messages.slice(at).filter(m=>m.role==='assistant').length;
-   if(since===0)return[use(id+'-assign','delegate',{tasks:[{id,title:id==='timing'?'Set the frame rate':'Set the square format',brief:'fixture-step:'+id,publish:true}]})];
-   if(blockOnce&&id==='square'&&!all.includes('Square format is confirmed'))return finish(id+'-paused','Square format saved; confirmation needed.','Confirm the square format before continuing.');
-   return finish(id+'-done','Approved step saved.');
-  }
-  const id=first.includes('fixture-step:timing')?'timing':'square';
-  return step===0?scriptedEdit('step-'+id,id==='timing'?'p.timeline.settings.fps=60':'p.timeline.settings.width=1080;p.timeline.settings.height=1080'):finish(id+'-worker-done','Saved the '+id+' change.');
+  // The latest step message decides the step. A message is plain text or, for the first one, the cached briefing followed
+  // by the request.
+  const text=(m:any)=>typeof m?.content==='string'?m.content:Array.isArray(m?.content)?m.content.map((b:any)=>b.text??'').join('\n'):'';
+  const messages:any[]=body.messages??[],at=messages.findLastIndex(m=>text(m).includes('Current step:')),current=text(messages[at]),id=current.includes('Set 60 fps')?'timing':'square',since=messages.slice(at).filter(m=>m.role==='assistant').length;
+  if(since===0)return scriptedEdit('step-'+id,id==='timing'?'p.timeline.settings.fps=60':'p.timeline.settings.width=1080;p.timeline.settings.height=1080');
+  if(blockOnce&&id==='square'&&!all.includes('Square format is confirmed'))return finish(id+'-paused','Square format saved; confirmation needed.','Confirm the square format before continuing.');
+  return finish(id+'-done','Approved step saved.');
  };
 }
 /** Finishes, keeping with a reason every must-fix check the latest publication reported (an edit that means to repeat

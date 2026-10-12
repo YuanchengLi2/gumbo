@@ -17,8 +17,8 @@ type Dependencies={fetch?:typeof fetch;wait?:(ms:number,signal?:AbortSignal)=>Pr
 
 const MAX_OUTPUT=engineBudgets.maxOutput,TRANSIENT_RETRIES=3,IDLE_MS=90_000,HARD_MS=20*60_000,HAIKU_HARD=engineBudgets.haikuHardInput;
 // Execution-side purposes hand a still-truncated response back to the agent; others report a split request.
-const AGENT_PURPOSES=['execution','worker','planning','answering','lead'];
-// Worker phases are named <lead phase>:worker:<call>:<task>; their activity nests under that task's row.
+const AGENT_PURPOSES=['execution','worker','planning','answering'];
+// Worker phases are named <agent phase>:worker:<call>:<task>; their activity nests under that task's row.
 // A retried worker (phase suffix :r2) keeps its task's row.
 const workerParent=(phase?:string)=>phase?.includes(':worker:')?'worker:'+phase.split(':worker:').at(-1)!.replace(/:r\d+$/,''):undefined;
 function validResponse(value:any):value is InferenceResponse {

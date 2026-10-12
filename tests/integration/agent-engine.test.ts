@@ -18,41 +18,34 @@ const scene=(label:string)=>`<div id="t">${label}</div><script>window.renderFram
 const toolUse=(id:string,name:string,input:any)=>({content:[{type:'tool_use',id,name,input}],stop_reason:'tool_use',usage:{}});
 const resultOf=(messages:any[],id:string)=>{for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&b.tool_use_id===id)return b;};
 
-it('lets Opus run Haiku workers in parallel within disjoint write scopes, then integrate and publish',async()=>{
+it('lets the editing agent run helpers in parallel within disjoint write scopes, then place their scenes and publish itself',async()=>{
  const db=fixture(),ws=workspaceFor(db);let arrived=0,release!:()=>void;const barrier=new Promise<void>(resolve=>release=resolve);
- const seen:Record<string,any[]>={};let leadCalls=0;const workerCalls:Record<string,number>={};
+ const seen:Record<string,any[]>={};let agentCalls=0;const helperCalls:Record<string,number>={};
  try{
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,ws);
   director.inference=async(_model,_system,messages:any,_tools,_turn,_force,purpose='execution')=>{
-   if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'local',intelligence:'opus',complexity:'normal',reason:'Two new scenes',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
-   if(purpose==='lead'){leadCalls++;
-    if(leadCalls===1)return toolUse('parallel','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Write src/title/scene.html.',writes:['src/title']},{id:'outro',title:'Build the outro',brief:'Write src/outro/scene.html.',writes:['src/outro']}]});
-    if(leadCalls===2){expect(JSON.stringify(resultOf(messages,'parallel'))).toContain('Wrote the title');return toolUse('integrate','delegate',{tasks:[{id:'timeline',title:'Place both scenes',brief:'Declare both scenes and place them on the spine, then publish.',publish:true}]});}
+   if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'local',intelligence:'sonnet',complexity:'normal',reason:'Two new scenes',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='execution'){agentCalls++;
+    if(agentCalls===1)return toolUse('parallel','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Write src/title/scene.html.',writes:['src/title']},{id:'outro',title:'Build the outro',brief:'Write src/outro/scene.html.',writes:['src/outro']}]});
+    if(agentCalls===2){expect(JSON.stringify(resultOf(messages,'parallel'))).toContain('Wrote the title');const doc=JSON.parse(readFileSync(join(ws.root,'project.json'),'utf8'));doc.outputs=['title','outro'].map(id=>({id,path:`src/${id}/scene.html`,kind:'scene',width:640,height:360,fps:30,durationInFrames:60}));doc.timeline.spine=['title','outro'].map(id=>({id,assetId:'output:'+id,srcIn:0,srcOut:2,speed:1,audio:{mute:true},reason:'Scene'}));return{content:[{type:'tool_use',id:'doc',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}},{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}};}
     return{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Added the title and outro.'}}],stop_reason:'tool_use',usage:{}};}
-   const head=messages[0].content,brief=(typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text).split('\n')[0],task=brief.includes('title card')?'title':brief.includes('outro')?'outro':'timeline',n=workerCalls[task]=(workerCalls[task]??0)+1;seen[task]=messages;
-   if(task!=='timeline'&&n===1){arrived++;if(arrived===2)release();await barrier;return{content:[{type:'tool_use',id:task+'-json',name:'write_file',input:{path:'project.json',content:'{}'}},{type:'tool_use',id:task+'-stray',name:'write_file',input:{path:'src/shared.js',content:'x'}},{type:'tool_use',id:task+'-write',name:'write_file',input:{path:`src/${task}/scene.html`,content:scene(task)}}],stop_reason:'tool_use',usage:{}};}
-   if(task!=='timeline')return{content:[{type:'tool_use',id:task+'-finish',name:'finish',input:{status:'complete',summary:`Wrote the ${task} scene at src/${task}/scene.html.`}}],stop_reason:'tool_use',usage:{}};
-   if(n===1){const doc=JSON.parse(readFileSync(join(ws.root,'project.json'),'utf8'));doc.outputs=['title','outro'].map(id=>({id,path:`src/${id}/scene.html`,kind:'scene',width:640,height:360,fps:30,durationInFrames:60}));doc.timeline.spine=['title','outro'].map(id=>({id,assetId:'output:'+id,srcIn:0,srcOut:2,speed:1,audio:{mute:true},reason:'Scene'}));return{content:[{type:'tool_use',id:'doc',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}},{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}};}
-   return{content:[{type:'tool_use',id:'timeline-finish',name:'finish',input:{status:'complete',summary:'Placed and published both scenes.'}}],stop_reason:'tool_use',usage:{}};
+   const head=messages[0].content,brief=(typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text).split('\n')[0],task=brief.includes('title card')?'title':'outro',n=helperCalls[task]=(helperCalls[task]??0)+1;seen[task]=messages;
+   if(n===1){arrived++;if(arrived===2)release();await barrier;return{content:[{type:'tool_use',id:task+'-json',name:'write_file',input:{path:'project.json',content:'{}'}},{type:'tool_use',id:task+'-stray',name:'write_file',input:{path:'src/shared.js',content:'x'}},{type:'tool_use',id:task+'-write',name:'write_file',input:{path:`src/${task}/scene.html`,content:scene(task)}}],stop_reason:'tool_use',usage:{}};}
+   return{content:[{type:'tool_use',id:task+'-finish',name:'finish',input:{status:'complete',summary:`Wrote the ${task} scene at src/${task}/scene.html.`}}],stop_reason:'tool_use',usage:{}};
   };
   await director.message('Add a title card and an outro');
   expect(db.getMeta('ai_status')).toBe('complete');expect(arrived).toBe(2);
-  for(const task of ['title','outro']){expect(resultOf(seen[task],task+'-json').content).toContain('does not own project.json');expect(resultOf(seen[task],task+'-stray').content).toContain(`only write under src/${task}`);expect(readFileSync(join(ws.root,`src/${task}/scene.html`),'utf8')).toBe(scene(task));}
-  expect(JSON.parse(resultOf(seen.timeline,'pub').content).projectJson.hash).toMatch(/^[a-f0-9]{64}$/);
+  for(const task of ['title','outro']){expect(resultOf(seen[task],task+'-json').content).toContain('Helpers do not edit project.json');expect(resultOf(seen[task],task+'-stray').content).toContain(`only write under src/${task}`);expect(readFileSync(join(ws.root,`src/${task}/scene.html`),'utf8')).toBe(scene(task));}
   expect(db.timeline().spine.map(c=>c.id)).toEqual(['title','outro']);expect(db.footage().assets.filter(a=>a.scene)).toHaveLength(2);
  }finally{db.close();}
 });
-
-it('rejects unsafe parallel delegations before any worker starts',()=>{
- const task=(id:string,writes:string[],publish=false)=>({id,title:id,brief:'b',writes,publish});
+it('rejects unsafe parallel delegations before any helper starts',()=>{
+ const task=(id:string,writes:string[])=>({id,title:id,brief:'b',writes});
  expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/a/inner'])])).toThrow('overlapping');
- expect(()=>validateDelegation([task('a',['src/a'],true),task('b',['src/b'])])).toThrow('must come after every build task');
- expect(()=>validateDelegation([task('a',['src/a'],true),{...task('b',['src/b'],true),after:['a']}])).toThrow('Only one task may publish');
  expect(()=>validateDelegation([task('a',['project.json']),task('b',['src/b'])])).toThrow('project.json');
- expect(()=>validateDelegation([task('a',[]),task('b',['src/b'])])).toThrow('declare writes');
- expect(()=>validateDelegation([task('a',[],true)])).not.toThrow();expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/ab'])])).not.toThrow();
+ expect(()=>validateDelegation([task('a',['.'])])).toThrow('whole workspace');
+ expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/ab'])])).not.toThrow();
 });
-
 it('inlines local script and stylesheet references at publication and rejects external ones',async()=>{
  const db=fixture(),ws=workspaceFor(db);try{
   await ws.initialize();mkdirSync(join(ws.root,'src/intro'),{recursive:true});
@@ -149,8 +142,8 @@ it('enables the server-side refusal fallback for Opus, heals if the provider rej
 
 it('never executes or echoes the declined part of a response that fell back mid-stream',async()=>{
  const db=fixture();try{let calls=0;const executed:string[]=[],histories:any[]=[];
-  const result=await codeAgent({db,turnId:'turn',model:models.lead,text:'Lead the edit',role:'lead',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async(name:string)=>{executed.push(name);return name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true};}},
-   infer:async(_m,_s,messages)=>{histories.push(JSON.parse(JSON.stringify(messages)));return infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.lead,system:'Lead',messages,tools:[],purpose:'lead',max_tokens:16384,turnId:'turn',phase:'fallback-'+calls}},{fetch:async()=>Response.json(calls++===0?{content:[{type:'thinking',thinking:'',signature:'declined'},{type:'tool_use',id:'declined-read',name:'list_files',input:{path:'.'}},{type:'text',text:'Looking at the project.'},{type:'fallback',from:{model:'claude-opus-5-5'},to:{model:'claude-opus-4-8'}},{type:'tool_use',id:'served-publish',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Confirmed.'}}],stop_reason:'tool_use',usage:{}})});}});
+  const result=await codeAgent({db,turnId:'turn',model:models.director,text:'Make the edit',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async(name:string)=>{executed.push(name);return name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true};}},
+   infer:async(_m,_s,messages)=>{histories.push(JSON.parse(JSON.stringify(messages)));return infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.director,system:'Edit',messages,tools:[],purpose:'execution',max_tokens:16384,turnId:'turn',phase:'fallback-'+calls}},{fetch:async()=>Response.json(calls++===0?{content:[{type:'thinking',thinking:'',signature:'declined'},{type:'tool_use',id:'declined-read',name:'list_files',input:{path:'.'}},{type:'text',text:'Looking at the project.'},{type:'fallback',from:{model:'claude-opus-5-5'},to:{model:'claude-opus-4-8'}},{type:'tool_use',id:'served-publish',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Confirmed.'}}],stop_reason:'tool_use',usage:{}})});}});
   expect(result.outcome.status).toBe('complete');expect(executed).toEqual(['publish_project']);
   const replayed=JSON.stringify(histories.at(-1));expect(replayed).not.toContain('declined-read');expect(replayed).not.toContain('"signature":"declined"');expect(replayed).toContain('Looking at the project.');
  }finally{db.close();}
@@ -200,22 +193,23 @@ it('rebuilds a scene on the timeline when its source file is edited and publishe
  }finally{db.close();}
 });
 
-it('plans with Opus and, when the user says "do it", runs the approved plan with Opus leading Haiku workers',async()=>{
+it('plans with Opus and, when the user says "do it", runs the approved plan as one Sonnet agent',async()=>{
  const {approvesPlan}=await import('../../packages/orchestrator/src/code-director');
  for(const yes of ['do it','Edit','looks good, go ahead','ok','Apply the plan.'])expect(approvesPlan(yes)).toBe(true);
  for(const no of ['make the title red','looks good but make it shorter','edit the second step to use blue',''])expect(approvesPlan(no)).toBe(false);
  const db=fixture();try{
-  const calls:{purpose:string;model:string}[]=[];let lead=0,worker=0;
+  const calls:{purpose:string;model:string}[]=[];let agent=0;
   const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
   director.inference=async(model,_s,_m,_t,_turn,_f,purpose='execution')=>{calls.push({purpose,model});
    if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'plan',intelligence:'opus',complexity:'normal',reason:'Plan',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
    if(purpose==='planning')return toolUse('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Title card',goal:'Add a title card',steps:[{id:'title',title:'Add the title card',instruction:'Create the title card',acceptance:'Title visible',review:false}],assumptions:[]}});
-   if(purpose==='lead')return ++lead===1?toolUse('assign','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Create it and publish.',publish:true}]}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});
-   return ++worker===1?toolUse('pub','publish_project',{}):toolUse('wdone','finish',{status:'complete',summary:'Published.'});};
+   return ++agent===1?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});};
   await director.message('Plan a title card for the video',[],'plan');expect(db.getMeta('ai_status')).toBe('awaiting_approval');
   await director.message('do it');expect(db.getMeta('ai_status')).toBe('complete');
-  expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.director);expect(calls.filter(c=>c.purpose==='lead').every(c=>c.model===models.lead)).toBe(true);expect(calls.filter(c=>c.purpose==='worker').every(c=>c.model===models.worker)).toBe(true);expect(lead).toBe(2);expect(worker).toBe(2);
+  expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.director);
+  const steps=calls.filter(c=>c.purpose==='execution');expect(steps.length).toBe(2);expect(steps.every(c=>c.model===models.sonnet)).toBe(true);
+  expect([...new Set(calls.map(c=>c.purpose))].sort()).toEqual(['execution','planning','routing']);
   expect(db.state().messages.some(m=>m.role==='user'&&m.text==='do it')).toBe(true);
  }finally{db.close();}
 });

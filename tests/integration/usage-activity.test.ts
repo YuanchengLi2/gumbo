@@ -75,13 +75,11 @@ it('moves events out of saved turns during migration, idempotently',()=>{
 });
 
 it('sets effort by role and task budgets, and steps effort down after a thinking-only cut-off',()=>{
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'research'}).effort).toBe('low');
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'publish'}).effort).toBe('low');
  expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build'}).effort).toBe('medium');
- expect(intelligence('claude-opus-5-5','lead').effort).toBe('medium');expect(intelligence('claude-opus-5-5','lead',undefined,2).effort).toBe('high');
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,'high',{workerMode:'research'}).effort).toBe('high');
+ expect(intelligence('claude-sonnet-5-5','execution').effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'difficult'}).effort).toBe('high');
+ expect(intelligence('claude-haiku-5-5','worker',undefined,0,'high',{workerMode:'build'}).effort).toBe('high');
  expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build',lower:1}).effort).toBe('low');
- expect(taskBudget('lead')).toEqual({total:150000});expect(taskBudget('worker','build')).toEqual({total:100000});expect(taskBudget('worker','research')).toEqual({total:40000});expect(taskBudget('routing')).toBeUndefined();
+ expect(taskBudget('execution')).toEqual({total:120000});expect(taskBudget('worker','build')).toEqual({total:100000});expect(taskBudget('routing')).toBeUndefined();
 });
 
 it('shortens over-long prose fields instead of failing the tool call, but never code or paths',()=>{

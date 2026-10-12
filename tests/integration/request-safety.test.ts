@@ -38,6 +38,6 @@ it('records every time Opus takes part in a request, with the reason',async()=>{
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace());
   director.inference=async(_model,_s,_m,_t,_turn,_f,purpose='execution')=>purpose==='routing'?{content:[{type:'text',text:JSON.stringify({route:'local',intelligence:'opus',complexity:'difficult',reason:'Three new scenes and music'})}],stop_reason:'end_turn',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'blocked',summary:'Stopped for the test.',nextAction:'None.'}}],stop_reason:'tool_use',usage:{}};
   await director.message('Build three animated scenes with new music');
-  expect(events(db,'ai.escalation')).toEqual([expect.objectContaining({kind:'route',model:models.lead,reason:'Three new scenes and music'})]);
+  expect(events(db,'ai.escalation')).toEqual([expect.objectContaining({kind:'route',model:models.director,reason:'Three new scenes and music'})]);
  }finally{db.close();}
 });

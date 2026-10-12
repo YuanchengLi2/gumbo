@@ -5,7 +5,7 @@ import {inferencePolicy,cachedPrompt,usageCost} from '../../supabase/functions/d
 const db={rpc:async()=>({data:'usage',error:null}),from:()=>({update:()=>({eq:async()=>({error:null})})})};
 const ok={content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{input_tokens:1000,cache_creation_input_tokens:2000,cache_creation:{ephemeral_1h_input_tokens:2000},output_tokens:100}};
 
-it('uses one-hour caching for every breakpoint of a lead conversation and five minutes otherwise',()=>{
+it('uses one-hour caching for every breakpoint of a conversation waiting on helpers and five minutes otherwise',()=>{
  expect(cachedPrompt('System',[{name:'a'}],'1h').cache_control).toEqual({type:'ephemeral',ttl:'1h'});
  expect(cachedPrompt('System',[{name:'a'}]).cache_control).toEqual({type:'ephemeral'});
  expect(inferencePolicy('claude-haiku-5-5','worker',{effort:'low'}).thinking).toMatchObject({display:'summarized'});
