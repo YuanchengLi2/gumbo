@@ -6,7 +6,8 @@ const levels=['low','medium','high'] as const;
 export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string},failures=0,chosen?:'low'|'medium'|'high'|'',extra:{workerMode?:WorkerMode;lower?:number}={}):IntelligenceProfile{
  const role=purpose==='routing'?'router':purpose==='execution'||purpose==='worker'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
  const complexity=failures>=2||routing?.complexity==='difficult'?'difficult':routing?.complexity==='simple'?'simple':'normal';
- const automatic=role==='router'||complexity==='simple'&&role!=='consultation'?'low':complexity==='difficult'?'high':'medium';
+ // Every role thinks at medium effort; the router classifies within a 2K-token allowance, so it stays low.
+ const automatic=role==='router'?'low':'medium';
  // An effort the user picked in the composer applies to every model in the request except the router.
  // DREAM_BUILD_WORKER_EFFORT overrides helpers only, for measuring effort against speed, cost and quality.
  const override=purpose==='worker'&&['low','medium','high'].includes(process.env.DREAM_BUILD_WORKER_EFFORT??'')?process.env.DREAM_BUILD_WORKER_EFFORT as 'low'|'medium'|'high':undefined;

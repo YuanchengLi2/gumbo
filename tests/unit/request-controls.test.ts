@@ -20,6 +20,6 @@ describe('composer permission and effort',()=>{
   expect(intelligence('haiku','worker',undefined,0,'medium').effort).toBe('medium');
   expect(intelligence('haiku','routing',undefined,0,'high').effort).toBe('low');
   expect(intelligence('opus','execution',{complexity:'normal'},0,'').effort).toBe('medium');
-  expect(intelligence('haiku','execution',{complexity:'difficult'}).effort).toBe('high');
+  expect(intelligence('haiku','execution',{complexity:'difficult'}).effort).toBe('medium');
  });
 });

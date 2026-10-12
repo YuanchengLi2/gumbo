@@ -76,7 +76,7 @@ it('moves events out of saved turns during migration, idempotently',()=>{
 
 it('sets effort by role and task budgets, and steps effort down after a thinking-only cut-off',()=>{
  expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build'}).effort).toBe('medium');
- expect(intelligence('claude-sonnet-5-5','execution').effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'difficult'}).effort).toBe('high');
+ expect(intelligence('claude-sonnet-5-5','execution').effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'difficult'}).effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'simple'}).effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','routing').effort).toBe('low');
  expect(intelligence('claude-haiku-5-5','worker',undefined,0,'high',{workerMode:'build'}).effort).toBe('high');
  expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build',lower:1}).effort).toBe('low');
  expect(taskBudget('execution')).toEqual({total:120000});expect(taskBudget('worker','build')).toEqual({total:100000});expect(taskBudget('routing')).toBeUndefined();
