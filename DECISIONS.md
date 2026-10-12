@@ -286,3 +286,13 @@ Opaque exports render JPEG frames (quality 90) instead of PNG and run half the C
 ## October 11, 2026 — The cached briefing actually stays the same
 
 - In the second live run the cached briefing was read from cache by only one request of eight: the media list inside it changed almost every request, because the agent rewrites its notes on sources as it works and every new title or music track it makes joins the list. Source notes now travel as sourceNotes and media the agent made as generatedMedia in the request block, so the cached media list changes only when the user imports something or a source's footage map finishes.
+
+## October 11, 2026 — Export renders footage with ffmpeg
+
+- Export no longer screenshots every frame in a hidden browser (about 7 times slower than real time; a 13-minute 1080p edit took about an hour). ffmpeg renders footage straight from the sources: framing, grade and white balance with the player's CSS colour maths, zooms, shake, crossfades, dips, footage overlays and captions (libass), encoded on the graphics card when there is one. Consecutive pieces render as one ffmpeg run, three runs at once. Plain footage never leaves YUV; untagged video is read as BT.709, as the browser reads it. The sound is mixed, levelled and encoded while the picture renders. A 13-minute talk edit exports in about 3 minutes (6 with a grade on every clip); it matches the browser export at SSIM 0.968.
+- Only what the browser alone can draw goes through it. Graphics over footage (titles, chapter cards, motion graphics) come from it as a transparent ProRes 4444 layer that ffmpeg puts over the footage; only a scene used as the clip itself, or a transition only the player draws, is drawn whole. Each layer is rendered with a composition selected with that layer's props, because a Remotion composition renders with the props it was selected with: before this, browser pieces drew the footage and the captions anyway, which made a long-form edit with nine chapter cards hang for over 40 minutes. That edit (10 minutes) now exports in 5.
+- If the native path fails, the browser renders the whole video as before. DREAM_EXPORT=browser forces the browser path.
+
+## October 11, 2026 — Editing starts while a long recording is still being transcribed
+
+- read_transcript returns the speech transcribed without gaps from the start while transcription runs, waiting at most 45 seconds for the requested page, with transcribedUntilSec; its revision stays fixed while words are appended, so pages already read stay valid. Each source's state shows how far transcription has got.

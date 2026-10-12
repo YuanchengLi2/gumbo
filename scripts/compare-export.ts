@@ -12,7 +12,7 @@ import {ProjectDB} from '@dream/project-db';
 import {AssetSchema} from '@dream/footage';
 import {renderServer} from '../apps/desktop/src/main/render-server';
 import {frameFormat,renderConcurrency} from '../apps/desktop/src/main/render-settings';
-import {exportNative,planPieces} from '../apps/desktop/src/main/native-export';
+import {exportNative,planPieces,browserLayer} from '../apps/desktop/src/main/native-export';
 
 const ffmpeg=process.env.DREAM_FFMPEG??ffmpegStatic!,args=process.argv.slice(2),nativeOnly=args.includes("--native-only"),keep=args.includes("--keep"),talk=resolve(args.find(a=>!a.startsWith('--'))??'artifacts/footage-cache/fun-with-foss-talk.mp4');
 const staged=resolve('apps/desktop/resources/staged'),browserExecutable=join(staged,'render-browser/chrome-headless-shell.exe'),serveUrl=join(staged,'remotion'),binariesDirectory=join(staged,'compositor');
@@ -53,7 +53,7 @@ try{
  if(!nativeOnly)await renderMedia({serveUrl,composition,inputProps,codec:'h264',crf:12,...frameFormat(),outputLocation:reference,browserExecutable,binariesDirectory,concurrency:renderConcurrency()});
  const browserSeconds=(Date.now()-started)/1000;
  const native=join(folder,'native.mp4');started=Date.now();
- const result=await exportNative({ffmpeg,timeline:state.timeline,footage:state.footage,output:native,workDir:join(folder,'work'),onProgress:(done,total,phase)=>console.log(`${((Date.now()-started)/1000).toFixed(1)}s ${phase} ${done}/${total}`),renderBrowser:async(from,to,file)=>{const hidden={...state.timeline,trackSettings:{...state.timeline.trackSettings,captions:{...state.timeline.trackSettings?.captions,hidden:true}}};await renderMedia({serveUrl,composition,inputProps:{...inputProps,timeline:hidden},codec:'prores',proResProfile:'hq',muted:true,outputLocation:file,browserExecutable,binariesDirectory,frameRange:[from,to-1]});}});
+ const result=await exportNative({ffmpeg,timeline:state.timeline,footage:state.footage,output:native,workDir:join(folder,'work'),onProgress:(done,total,phase)=>console.log(`${((Date.now()-started)/1000).toFixed(1)}s ${phase} ${done}/${total}`),renderBrowser:async(from,to,file,layer)=>{const l=browserLayer(state.timeline,layer),props={...inputProps,timeline:l.timeline,transparentBackground:l.transparentBackground};const selected=await selectComposition({serveUrl,id:'Dream',inputProps:props,browserExecutable,binariesDirectory});await renderMedia({serveUrl,composition:selected,inputProps:props,...l.render,muted:true,outputLocation:file,browserExecutable,binariesDirectory,frameRange:[from,to-1]});}});
  const nativeSeconds=(Date.now()-started)/1000;
  if(nativeOnly){console.log(JSON.stringify({nativeSeconds,...result,folder}));}else{
  const ssim=spawnSync(ffmpeg,['-hide_banner','-i',native,'-i',reference,'-lavfi','[0:v]scale=in_range=auto,format=gbrp[a];[1:v]scale=in_range=auto,format=gbrp[b];[a][b]ssim=stats_file=ssim.log','-f','null','-'],{cwd:folder,encoding:'utf8'});

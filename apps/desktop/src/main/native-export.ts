@@ -17,21 +17,28 @@ import {encodeAtLoudness} from './export-loudness';
  * same envelope the player uses, levelled and encoded while the picture renders. */
 
 const COMPOSITION_BG='0x0a0b0d',CLIP_BG='0x0b0c0e';
-export type Piece={index:number;from:number;to:number;kind:'clip'|'transition'|'gap';clip?:ResolvedClip;before?:ResolvedClip;after?:ResolvedClip;overlays:ResolvedItem[];effects:ResolvedItem[];browser:string|undefined};
+export type Piece={index:number;from:number;to:number;kind:'clip'|'transition'|'gap';clip?:ResolvedClip;before?:ResolvedClip;after?:ResolvedClip;overlays:ResolvedItem[];effects:ResolvedItem[];browser:string|undefined;
+ /** What the browser draws: the whole frame, or (when only overlays need it) the overlays alone on transparency, put
+  * over the footage ffmpeg draws. Decoding footage in the browser is its slowest work, far into a long recording most. */
+ browserLayer?:'all'|'overlays'};
 type Asset_=Asset;
 
 const visualAsset=(asset:Asset_|undefined)=>!!asset&&!asset.scene&&!asset.sequence&&(asset.kind==='video'||asset.kind==='image');
 const nativeEffects=new Set(['slow_push','punch_zoom','shake','grade']),drawnTransitions=new Set(['crossfade','whip','slide','zoom_through']);
 
-/** Why a piece needs the browser, or undefined when ffmpeg can render it. */
-function browserReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex,timeline:TimelineDocument):string|undefined{
+/** Why the piece's base (its clip or transition, framing and effects) needs the browser, or undefined. */
+function baseReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex):string|undefined{
  const asset=(id:string)=>footage.assets.find(a=>a.id===id);
  if(piece.kind==='clip'&&!visualAsset(asset(piece.clip!.assetId)))return'the clip is a scene or not footage';
  if(piece.kind==='transition'){if(!['crossfade'].includes(piece.after!.transitionIn!.type))return`a ${piece.after!.transitionIn!.type} transition`;if(!visualAsset(asset(piece.before!.assetId))||!visualAsset(asset(piece.after!.assetId)))return'a transition between scenes';}
- for(const item of piece.overlays){if(!item.source)return`the ${item.component} element`;const a=asset(item.source.assetId);if(!visualAsset(a))return'a scene overlay';if(Number((item.params as any).rotation??0)!==0)return'a rotated overlay';}
  for(const effect of piece.effects)if(!nativeEffects.has(effect.component))return`the ${effect.component} effect`;
  if(piece.kind!=='gap'){for(const clip of [piece.clip,piece.before,piece.after].filter(Boolean) as ResolvedClip[])if(clip.framing?.mode==='face')return'face framing';}
- void timeline;return;
+ return;
+}
+/** Why the piece's overlays need the browser, or undefined when ffmpeg draws them all. */
+function overlayReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex):string|undefined{
+ for(const item of piece.overlays){if(!item.source)return`the ${item.component} element`;const a=footage.assets.find(x=>x.id===item.source!.assetId);if(!visualAsset(a))return'a scene overlay';if(Number((item.params as any).rotation??0)!==0)return'a rotated overlay';}
+ return;
 }
 
 /** Pieces covering every frame of the video, split wherever what is on screen changes. */
@@ -54,7 +61,8 @@ export function planPieces(timeline:TimelineDocument,footage:FootageIndex,resolv
   const window=windows.find(w=>w.from<=from&&w.to>=to),clip=resolved.clips.find(c=>c.from<=from&&c.from+c.durationInFrames>=to);
   const base={from,to,overlays:active.filter(i=>i.type!=='effect').sort((a,b)=>a.layer-b.layer),effects:active.filter(i=>i.type==='effect')};
   const piece:Omit<Piece,'browser'|'index'>=timeline.trackSettings?.video?.hidden?{...base,kind:'gap'}:window?{...base,kind:'transition',before:window.before,after:window.after}:clip?{...base,kind:'clip',clip}:{...base,kind:'gap'};
-  pieces.push({...piece,index:pieces.length,browser:browserReason(piece,footage,timeline)});
+  const whole=baseReason(piece,footage),layer=overlayReason(piece,footage);
+  pieces.push({...piece,index:pieces.length,browser:whole??layer,...(whole?{browserLayer:'all' as const}:layer?{browserLayer:'overlays' as const}:{})});
  }
  return pieces;
 }
@@ -170,15 +178,24 @@ export function pickEncoder(ffmpeg:string){
 function runFfmpeg(ffmpeg:string,args:string[],signal?:AbortSignal,cwd?:string){return new Promise<void>((resolve,reject)=>{const child=spawn(ffmpeg,args,{windowsHide:true,signal,cwd});let log='';child.stderr.on('data',chunk=>{log=(log+chunk.toString()).slice(-4000);});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(new Error('ffmpeg failed: '+log.slice(-1500))));});}
 
 export type NativeExportOptions={ffmpeg:string;timeline:TimelineDocument;footage:FootageIndex;output:string;workDir:string;signal?:AbortSignal;concurrency?:number;
- /** Renders frames [from,to) of the composition (captions hidden, no audio) with the browser to a video file. */
- renderBrowser:(from:number,to:number,file:string)=>Promise<void>;onProgress?:(done:number,total:number,phase:string)=>void};
+ /** Renders frames [from,to) of the composition (captions hidden, no audio) with the browser to a video file: the whole frame,
+  * or with layer 'overlays' only the overlays, on transparency (the footage is ffmpeg's). */
+ renderBrowser:(from:number,to:number,file:string,layer:'all'|'overlays')=>Promise<void>;onProgress?:(done:number,total:number,phase:string)=>void};
+
+/** What the browser renders for a piece: the composition without captions (drawn over the whole video afterwards), and for
+ * the overlays layer also without the footage, on a transparent background, as ProRes 4444 with alpha. */
+export function browserLayer(timeline:TimelineDocument,layer:'all'|'overlays'){
+ const tracks=timeline.trackSettings??{},overlays=layer==='overlays';
+ return{timeline:{...timeline,trackSettings:{...tracks,captions:{...tracks.captions,hidden:true},...(overlays?{video:{...tracks.video,hidden:true}}:{})}},transparentBackground:overlays,
+  render:overlays?{codec:'prores' as const,proResProfile:'4444' as const,imageFormat:'png' as const,pixelFormat:'yuva444p10le' as const}:{codec:'prores' as const,proResProfile:'hq' as const}};
+}
 
 /** Renders the timeline natively. Returns what it did so callers can report it. */
 export async function exportNative(o:NativeExportOptions){
  const {timeline,footage,ffmpeg,workDir}=o,{width,height,fps}=timeline.settings,resolved=resolveTimeline(timeline,footage),pieces=planPieces(timeline,footage,resolved),encoder=await pickEncoder(ffmpeg);
  mkdirSync(workDir,{recursive:true});const asset=(id:string)=>footage.assets.find(a=>a.id===id)!;
  // Each source's colour tags, read once.
- const used=new Set(pieces.filter(p=>!p.browser).flatMap(p=>[p.clip,p.before,p.after].filter(Boolean).map(c=>c!.assetId).concat(p.overlays.map(i=>i.source!.assetId))));
+ const used=new Set(pieces.filter(p=>p.browserLayer!=='all').flatMap(p=>[p.clip,p.before,p.after].filter(Boolean).map(c=>c!.assetId).concat(p.browserLayer?[]:p.overlays.map(i=>i.source!.assetId))));
  const colours=new Map(await Promise.all([...used].map(async id=>[id,await probeColour(ffmpeg,asset(id).originalPath,asset(id).kind==='image')] as const)));
  const encode=[...encoder.args,'-pix_fmt',encoder.pixelFormat==='nv12'?'nv12':'yuv420p','-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709','-color_range','tv','-r',String(fps),'-g',String(fps*2),'-video_track_timescale',String(fps*1000),'-an'];
 
@@ -188,7 +205,7 @@ export async function exportNative(o:NativeExportOptions){
   const frames=p.to-p.from,seconds=frames/fps,inputs:string[]=[],filters:string[]=[],L=(name:string)=>`p${p.index}${name}`;
   const addInput=(path:string,seek:number,length:number,image=false)=>{if(image)inputs.push('-loop','1','-framerate',String(fps),'-t',num(length+1/fps),'-i',path);else inputs.push('-ss',num(Math.max(0,seek)),'-t',num(length+2/fps),'-i',path);return first+inputs.filter(a=>a==='-i').length-1;};
   let last=L('base'),yuv=false;
-  if(p.browser){const raw=join(workDir,`browser-${p.index}.mov`);await o.renderBrowser(p.from,p.to,raw);const n=addInput(raw,0,seconds);filters.push(`[${n}:v]fps=${fps},format=rgb24[${last}]`);}
+  if(p.browserLayer==='all'){const raw=join(workDir,`browser-${p.index}.mov`);await o.renderBrowser(p.from,p.to,raw,'all');const n=addInput(raw,0,seconds);filters.push(`[${n}:v]fps=${fps},format=rgb24[${last}]`);}
   else{
    // The composition background; transitions are drawn on black, and a clip on its own background, as the player does.
    const plate=(color:string,label:string)=>`color=c=${color}:s=${width}x${height}:r=${fps}:d=${num(seconds+1/fps)},format=rgba[${label}]`;
@@ -209,7 +226,10 @@ export async function exportNative(o:NativeExportOptions){
     // transition's frames: its alpha faded in, timed from the transition's start (this piece may begin part way through).
     const offset=p.from-(after.from-Math.round(after.transitionIn!.durationSec*fps/2));
     filters.push(`[${L('base')}][${L('c0')}]overlay=0:0:format=rgb[${L('out')}]`,`[${L('c1')}]format=rgba,setpts=PTS+${offset}/(${fps}*TB),fade=t=in:st=0:d=${num(Math.max(1,d-1)/fps)}:alpha=1,setpts=PTS-STARTPTS[${L('in')}]`,`[${L('out')}][${L('in')}]overlay=0:0:format=rgb[${L('v0')}]`);last=L('v0');}
-   p.overlays.forEach((item,i)=>{const a=asset(item.source!.assetId),offset=(p.from/fps)-item.timelineStart,n=addInput(a.originalPath,item.source!.srcIn+Math.max(0,offset),seconds,a.kind==='image'),c=overlayChain(`${n}:v`,item,a,colours.get(a.id)!,width,height,fps);
+   // Overlays only the browser can draw come from it as one transparent layer over the footage; the others ffmpeg draws.
+   if(p.browserLayer==='overlays'){const raw=join(workDir,`overlays-${p.index}.mov`);await o.renderBrowser(p.from,p.to,raw,'overlays');const n=addInput(raw,0,seconds);
+    filters.push(`[${n}:v]fps=${fps},format=rgba[${L('layer')}]`,`[${last}][${L('layer')}]overlay=0:0:format=rgb[${L('layered')}]`);last=L('layered');}
+   else p.overlays.forEach((item,i)=>{const a=asset(item.source!.assetId),offset=(p.from/fps)-item.timelineStart,n=addInput(a.originalPath,item.source!.srcIn+Math.max(0,offset),seconds,a.kind==='image'),c=overlayChain(`${n}:v`,item,a,colours.get(a.id)!,width,height,fps);
     filters.push(`${c.chain}[${L('o'+i)}]`,`[${last}][${L('o'+i)}]overlay=x='${c.x}':y='${c.y}':format=rgb[${L('ov'+i)}]`);last=L('ov'+i);});
   }
   // Exactly the piece's frames (a source that ends early holds its last frame), as 4:2:0 BT.709. Frames already in that form
@@ -223,7 +243,7 @@ export async function exportNative(o:NativeExportOptions){
  // a long edit with a cut every few seconds would otherwise pay hundreds of times. A browser piece is a run of its own, and
  // runs are kept short enough that several render at once.
  const runs:Piece[][]=[];
- for(const p of pieces){const run=runs.at(-1);if(run&&!p.browser&&!run[0].browser&&run.length<24&&p.to-run[0].from<=fps*90)run.push(p);else runs.push([p]);}
+ for(const p of pieces){const run=runs.at(-1);if(run&&p.browserLayer!=='all'&&run[0].browserLayer!=='all'&&run.length<24&&p.to-run[0].from<=fps*90)run.push(p);else runs.push([p]);}
  const runFile=(run:Piece[])=>join(workDir,`run-${String(run[0].index).padStart(5,'0')}.mp4`);let done=0;
  const renderRun=async(run:Piece[])=>{
   o.signal?.throwIfAborted();const from=run[0].from,to=run.at(-1)!.to,args:string[]=['-hide_banner','-v','error','-y'],filters:string[]=[];let inputs=0;

@@ -33,6 +33,8 @@ it('renders footage with ffmpeg and sends only what the browser alone can draw t
  const pieces=planPieces(TimelineSchema.parse(t),footage(mkdtempSync(join(tmpdir(),'dream-native-plan-'))));
  expect(pieces[0]).toMatchObject({from:0,to:pieces[1].from,browser:undefined});
  expect(pieces.filter(p=>p.browser).map(p=>p.browser)).toEqual(['the lower_third element','a whip transition','a whip transition']);
+ // A title over footage needs only its own layer from the browser; a transition it draws needs the whole frame.
+ expect(pieces.filter(p=>p.browser).map(p=>p.browserLayer)).toEqual(['overlays','all','all']);
  expect(pieces.some(p=>p.kind==='transition'&&!p.browser)).toBe(true);
  // Every frame is covered exactly once.
  pieces.forEach((p,i)=>{expect(p.to).toBeGreaterThan(p.from);if(i)expect(p.from).toBe(pieces[i-1].to);});
