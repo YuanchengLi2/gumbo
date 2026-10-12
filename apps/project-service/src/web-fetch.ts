@@ -21,7 +21,7 @@ export function pageText(html:string){
 export async function fetchPage(url:string,maxCharacters:number,signal:AbortSignal){
  const target=new URL(url);if(!['http:','https:'].includes(target.protocol))throw new Error('Only http and https addresses can be read.');
  const host=target.hostname.replace(/^\[|\]$/g,'');if(host==='localhost'||host.endsWith('.local')||(isIP(host)?privateAddress(host):(await lookup(host,{all:true})).some(a=>privateAddress(a.address))))throw new Error('Addresses on this computer or its local network are not read.');
- const response=await fetch(target,{signal:AbortSignal.any([signal,AbortSignal.timeout(30_000)]),redirect:'follow',headers:{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Dream/1.0','Accept':'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.5'}});
+ const response=await fetch(target,{signal:AbortSignal.any([signal,AbortSignal.timeout(30_000)]),redirect:'follow',headers:{'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Figjam/1.0','Accept':'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.5'}});
  const type=response.headers.get('content-type')??'';
  if(!/text\/|json|xml|javascript/i.test(type))throw new Error(`${url} is ${type||'binary content'}, not a page: download it with a command (curl -L -o resources/name.ext "${url}").`);
  const body=await response.text(),html=/html/i.test(type)||/^\s*<(!doctype|html)/i.test(body),{title,text}=html?pageText(body):{title:'',text:body};

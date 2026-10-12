@@ -39,7 +39,7 @@ export function ProjectPlayer(p:Props){
   <div className="preview-viewport" ref={viewport}>
    <div className="preview-frame" style={{width:size.width||'100%',height:size.height||'100%',aspectRatio:t.settings.width+'/'+t.settings.height}}>
     {r.durationInFrames>0?<Player ref={p.player} component={TimelineComposition} inputProps={inputProps} durationInFrames={duration} compositionWidth={t.settings.width} compositionHeight={t.settings.height} fps={t.settings.fps} controls={false} clickToPlay numberOfSharedAudioTags={16} errorFallback={({error})=><div className="preview-error" role="alert">Playback unavailable: {error.message}</div>} style={{width:'100%',height:'100%'}}/>:<div className="preview-empty"><Film size={30}/><h3>Your canvas is ready</h3><p>Add media or describe the video you want to make.</p></div>}
-    {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Dream is editing"><div className="editing-animation"><div className="editing-orbit"/><DreamMark/></div><strong>Dream is editing</strong><span className="editing-status">{currentAction?editingActivity(currentAction):currentStep?editingTask(currentStep.label):'Putting your ideas in motion'}</span><div className="editing-pulse"><i/><i/><i/></div></div>}
+    {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Figjam is editing"><div className="editing-animation"><div className="editing-orbit"/><DreamMark/></div><strong>Figjam is editing</strong><span className="editing-status">{currentAction?editingActivity(currentAction):currentStep?editingTask(currentStep.label):'Putting your ideas in motion'}</span><div className="editing-pulse"><i/><i/><i/></div></div>}
    </div>
   </div>
   <div className="transport">

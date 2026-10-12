@@ -14,7 +14,7 @@ function UserMessage({text,assetIds,selection,project}:{text:string;assetIds?:st
  const asset=(id?:string)=>id?project.footage.assets.find(a=>a.id===id):undefined;
  return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div></article>;
 }
-const Identity=()=><div className="assistant-identity"><DreamMark/><span>Dream</span></div>;
+const Identity=()=><div className="assistant-identity"><DreamMark/><span>Figjam</span></div>;
 
 export function Conversation({project}:{project:ProjectState}){
  const commentary=useEditor(s=>s.commentary),pending=useEditor(s=>s.pending),groups:{id:string;turnId?:string;messages:Message[]}[]=[],byTurn=new Map<string,typeof groups[number]>();

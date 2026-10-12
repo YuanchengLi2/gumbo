@@ -79,7 +79,7 @@ export function RunStream({events,running,assets=[],startedAt}:{events:PublicAct
  const all=events.slice().sort((a,b)=>a.sequence-b.sequence),ids=new Set(all.map(e=>e.id)),top=all.filter(e=>!e.parent||!ids.has(e.parent)),list=items(top,all);
  // While the run is between steps (the model is thinking), a spinner row shows it is still working.
  const busy=running&&all.some(e=>!hidden(e)&&live(e.status)&&(!e.parent||all.some(p=>p.id===e.parent&&live(p.status)))),elapsed=useElapsed(running,startedAt??all[0]?.startedAt);
- return <div className="run-stream" aria-label="Dream activity"><Assets.Provider value={assets}><Items list={list} all={all} running={running}/></Assets.Provider>
+ return <div className="run-stream" aria-label="Figjam activity"><Assets.Provider value={assets}><Items list={list} all={all} running={running}/></Assets.Provider>
   {running&&!busy&&<div className="run-working" role="status"><LoaderCircle size={13} className="spin"/><span>{list.length?'Thinking':'Understanding your request'}</span><small>{elapsed}</small></div>}
  </div>;
 }

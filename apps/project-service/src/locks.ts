@@ -11,7 +11,7 @@ export function acquireProjectLock(folder:string):string {
   if(!Number.isInteger(owner.pid)||owner.pid<=0)throw new Error('The project has an invalid writer lock.');
   try{process.kill(owner.pid,0);}catch(error){
     if((error as NodeJS.ErrnoException).code==='ESRCH'){unlinkSync(path);return create();}
-    throw new Error('Unable to verify whether another Dream process has this project open.');
+    throw new Error('Unable to verify whether another Figjam process has this project open.');
   }
-  throw new Error('This project is open in another Dream window.');
+  throw new Error('This project is open in another Figjam window.');
 }

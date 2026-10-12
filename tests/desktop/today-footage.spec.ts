@@ -24,7 +24,7 @@ test('finds what was shot today on the computer, imports it in capture order and
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Today acceptance'});await window.dream.command({type:'account',action:'signin',email:'local-fixture@example.invalid',password:'local-fixture'});},folder);
   await page.evaluate(()=>window.dream.grantComputer());await page.reload();
-  await page.getByLabel('Ask Dream to edit').fill('Look at what I shot today and make a short');await page.getByRole('button',{name:'Send prompt'}).click();
+  await page.getByLabel('Ask Figjam to edit').fill('Look at what I shot today and make a short');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).aiStatus),{timeout:120000}).toBe('complete');
   const state=await page.evaluate(async()=>window.dream.command({type:'state'}));
   // Only today's three clips were imported, and they play in the order they were shot.

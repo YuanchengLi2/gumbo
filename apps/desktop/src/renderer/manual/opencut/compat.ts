@@ -1,4 +1,4 @@
-/** Dream adapter for the imported OpenCut algorithms; supported project FPS divide 60,000. */
+/** Figjam adapter for the imported OpenCut algorithms; supported project FPS divide 60,000. */
 export type MediaTime=number;
 export type FrameRate={numerator:number;denominator:number};
 export type ElementRef={trackId:string;elementId:string};

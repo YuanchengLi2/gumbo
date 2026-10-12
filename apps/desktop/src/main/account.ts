@@ -11,23 +11,23 @@ export class Account {
  async ensureGuest(){
   if(this.session)return;
   if(!this.connecting){const generation=this.generation;this.connecting=(async()=>{
-   if(!this.anonKey)throw new Error('Dream AI is not configured. Your local projects remain available.');
+   if(!this.anonKey)throw new Error('Figjam AI is not configured. Your local projects remain available.');
    const response=await fetch(`${this.url}/auth/v1/signup`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{client:'dream-desktop'}}),signal:AbortSignal.timeout(20000)});
-   const body=await response.json() as any;if(!response.ok||!body.access_token)throw new Error(body.msg??body.error_description??'Could not connect to Dream AI. Retry when online.');
+   const body=await response.json() as any;if(!response.ok||!body.access_token)throw new Error(body.msg??body.error_description??'Could not connect to Figjam AI. Retry when online.');
    if(generation!==this.generation)throw new Error('Connection was canceled.');
    this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});
   })().finally(()=>{this.connecting=null;});}await this.connecting;
  }
  async token(){
-  await this.ensureGuest();if(!this.session)throw new Error('Could not connect to Dream AI.');
+  await this.ensureGuest();if(!this.session)throw new Error('Could not connect to Figjam AI.');
   if(this.session.expires_at<Date.now()/1000+60){
-   if(!this.refreshing){const session=this.session,generation=this.generation;this.refreshing=(async()=>{const response=await fetch(`${this.url}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token}),signal:AbortSignal.timeout(15000)});if(!response.ok){if([400,401].includes(response.status)&&generation===this.generation){this.session=null;if(existsSync(this.file))unlinkSync(this.file);return;}throw new Error('Dream AI could not refresh its connection. Retry when online.');}const body=await response.json() as any;if(generation===this.generation&&this.session?.refresh_token===session.refresh_token)this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});})().finally(()=>{this.refreshing=null;});}
+   if(!this.refreshing){const session=this.session,generation=this.generation;this.refreshing=(async()=>{const response=await fetch(`${this.url}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token}),signal:AbortSignal.timeout(15000)});if(!response.ok){if([400,401].includes(response.status)&&generation===this.generation){this.session=null;if(existsSync(this.file))unlinkSync(this.file);return;}throw new Error('Figjam AI could not refresh its connection. Retry when online.');}const body=await response.json() as any;if(generation===this.generation&&this.session?.refresh_token===session.refresh_token)this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});})().finally(()=>{this.refreshing=null;});}
    await this.refreshing;if(!this.session)await this.ensureGuest();
   }
   return this.session?.access_token??'';
  }
 
- async info(){if(!this.session)return {signedIn:false,email:'',configured:!!this.anonKey};const response=await fetch(`${this.url}/functions/v1/dream-gateway/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Dream AI is currently unavailable.');return {signedIn:true,email:this.session.user.email??'',guest:!!this.session.user.is_anonymous,...body};}
+ async info(){if(!this.session)return {signedIn:false,email:'',configured:!!this.anonKey};const response=await fetch(`${this.url}/functions/v1/dream-gateway/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Figjam AI is currently unavailable.');return {signedIn:true,email:this.session.user.email??'',guest:!!this.session.user.is_anonymous,...body};}
  signout(){this.generation++;this.session=null;if(existsSync(this.file))unlinkSync(this.file);return {signedIn:false};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }

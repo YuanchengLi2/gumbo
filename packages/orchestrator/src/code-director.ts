@@ -66,7 +66,7 @@ export class Director {
   // A request stops at its spending limit before the next call; completed work stays saved and a resume continues it.
   if(turnId){const resumes=Number(this.db.getMeta('resume_count:'+turnId)??0),limit=requestBudgetUsd(resumes),spent=this.db.turnUsage(turnId).costUsd;if(spent>=limit){this.db.event('ai.request_budget',{turnId,spentUsd:spent,limitUsd:limit});throw new InferenceError(`This request reached its $${limit.toFixed(2)} spending limit ($${spent.toFixed(2)} used). Completed work is saved; resume to continue with another $${requestBudgetUsd(0).toFixed(2)}.`,'request_budget');}}
   const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,0,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
-  // Web search runs on Anthropic's servers; it goes first so the cache breakpoint stays on the last of Dream's own tools.
+  // Web search runs on Anthropic's servers; it goes first so the cache breakpoint stays on the last of Figjam's own tools.
   const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&!this.db.getMeta(searchKey);
   if(withSearch)tools=[webSearchTool(model),...(tools as any[])];
   try{return await this.infer(model,system,messages,tools,turnId,purpose,phase,profile,extra);}
@@ -90,7 +90,7 @@ export class Director {
  }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
-  if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Dream build.');
+  if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Figjam build.');
   this.db.setPhase(turnId,planning?'planning':readOnly?'answering':'editing');const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
   const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
   const model=this.agentModel(turnId,text);
