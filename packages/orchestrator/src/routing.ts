@@ -4,7 +4,8 @@ export type RequestIntent='auto'|'plan'|'ask';
 export function routeCodeRequest(text:string,intent:RequestIntent,interrupted=false){
  const planning=intent==='plan'||/^(?:please\s+)?(?:plan\b|help me plan\b|discuss\b)/i.test(text);
  // Carrying on with a stopped request; anything else after a stop is a new request.
- const continuing=interrupted&&intent==='auto'&&/^(?:(?:ok(?:ay)?|yes|please)[,.!]?\s+)?(?:continue|keep going|resume|go on|carry on|try again|retry)\b/i.test(text.trim());
+ // "Continue" leads the message, or closes it after the feedback it carries ("Square is confirmed; continue.").
+ const continuing=interrupted&&intent==='auto'&&(/^(?:(?:ok(?:ay)?|yes|please)[,.!]?\s+)?(?:continue|keep going|resume|go on|carry on|try again|retry)\b/i.test(text.trim())||/[,;.!]\s*(?:(?:please|now|and)\s+)?(?:continue|keep going|resume|go on|carry on)[.!]*$/i.test(text.trim()));
  const question=/^(?:what|what's|why|how|where|which|who|when|does|do|did|is|are|was|were|should|explain|can you explain)\b/i.test(text)&&! /\b(?:then|and)\s+(?:make|change|create|edit|shorten|render|apply|implement)\b/i.test(text);
  // Something to read before anything is built (a script, ideas, an outline or copy), with no request to build it now.
  const toRead=/\b(?:write|draft|think of|come up with|give me|suggest|brainstorm|make|show me)\b[^.?!]{0,40}\b(?:script|ideas?|outline|copy|concepts?|voiceover|storyboard)\b/i;
