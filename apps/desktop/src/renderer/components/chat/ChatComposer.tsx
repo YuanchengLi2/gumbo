@@ -7,7 +7,7 @@ type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUploa
 
 export const permissions:{id:Permission;label:string;detail:string;icon:React.ReactNode}[]=[
  {id:'auto',label:'Edit automatically',detail:'Dream changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
- {id:'plan',label:'Plan first',detail:'Opus writes a plan. Nothing changes until you approve it.',icon:<ListChecks size={14}/>},
+ {id:'plan',label:'Plan first',detail:'Dream writes a plan. Nothing changes until you approve it.',icon:<ListChecks size={14}/>},
  {id:'ask',label:'Ask only',detail:'Answers, scripts and ideas. The project is never changed.',icon:<MessageCircle size={14}/>}
 ];
 export const modelChoices:{id:ModelChoice;label:string;detail:string;icon:React.ReactNode}[]=[

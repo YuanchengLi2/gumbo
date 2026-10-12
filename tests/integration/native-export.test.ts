@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {mkdtempSync} from 'node:fs';
+import {mkdtempSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -7,7 +7,7 @@ import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import {emptyTimeline,TimelineSchema} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
-import {exportNative,planPieces,parseColour} from '../../apps/desktop/src/main/native-export';
+import {exportNative,planPieces,parseColour,exportSpace,assertExportSpace} from '../../apps/desktop/src/main/native-export';
 
 const anchor=(clipId:string,at:'start'|'end'|number='start')=>({kind:'clip' as const,clipId,at,offsetSec:0});
 const clip=(id:string,srcIn:number,srcOut:number,extra:object={})=>({id,assetId:'v',srcIn,srcOut,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},reason:'',...extra});
@@ -55,3 +55,19 @@ it('exports cuts, a slow push about the centre and the sound, frame-exact',async
  const red=(x:number)=>row[x*3]>row[x*3+2];
  expect(red(150)).toBe(true);expect(red(170)).toBe(false);
 },60_000);
+
+it('deletes each graphics layer once its run is encoded, and refuses an export the drive cannot hold, saying how much it needs',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dream-native-layers-')),f=footage(dir),t=emptyTimeline('t');t.settings={...t.settings,width:320,height:180};
+ t.spine=[clip('a',0,1.5),clip('b',2,3.5)];
+ t.attached=[{id:'title',type:'overlay',component:'lower_third',start:anchor('a',.5),durationSec:.5,params:{text:'Hello'},layer:1,reason:''}];
+ const timeline=TimelineSchema.parse(t),work=join(dir,'work'),rendered:string[]=[];
+ // The browser's layer: a transparent clip of the piece's length.
+ const renderBrowser=async(from:number,to:number,file:string)=>{rendered.push(file);const r=spawnSync(ffmpeg!,['-y','-v','error','-f','lavfi','-i',`color=c=black@0:s=320x180:r=30:d=${(to-from)/30},format=rgba`,'-c:v','png',file],{windowsHide:true});if(r.status)throw new Error(r.stderr.toString());};
+ const result=await exportNative({ffmpeg:ffmpeg!,timeline,footage:f,output:join(dir,'out.mp4'),workDir:work,renderBrowser});
+ expect(result.browserPieces).toBe(1);expect(rendered).toHaveLength(1);expect(existsSync(rendered[0])).toBe(false);expect(existsSync(join(dir,'out.mp4'))).toBe(true);
+ // About 41 MB a second for 1080p30 graphics over footage; this one is tiny, so mostly the fixed margin.
+ const pieces=planPieces(timeline,f),need=exportSpace(pieces,timeline.settings);expect(need).toBeGreaterThan(300e6);expect(need).toBeLessThan(400e6);
+ expect(exportSpace([{...pieces[0],from:0,to:30*60,browserLayer:'overlays'}],{width:1920,height:1080,fps:30})).toBeGreaterThan(2.4e9);
+ expect(()=>assertExportSpace('C:\exports\work',need,1.2e9)).not.toThrow();
+ expect(()=>assertExportSpace('C:\exports\work',4.2e9,1.8e9)).toThrow('Export needs about 4.2 GB free on C:; 1.8 GB is free.');
+},120_000);

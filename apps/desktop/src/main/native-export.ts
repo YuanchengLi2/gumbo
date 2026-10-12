@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {writeFileSync,mkdirSync,rmSync,existsSync,renameSync} from 'node:fs';
+import {writeFileSync,mkdirSync,rmSync,existsSync,renameSync,statfsSync} from 'node:fs';
 import {join} from 'node:path';
 import {resolve as resolveTimeline,type TimelineDocument,type ResolvedClip,type ResolvedItem,type ResolvedTimeline} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
@@ -190,10 +190,25 @@ export function browserLayer(timeline:TimelineDocument,layer:'all'|'overlays'){
   render:overlays?{codec:'prores' as const,proResProfile:'4444' as const,imageFormat:'png' as const,pixelFormat:'yuva444p10le' as const}:{codec:'prores' as const,proResProfile:'hq' as const}};
 }
 
+/** About how much space an export writes at its peak, in bytes. The browser's layers are the large part (ProRes, about
+ * 41 MB a second for 1080p30 graphics with transparency, 28 for whole pieces); each is deleted once its run is encoded, so
+ * at most one per concurrent run exists at a time. The encoded runs and the joined output are each about the final size. */
+export function exportSpace(pieces:Piece[],settings:{width:number;height:number;fps:number},concurrency=3){
+ const scale=settings.width*settings.height*settings.fps/(1920*1080*30),seconds=(p:Piece)=>(p.to-p.from)/settings.fps;
+ const layers=pieces.filter(p=>p.browserLayer).map(p=>seconds(p)*(p.browserLayer==='overlays'?41e6:28e6)*scale).sort((a,b)=>b-a);
+ const duration=pieces.reduce((n,p)=>n+seconds(p),0),encoded=duration*1.6e6*Math.max(.25,scale);
+ return Math.round(layers.slice(0,concurrency).reduce((n,b)=>n+b,0)+encoded*2+300e6);
+}
+/** Refuses to start an export the drive cannot hold, saying how much it needs and has. */
+export function assertExportSpace(workDir:string,need:number,free=(()=>{const s=statfsSync(workDir);return s.bavail*s.bsize;})()){
+ const gb=(n:number)=>(n/1e9).toFixed(1),drive=/^[a-z]:/i.test(workDir)?workDir.slice(0,2).toUpperCase():'the export drive';
+ if(free<need)throw Object.assign(new Error(`Export needs about ${gb(need)} GB free on ${drive}; ${gb(free)} GB is free. Free some space and export again.`),{code:'ENOSPC'});
+}
+
 /** Renders the timeline natively. Returns what it did so callers can report it. */
 export async function exportNative(o:NativeExportOptions){
  const {timeline,footage,ffmpeg,workDir}=o,{width,height,fps}=timeline.settings,resolved=resolveTimeline(timeline,footage),pieces=planPieces(timeline,footage,resolved),encoder=await pickEncoder(ffmpeg);
- mkdirSync(workDir,{recursive:true});const asset=(id:string)=>footage.assets.find(a=>a.id===id)!;
+ mkdirSync(workDir,{recursive:true});assertExportSpace(workDir,exportSpace(pieces,timeline.settings,o.concurrency??3));const asset=(id:string)=>footage.assets.find(a=>a.id===id)!;
  // Each source's colour tags, read once.
  const used=new Set(pieces.filter(p=>p.browserLayer!=='all').flatMap(p=>[p.clip,p.before,p.after].filter(Boolean).map(c=>c!.assetId).concat(p.browserLayer?[]:p.overlays.map(i=>i.source!.assetId))));
  const colours=new Map(await Promise.all([...used].map(async id=>[id,await probeColour(ffmpeg,asset(id).originalPath,asset(id).kind==='image')] as const)));
@@ -202,10 +217,10 @@ export async function exportNative(o:NativeExportOptions){
  /** One piece's part of a run's filter graph: its inputs (numbered from first) and filters, ending at [p<index>] as frame-sized
   * 4:2:0 BT.709 frames, exactly as many as the piece has. Labels carry the piece's index so pieces share one graph. */
  const buildPiece=async(p:Piece,first:number)=>{
-  const frames=p.to-p.from,seconds=frames/fps,inputs:string[]=[],filters:string[]=[],L=(name:string)=>`p${p.index}${name}`;
+  const frames=p.to-p.from,seconds=frames/fps,inputs:string[]=[],filters:string[]=[],layers:string[]=[],L=(name:string)=>`p${p.index}${name}`;
   const addInput=(path:string,seek:number,length:number,image=false)=>{if(image)inputs.push('-loop','1','-framerate',String(fps),'-t',num(length+1/fps),'-i',path);else inputs.push('-ss',num(Math.max(0,seek)),'-t',num(length+2/fps),'-i',path);return first+inputs.filter(a=>a==='-i').length-1;};
   let last=L('base'),yuv=false;
-  if(p.browserLayer==='all'){const raw=join(workDir,`browser-${p.index}.mov`);await o.renderBrowser(p.from,p.to,raw,'all');const n=addInput(raw,0,seconds);filters.push(`[${n}:v]fps=${fps},format=rgb24[${last}]`);}
+  if(p.browserLayer==='all'){const raw=join(workDir,`browser-${p.index}.mov`);layers.push(raw);await o.renderBrowser(p.from,p.to,raw,'all');const n=addInput(raw,0,seconds);filters.push(`[${n}:v]fps=${fps},format=rgb24[${last}]`);}
   else{
    // The composition background; transitions are drawn on black, and a clip on its own background, as the player does.
    const plate=(color:string,label:string)=>`color=c=${color}:s=${width}x${height}:r=${fps}:d=${num(seconds+1/fps)},format=rgba[${label}]`;
@@ -227,7 +242,7 @@ export async function exportNative(o:NativeExportOptions){
     const offset=p.from-(after.from-Math.round(after.transitionIn!.durationSec*fps/2));
     filters.push(`[${L('base')}][${L('c0')}]overlay=0:0:format=rgb[${L('out')}]`,`[${L('c1')}]format=rgba,setpts=PTS+${offset}/(${fps}*TB),fade=t=in:st=0:d=${num(Math.max(1,d-1)/fps)}:alpha=1,setpts=PTS-STARTPTS[${L('in')}]`,`[${L('out')}][${L('in')}]overlay=0:0:format=rgb[${L('v0')}]`);last=L('v0');}
    // Overlays only the browser can draw come from it as one transparent layer over the footage; the others ffmpeg draws.
-   if(p.browserLayer==='overlays'){const raw=join(workDir,`overlays-${p.index}.mov`);await o.renderBrowser(p.from,p.to,raw,'overlays');const n=addInput(raw,0,seconds);
+   if(p.browserLayer==='overlays'){const raw=join(workDir,`overlays-${p.index}.mov`);layers.push(raw);await o.renderBrowser(p.from,p.to,raw,'overlays');const n=addInput(raw,0,seconds);
     filters.push(`[${n}:v]fps=${fps},format=rgba[${L('layer')}]`,`[${last}][${L('layer')}]overlay=0:0:format=rgb[${L('layered')}]`);last=L('layered');}
    else p.overlays.forEach((item,i)=>{const a=asset(item.source!.assetId),offset=(p.from/fps)-item.timelineStart,n=addInput(a.originalPath,item.source!.srcIn+Math.max(0,offset),seconds,a.kind==='image'),c=overlayChain(`${n}:v`,item,a,colours.get(a.id)!,width,height,fps);
     filters.push(`${c.chain}[${L('o'+i)}]`,`[${last}][${L('o'+i)}]overlay=x='${c.x}':y='${c.y}':format=rgb[${L('ov'+i)}]`);last=L('ov'+i);});
@@ -236,7 +251,7 @@ export async function exportNative(o:NativeExportOptions){
   // pass through: converting YUV to YUV would reinterpret an untagged source's matrix.
   const convert=yuv?'format=yuv420p':'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p';
   filters.push(`[${last}]${convert},setsar=1,tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames},setpts=PTS-STARTPTS[p${p.index}]`);
-  return{inputs,filters,count:inputs.filter(a=>a==='-i').length};
+  return{inputs,filters,layers,count:inputs.filter(a=>a==='-i').length};
  };
 
  // Runs of pieces rendered by one ffmpeg each: starting the encoder and loading the caption fonts takes a second or two, which
@@ -246,8 +261,9 @@ export async function exportNative(o:NativeExportOptions){
  for(const p of pieces){const run=runs.at(-1);if(run&&p.browserLayer!=='all'&&run[0].browserLayer!=='all'&&run.length<24&&p.to-run[0].from<=fps*90)run.push(p);else runs.push([p]);}
  const runFile=(run:Piece[])=>join(workDir,`run-${String(run[0].index).padStart(5,'0')}.mp4`);let done=0;
  const renderRun=async(run:Piece[])=>{
-  o.signal?.throwIfAborted();const from=run[0].from,to=run.at(-1)!.to,args:string[]=['-hide_banner','-v','error','-y'],filters:string[]=[];let inputs=0;
-  for(const p of run){const built=await buildPiece(p,inputs);args.push(...built.inputs);filters.push(...built.filters);inputs+=built.count;}
+  o.signal?.throwIfAborted();const from=run[0].from,to=run.at(-1)!.to,args:string[]=['-hide_banner','-v','error','-y'],filters:string[]=[],layers:string[]=[];let inputs=0;
+  try{
+  for(const p of run){const built=await buildPiece(p,inputs);args.push(...built.inputs);filters.push(...built.filters);layers.push(...built.layers);inputs+=built.count;}
   let last='joined';filters.push(`${run.map(p=>`[p${p.index}]`).join('')}concat=n=${run.length}:v=1:a=0[joined]`);
   const ass=captionsAss(timeline,resolved,from,to),assName=`run-${run[0].index}.ass`,assFile=join(workDir,assName);if(ass)writeFileSync(assFile,ass);
   // Filter files are named relative to the work directory, where ffmpeg runs: no drive colon to escape.
@@ -258,6 +274,8 @@ export async function exportNative(o:NativeExportOptions){
   try{await runFfmpeg(ffmpeg,args,o.signal,workDir);}catch(error){throw new Error(`Pieces ${run[0].index}-${run.at(-1)!.index} (frames ${from}-${to}): ${(error as Error).message}
 Filters: ${filters.join(';')}`);}finally{if(existsSync(assFile)&&!process.env.DREAM_EXPORT_DEBUG)rmSync(assFile,{force:true});}
   done+=run.length;o.onProgress?.(done,pieces.length,'Rendering the video');
+  // A browser layer is gigabytes for a long graphic; once its run is encoded it is not needed again.
+  }finally{if(!process.env.DREAM_EXPORT_DEBUG)for(const file of layers)rmSync(file,{force:true});}
  };
  // The sound is mixed, levelled and encoded while the picture renders; it needs little of the processor the picture uses.
  const sound=(async()=>{const mix=join(workDir,'mix.wav'),encoded=join(workDir,'sound.m4a');if(!await mixAudio(o,resolved,mix))return;await encodeAtLoudness(ffmpeg,mix,encoded,o.signal);rmSync(mix,{force:true});return encoded;})();

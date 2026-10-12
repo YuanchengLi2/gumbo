@@ -406,3 +406,11 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - While the agent works, the timeline and the player show its unpublished draft (the workspace.draft events): blocks it adds come in one after another, moved and trimmed ones glide, removed ones fade out, and "Editing live" shows beside the zoom. The player plays the draft whenever everything in it already exists; scenes built only on publish show on the timeline first. A half-written project.json keeps the last good draft on screen; publishing makes the draft the edit.
 - Every part of the edit is a block on a track of its kind, top to bottom as in CapCut: Effects (punch zoom, slow push, shake), Filters (a grade over a stretch, and a clip's own grade shown over that clip), Text, Captions, Overlays (motion graphics the agent wrote, named after the scene, and overlay media), the main track, Sound effects and Music. Only tracks with something on them show, plus one empty overlay and one empty audio row to drag onto for a new track.
 - The old read-only timeline and its styles are removed.
+
+## October 12, 2026 — Export cannot fill the disk
+
+- Each graphics layer the browser renders (ProRes, about 41 MB a second at 1080p30 with transparency) is deleted as soon as the run that uses it is encoded, instead of when the whole export ends; at most one per concurrent run exists at a time.
+- Before rendering, export estimates its peak space (the largest concurrent layers, the encoded runs and the joined output, plus a margin) and stops with "Export needs about N GB free on C:; M GB is free." when the drive is short.
+- A full drive is not retried in the browser, which needs more space still; any other native failure is, and if that fails too its message carries the first error (the browser's "out of memory" no longer hides the cause).
+- The layer format stays ProRes 4444: a smaller format with transparency (VP9) is far slower to encode, and deleting layers as they are used already bounds the space.
+- Measured on the October 11 long-form edit (11:18, 12 chapter cards and overlays): exported in 574 s with a peak of 0.56 GB of work files.

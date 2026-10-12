@@ -23,7 +23,11 @@ const server=await renderServer(new Map(state.footage.assets.map(a=>[a.id,a])),o
   try{await exportNative({ffmpeg:paths.ffmpeg,timeline:state.timeline,footage:state.footage,output:temp,workDir,signal:nativeAbort.signal,
     renderBrowser:async(from,to,file,layer)=>{const {props,composition:selected}=await layerComposition(layer);await renderMedia({serveUrl,composition:selected,inputProps:props,chromiumOptions,...browserLayer(state.timeline,layer).render,muted:true,outputLocation:file,browserExecutable,binariesDirectory,cancelSignal,concurrency:renderConcurrency(),frameRange:[from,to-1]});},
     onProgress:(done,total,phase)=>publish('export.progress',{status:'rendering',progress:done/total,phase})});}
-  catch(error){if(nativeAbort.signal.aborted)throw error;console.error('Native export failed; rendering with the browser instead.',error);if(existsSync(temp))unlinkSync(temp);await browserExport();}
+  // A full drive is not retried in the browser, which needs more space still; any other failure is, and if that fails too
+  // the first error is reported with it.
+  catch(error){if(nativeAbort.signal.aborted)throw error;const native=error as Error&{code?:string};if(native.code==='ENOSPC'||/ENOSPC|no space left|not enough space|disk (is )?full/i.test(native.message))throw native;
+   console.error('Native export failed; rendering with the browser instead.',error);if(existsSync(temp))unlinkSync(temp);
+   try{await browserExport();}catch(browser){throw new Error(`${(browser as Error).message} (The faster export failed first: ${native.message.split('\n')[0].slice(0,300)})`);}}
   finally{rmSync(workDir,{recursive:true,force:true});}
  });await validateExport(temp,paths.ffprobe,resolve(state.timeline,state.footage).durationSec,state.timeline.settings.fps);
  // The finished mix is brought to the standard online level; the picture is copied untouched.
