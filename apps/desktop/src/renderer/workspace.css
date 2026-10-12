@@ -165,3 +165,36 @@
 .drop-indicator{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#7d6bc4;pointer-events:none;z-index:6}
 .timeline-empty{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:#9a95a6;pointer-events:none}
 .timeline-notice{margin:6px 0 0;font-size:11px;color:#6a58b0}
+/* The editable timeline under the player: no card around it, flush to the edges, in the workspace's light theme; its height follows the drag handle at its top edge. */
+.ai-stage{--editor-bg:#fff;--editor-panel:#fff;--editor-raised:#f6f5f9;--editor-hover:#f1eff6;--editor-input:#fff;--editor-border:#f0eff4;--editor-text:#3f3b4c;--editor-muted:#9a96a6;--editor-accent:#7d6bc4;--editor-accent-bg:#f1eefb;padding:0!important;gap:0!important}
+.ai-stage>.project-player{flex:1;min-height:0;padding:24px 28px 12px}
+.ai-stage .manual-timeline{flex:0 0 var(--timeline-height,38%);min-height:140px;background:#fff;border-top:1px solid #ecebf1}
+.ai-stage .manual-timeline{position:relative}
+.ai-stage .manual-timeline-toolbar{position:absolute;top:0;right:12px;z-index:20;min-height:30px;padding:0 4px 0 12px;border-bottom:0;gap:8px;color:#a39fb0;background:linear-gradient(90deg,#fff0,#fff 12px)}
+.ai-stage .manual-timeline-toolbar input{width:120px}
+.ai-stage .manual-timeline-scroll{scrollbar-width:auto;scrollbar-color:auto}
+.ai-stage .manual-timeline-scroll::-webkit-scrollbar{width:8px;height:0}
+.ai-stage .manual-timeline-scroll::-webkit-scrollbar-thumb{background:#e2dfe9;border-radius:4px}
+.ai-stage .manual-timeline-scroll::-webkit-scrollbar-track{background:transparent}
+.ai-stage .manual-ruler{background:#fff;border-bottom:1px solid #f0eff4}
+.ai-stage .manual-ruler>span{border-left-color:#e4e1ea;color:#a39fb0}
+.ai-stage .manual-track{border-bottom:1px solid #f5f4f8}
+.ai-stage .manual-track-label{background:#fff;border-right:1px solid #f0eff4;flex-direction:row;align-items:center;justify-content:center;padding:0;gap:0}
+.ai-stage .track-icon{color:#aaa6b6}
+.ai-stage .track-toggles{display:none;gap:1px}
+.ai-stage .manual-track:hover .track-icon{display:none}
+.ai-stage .manual-track:hover .track-toggles{display:flex}
+.ai-stage .manual-track-label button{padding:3px;color:#8c8797;border-radius:4px}
+.ai-stage .manual-track-label button:hover{background:#f1eff6}
+.ai-stage .manual-track-label button[aria-pressed=true]{color:#7d6bc4}
+.ai-stage .manual-clip{border-radius:6px;border-color:#a9badb;background:#e6ecf7;color:#2f3a4f;transition:left .32s cubic-bezier(.2,.8,.2,1),width .32s cubic-bezier(.2,.8,.2,1)}
+.ai-stage .manual-clip.item{background:#eee9fb;border-color:#b2a3e0}.ai-stage .manual-clip.music{background:#e1f2ed;border-color:#8cc5b5}.ai-stage .manual-clip.caption{background:#f7f2df;border-color:#dccb92}
+.ai-stage .manual-clip.selected{outline:2px solid #7d6bc4;outline-offset:-1px;border-color:#7d6bc4}
+.ai-stage .manual-clip-thumbnails{opacity:.9}
+.ai-stage .manual-clip-label{color:#2f2b38;text-shadow:none;background:#ffffffd9;font-weight:500;top:3px;left:6px}
+.ai-stage .manual-wave{color:#4f9c87}
+.ai-stage .manual-trim{background:transparent}.ai-stage .manual-clip:hover .manual-trim{background:#7d6bc433}.ai-stage .manual-trim:hover{background:#7d6bc499!important}
+.ai-stage .manual-marquee{background:#7d6bc41a}
+.manual-empty-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:#9a96a6;pointer-events:none}
+.timeline-resizer{flex:none;height:7px;margin-bottom:-7px;cursor:row-resize;position:relative;z-index:20}
+.timeline-resizer:hover{background:linear-gradient(transparent 2px,#7d6bc455 2px,#7d6bc455 4px,transparent 4px)}

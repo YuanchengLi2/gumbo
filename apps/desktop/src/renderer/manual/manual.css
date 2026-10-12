@@ -7,7 +7,7 @@
 .manual-timeline-toolbar input { width:110px; height:3px; accent-color:var(--editor-accent)}
 .manual-timeline-scroll { flex:1; min-height:0; overflow:auto; position:relative; scrollbar-color:#455166 var(--editor-bg); scrollbar-width:thin; overscroll-behavior:contain}
 .manual-timeline-content { position:relative; min-width:100%; touch-action:none; user-select:none}
-.manual-ruler { position:sticky; top:0; margin-left:142px; left:auto!important; height:30px; background:var(--editor-panel); border-bottom:1px solid var(--editor-border); z-index:12; cursor:crosshair}
+.manual-ruler { position:sticky; top:0; margin-left:56px; left:auto!important; height:30px; background:var(--editor-panel); border-bottom:1px solid var(--editor-border); z-index:12; cursor:crosshair}
 .manual-ruler>span { position:absolute; font-size:10px; font-variant-numeric:tabular-nums; color:var(--editor-muted); top:7px; padding-left:4px; border-left:1px solid #596378; height:23px; white-space:nowrap}
 .manual-track { position:absolute; left:0; right:0; border-bottom:1px solid var(--editor-border)}
 .manual-track-label { position:sticky; left:0; height:100%; z-index:16; background:var(--editor-panel); border-right:1px solid var(--editor-border); display:flex; flex-direction:column; justify-content:center; gap:5px; padding:0 11px}
@@ -17,10 +17,10 @@
 .manual-track-label button[aria-pressed=true] { color:var(--editor-accent)}
 .manual-track-lane { position:absolute; top:0; height:100%; background:linear-gradient(#ffffff01,#ffffff01); cursor:crosshair}
 .manual-track.is-locked .manual-track-lane { background:repeating-linear-gradient(135deg,#ffffff03,#ffffff03 6px,transparent 6px,transparent 12px)}
-.manual-clip { position:absolute; top:6px; height:45px; border:1px solid #657fa9; border-radius:5px; overflow:hidden; background:#405a84; cursor:grab; touch-action:none; min-width:4px}
+.manual-clip { position:absolute; top:5px; height:36px; border:1px solid #657fa9; border-radius:5px; overflow:hidden; background:#405a84; cursor:grab; touch-action:none; min-width:4px}
 .manual-clip.item { background:#565079; border-color:#8376b8}
 .manual-clip.music { background:#305d57; border-color:#579b90}
-.manual-clip.caption { background:#5d563b; border-color:#a49364; height:30px; top:13px}
+.manual-clip.caption { background:#5d563b; border-color:#a49364; height:26px; top:10px}
 .manual-clip.selected { outline:2px solid #d5d8ff; outline-offset:-2px; border-color:#d5d8ff; z-index:3}
 .manual-clip-thumbnails { position:absolute; inset:0; background-size:auto 100%; background-repeat:repeat-x; opacity:.52}
 .manual-clip-label { position:absolute; top:4px; left:10px; right:8px; font-size:10px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-shadow:0 1px 3px #000; background:#131c2d55; padding:2px 3px; border-radius:2px; pointer-events:none}
@@ -28,7 +28,7 @@
 .manual-trim.left { left:0; border-radius:4px 0 0 4px}
 .manual-trim.right { right:0; border-radius:0 4px 4px 0}
 .manual-trim:hover { background:#d5d8ff99}
-.manual-wave { position:absolute; inset:11px 0 0; width:100%; height:30px; color:#b0dfcb; pointer-events:none}
+.manual-wave { position:absolute; inset:8px 0 0; width:100%; height:26px; color:#b0dfcb; pointer-events:none}
 .manual-playhead { position:absolute; top:0; bottom:0; width:1px; background:var(--editor-accent); pointer-events:none; z-index:14}
 .manual-playhead>span { position:absolute; left:-5px; top:1px; width:11px; height:12px; background:var(--editor-accent); clip-path:polygon(0 0,100% 0,100% 60%,50% 100%,0 60%)}
 .manual-snap { position:absolute; top:0; bottom:0; border-left:1px dashed var(--editor-accent); pointer-events:none; z-index:15}

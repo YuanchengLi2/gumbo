@@ -18,7 +18,7 @@ test('drags project media onto the timeline at the drop point and shows selectio
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
   // Before any draft the timeline is already there, as a drop zone.
   await page.locator('.sidebar-tabs button',{hasText:'Media'}).click();const card=page.locator('.asset-card').first();await expect(card).toBeVisible();
-  const track=page.locator('.assistant-timeline .track.video');await expect(track).toContainText('Drop media here to start your edit');
+  const track=page.locator('.assistant-timeline .track.video .manual-track-lane');await expect(track).toContainText('Drop media here to start your edit');
   await card.dragTo(track,{targetPosition:{x:20,y:10}});
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).timeline.spine.length),{timeout:15000}).toBe(1);
   const state=await page.evaluate(async()=>window.dream.command({type:'state'}));expect(state.timeline.spine[0].assetId).toBe(state.footage.assets[0].id);
