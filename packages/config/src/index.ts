@@ -1,6 +1,8 @@
 export const defaults={fps:30,width:1920,height:1080,proxyHeight:720,highlightMs:1500,animationMs:300,maxToolCalls:40,maxReviewRounds:2,maxSourceHours:2,maxProjectHours:4,frameSampleSec:2,faceSampleSec:.5,model:'large-v3-turbo'} as const;
-/** One model does all the work: the router, the editing agent, its helpers, plans and replies. */
-export const models={agent:'claude-sonnet-5-5'};
+/** One model does all the work: the router, the editing agent, its helpers, plans and replies. DREAM_AGENT_MODEL swaps it
+ * for a measured comparison (for example claude-haiku-5-5); Sonnet is the default. */
+const chosenModel=typeof process!=='undefined'?process.env?.DREAM_AGENT_MODEL:undefined;
+export const models={agent:chosenModel&&/^claude-(haiku|sonnet|opus)-5-5$/.test(chosenModel)?chosenModel:'claude-sonnet-5-5'};
 
 // Working targets trigger archival of completed exchanges, not task failure. Haiku compacts at 80K and is never sent
 // more than 96K, so it stays under its 100K long-context price tier.

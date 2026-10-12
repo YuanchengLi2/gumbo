@@ -2,7 +2,7 @@ import {test} from '@playwright/test';
 import {existsSync,mkdirSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {dirname,resolve} from 'node:path';
-import {liveSession,videoLength,outOfRange} from './live-session';
+import {liveSession,videoLength,outOfRange,oneModel} from './live-session';
 
 /** The cheap live check to run before a long session: three minutes of the long-form talk cut into a short clip, then one
  * follow-up. A few cents and a few minutes, on the same packaged app and deployed gateway, so a broken model route, a
@@ -16,10 +16,9 @@ test('live smoke session on three minutes of a talk',async()=>{
   const imported=await importFiles([excerpt]),source=imported.footage.assets.find((a:any)=>a.filename===excerpt.split(/[\\/]/).pop())!;
   const fromTalk=(s:any)=>s.timeline.spine.filter((c:any)=>c.assetId===source.id);
   const pauses=(s:any)=>{const spoken=words(source.id);let n=0;for(const c of fromTalk(s)){const inside=spoken.filter(w=>w.start>=c.srcIn&&w.end<=c.srcOut);for(let i=1;i<inside.length;i++)if((inside[i].start-inside[i-1].end)/(c.speed||1)>2.5)n++;}return n;};
-  const sonnetOnly=(n:any)=>!!n&&Object.keys(n.byModel).every(m=>m==='sonnet');
   await ask('short cut','Cut this into a tight 60 to 90 second clip: remove pauses and filler, keep the main point, and open with the strongest line.',
    (_b,a)=>{const length=videoLength(a);if(length<45||length>120)return`the clip is ${length.toFixed(0)} s long`;if(fromTalk(a).length<2)return'fewer than two cuts';if(outOfRange(a).length)return`clips past their source: ${outOfRange(a).join(', ')}`;return pauses(a)>1?`${pauses(a)} pauses of over 2.5 seconds remain`:undefined;},
-   (_b,_a,n)=>({'Sonnet only':sonnetOnly(n),'under $0.50':!!n&&n.costUsd<.5,'under 5 minutes':!!n&&n.seconds<300}));
-  await ask('captions','Add captions.',(_b,a)=>a.timeline.captions?undefined:'no captions',(_b,_a,n)=>({'Sonnet only':sonnetOnly(n),'under $0.10':!!n&&n.costUsd<.1,'under 90 s':!!n&&n.seconds<90}));
+   (_b,_a,n)=>({'one model only':oneModel(n),'under $0.50':!!n&&n.costUsd<.5,'under 5 minutes':!!n&&n.seconds<300}));
+  await ask('captions','Add captions.',(_b,a)=>a.timeline.captions?undefined:'no captions',(_b,_a,n)=>({'one model only':oneModel(n),'under $0.10':!!n&&n.costUsd<.1,'under 90 s':!!n&&n.seconds<90}));
  },{computer:false});
 });

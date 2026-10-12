@@ -86,7 +86,10 @@ export const outOfRange=(s:any)=>s.timeline.spine.filter((c:any)=>{const a=s.foo
 export const clipIds=(s:any)=>s.timeline.spine.map((c:any)=>c.id);
 /** Scenes on the timeline: spine clips and attached items that play a published scene. */
 export const sceneUses=(s:any)=>{const scenes=new Set(s.footage.assets.filter((a:any)=>a.scene).map((a:any)=>a.id));return s.timeline.spine.filter((c:any)=>scenes.has(c.assetId)).length+s.timeline.attached.filter((i:any)=>i.source&&scenes.has(i.source.assetId)).length;};
-/** Goals: a simple follow-up starts without a router call, runs on Sonnet only and finishes in under a minute for about ten cents. */
-export const quick=(_b:any,_a:any,n:RequestReport|undefined)=>({'no router call':!!n&&!n.routed,'Sonnet only':!!n&&Object.keys(n.byModel).every(m=>m==='sonnet'),'under $0.15':!!n&&n.costUsd<.15,'under 60 s':!!n&&n.seconds<60});
+/** The session's one model (DREAM_AGENT_MODEL, Sonnet by default) as the session report names it, and whether a request used only it. */
+export const sessionModel=/claude-(haiku|sonnet|opus)/.exec(process.env.DREAM_AGENT_MODEL??'')?.[1]??'sonnet';
+export const oneModel=(n:RequestReport|undefined)=>!!n&&Object.keys(n.byModel).every(m=>m===sessionModel);
+/** Goals: a simple follow-up starts without a router call, runs on the session's one model and finishes in under a minute for about ten cents. */
+export const quick=(_b:any,_a:any,n:RequestReport|undefined)=>({'no router call':!!n&&!n.routed,'one model only':oneModel(n),'under $0.15':!!n&&n.costUsd<.15,'under 60 s':!!n&&n.seconds<60});
 export const noOpus=(_b:any,_a:any,n:RequestReport|undefined)=>({'no Opus':!!n&&!n.byModel.opus});
 export const assetNamed=(s:any,filename:string)=>s.footage.assets.find((a:any)=>a.filename===filename)?.id as string|undefined;
