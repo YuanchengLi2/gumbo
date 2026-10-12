@@ -62,13 +62,13 @@ it('records a response that cannot be decoded with what the stream showed, then 
  try{
   const input={model:'claude-sonnet-5-5',system:'Edit',messages:[{role:'user',content:'Edit'}],tools:[],turnId:'turn',purpose:'execution',phase:'main',max_tokens:8192};
   // The first stream stops a tool call's block without ever closing it, then ends the message.
-  const broken=events().filter(e=>!(e.type==='content_block_stop'&&e.index===1));
+  const broken=[event('dream_request',{providerRequestId:'provider-broken'}),...events().filter(e=>!(e.type==='content_block_stop'&&e.index===1))];
   const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{wait:async()=>{},fetch:async url=>{
    if(!String(url).endsWith('/ai'))return Response.json({},{status:404});
    return streamed(attempts++===0?broken:events());}});
   expect(response.stop_reason).toBe('tool_use');expect(attempts).toBe(2);
   const failed=(db.db.prepare("SELECT json FROM events WHERE type='ai.inference_failed'").all() as {json:string}[]).map(r=>JSON.parse(r.json));
-  expect(failed).toHaveLength(1);expect(failed[0]).toMatchObject({turnId:'turn',model:'claude-sonnet-5-5',code:'invalid_stream',diagnostics:{openBlocks:[1]}});
+  expect(failed).toHaveLength(1);expect(failed[0]).toMatchObject({turnId:'turn',model:'claude-sonnet-5-5',code:'invalid_stream',providerRequestId:'provider-broken',diagnostics:{openBlocks:[1]}});
   expect(failed[0].diagnostics.recent).toEqual(expect.arrayContaining(['content_block_delta','message_stop']));expect(failed[0].diagnostics.blocks).toEqual(['thinking','tool_use']);
  }finally{db.close();}
 });

@@ -89,6 +89,24 @@ it('never reports an edit with must-fix checks as done when the agent just stops
  }finally{db.close();}
 },60_000);
 
+it('never reports an edit as done when a delegated task ended blocked and the agent keeps replying instead of finishing',async()=>{
+ const {root,db,ws}=await fixture();try{
+  const doc=document(root);doc.timeline.spine=[clip('a',2.2,4)];
+  let step=0;
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Trim the opening and add a title scene',model:models.agent,signal:signal(),publish:()=>{},
+   runWorkers:async(tasks:any[])=>tasks.map(t=>({taskId:t.id,title:t.title,status:'blocked',summary:'The scene failed to compile.'})),
+   infer:async()=>{
+    step++;
+    if(step===1)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}}]};
+    if(step===2)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'publish',name:'publish_project',input:{}}]};
+    if(step===3)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'delegate',name:'delegate',input:{tasks:[{id:'title',title:'Title scene',brief:'b',writes:['src/title']}]}}]};
+    return{stop_reason:'end_turn',content:[{type:'text',text:'Trimmed the opening.'}]};
+   }} as any);
+  expect(result.outcome.status).toBe('blocked');expect(result.outcome.summary).toContain('Delegated tasks title ended blocked');
+  expect((result.outcome as any).nextAction).toContain('fix');
+ }finally{db.close();}
+},60_000);
+
 it('completes an edit when the agent stops with a reply once everything is published and nothing is left to fix',async()=>{
  const {root,db,ws}=await fixture();try{
   const doc=document(root);doc.timeline.spine=[clip('a',2.2,4)];

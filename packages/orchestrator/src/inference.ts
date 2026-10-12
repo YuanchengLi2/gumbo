@@ -159,16 +159,16 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   let response:Response,body:any;
   const live=input.turnId&&input.purpose!=='routing'?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)):undefined;
   // Idle watchdog instead of a total timeout: long generations are fine while events keep arriving (the gateway pings every 5s).
-  const idle=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined;const touch=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>idle.abort(Object.assign(new Error('The AI stream stopped sending data.'),{code:'idle_timeout'})),dependencies.idleMs??IDLE_MS);};
+  const idle=new AbortController();let providerRequestId:string|undefined,timer:ReturnType<typeof setTimeout>|undefined;const touch=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>idle.abort(Object.assign(new Error('The AI stream stopped sending data.'),{code:'idle_timeout'})),dependencies.idleMs??IDLE_MS);};
   try{
    touch();
    const {phase:_phase,...wire}=wireInput as any;
    response=await request(`${config.url}/ai`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${config.token}`},body:JSON.stringify({...wire,requestId:receipt.id,stream:true,max_tokens:receipt.capacity}),signal:AbortSignal.any([...(signal?[signal]:[]),idle.signal,AbortSignal.timeout(HARD_MS)])});
    touch();
-   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();live?.accept(event);}):await response.json();
+   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();if(event.event==='dream_request')providerRequestId=event.data?.providerRequestId;live?.accept(event);}):await response.json();
   }catch(error){
    // Every failed attempt is recorded with what the stream showed, so a failure can be diagnosed after the run.
-   if(!signal?.aborted)db.event('ai.inference_failed',{turnId:input.turnId,phase:input.phase??'main',purpose:input.purpose,model:input.model,attempt:receipt.attempt,transientRetries:receipt.transientRetries??0,code:(error as any).code??(error as Error).name,message:String((error as Error).message).slice(0,500),diagnostics:(error as any).diagnostics});
+   if(!signal?.aborted)db.event('ai.inference_failed',{turnId:input.turnId,phase:input.phase??'main',purpose:input.purpose,model:input.model,attempt:receipt.attempt,transientRetries:receipt.transientRetries??0,code:(error as any).code??(error as Error).name,message:String((error as Error).message).slice(0,500),diagnostics:(error as any).diagnostics,providerRequestId:(error as any).diagnostics?.providerRequestId??providerRequestId});
    live?.interrupt((error as Error).message);receipt.status='uncertain';receipt.error=(error as Error).message;receipt.diagnostics=(error as any).diagnostics;receipt.errorCode=(error as any).code;save();
    if(signal?.aborted){await cancelRemote();signal.throwIfAborted();}
    const recovered=await recover();
