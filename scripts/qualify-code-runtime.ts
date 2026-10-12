@@ -10,6 +10,8 @@ writeFileSync(join(workspace,'package.json'),JSON.stringify({name:'dream-runtime
 writeFileSync(join(workspace,'probe.cjs'),`const fs=require('fs');console.log(process.version);fs.writeFileSync('output/node.txt','node passed');if(process.env.OPENAI_API_KEY||process.env.ANTHROPIC_API_KEY)throw Error('credentials leaked');try{fs.readFileSync('../.dream/private-fixture');throw Error('private read succeeded')}catch(e){if(e.message==='private read succeeded')throw e;console.log('private storage denied')}`);
 mkdirSync(resolve(workspace,'../.dream'),{recursive:true});writeFileSync(resolve(workspace,'../.dream/private-fixture'),'private');
 await check('node-isolation','node probe.cjs');
+// Commands run in sh: escaped quotes inside a one-liner, pipes and the built-in Unix tools.
+await check('shell-quoting-unix-tools','node -e "console.log(\\"one\\");console.log(\'two\')" | head -1 | grep -q one && ls output | wc -l && echo shell passed');
 await check('python','python -c "import sys,pathlib; print(sys.version); pathlib.Path(\'output/python.txt\').write_text(\'python passed\')"');
 if(!process.argv.includes('--skip-npm'))await check('npm-network-native','npm install --save-exact esbuild@0.25.12 && npm rebuild esbuild && node -e "console.log(require(\'esbuild\').transformSync(\'const x: number=1\',{loader:\'ts\'}).code)"');
 await check('pip-network-native','python -m pip install numpy==2.3.3 && python -c "import numpy; print(numpy.arange(3).sum())" && python -m pip freeze --path .python-packages > requirements.lock.txt');

@@ -10,7 +10,7 @@ import {createInterface} from 'node:readline';
 import {join,dirname,basename,relative,isAbsolute} from 'node:path';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,ProcessRunner,ProcessResult,FileService,ReviewRenderer,WorkerScope} from '@dream/contracts';
-import {WorkspaceDocumentSchema} from '@dream/contracts';
+import {WorkspaceDocumentSchema,ranToEnd} from '@dream/contracts';
 import {resolve as resolveTimeline} from '@dream/timeline';
 import {digest,workspacePath,authoredFiles} from '../../../packages/project-db/src/workspace-store';
 import {contentHash} from '../../../packages/project-db/src/blob-store';
@@ -272,7 +272,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    }
    let result:ProcessResult;
    if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext(turnId);try{result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});}finally{stopFollowing();}this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
-   output=result.output;emit(result.status);this.followDraft(turnId);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path \"%DREAM_PYTHON_PACKAGES%\" > \"%DREAM_WORKSPACE%\\requirements.lock.txt\"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
+   output=result.output;emit(ranToEnd(result)?'complete':result.status);this.followDraft(turnId);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path "$DREAM_PYTHON_PACKAGES" > "$DREAM_WORKSPACE/requirements.lock.txt"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
    // Commands never publish: a check or install mid-edit must not publish a half-finished project.json. Use publish_project.
    return{process:result};
   }
@@ -289,7 +289,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
   let document:any={};try{document=JSON.parse(readFileSync(join(this.root,'project.json'),'utf8'));}catch{}
   const settings=document.timeline?.settings??this.db.timeline().settings,outputs:any[]=Array.isArray(document.outputs)?document.outputs:[];
   const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>(o.kind==='scene'&&isEngineScene(String(o.path))||o.kind==='music'||o.kind==='sfx'&&!String(o.path).startsWith('preset:'))&&(!input.scene||o.id===input.scene));
-  if(!entries.length)throw new Error('There is nothing to check: pass scene files (src/....tsx) or score files (src/music/....score.json) as paths, or declare those outputs in project.json.');
+  // Nothing to check is an answer, not an error.
+  if(!entries.length)return{checked:[],note:input.scene?`project.json declares no checkable output with id "${input.scene}". Pass scene files (src/....tsx) or score files (src/music/....score.json) as paths.`:'project.json declares no engine scene, score or sound file to check. Pass scene files (src/....tsx) or score files (src/music/....score.json) as paths.'};
   const results:any[]=[],drafts:any[]=[],recorded=JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}');
   for(const entry of entries.slice(0,8)){
    // Score and sound files are checked as data: what they will play, and what is wrong with them, without rendering audio.

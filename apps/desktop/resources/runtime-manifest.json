@@ -25,6 +25,6 @@
     "python": "3.13.16",
     "platform": "win32-x64",
     "manifest": "staged/creation/manifest.json",
-    "manifestSha256": "026b1fe314b23811ecff9d4c42a8245af40aa74668ea48dbdd96d7942bee7acb"
+    "manifestSha256": "9d25bbef48881298709aa3d547892151864a9668f53812362257ef56f8f47f88"
   }
 }

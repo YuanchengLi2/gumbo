@@ -1,7 +1,7 @@
 import {it,expect} from 'vitest';
-import {mkdtempSync,mkdirSync,readFileSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,existsSync,copyFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 import {createServer} from 'node:http';
 import {ProjectDB} from '@dream/project-db';
 import {models,usageCost} from '@dream/config';
@@ -13,17 +13,21 @@ import {usageCost as gatewayCost} from '../../supabase/functions/dream-gateway/i
 
 it('runs a command on the user\'s computer when computer access is allowed, without the app\'s secrets',async()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-local-')),workspace=join(project,'Workspace');mkdirSync(workspace);
- const runtime=new CodeRuntime({creation:join(project,'missing-runtime'),ffmpeg:join(project,'bin','ffmpeg.exe'),ffprobe:'',browser:''});runtime.local=()=>true;
+ // A command on the user's computer needs only the bundled shell, not the container.
+ mkdirSync(join(project,'runtime','shell'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/shell/busybox.exe'),join(project,'runtime','shell','busybox.exe'));
+ const runtime=new CodeRuntime({creation:join(project,'runtime'),ffmpeg:join(project,'bin','ffmpeg.exe'),ffprobe:'',browser:''});runtime.local=()=>true;
  process.env.DREAM_TEST_SECRET='hidden';process.env.SUPABASE_SERVICE_KEY='hidden';
  try{
   const seen:string[]=[];
-  const result=await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from %COMPUTERNAME% & echo [%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%] & cd',cwd:'.',timeoutMs:30000},new AbortController().signal,text=>seen.push(text));
+  const result=await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from $COMPUTERNAME; echo "[$DREAM_TEST_SECRET][$SUPABASE_SERVICE_KEY]"; pwd',cwd:'.',timeoutMs:30000},new AbortController().signal,text=>seen.push(text));
   expect(result).toMatchObject({status:'complete',exitCode:0,isolation:'local'});
-  expect(result.output).toContain('hello from '+process.env.COMPUTERNAME);expect(result.output).toContain('[%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%]');expect(result.output.toLowerCase()).toContain(workspace.toLowerCase());
+  expect(result.output).toContain('hello from '+process.env.COMPUTERNAME);expect(result.output).toContain('[][]');expect(result.output.toLowerCase()).toContain(workspace.replaceAll('\\','/').toLowerCase());
   expect(seen.join('')).toContain('hello');expect(existsSync(join(project,'.dream','processes','local1.json'))).toBe(true);
   // A replayed request returns its receipt instead of running again.
-  expect((await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from %COMPUTERNAME% & echo [%DREAM_TEST_SECRET%][%SUPABASE_SERVICE_KEY%] & cd',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{})).output).toBe(result.output);
-  const failed=await runtime.run({id:'local2',projectId:'p',workspace,command:'exit /b 3',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{});expect(failed).toMatchObject({status:'failed',exitCode:3});
+  expect((await runtime.run({id:'local1',projectId:'p',workspace,command:'echo hello from $COMPUTERNAME; echo "[$DREAM_TEST_SECRET][$SUPABASE_SERVICE_KEY]"; pwd',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{})).output).toBe(result.output);
+  const failed=await runtime.run({id:'local2',projectId:'p',workspace,command:'exit 3',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{});expect(failed).toMatchObject({status:'failed',exitCode:3});
+  const unix=await runtime.run({id:'local3',projectId:'p',workspace,command:'node -e "console.log(\\"one\\");console.log(\'two\')" | tail -1 | grep two; printf \'a\\nb\\nc\\n\' | head -2 | wc -l',cwd:'.',timeoutMs:30000},new AbortController().signal,()=>{});
+  expect(unix).toMatchObject({status:'complete',exitCode:0});expect(unix.output.split(/\r?\n/).filter(Boolean)).toEqual(['two','2']);
  }finally{delete process.env.DREAM_TEST_SECRET;delete process.env.SUPABASE_SERVICE_KEY;}
 },60_000);
 

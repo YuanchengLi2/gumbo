@@ -6,10 +6,12 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 
-record Request(string Id,string Workspace,string Cwd,string Command,string CommandHash,string ReceiptPath,string[] ReadRoots,Dictionary<string,string> Environment,int TimeoutMs);
+record Request(string Id,string Workspace,string Cwd,string Command,string CommandHash,string ReceiptPath,string[] ReadRoots,Dictionary<string,string> Environment,int TimeoutMs,string? Shell=null);
 static class Program {
  static readonly JsonSerializerOptions Json=new(){PropertyNameCaseInsensitive=true,PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
  static void Check(bool ok){if(!ok)throw new Win32Exception(Marshal.GetLastWin32Error());}
+ // One argument for CommandLineToArgvW and the C runtime: backslashes double only before a quote, quotes are escaped.
+ static string Quote(string arg){var b=new StringBuilder("\"");int slashes=0;foreach(char c in arg){if(c=='\\'){slashes++;continue;}b.Append('\\',c=='"'?slashes*2+1:slashes);b.Append(c);slashes=0;}b.Append('\\',slashes*2);return b.Append('"').ToString();}
  static void Emit(object value){lock(Console.Out){Console.WriteLine(JsonSerializer.Serialize(value,Json));Console.Out.Flush();}}
  static void Grant(string path,SecurityIdentifier sid,bool write){
   var dir=new DirectoryInfo(path);if((dir.Attributes&FileAttributes.ReparsePoint)!=0)throw new IOException("Runtime/workspace root must not be a reparse point.");
@@ -40,7 +42,8 @@ static class Program {
    var si=new STARTUPINFOEX{StartupInfo=new STARTUPINFO{cb=Marshal.SizeOf<STARTUPINFOEX>(),dwFlags=0x100,hStdInput=input,hStdOutput=write,hStdError=write},lpAttributeList=attrs};
    job=CreateJobObject(IntPtr.Zero,null);Check(job!=IntPtr.Zero);var limits=new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();limits.BasicLimitInformation.LimitFlags=0x2000;Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()));
    var environment=string.Join('\0',req.Environment.OrderBy(k=>k.Key,StringComparer.OrdinalIgnoreCase).Select(k=>$"{k.Key}={k.Value}"))+"\0\0";env=Marshal.StringToHGlobalUni(environment);
-   string cmd=Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.System),"cmd.exe");var command=new StringBuilder($"\"{cmd}\" /d /s /c \"{req.Command}\"");
+   // The bundled sh takes the command as one argument, quoted for the C runtime's argument parser; cmd.exe is the fallback.
+   string cmd=req.Shell??Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.System),"cmd.exe");var command=new StringBuilder(req.Shell!=null?$"\"{cmd}\" sh -c {Quote(req.Command)}":$"\"{cmd}\" /d /s /c \"{req.Command}\"");
    Check(CreateProcess(cmd,command,IntPtr.Zero,IntPtr.Zero,true,0x00080000|0x00000400|0x08000000|0x00000004,env,cwd,ref si,out pi));
    Check(AssignProcessToJobObject(job,pi.hProcess));Check(ResumeThread(pi.hThread)!=uint.MaxValue);CloseHandle(write);write=IntPtr.Zero;CloseHandle(input);input=IntPtr.Zero;
    var jobHandle=job;var control=Task.Run(async()=>{try{await Console.In.ReadLineAsync();cancelled=true;TerminateJobObject(jobHandle,1223);}catch{}});

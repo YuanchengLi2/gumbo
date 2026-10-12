@@ -1,5 +1,6 @@
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
+import {ranToEnd} from '@dream/contracts';
 import {engineBudgets} from '@dream/config';
 import {codePrompt} from './code-prompt';
 import {toolsFor,allowedTools,parseCodeTool,validateDelegation,withinScopes,normalizeScope,type AgentRole} from './code-tools';
@@ -38,7 +39,8 @@ export const capText=(content:any,receipt:string)=>{
  return cut?[...blocks,{type:'text',text:JSON.stringify({truncated:true,...note})}]:content;
 };
 // What the model reads of a command's result: the receipt keeps timings, the log path, isolation and the command hash.
-const modelView=(result:any)=>result?.process&&typeof result.process==='object'?{...result,process:(({startedAt:_s,finishedAt:_f,logPath:_l,isolation:_i,commandHash:_h,...rest})=>rest)(result.process)}:result;
+// The model reads a command's exit code and output; a status is shown only when the command did not run to its end.
+const modelView=(result:any)=>result?.process&&typeof result.process==='object'?{...result,process:(({startedAt:_s,finishedAt:_f,logPath:_l,isolation:_i,commandHash:_h,status,...rest})=>ranToEnd(result.process)?rest:{status,...rest})(result.process)}:result;
 const publicationOf=(result:any)=>result?.publication?{versionId:result.publication.versionId,assets:result.publication.assets,processId:result.publication.processId,unchanged:result.publication.unchanged}:undefined;
 
 // A list of names that is every combination of a few words (sound presets) is given as the combination.
@@ -192,7 +194,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       result={reports};
      }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
-     if(result?.process&&result.process.status!=='complete')throw new Error(`Command ${result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
+     if(result?.process&&!ranToEnd(result.process))throw new Error(`Command ${result.process.status==='failed'?'crashed':result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      delete checkpoint.failures[operationKey];if(checkpoint.coarse)delete checkpoint.coarse[coarse];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
     }catch(error){
      // Spending limits and account problems end the request; they are not tool errors to retry.

@@ -414,3 +414,12 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - A full drive is not retried in the browser, which needs more space still; any other native failure is, and if that fails too its message carries the first error (the browser's "out of memory" no longer hides the cause).
 - The layer format stays ProRes 4444: a smaller format with transparency (VP9) is far slower to encode, and deleting layers as they are used already bounds the space.
 - Measured on the October 11 long-form edit (11:18, 12 chapter cards and overlays): exported in 574 s with a peak of 0.56 GB of work files.
+
+## October 12, 2026 — Commands run in a POSIX shell
+
+- The agent writes bash: `;` between commands, `head`, `\"` inside a `node -e` one-liner. Under cmd.exe those broke silently — `node -e "…"; type x | findstr …` piped node's output into findstr and came back empty, and `head` did not exist.
+- Commands now run in BusyBox's sh (busybox-w32 FRP-6075, Unicode build, pinned by its published SHA-256, GPLv2, source linked in notices/busybox), on the user's computer and in the container alike. It brings POSIX quoting and the Unix tools (ls, cat, head, tail, grep, sed, awk, find, wc, xargs); Node, npm, Python, pip and ffmpeg run from it as before.
+- Inside the AppContainer BusyBox cannot exec a program in its place (it exits at once and the job ends the program), so every command gets a final `exit $?`: the shell waits and passes on the exit code. An explicit `exec` in a command still fails there.
+- A command that runs to its end is a result whatever its exit code, as in a terminal: the agent reads the exit code and output, nothing is marked failed or counted toward repeated failures. Only a stop, a timeout or a crash (a negative exit code) is an error.
+- check_outputs with nothing to check answers with an empty list and a note instead of an error, and publishing a non-scene output outside output/ names the output, its kind and path, and both fixes (move it under output/, or declare a live scene as kind "scene").
+- The creation runtime was restaged and passed qualification, with a new check for quoting, pipes and the Unix tools.

@@ -28,7 +28,12 @@ export class CodeRuntime {
   if(existsSync(receiptPath)){const saved=JSON.parse(readFileSync(receiptPath,'utf8'));if(saved.commandHash!==commandHash)throw new Error('Process identity mismatch.');return{...saved,logPath};}
   if(existsSync(intentPath))throw new Error('This process was interrupted without a terminal receipt. Inspect its log and outputs before issuing a new command.');
   const manifest=local?{files:{}}:JSON.parse(readFileSync(join(this.paths.creation,'manifest.json'),'utf8'));
-  if(!local)for(const file of ['host/creation-host.exe','node/node.exe','python/python.exe'])if(hash(readFileSync(join(this.paths.creation,file)))!==manifest.files[file])throw new Error('Bundled creation runtime integrity check failed.');
+  if(!local)for(const file of ['host/creation-host.exe','node/node.exe','python/python.exe','shell/busybox.exe'])if(hash(readFileSync(join(this.paths.creation,file)))!==manifest.files[file])throw new Error('Bundled creation runtime integrity check failed.');
+  // Commands run in BusyBox's POSIX sh, so they quote like a terminal and have head, grep, sed, awk and find built in.
+  const shell=join(this.paths.creation,'shell','busybox.exe');if(!existsSync(shell))throw new Error('The bundled command shell is missing. Stage the pinned runtimes.');
+  // Inside the container BusyBox cannot hand itself over to a program, so a command's last line is never exec'd: the
+  // shell stays, waits for it and passes on its exit code.
+  const script=request.command+'\nexit $?';
   const libraries=join(dirname(this.paths.creation),'libraries'),shared=existsSync(join(libraries,'libraries.json'));
   const cache=join(root,'.cache'),sources=join(project,'Sources');mkdirSync(cache,{recursive:true});mkdirSync(sources,{recursive:true});mkdirSync(join(project,'Media'),{recursive:true});
   const longPath=(path:string)=>path.startsWith('\\\\?\\')?path:'\\\\?\\'+path;
@@ -44,24 +49,24 @@ export class CodeRuntime {
   const renderTimer=setInterval(()=>{if(controller.signal.aborted)return;for(const file of readdirSync(renderRequests)){if(!/^[a-f0-9-]+\.json$/.test(file)||handled.has(file))continue;handled.add(file);const response=workspacePath(root,'.cache/render-requests/'+file.replace('.json','.result.json'));writeFileSync(response+'.tmp',JSON.stringify({error:'Chat does not render frames. Publish a live scene and use Export to render a video.'}));renameSync(response+'.tmp',response);}},100);
 
   writeFileSync(intentPath,JSON.stringify({id:request.id,commandHash,startedAt:new Date().toISOString()}));
-  if(local){clearInterval(renderTimer);try{return await this.runLocal(request,cwd,environment,controller.signal,receiptPath,logPath,commandHash,onOutput);}finally{signal.removeEventListener('abort',stop);this.owned.delete(controller);}}
+  if(local){clearInterval(renderTimer);try{return await this.runLocal(request,shell,script,cwd,environment,controller.signal,receiptPath,logPath,commandHash,onOutput);}finally{signal.removeEventListener('abort',stop);this.owned.delete(controller);}}
   return await new Promise<ProcessResult>((ok,fail)=>{
    const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});let pending='',result:ProcessResult|undefined,error:Error|undefined;
    const cancel=()=>{if(child.stdin.writable)child.stdin.write('cancel\n');};controller.signal.addEventListener('abort',cancel,{once:true});
-   child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify({...request,cwd,commandHash,receiptPath,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment})+'\n');if(signal.aborted)cancel();
+   child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify({...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment})+'\n');if(signal.aborted)cancel();
    child.stdout.on('data',chunk=>{pending+=chunk.toString();let newline:number;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);try{const data=JSON.parse(line);if(data.type==='output'){appendFileSync(logPath,data.text);onOutput(data.text);}if(data.type==='result')result={...data.result,logPath};if(data.type==='error')error=new Error(data.message);}catch(e){error=e as Error;cancel();}}});
    child.stderr.on('data',b=>appendFileSync(logPath,b));child.on('error',e=>{error=e;});
    child.on('close',()=>{clearInterval(renderTimer);controller.abort();signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',cancel);this.owned.delete(controller);child.stdin.end();if(result)ok(result);else fail(error??new Error('Creation host ended without a process receipt. The last published video is unchanged.'));});
   });
  }
- /** A command on the user's computer through cmd.exe, with the workspace's tools first on PATH and the user's own after them. */
- private runLocal(request:ProcessRequest,cwd:string,sandbox:Record<string,string>,signal:AbortSignal,receiptPath:string,logPath:string,commandHash:string,onOutput:(text:string)=>void){
+ /** A command on the user's computer through the bundled sh, with the workspace's tools first on PATH and the user's own after them. */
+ private runLocal(request:ProcessRequest,shell:string,script:string,cwd:string,sandbox:Record<string,string>,signal:AbortSignal,receiptPath:string,logPath:string,commandHash:string,onOutput:(text:string)=>void){
   const user=Object.fromEntries(Object.entries(process.env).filter(([key,value])=>value!==undefined&&!secret.test(key))) as Record<string,string>;
   const {HOME:_home,USERPROFILE:_profile,APPDATA:_appData,LOCALAPPDATA:_localAppData,TEMP:_temp,TMP:_tmp,SystemRoot:_root,WINDIR:_windir,ComSpec:_comspec,...tools}=sandbox;
   const env:Record<string,string>={...user,...tools,PATH:[sandbox.PATH,user.PATH??user.Path??''].filter(Boolean).join(';')};delete env.Path;
   const startedAt=new Date().toISOString();let output='';
   return new Promise<ProcessResult>((ok,fail)=>{
-   const child=spawn(process.env.ComSpec??'cmd.exe',['/d','/s','/c',request.command],{cwd,env:env as NodeJS.ProcessEnv,windowsHide:true,windowsVerbatimArguments:true,stdio:['ignore','pipe','pipe']});
+   const child=spawn(shell,['sh','-c',script],{cwd,env:env as NodeJS.ProcessEnv,windowsHide:true,stdio:['ignore','pipe','pipe']});
    const kill=()=>{if(child.pid)spawn('taskkill',['/pid',String(child.pid),'/t','/f'],{windowsHide:true});};
    let reason:'cancelled'|'interrupted'|undefined;const timer=setTimeout(()=>{reason='interrupted';kill();},request.timeoutMs);
    const abort=()=>{reason='cancelled';kill();};signal.addEventListener('abort',abort,{once:true});

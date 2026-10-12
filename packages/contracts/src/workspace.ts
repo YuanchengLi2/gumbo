@@ -14,6 +14,9 @@ export type WorkspaceDraft={hash:string;error?:string;basedOn?:string;timeline?:
 export const ProcessRequestSchema=z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),projectId:z.string(),workspace:z.string(),command:z.string().min(1).max(32000),cwd:z.string().default('.'),timeoutMs:z.number().int().min(1000).max(3600000).default(600000)});
 export type ProcessRequest=z.infer<typeof ProcessRequestSchema>;
 export type ProcessResult={id:string;status:'complete'|'failed'|'cancelled'|'interrupted';exitCode:number|null;startedAt:string;finishedAt:string;output:string;logPath:string;isolation:'windows-appcontainer'|'local';commandHash:string};
+/** A command that ran to its end is a result whatever its exit code, as in a terminal: grep finding nothing exits 1.
+ * Only a stop, a timeout or a crash is an error. */
+export const ranToEnd=(process:{status:string;exitCode?:number|null})=>process.status==='complete'||process.status==='failed'&&typeof process.exitCode==='number'&&process.exitCode>=0;
 export type ProcessRunner=(request:ProcessRequest,signal:AbortSignal,onOutput:(text:string)=>void)=>Promise<ProcessResult>;
 export type SourceSnapshot={hash:string;files:Record<string,string>};
 // Publications record which files changed and by how many lines; the text itself comes from file_diff on demand.

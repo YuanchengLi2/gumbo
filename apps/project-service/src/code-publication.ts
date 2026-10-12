@@ -58,7 +58,8 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  const ordered=[...candidate.outputs].sort((a,b)=>Number(a.kind==='scene')-Number(b.kind==='scene'));
  for(const output of ordered){
   if(output.kind==='music'||output.kind==='sfx'){const asset=await soundOutput(db.folder,root,{id:output.id,path:output.path,kind:output.kind},options.renderAudio??inProcessRenderer,options.signal??new AbortController().signal);asset.creation={kind:'code',processId:process.id,outputId:output.id};outputs.set('output:'+output.id,asset);continue;}
-  if(output.kind!=='scene'&&!output.path.replaceAll('\\','/').startsWith('output/'))throw new Error('Declare generated assets under output/.');
+  // The message names the output and both ways to fix it, so the agent corrects the declaration instead of guessing.
+  if(output.kind!=='scene'&&!output.path.replaceAll('\\','/').startsWith('output/'))throw new Error(`Output "${output.id}" is declared as kind "${output.kind}" at ${output.path}. A file of kind ${output.kind} must be written under output/ (for example output/${output.path.replaceAll('\\','/').split('/').pop()}). If ${output.path} is a scene to play live (.tsx, .ts, .jsx, .js or .html), declare it with kind "scene" instead.`);
   const path=workspacePath(root,output.path);let asset:Asset;
   if(output.kind==='scene'){
    // Engine scenes default to the project's frame size and rate; every scene needs its length.
