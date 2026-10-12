@@ -161,7 +161,7 @@
 .selection-strip-items{display:flex;gap:6px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:thin}
 .selection-strip>button{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#6d6280}
 /* Timeline drag and drop. */
-.track.drop-target{background:#f1eefb}
+
 .drop-indicator{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#7d6bc4;pointer-events:none;z-index:6}
 .timeline-empty{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;color:#9a95a6;pointer-events:none}
 .timeline-notice{margin:6px 0 0;font-size:11px;color:#6a58b0}
@@ -198,3 +198,23 @@
 .manual-empty-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:#9a96a6;pointer-events:none}
 .timeline-resizer{flex:none;height:7px;margin-bottom:-7px;cursor:row-resize;position:relative;z-index:20}
 .timeline-resizer:hover{background:linear-gradient(transparent 2px,#7d6bc455 2px,#7d6bc455 4px,transparent 4px)}
+/* Blocks by kind, as in CapCut: effects, filters, text and motion graphics each read at a glance. */
+.ai-stage .manual-clip,.ai-stage .manual-clip.caption{top:4px;bottom:4px;height:auto}
+.ai-stage .manual-clip-label{top:50%;transform:translateY(-50%);left:6px;font-size:10px;line-height:14px;padding:0 4px}
+.ai-stage .clip-look-icon{position:absolute;left:6px;top:50%;transform:translateY(-50%);z-index:2;opacity:.85}
+.ai-stage .clip-look-icon+.manual-clip-label{left:20px}
+.ai-stage .manual-clip.look-effect{background:#fff1e0;border-color:#efb26b;color:#8a4b0f}
+.ai-stage .manual-clip.look-filter{background:linear-gradient(90deg,#def2ef,#e9e4fb);border-color:#86c5bc;color:#23574f}
+.ai-stage .manual-clip.look-text{background:#fde9f2;border-color:#e6a0c0;color:#7a2d52}
+.ai-stage .manual-clip.look-graphic{background:linear-gradient(90deg,#ebe4fb,#e1eafb);border-color:#a593dc;color:#3f2f86}
+.ai-stage .manual-clip.look-sfx{background:#e1f2ed;border-color:#8cc5b5}
+.ai-stage .manual-clip.look-effect .manual-clip-label,.ai-stage .manual-clip.look-filter .manual-clip-label,.ai-stage .manual-clip.look-text .manual-clip-label,.ai-stage .manual-clip.look-graphic .manual-clip-label{background:transparent;color:inherit;font-weight:600}
+.ai-stage .manual-clip.derived{cursor:pointer;opacity:.9}
+/* Live: blocks the agent adds come in, removed ones fade, and a small marker shows it is editing. */
+@keyframes block-in{from{opacity:0;transform:scaleX(.6) translateY(4px)}to{opacity:1;transform:none}}
+@keyframes block-out{to{opacity:0;transform:scaleY(.6)}}
+.ai-stage .manual-clip.entering{animation:block-in .38s cubic-bezier(.2,.8,.2,1) both;transform-origin:left center}
+.ai-stage .manual-clip.leaving{animation:block-out .5s ease forwards;pointer-events:none;outline:1px dashed #d0cbe0}
+.live-editing{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:#6a58b0}
+.live-editing i{width:7px;height:7px;border-radius:50%;background:#7d6bc4;animation:live-pulse 1.2s ease-in-out infinite}
+@keyframes live-pulse{50%{opacity:.35;transform:scale(.8)}}

@@ -17,6 +17,7 @@ export function useProjectSession(){
  useEffect(()=>{void window.dream.command({type:'state'}).then(s.setProject).catch(()=>{});void refreshProjects();void window.dream.runtime().then(setRuntime);void window.dream.catalog().then(setCatalog);return window.dream.onEvent(event=>{
   const current=useEditor.getState().project;if(event.projectId&&current&&event.projectId!==current.meta.id&&event.type!=='state')return;
   if(event.type==='state')s.setProject(event.payload as any);
+  if(event.type==='workspace.draft'){const next=(event.payload as any).draft,last=useEditor.getState().draft;useEditor.getState().setDraft(!next?null:next.timeline?next:last?{...last,error:next.error,hash:next.hash}:null);}
   if(event.type==='state.delta'&&!mergeProjectDelta(event.payload as any))void window.dream.command({type:'state'}).then(s.setProject);
   if(event.turnId&&current?.experience?.turnId&&event.turnId!==current.experience.turnId&&event.type.startsWith('ai.'))return;
   if(event.type==='ai.workflow'){const p=useEditor.getState().project;if(p)s.setProject({...p,workflow:event.payload});}
