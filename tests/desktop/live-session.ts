@@ -18,9 +18,9 @@ export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>
  * wrong model because the gateway had never been deployed after its routing schema changed. */
 export function assertCurrent(executable:string,ref:string){
  const git=(...args:string[])=>spawnSync('git',args,{encoding:'utf8',windowsHide:true}).stdout.trim();
- const newest=(paths:string[])=>{const committed=Number(git('log','-1','--format=%ct','--',...paths)||0)*1000;
-  const changed=git('status','--porcelain','--',...paths).split('\n').filter(Boolean).map(line=>line.slice(3).split(' -> ').pop()!.trim().replace(/^"|"$/g,'')).filter(path=>existsSync(path)).map(path=>statSync(path).mtimeMs);
-  return Math.max(committed,...changed);};
+ // The last time any tracked or new file under these paths changed on disk. A commit alone changes no file, so committing
+ // after packaging does not make the build stale.
+ const newest=(paths:string[])=>git('ls-files','-co','--exclude-standard','--',...paths).split('\n').filter(path=>path&&existsSync(path)).reduce((latest,path)=>Math.max(latest,statSync(path).mtimeMs),0);
  const asar=join(dirname(executable),'resources','app.asar'),code=newest(['apps','packages']);
  if(!existsSync(asar)||statSync(asar).mtimeMs<code)throw new Error(`The packaged app is older than its code (changed ${new Date(code).toISOString()}). Run pnpm package first.`);
  const listed=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase functions list --project-ref ${ref}`],{encoding:'utf8',windowsHide:true});

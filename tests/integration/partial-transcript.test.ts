@@ -49,3 +49,15 @@ it('keeps the transcript file current while a command runs, so code waiting for 
   expect(JSON.parse(result.process.output)).toEqual({status:'complete',words:120});
  }finally{db.close();}
 },15000);
+
+it('gives a workspace the package manifest of a fresh npm project, so require() and import scripts both run',async()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-manifest-')));
+ try{
+  const ws=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:'',ffprobe:''},()=>{});await ws.initialize();
+  const manifest=join(ws.root,'package.json');expect(JSON.parse(readFileSync(manifest,'utf8')).type).toBeUndefined();
+  // An earlier workspace that declared an ES module loses the declaration on open.
+  writeFileSync(manifest,JSON.stringify({name:'dream-project',private:true,type:'module',scripts:{}}));
+  await new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:'',ffprobe:''},()=>{}).initialize();
+  expect(JSON.parse(readFileSync(manifest,'utf8'))).toEqual({name:'dream-project',private:true,scripts:{}});
+ }finally{db.close();}
+});

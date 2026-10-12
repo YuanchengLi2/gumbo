@@ -68,7 +68,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  async initialize(){
   try{const status=await this.options.files?.({action:'computer_status'});if(status&&'access'in status)this.computer=status as ComputerStatus;}catch{}
   this.db.workspace.restorePending();this.db.workspace.syncPublishedDocument();for(const dir of ['src','output','context/transcripts','.logs','.cache'])mkdirSync(join(this.root,dir),{recursive:true});
-  if(!existsSync(join(this.root,'project.json'))){this.write('project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));this.write('package.json',JSON.stringify({name:'dream-project',private:true,type:'module',scripts:{}},null,2));this.write('requirements.txt','');this.write('README.md',workspaceReadme);}
+  if(!existsSync(join(this.root,'project.json'))){this.write('project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));this.write('package.json',JSON.stringify({name:'dream-project',private:true,scripts:{}},null,2));this.write('requirements.txt','');this.write('README.md',workspaceReadme);}
   if(!this.db.getMeta('workspace_sources_migrated')){
    for(const row of this.db.db.prepare("SELECT id,json FROM library WHERE kind='visual_revision'").all() as {id:string;json:string}[]){const revision=JSON.parse(row.json),modules=revision.definition?.source?.modules??{};for(const [path,hash] of Object.entries(modules)){this.write(`src/legacy/${digest(row.id).slice(0,16)}/${path}`,this.db.blobs.get(String(hash)));}}
    this.db.setMeta('workspace_sources_migrated','1');
@@ -76,6 +76,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
   // Projects from before the scene engine carry a README that points at the retired HTML scene guide.
   // Earlier projects' READMEs describe tools that are gone (legacy HTML scenes, timeline actions).
   const readme=join(this.root,'README.md');if(existsSync(readme)&&['context/live-scenes.md','edit_timeline'].some(old=>readFileSync(readme,'utf8').includes(old)))this.write('README.md',workspaceReadme);
+  // Earlier workspaces declared "type":"module", so the plain require() scripts agents write failed on first try. Without
+  // it Node 24 runs CommonJS and detects ES module syntax, as in a fresh npm project. The change publishes with the next edit.
+  const manifest=join(this.root,'package.json');try{const doc=JSON.parse(readFileSync(manifest,'utf8'));if(doc.name==='dream-project'&&doc.type==='module'){delete doc.type;this.write('package.json',JSON.stringify(doc,null,2));}}catch{}
   this.refreshContext();if(!this.db.workspace.snapshot(this.db.head()))this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);
  }
  // Media is listed in capture order when known, so "in the order I shot it" needs no extra lookups.
