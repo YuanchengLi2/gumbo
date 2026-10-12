@@ -42,16 +42,23 @@ it('restores the full state when compaction drops the messages a change report b
  }finally{db.close();}
 });
 
-it('shows five or more frames of a look at footage as contact sheets',async()=>{
+it('shows a look at footage as fewer frames on small contact sheets, and every frame full size with detail',async()=>{
  const db=fixture();try{
   const file=join(db.folder,'clip.mp4');writeFileSync(file,'video');
   db.saveAsset(AssetSchema.parse({id:'v',filename:'Clip.mp4',kind:'video',originalPath:file,durationSec:20,fingerprint:'v'}));
   const frame=(t:number)=>({timeSec:t,sha256:'s'+t,data:'frame'+t,mimeType:'image/jpeg' as const});let tiled=0;
   db.inspectSource=async request=>({assetId:'v',fingerprint:'v',startSec:request.startSec,endSec:request.endSec,sampleIntervalSec:1,coverage:'fixture',frames:Array.from({length:request.endSec-request.startSec>4?14:3},(_,n)=>frame(request.startSec+n*.5))});
-  db.contactSheet=async images=>{tiled+=images.length;return{data:'sheet',mimeType:'image/jpeg',columns:4,rows:3,count:images.length,width:1568,height:664};};
-  const wide=await inspectMedia(db,{assetId:'v',startSec:0,endSec:10},'ffmpeg','ffprobe',new AbortController().signal);
-  expect(wide.content.filter((b:any)=>b.type==='image')).toHaveLength(2);expect(tiled).toBe(14);expect(wide.evidence.frames).toHaveLength(14);
-  const close=await inspectMedia(db,{assetId:'v',startSec:2,endSec:3},'ffmpeg','ffprobe',new AbortController().signal);
-  expect(close.content.filter((b:any)=>b.type==='image').map((b:any)=>b.source.data)).toEqual(['frame2','frame2.5','frame3']);
+  const widths:number[]=[];db.contactSheet=async(images,options)=>{tiled+=images.length;widths.push(options.width);return{data:'sheet',mimeType:'image/jpeg',columns:4,rows:3,count:images.length,width:options.width,height:400};};
+  const look=(range:{startSec:number;endSec:number},detail?:boolean)=>inspectMedia(db,{assetId:'v',...range,detail},'ffmpeg','ffprobe',new AbortController().signal);
+  // A default look keeps every other frame (and the last) on one sheet about 1024 px wide.
+  const wide=await look({startSec:0,endSec:10});
+  expect(wide.content.filter((b:any)=>b.type==='image')).toHaveLength(1);expect(tiled).toBe(8);expect(widths).toEqual([1024]);expect(wide.evidence.frames).toHaveLength(8);
+  // The model reads a compact view: frame times, no absolute paths or hashes.
+  const view=JSON.parse(wide.content[0].text);expect(view.frames).toEqual([0,1,2,3,4,5,6,6.5]);expect(wide.content[0].text).not.toContain('previewPath');expect(wide.content[0].text).not.toContain('sha256');
+  tiled=0;widths.length=0;const detailed=await look({startSec:0,endSec:10},true);
+  expect(detailed.content.filter((b:any)=>b.type==='image')).toHaveLength(2);expect(tiled).toBe(14);expect(widths).toEqual([1568,1568]);
+  const close=await look({startSec:2,endSec:3});expect(close.content.filter((b:any)=>b.type==='image').map((b:any)=>b.source.data)).toEqual(['sheet']);
+  const closeDetail=await look({startSec:2,endSec:3},true);
+  expect(closeDetail.content.filter((b:any)=>b.type==='image').map((b:any)=>b.source.data)).toEqual(['frame2','frame2.5','frame3']);
  }finally{db.close();}
 });

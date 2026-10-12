@@ -30,15 +30,16 @@ export class ProjectContext {
   const add=(id:string)=>{const row=p.db.prepare('SELECT id,kind,owner,text,hash AS revision FROM context_chunks WHERE id=?').get(id);if(row)picked.set(id,row);};
   for(const id of assetIds.slice(0,20))add(`asset:${id}:0`);
   for(const id of selection.slice(0,8))for(const kind of ['clip','overlay','music','asset'])add(`${kind}:${id}:0`);
-  const edges=/\b(last|end|ending|outro)\b/i.test(query)?t.spine.slice(-3):t.spine.slice(0,3);
-  for(const c of [...t.spine.filter(c=>wanted.has(c.id)),...edges].slice(0,4)){add(`clip:${c.id}:0`);add(`asset:${c.assetId}:0`);if(c.beatId)add(`beat:${c.beatId}:0`);}
-  const hits=this.search(query,6);for(const h of hits)if(h.kind==='conversation'||picked.size<10)picked.set(h.id,h);
-  const relevant:unknown[]=[];let remaining=5000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
+  // The timeline outline already lists every clip, so records are added only for what the user selected or attached, and
+  // earlier conversation that matches the request.
+  for(const c of t.spine.filter(c=>wanted.has(c.id)).slice(0,4)){add(`clip:${c.id}:0`);add(`asset:${c.assetId}:0`);if(c.beatId)add(`beat:${c.beatId}:0`);}
+  const hits=this.search(query,6);for(const h of hits)if(h.kind==='conversation')picked.set(h.id,h);
+  const relevant:unknown[]=[];let remaining=3000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
   // Spoken words only: what footage shows is for the agent to look at, not an earlier description of it.
   const footage=p.search(terms(query).join(' ')).filter(hit=>hit.kind==='words').slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
   // Follow-ups ("do that", "make it bluer") depend on the preceding exchange.
   const previous=p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 6").all() as {id:string;role:string;text:string}[];
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,1500)})),retrieval:{available:['timeline','assets','footage','conversation','library','code','preferences','task_plan','outline','decision','workflow','observation'],search:'search (scope project)',read:'read_file with scope project and a chunk id',timeline:'project.json'}};
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,m.role==='user'?1500:700)})),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json.'};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();

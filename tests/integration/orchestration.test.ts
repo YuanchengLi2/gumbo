@@ -7,6 +7,7 @@ import {models} from '@dream/config';
 import {Director,parseCodeRoute} from '../../packages/orchestrator/src/code-director';
 import {routeCodeRequest} from '../../packages/orchestrator/src/routing';
 import {inferencePolicy} from '../../supabase/functions/dream-gateway/inference-policy';
+import {parseCodeTool,allowedTools} from '../../packages/orchestrator/src/code-tools';
 
 const fixture=()=>new ProjectDB(mkdtempSync(join(tmpdir(),'dream-orchestration-')));
 const text=(value:string)=>({content:[{type:'text',text:value}],stop_reason:'end_turn',usage:{}});
@@ -41,8 +42,9 @@ it('answers a request for a script after a stop as a new turn, and continues the
   await director.message('Create a Minecraft animated short about Claude');expect(db.getMeta('ai_status')).toBe('interrupted');const first=pending(db);
   await director.message('wait can you make a script for it first');
   expect(calls.filter(c=>c.purpose==='routing').at(-1)!.messages).toContain('Create a Minecraft animated short about Claude');
-  // The reply can look at what it needs, but cannot change anything.
-  const answer=calls.at(-1)!;expect(answer).toMatchObject({purpose:'answering',model:models.agent});expect(answer.tools).toContain('read_file');expect(answer.tools).not.toContain('write_file');
+  // The reply is offered the editing agent's tools so both read one cached prefix; the engine refuses its write calls.
+  const answer=calls.at(-1)!,edit=calls.find(c=>c.purpose==='execution')!;expect(answer).toMatchObject({purpose:'answering',model:models.agent});expect(answer.tools).toEqual(edit.tools);
+  expect(()=>parseCodeTool('write_file',{path:'a.txt',content:'x'},true,allowedTools('readonly'))).toThrow('unavailable');
   expect(db.getMeta('ai_status')).toBe('complete');expect(pending(db)).not.toBe(first);
   expect(db.state().messages.at(-1)).toMatchObject({role:'assistant',text:'Script: Steve opens a chest and finds Claude, who explains what it can do.'});
   expect(db.state().messages.filter(m=>m.turnId===first&&m.role==='user')).toHaveLength(1);

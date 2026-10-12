@@ -15,7 +15,7 @@ it('uses the imported copy and retrieves newly completed speech from the current
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-audio-handoff-'))),path=join(db.folder,'Media/Originals/voice.mp3');writeFileSync(path,'fixture');const run=vi.fn();
  try{db.saveAsset(AssetSchema.parse({id:'voice',filename:'voice.mp3',kind:'audio',hasAudio:true,durationSec:2,originalPath:path,fingerprint:'voice',status:'ready'}));db.job('voice','transcription','running');
  const ws=new CodeWorkspace(db,{run,ffmpeg:'',ffprobe:'',ensureTranscript:async()=>{db.saveRecords('words',[{id:'word',assetId:'voice',text:'Hello',start:0,end:1,confidence:1,speaker:'unknown',pauseBefore:0}]);db.job('voice','transcription','complete',100);}},()=>{});await ws.initialize();expect(ws.mediaContext()[0].path).toBe('../Media/Originals/voice.mp3');expect(ws.mediaContext()[0].transcript?.wordCount).toBe(0);
- const result=await ws.execute('read_transcript',{assetId:'voice'},'speech','turn',new AbortController().signal);expect(result.words[0].text).toBe('Hello');expect(result.status).toBe('complete');expect(ws.mediaContext()[0].transcript?.wordCount).toBe(1);expect(run).not.toHaveBeenCalled();
+ const result=await ws.execute('read_transcript',{assetId:'voice'},'speech','turn',new AbortController().signal);expect(result.words).toMatch(/ Hello$/);expect(result.status).toBe('complete');expect(ws.mediaContext()[0].transcript?.wordCount).toBe(1);expect(run).not.toHaveBeenCalled();
  }finally{db.close();}
 });
 it('shows editing progress for stored developer activity and omits source filenames',()=>{
