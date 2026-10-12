@@ -33,7 +33,7 @@ it('lets Opus make a whole new video itself, with every tool including helpers, 
   };
   await director.message('Create an elegant product scene');
   expect(db.getMeta('ai_status')).toBe('complete');
-  expect(requests.map(r=>r.purpose)).toEqual(['routing','execution','execution']);expect(requests.filter(r=>r.purpose==='execution').every(r=>r.model===models.agent)).toBe(true);
+  expect(requests.map(r=>r.purpose)).toEqual(['execution','execution']);expect(requests.filter(r=>r.purpose==='execution').every(r=>r.model===models.agent)).toBe(true);
   const agent=requests.find(r=>r.purpose==='execution')!;expect(agent.tools).toEqual(expect.arrayContaining(['write_file','run_command','view_media','publish_project','delegate','finish']));
   for(const gone of ['hand_off','switch_to_orchestrated','edit_timeline'])expect(agent.tools).not.toContain(gone);
   const final=db.state().messages.filter(m=>m.role==='assistant').at(-1)!;expect(final.text).toBe('I added the product scene; check the title timing.');expect(final.report).toMatchObject({kind:'completion'});

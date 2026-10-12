@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {models,agentModels} from '@dream/config';
-import {Director,parseCodeRoute,autoModel} from '../../packages/orchestrator/src/code-director';
+import {Director,parseCodeRoute} from '../../packages/orchestrator/src/code-director';
 import {routeCodeRequest} from '../../packages/orchestrator/src/routing';
 import {inferencePolicy} from '../../supabase/functions/dream-gateway/inference-policy';
 import {parseCodeTool,allowedTools} from '../../packages/orchestrator/src/code-tools';
@@ -41,7 +41,6 @@ it('answers a request for a script after a stop as a new turn, and continues the
   };
   await director.message('Create a Minecraft animated short about Claude');expect(db.getMeta('ai_status')).toBe('interrupted');const first=pending(db);
   await director.message('wait can you make a script for it first');
-  expect(calls.filter(c=>c.purpose==='routing').at(-1)!.messages).toContain('Create a Minecraft animated short about Claude');
   // The reply is offered the editing agent's tools so both read one cached prefix; the engine refuses its write calls.
   const answer=calls.at(-1)!,edit=calls.find(c=>c.purpose==='execution')!;expect(answer).toMatchObject({purpose:'answering',model:models.agent});expect(answer.tools).toEqual(edit.tools);
   expect(()=>parseCodeTool('write_file',{path:'a.txt',content:'x'},true,allowedTools('readonly'))).toThrow('unavailable');
@@ -110,19 +109,6 @@ it('keeps the editing agent on the five-minute cache until a wait for its helper
  }finally{db.close();}
 });
 
-it('Auto runs a small, precise change to an existing edit on Haiku and everything bigger on Sonnet',()=>{
- const local=(complexity:string)=>({route:'local',complexity});
- expect(autoModel({route:local('simple'),text:'Trim the first clip to 3 seconds',hasEdit:true})).toBe('haiku');
- expect(autoModel({route:local('difficult'),text:'make the second clip quieter',hasEdit:true})).toBe('haiku');
- // The first cut, motion graphics, captions, whole-video changes, questions and plans stay on Sonnet.
- expect(autoModel({route:local('simple'),text:'Trim the first clip to 3 seconds',hasEdit:false})).toBe('sonnet');
- expect(autoModel({route:local('simple'),text:'add a motion graphic at 4:30',hasEdit:true})).toBe('sonnet');
- expect(autoModel({route:local('normal'),text:'add captions',hasEdit:true})).toBe('sonnet');
- expect(autoModel({route:local('normal'),text:'tighten the pacing throughout',hasEdit:true})).toBe('sonnet');
- expect(autoModel({route:local('difficult'),text:'The middle drags. Make it faster.',hasEdit:true})).toBe('sonnet');
- expect(autoModel({route:{route:'question',complexity:'simple'},text:'what does the intro say?',hasEdit:true})).toBe('sonnet');
-});
-
 it('runs the whole request on the model the user picked, and keeps it there',async()=>{
  const db=fixture(),calls:Call[]=[];try{
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspaceFor(db));
@@ -135,8 +121,8 @@ it('runs the whole request on the model the user picked, and keeps it there',asy
   await director.message('Make the whole video feel more cinematic',[],'auto',[],'picked',undefined,'haiku');
   expect(calls.filter(c=>c.purpose==='execution').map(c=>c.model)).toEqual([agentModels.haiku,agentModels.haiku]);
   expect(db.getMeta('agent-model:picked')).toBe(agentModels.haiku);
-  // Auto on the same request goes to Sonnet: it is not a small change.
-  calls.length=0;await director.message('Make the whole video feel more cinematic',[],'auto',[],'auto-pick',undefined,'auto');
+  // Without a choice the request runs on Sonnet.
+  calls.length=0;await director.message('Make the whole video feel more cinematic',[],'auto',[],'default-pick');
   expect(new Set(calls.filter(c=>c.purpose==='execution').map(c=>c.model))).toEqual(new Set([agentModels.sonnet]));
  }finally{db.close();}
 });

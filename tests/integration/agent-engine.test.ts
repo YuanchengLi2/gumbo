@@ -111,12 +111,12 @@ it('gives a truncated execution response more output room before involving the a
  }finally{db.close();}
 });
 
-it('falls back to the local route when classification fails, and resumes interrupted work in the same conversation',async()=>{
+it('routes a question from its words without a model call, and resumes interrupted work in the same conversation',async()=>{
  const db=fixture();try{
   const workspace={initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})};
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
   director.inference=async(_m,_s,_msgs,_t,_turn,_f,purpose='execution')=>{if(purpose==='routing')throw new SyntaxError('Unexpected token < in JSON');return{content:[{type:'text',text:'The video opens on a beach.'}],stop_reason:'end_turn',usage:{}};};
-  await director.message('What happens in my video?');expect(db.getMeta('ai_status')).toBe('complete');expect(db.db.prepare("SELECT COUNT(*) AS n FROM events WHERE type='ai.route_fallback'").get()).toMatchObject({n:1});
+  await director.message('What happens in my video?');expect(db.getMeta('ai_status')).toBe('complete');expect(db.db.prepare("SELECT COUNT(*) AS n FROM ai_usage WHERE purpose='routing'").get()).toMatchObject({n:0});
   let fail=true;const seen:string[]=[];director.inference=async(_m,_s,messages:any,_t,_turn,_f,purpose='execution')=>{seen.push(JSON.stringify(messages));if(fail){fail=false;throw new Error('Network unavailable');}return{content:[{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}};};
   (workspace as any).execute=async()=>({publication:{versionId:db.head(),assets:[]}});
   await director.message('Trim the first clip to 2 seconds');expect(db.getMeta('ai_status')).toBe('interrupted');
@@ -209,7 +209,7 @@ it('plans with Opus and, when the user says "do it", runs the approved plan as o
   await director.message('do it');expect(db.getMeta('ai_status')).toBe('complete');
   expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.agent);
   const steps=calls.filter(c=>c.purpose==='execution');expect(steps.length).toBe(2);expect(steps.every(c=>c.model===models.agent)).toBe(true);
-  expect([...new Set(calls.map(c=>c.purpose))].sort()).toEqual(['execution','planning','routing']);
+  expect([...new Set(calls.map(c=>c.purpose))].sort()).toEqual(['execution','planning']);
   expect(db.state().messages.some(m=>m.role==='user'&&m.text==='do it')).toBe(true);
  }finally{db.close();}
 });

@@ -387,3 +387,10 @@ This entry supersedes "Sonnet only" (October 11) where it says every request run
 
 - The layout stays: chat on the left, player and timeline on the right (a full OpenCut-style rearrangement was considered and dropped). The timeline under the player is the OpenCut-derived one that was dormant in the manual editor: drag clips to move them (onto another row, or onto the empty row below the used ones, which makes a new track), drag edges to trim, marquee and Shift/Ctrl selection, snapping (Alt to bypass), Delete, Ctrl/Cmd+B to split, Ctrl/Cmd+D to duplicate, and media dropped from the Media tab. Each change is one undoable version the agent sees in its next request; while the agent works the timeline is locked and dropped media goes with the next message.
 - It is minimal: no card around it, flush under the player, a zoom slider in the corner of the ruler (double-click fits), icon-only track headers with mute and hide on hover, no toolbar, footer or horizontal scrollbar. It opens fitted to the width, with the main track first. Its height is dragged from its top edge and remembered.
+
+## October 12, 2026 — No router: the user picks the model
+
+This entry supersedes "The user picks the model in the composer; Auto sends small changes to Haiku".
+
+- The composer's Model choice is Sonnet (default), Haiku or Opus 5.5, and that is the model the request runs on (agent, helpers, replies and plans). Auto and the router model call are removed: the router rated nearly every request difficult, so a rule built on its rating could not be trusted to pick a model. DREAM_AGENT_MODEL still sets the default for a measured run.
+- Whether a message is an edit, a question to answer, or carrying on with a stopped request is read from its words and the Permissions mode (Edit, Plan first, Ask only), with no model call. The agent sets the project title itself.
