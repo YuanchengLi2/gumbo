@@ -1,5 +1,5 @@
 /** Low-cost defaults with a bounded, purpose-specific escalation path. */
-export function validProfile(value:any){return value===undefined||value&&value.version===1&&['router','editor','executor','planner','consultation','review'].includes(value.role)&&['low','medium','high'].includes(value.effort)&&['simple','normal','difficult'].includes(value.complexity)&&typeof value.reason==='string'&&value.reason.length<=500;}
+export function validProfile(value:any){return value===undefined||value&&value.version===1&&['router','editor','executor','planner','consultation','review'].includes(value.role)&&['low','medium','high','xhigh'].includes(value.effort)&&['simple','normal','difficult'].includes(value.complexity)&&typeof value.reason==='string'&&value.reason.length<=500;}
 /** Optional client hints. A task budget lets the model pace a long agent loop; ignored when absent or turned off. */
 export type PolicyOptions={taskBudget?:{total:number;remaining?:number}};
 export function validTaskBudget(value:any){return value===undefined||!!value&&Number.isInteger(value.total)&&value.total>=20_000&&value.total<=1_000_000&&(value.remaining===undefined||Number.isInteger(value.remaining)&&value.remaining>=0&&value.remaining<=value.total);}

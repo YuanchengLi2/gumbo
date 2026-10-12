@@ -38,7 +38,7 @@ The composer chooses the permission mode and the effort:
 - **Edit automatically** (default): routed as above.
 - **Plan first**: every request is routed to `plan`. Approving a plan (the button or "do it") switches the composer back to Edit automatically.
 - **Ask only**: every request is routed to `question`; nothing in the project changes.
-- **Effort** Auto, Low, Medium or High. Auto is medium for every role except the router, which classifies within a 2K-token allowance and stays low; `DREAM_BUILD_WORKER_EFFORT` overrides helpers only, for measurement. A chosen effort applies to every model of that request except the router. A phase whose response spent its whole output allowance thinking steps its effort down.
+- **Effort** Auto, Low, Medium or High. Auto is medium on Sonnet and xhigh on Haiku (to make up for the smaller model), except the router, which classifies within a 2K-token allowance and stays low; `DREAM_BUILD_WORKER_EFFORT` overrides helpers only, for measurement. A chosen effort applies to every model of that request except the router. A phase whose response spent its whole output allowance thinking steps its effort down.
 
 ## Helpers as a task graph
 

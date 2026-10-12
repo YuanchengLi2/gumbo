@@ -1,17 +1,18 @@
 import type {IntelligenceProfile} from '@dream/contracts';
 /** Helpers build pieces; the mode stays a parameter so effort can be measured per kind of helper work. */
 export type WorkerMode='build';
-const levels=['low','medium','high'] as const;
+const levels=['low','medium','high','xhigh'] as const;
 /** extra.lower steps effort down after a response spent its whole allowance thinking. */
 export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string},failures=0,chosen?:'low'|'medium'|'high'|'',extra:{workerMode?:WorkerMode;lower?:number}={}):IntelligenceProfile{
  const role=purpose==='routing'?'router':purpose==='execution'||purpose==='worker'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
  const complexity=failures>=2||routing?.complexity==='difficult'?'difficult':routing?.complexity==='simple'?'simple':'normal';
- // Every role thinks at medium effort; the router classifies within a 2K-token allowance, so it stays low.
- const automatic=role==='router'?'low':'medium';
+ // Sonnet thinks at medium effort and Haiku at xhigh, to make up for being the smaller model; the router classifies
+ // within a 2K-token allowance, so it stays low.
+ const automatic=role==='router'?'low':model.startsWith('claude-haiku')?'xhigh':'medium';
  // An effort the user picked in the composer applies to every model in the request except the router.
  // DREAM_BUILD_WORKER_EFFORT overrides helpers only, for measuring effort against speed, cost and quality.
  const override=purpose==='worker'&&['low','medium','high'].includes(process.env.DREAM_BUILD_WORKER_EFFORT??'')?process.env.DREAM_BUILD_WORKER_EFFORT as 'low'|'medium'|'high':undefined;
- const picked=chosen&&role!=='router'?chosen:override??automatic,effort=extra.lower?levels[Math.max(0,levels.indexOf(picked)-extra.lower)]:picked;
+ const picked:typeof levels[number]=chosen&&role!=='router'?chosen:override??automatic,effort=extra.lower?levels[Math.max(0,levels.indexOf(picked)-extra.lower)]:picked;
  return{version:1,role,complexity,effort,reason:failures>=2?'Repeated substantive failure requires deeper diagnosis.':routing?.reason??'Match reasoning to the current task.'};
 }
 /** A task budget the model can see, so it paces itself and finishes instead of being cut off. Router and consultations have none. */
