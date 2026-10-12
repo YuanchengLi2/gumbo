@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {models,engineBudgets} from '@dream/config';
+import {models,engineBudgets,agentModels,type ModelChoice} from '@dream/config';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
@@ -17,6 +17,15 @@ import {z} from 'zod';
 import {normalizeOptionalNulls} from './provider-input';
 const CodeRouteSchema=z.object({route:z.enum(['local','question','plan','continue']),intelligence:z.enum(['haiku','sonnet','opus']),complexity:z.enum(['simple','normal','difficult']),reason:z.string().max(500).default('Route based on the requested work.'),approvalQuote:z.string().max(300).optional(),projectTitle:z.string().trim().min(1).max(80).optional()});
 export type Effort='auto'|'low'|'medium'|'high';
+// Work that needs Sonnet however it is phrased: new visuals, sound, captions, or anything across the whole video.
+const bigWork=/\b(?:motion|graphics?|animat\w*|scenes?|intro|outro|title cards?|chapters?|lower thirds?|overlays?|3d|music|score|soundtrack|sound effects?|voice-?over|captions?|subtitles?|first cut|re-?edit|from scratch|whole|entire|every|throughout|restructure|story)\b/i;
+/** Auto picks the model for a request: Haiku for a small, precise change to an edit that already exists; Sonnet for
+ * everything else (the first cut, motion graphics, new scenes, music, captions, changes across the whole video,
+ * questions and plans). */
+export function autoModel(input:{route?:{route?:string;complexity?:string};text:string;hasEdit:boolean}):'sonnet'|'haiku'{
+ const r=input.route;
+ return r?.route==='local'&&input.hasEdit&&!bigWork.test(input.text)&&(r.complexity==='simple'||plainEdit(input.text))?'haiku':'sonnet';
+}
 export function parseCodeRoute(raw:unknown,text:string,intent:RequestIntent,interrupted=false){
  const route=CodeRouteSchema.parse(normalizeOptionalNulls(raw,z.toJSONSchema(CodeRouteSchema,{target:'draft-7',io:'input'})));
  // Continuing only means something while a stopped request exists.
@@ -50,11 +59,11 @@ export class Director {
  get running(){return!!this.controller;}
  cancel(reason:'user'|'shutdown'='user'){this.controller?.abort(Object.assign(new DOMException(reason==='user'?'Stopped by you.':'Project closed.','AbortError'),{dreamStop:reason}));}
  private async lifecycle(work:()=>Promise<void>,turnId:string){this.controller=new AbortController();this.db.setMeta('ai_status','running');this.publish('ai.status',{status:'running'});try{await work();}catch(error){const status=error instanceof FileApprovalRequired?'awaiting_file_permission':'interrupted';this.db.setMeta('ai_status',status);if(error instanceof FileApprovalRequired)this.db.setMeta('file_wait',JSON.stringify(error.proposal?{kind:'approval',proposal:error.proposal}:{kind:'permission'}));else{const message=this.controller.signal.aborted?'Stopped.':(error as Error).message;this.db.message('assistant',message,turnId);if(!this.controller.signal.aborted)this.publish('ai.error',{message});}this.publish('ai.status',{status});}finally{this.controller=null;this.publish('state',this.db.state({bounded:true}));}}
- async message(text:string,selection:string[]=[],intent:RequestIntent='auto',assetIds:string[]=[],requestId?:string,effort?:Effort):Promise<void>{
+ async message(text:string,selection:string[]=[],intent:RequestIntent='auto',assetIds:string[]=[],requestId?:string,effort?:Effort,model?:ModelChoice):Promise<void>{
   if(this.running)throw new Error('An edit is already running.');const turnId=requestId??randomUUID();if(this.db.getMeta('submitted:'+turnId))return;
   // With a plan waiting, "do it" / "edit it" / "looks good" approves it: the editing agent then works through the steps.
   const waiting=this.db.getMeta('ai_status')==='awaiting_approval'?this.db.loadState<any>('task_plan'):undefined;
-  if(waiting?.plan&&intent==='auto'&&approvesPlan(text)){this.db.message('user',text,waiting.turnId);return this.approveTaskPlan(waiting.plan,waiting.versionId,turnId,waiting.revision,effort);}
+  if(waiting?.plan&&intent==='auto'&&approvesPlan(text)){this.db.message('user',text,waiting.turnId);return this.approveTaskPlan(waiting.plan,waiting.versionId,turnId,waiting.revision,effort,model);}
   // The conversation shows what the user typed; the saved plan rides along only in the agent's request.
   const proposal=this.db.loadState<any>('task_plan');let request=text;if(this.db.getMeta('ai_status')==='awaiting_approval'&&proposal){intent='plan';request=text+'\nRevise the saved plan: '+JSON.stringify(proposal.plan);}
   // After a stop, the next message is a new request unless the router reads it as carrying on with the stopped one.
@@ -65,7 +74,7 @@ export class Director {
    if(route.route==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...route,continued:true});return this.resume(text);}
    this.recordRoute(turnId,route);
   }
-  this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
+  this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.chooseModel(turnId,model);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
  /** One inference. The editing agent's first message carries the project briefing; helpers work from briefs. */
  async inference(model:string,system:string,messages:unknown[],tools:unknown[]=[],turnId?:string,forceTool?:string,purpose='execution',phase='main',extra:{workerMode?:WorkerMode;onStream?:()=>void}={}){
@@ -87,17 +96,28 @@ export class Director {
  private signal(){return this.controller?.signal??new AbortController().signal;}
  // The composer's effort choice holds for the whole request (changing it mid-conversation would reset the prompt cache).
  private chooseEffort(turnId:string,effort?:Effort){if(effort)this.db.setMeta('effort:'+turnId,effort==='auto'?'':effort);}
+ // The composer's model choice for this request; Auto decides once the request is classified.
+ private chooseModel(turnId:string,model?:ModelChoice){if(model)this.db.setMeta('model-choice:'+turnId,model);}
+ /** The model this request runs on, decided once and pinned: every conversation of the request (the agent, its helpers,
+  * resumes) stays on it, so its prompt cache stays valid. DREAM_AGENT_MODEL still forces one model for a measured run. */
+ agentModel(turnId:string,text='',route?:any):string{
+  const pinned=this.db.getMeta('agent-model:'+turnId);if(pinned)return pinned;
+  const choice=(this.db.getMeta('model-choice:'+turnId)??'auto') as ModelChoice;
+  const model=choice!=='auto'?agentModels[choice]:process.env.DREAM_AGENT_MODEL?models.agent:agentModels[autoModel({route,text,hasEdit:this.db.timeline().spine.length>0})];
+  this.db.setMeta('agent-model:'+turnId,model);this.db.event('ai.model_chosen',{turnId,choice,model,complexity:route?.complexity});return model;
+ }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
   if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Dream build.');
   this.db.setPhase(turnId,planning?'planning':readOnly?'answering':'editing');const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
   const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
-  if(planning)return codeAgent({...common,planning:true,model:models.agent,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
+  const model=this.agentModel(turnId,text);
+  if(planning)return codeAgent({...common,planning:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
   // Replies look at what they need with the read-only tools.
-  if(readOnly)return codeAgent({...common,readOnly:true,model:models.agent,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'answering',phase)});
+  if(readOnly)return codeAgent({...common,readOnly:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'answering',phase)});
   // One Sonnet agent owns the request, and the steps of an approved plan (one conversation across the steps). It looks,
   // edits and publishes itself, and may have helpers build separate pieces.
-  return codeAgent({...common,role:'solo',model:models.agent,followUp,
+  return codeAgent({...common,role:'solo',model,followUp,
    runWorkers:(tasks,callId)=>this.runWorkers(tasks,callId,turnId,phase),
    infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'execution',phase)});
  }
@@ -129,7 +149,7 @@ ${file.text}`).join('');
    try{
     // The snapshot stands for the project state only while the published version is the one it describes.
     let stateKnown=false;try{stateKnown=JSON.parse(snapshot).overview?.versionId===this.db.head();}catch{}
-    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:models.agent,role:'worker',system:workerPrompt,writes:task.writes,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
+    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:this.agentModel(turnId),role:'worker',system:workerPrompt,writes:task.writes,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
     const saved=this.db.loadState<any>(`code-agent:${turnId}:${phase}`),completed=saved?.completed??{};
     const changedFiles=[...new Set((saved?.messages??[]).flatMap((m:any)=>m.role==='assistant'&&Array.isArray(m.content)?m.content:[]).filter((b:any)=>b.type==='tool_use'&&completed[b.id]&&['write_file','edit_file','import_resources'].includes(b.name)).map((b:any)=>b.name==='import_resources'?String(b.input?.into??''):String(b.input?.path??'')).filter(Boolean))] as string[];
     return{taskId:task.id,title:task.title,status:outcome.status,summary:outcome.summary.slice(0,2000),nextAction:outcome.status==='blocked'?outcome.nextAction:undefined,changedFiles};
@@ -178,6 +198,7 @@ ${file.text}`).join('');
   if(this.db.getMeta('route:'+turnId)==='workflow'){await this.workflow(turnId);return;}
   let route=this.db.loadState<any>('routing:'+turnId);
   if(!route){route=await this.classify(text,turnId,selection,intent);if(route.route==='continue')route={...route,route:'local'};this.recordRoute(turnId,route);}
+  this.agentModel(turnId,text,route);
   const result=await this.execute(text+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');
   if(result.plan){proposePlan(this.db,turnId,result.plan,selection);return;}this.report(turnId,result.outcome,route.route==='question');
  }
@@ -185,7 +206,7 @@ ${file.text}`).join('');
  private report(turnId:string,outcome:any,answer=false){if(!this.db.getMeta('code-reported:'+turnId)){this.db.message('assistant',outcome.summary,turnId,{...outcome,kind:outcome.status==='complete'?answer?'answer':'completion':'blocker'});this.db.setMeta('code-reported:'+turnId,'1');}const status=outcome.status==='blocked'?'interrupted':'complete';this.db.setMeta('ai_status',status);this.publish('ai.status',{status});}
  // Approved plans are multi-step creative work done by one agent in one conversation: each step continues it, so context and cache carry over.
  private async workflow(turnId:string){let last:string|undefined;await executeWorkflow({db:this.db,turnId,signal:this.signal(),publish:this.publish,execute:async(text,_selection,_review,phase)=>{const {outcome}=await this.execute(text,turnId,false,false,'workflow',{id:phase,text});last=outcome.summary;return outcome;}});const saved=JSON.parse(this.db.getMeta('workflow:'+turnId)??'{}');this.report(turnId,{status:'complete',summary:last??saved.completed?.at(-1)?.outcome?.summary??'All approved steps are finished.',evidence:[]});}
- async approveTaskPlan(plan:TaskPlan,expectedVersionId:string,requestId:string,expectedPlanRevision?:number,effort?:Effort){if(this.running)throw new Error('An edit is already running.');const approved=approvePlan(this.db,plan,expectedVersionId,requestId,expectedPlanRevision);if(approved.replayed)return;this.chooseEffort(approved.turnId,effort);await this.lifecycle(()=>this.workflow(approved.turnId),approved.turnId);}
+ async approveTaskPlan(plan:TaskPlan,expectedVersionId:string,requestId:string,expectedPlanRevision?:number,effort?:Effort,model?:ModelChoice){if(this.running)throw new Error('An edit is already running.');const approved=approvePlan(this.db,plan,expectedVersionId,requestId,expectedPlanRevision);if(approved.replayed)return;this.chooseEffort(approved.turnId,effort);this.chooseModel(approved.turnId,model);await this.lifecycle(()=>this.workflow(approved.turnId),approved.turnId);}
  async approve(outline:Outline,expectedVersionId:string,requestId:string){if(this.db.head()!==expectedVersionId)throw new Error('The project changed. Refresh the outline.');return this.message('Implement this previously approved outline through project code: '+JSON.stringify(outline),[],'auto',[],requestId);}
  async resume(feedback?:string):Promise<void>{
   if(this.running)throw new Error('An edit is already running.');const pending=this.db.loadState<any>('pending_request');if(!pending)throw new Error('There is no interrupted request.');

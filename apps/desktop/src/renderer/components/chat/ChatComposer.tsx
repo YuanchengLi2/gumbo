@@ -1,14 +1,19 @@
 import React,{useState,useRef,useLayoutEffect,useEffect} from 'react';
 import {MediaTile} from '../media/MediaTile';
-import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check} from 'lucide-react';
-import type {Permission,Effort} from '../../store/editor';
+import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Gauge} from 'lucide-react';
+import type {Permission,Effort,ModelChoice} from '../../store/editor';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
-type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;effort?:Effort;onEffort?:(value:Effort)=>void};
+type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;effort?:Effort;onEffort?:(value:Effort)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void};
 
 export const permissions:{id:Permission;label:string;detail:string;icon:React.ReactNode}[]=[
  {id:'auto',label:'Edit automatically',detail:'Dream changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
  {id:'plan',label:'Plan first',detail:'Opus writes a plan. Nothing changes until you approve it.',icon:<ListChecks size={14}/>},
  {id:'ask',label:'Ask only',detail:'Answers, scripts and ideas. The project is never changed.',icon:<MessageCircle size={14}/>}
+];
+export const modelChoices:{id:ModelChoice;label:string;detail:string;icon:React.ReactNode}[]=[
+ {id:'auto',label:'Auto',detail:'Haiku for small, precise changes; Sonnet for first cuts, motion graphics, new scenes and anything bigger.',icon:<Gauge size={14}/>},
+ {id:'sonnet',label:'Sonnet',detail:'Best quality for every request.',icon:<Sparkles size={14}/>},
+ {id:'haiku',label:'Haiku',detail:'Cheapest and fastest. Good for small changes; can miss things on big edits.',icon:<Zap size={14}/>}
 ];
 export const efforts:{id:Effort;label:string;detail:string}[]=[
  {id:'auto',label:'Auto',detail:'Dream matches the thinking to each request.'},
@@ -40,6 +45,17 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
  </div>;
 }
 
+function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
+ const menu=usePopover(),current=modelChoices.find(m=>m.id===value)??modelChoices[0];
+ return <div className="composer-popover-anchor" ref={menu.ref}>
+  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+current.label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}>{current.icon}<span>{current.label}</span><ChevronDown size={12}/></button>
+  {menu.open&&<div className="composer-popover permission-menu" role="menu" aria-label="Model">
+   <header>Model</header>
+   {modelChoices.map(m=><button key={m.id} type="button" role="menuitemradio" aria-checked={m.id===value} className={m.id===value?'selected':''} onClick={()=>{onChange(m.id);menu.setOpen(false);}}><span className="permission-icon">{m.icon}</span><span><strong>{m.label}</strong><small>{m.detail}</small></span>{m.id===value&&<Check size={14} className="permission-check"/>}</button>)}
+  </div>}
+ </div>;
+}
+
 function EffortControl({value,onChange}:{value:Effort;onChange:(value:Effort)=>void}){
  const menu=usePopover(),index=Math.max(0,efforts.findIndex(e=>e.id===value)),current=efforts[index];
  return <div className="composer-popover-anchor" ref={menu.ref}>
@@ -58,4 +74,4 @@ export function ChatComposer(p:Props){const [menu,setMenu]=useState(false),texta
  useLayoutEffect(resize,[p.value,p.home,p.attachments.length]);
  useLayoutEffect(()=>{const node=textarea.current;if(!node)return;let width=node.offsetWidth;const observer=new ResizeObserver(()=>{if(node.offsetWidth!==width){width=node.offsetWidth;resize();}});observer.observe(node);return()=>observer.disconnect();},[]);
  const placeholder=p.home?'Describe the video you want to create…':p.permission==='ask'?'Ask a question, or ask for a script or ideas…':p.permission==='plan'?'Describe the change and Dream will plan it first…':'Ask me to edit, add something, or change anything…';
- return <div className={'composer-area '+(p.home?'home-composer':'')}><form className="composer" onSubmit={e=>{e.preventDefault();p.onSubmit();}}>{p.attachments.length>0&&<div className="attachment-list">{p.attachments.map(a=><MediaTile key={a.id} asset={a.asset} label={a.name} onRemove={()=>p.onRemove(a.id)}/>)}</div>}<textarea ref={textarea} aria-label="Ask Dream to edit" placeholder={placeholder} value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!p.active)p.onSubmit();}}}/><div className="composer-actions"><div className="attachment-menu-anchor"><button type="button" className="add-media" aria-label="Add media" aria-expanded={menu} onClick={()=>setMenu(!menu)}><span><Plus size={p.home?21:17}/></span>{p.home&&'Add media'}</button>{menu&&<div className="attachment-menu"><button type="button" onClick={()=>{setMenu(false);p.onUpload();}}><Upload size={16}/> Upload media</button>{p.onMedia&&<button type="button" onClick={()=>{setMenu(false);p.onMedia!();}}><FolderOpen size={16}/> Project media</button>}<button type="button" onClick={()=>{setMenu(false);p.onComputer();}}><Computer size={16}/> Computer files</button></div>}</div>{!p.home&&p.onPermission&&<PermissionMenu value={p.permission??'auto'} onChange={p.onPermission}/>}{!p.home&&p.onEffort&&<EffortControl value={p.effort??'auto'} onChange={p.onEffort}/>}<span className="spacer"/>{p.active?<button type="button" className="send" aria-label="Stop editing" onClick={p.onStop}><Square size={12} fill="currentColor"/></button>:<button type="submit" className="send" aria-label="Send prompt" disabled={!p.value.trim()||p.busy}><ArrowUp size={18}/></button>}</div></form></div>;}
+ return <div className={'composer-area '+(p.home?'home-composer':'')}><form className="composer" onSubmit={e=>{e.preventDefault();p.onSubmit();}}>{p.attachments.length>0&&<div className="attachment-list">{p.attachments.map(a=><MediaTile key={a.id} asset={a.asset} label={a.name} onRemove={()=>p.onRemove(a.id)}/>)}</div>}<textarea ref={textarea} aria-label="Ask Dream to edit" placeholder={placeholder} value={p.value} onChange={e=>p.onChange(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();if(!p.busy&&!p.active)p.onSubmit();}}}/><div className="composer-actions"><div className="attachment-menu-anchor"><button type="button" className="add-media" aria-label="Add media" aria-expanded={menu} onClick={()=>setMenu(!menu)}><span><Plus size={p.home?21:17}/></span>{p.home&&'Add media'}</button>{menu&&<div className="attachment-menu"><button type="button" onClick={()=>{setMenu(false);p.onUpload();}}><Upload size={16}/> Upload media</button>{p.onMedia&&<button type="button" onClick={()=>{setMenu(false);p.onMedia!();}}><FolderOpen size={16}/> Project media</button>}<button type="button" onClick={()=>{setMenu(false);p.onComputer();}}><Computer size={16}/> Computer files</button></div>}</div>{!p.home&&p.onPermission&&<PermissionMenu value={p.permission??'auto'} onChange={p.onPermission}/>}{!p.home&&p.onModel&&<ModelMenu value={p.model??'auto'} onChange={p.onModel}/>}{!p.home&&p.onEffort&&<EffortControl value={p.effort??'auto'} onChange={p.onEffort}/>}<span className="spacer"/>{p.active?<button type="button" className="send" aria-label="Stop editing" onClick={p.onStop}><Square size={12} fill="currentColor"/></button>:<button type="submit" className="send" aria-label="Send prompt" disabled={!p.value.trim()||p.busy}><ArrowUp size={18}/></button>}</div></form></div>;}

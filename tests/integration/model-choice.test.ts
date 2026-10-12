@@ -3,7 +3,7 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {models,engineBudgets} from '@dream/config';
+import {models,engineBudgets,agentModels} from '@dream/config';
 import {Director,plainEdit} from '../../packages/orchestrator/src/code-director';
 
 const fixture=()=>new ProjectDB(mkdtempSync(join(tmpdir(),'dream-models-')));
@@ -22,12 +22,12 @@ it('recognizes plain follow-up edits, but not questions, scripts or plans',()=>{
  for(const other of ['How long is the video now?','Make a script for it first','Could you make it warmer?','I think the opening is slow','Plan a three-part teaser'])expect(plainEdit(other),other).toBe(false);
 });
 
-it('sends a plain follow-up edit straight to the agent without a router call',async()=>{
+it('sends a plain follow-up edit straight to the agent without a router call, on Haiku under Auto',async()=>{
  const db=fixture();try{withClip(db);
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const purposes:string[]=[],used:string[]=[];
   director.inference=async(model,_s,messages:any,_t,_turn,_f,purpose='execution')=>{purposes.push(purpose);used.push(model);return messages.some((m:any)=>m.role==='assistant')?toolUse('done','finish',{status:'complete',summary:'Warmer now.'}):toolUse('pub','publish_project',{});};
   await director.message('Make it a little warmer');
-  expect(purposes).not.toContain('routing');expect(new Set(used)).toEqual(new Set([models.agent]));expect(db.getMeta('ai_status')).toBe('complete');
+  expect(purposes).not.toContain('routing');expect(new Set(used)).toEqual(new Set([agentModels.haiku]));expect(db.getMeta('ai_status')).toBe('complete');
  }finally{db.close();}
 });
 

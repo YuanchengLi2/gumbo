@@ -120,6 +120,7 @@
 .composer-chip>span{overflow:hidden;text-overflow:ellipsis}.composer-chip>svg{flex:none}
 .composer-chip:hover,.composer-chip[aria-expanded=true]{background:#f3f2f8;color:#3f3b4c}
 .permission-chip.plan{color:#6a58b0;background:#f1eefb}.permission-chip.ask{color:#3d7a6a;background:#eef6f3}
+.model-chip.sonnet{color:#6a58b0;background:#f1eefb}.model-chip.haiku{color:#a0641b;background:#fbf3e8}
 .composer-popover{position:absolute;bottom:calc(100% + 10px);left:0;z-index:25;background:#fff;border:1px solid #e3e1ea;border-radius:12px;box-shadow:0 10px 32px #2a203d22;padding:6px;width:290px;color:#2f2c3a}
 .composer-popover header{display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:#98939f;text-transform:uppercase;letter-spacing:.5px;padding:7px 9px 6px}
 .permission-menu>button{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;padding:9px;border-radius:8px}

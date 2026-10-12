@@ -3,8 +3,8 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {models} from '@dream/config';
-import {Director,parseCodeRoute} from '../../packages/orchestrator/src/code-director';
+import {models,agentModels} from '@dream/config';
+import {Director,parseCodeRoute,autoModel} from '../../packages/orchestrator/src/code-director';
 import {routeCodeRequest} from '../../packages/orchestrator/src/routing';
 import {inferencePolicy} from '../../supabase/functions/dream-gateway/inference-policy';
 import {parseCodeTool,allowedTools} from '../../packages/orchestrator/src/code-tools';
@@ -107,5 +107,36 @@ it('keeps the editing agent on the five-minute cache until a wait for its helper
  const {helperWaitCache,noteHelperWait}=await import('../../packages/orchestrator/src/code-director');const db=fixture();try{
   expect(helperWaitCache(db,'turn')).toEqual({});noteHelperWait(db,'turn',180_000);expect(helperWaitCache(db,'turn')).toEqual({});
   noteHelperWait(db,'turn',300_000);expect(helperWaitCache(db,'turn')).toEqual({cacheTtl:'1h'});expect(helperWaitCache(db,'other')).toEqual({});
+ }finally{db.close();}
+});
+
+it('Auto runs a small, precise change to an existing edit on Haiku and everything bigger on Sonnet',()=>{
+ const local=(complexity:string)=>({route:'local',complexity});
+ expect(autoModel({route:local('simple'),text:'Trim the first clip to 3 seconds',hasEdit:true})).toBe('haiku');
+ expect(autoModel({route:local('difficult'),text:'make the second clip quieter',hasEdit:true})).toBe('haiku');
+ // The first cut, motion graphics, captions, whole-video changes, questions and plans stay on Sonnet.
+ expect(autoModel({route:local('simple'),text:'Trim the first clip to 3 seconds',hasEdit:false})).toBe('sonnet');
+ expect(autoModel({route:local('simple'),text:'add a motion graphic at 4:30',hasEdit:true})).toBe('sonnet');
+ expect(autoModel({route:local('normal'),text:'add captions',hasEdit:true})).toBe('sonnet');
+ expect(autoModel({route:local('normal'),text:'tighten the pacing throughout',hasEdit:true})).toBe('sonnet');
+ expect(autoModel({route:local('difficult'),text:'The middle drags. Make it faster.',hasEdit:true})).toBe('sonnet');
+ expect(autoModel({route:{route:'question',complexity:'simple'},text:'what does the intro say?',hasEdit:true})).toBe('sonnet');
+});
+
+it('runs the whole request on the model the user picked, and keeps it there',async()=>{
+ const db=fixture(),calls:Call[]=[];try{
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspaceFor(db));
+  director.inference=async(model,_system,messages,tools=[],_turn,_force,purpose='execution',phase='main')=>{
+   calls.push({purpose,model,phase,tools:(tools as any[]).map(t=>t.name),messages:JSON.stringify(messages)});
+   if(purpose==='routing')return route({route:'local',intelligence:'sonnet',complexity:'difficult',projectTitle:'Talk'});
+   const steps=(messages as any[]).filter(m=>m.role==='assistant').length;
+   return steps===0?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'Done.'});
+  };
+  await director.message('Make the whole video feel more cinematic',[],'auto',[],'picked',undefined,'haiku');
+  expect(calls.filter(c=>c.purpose==='execution').map(c=>c.model)).toEqual([agentModels.haiku,agentModels.haiku]);
+  expect(db.getMeta('agent-model:picked')).toBe(agentModels.haiku);
+  // Auto on the same request goes to Sonnet: it is not a small change.
+  calls.length=0;await director.message('Make the whole video feel more cinematic',[],'auto',[],'auto-pick',undefined,'auto');
+  expect(new Set(calls.filter(c=>c.purpose==='execution').map(c=>c.model))).toEqual(new Set([agentModels.sonnet]));
  }finally{db.close();}
 });

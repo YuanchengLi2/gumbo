@@ -374,3 +374,11 @@ This entry supersedes "One agent owns the edit" where it describes choosing a mo
 
 - In the Sonnet long-form run, one look at footage added 52,812 tokens to the conversation in one step (94,735 characters of text beside its images), which every later call in that request re-read. The size cap applied only to results that are plain text; a result of text and images bypassed it. Now the text blocks of any result share the same budget, with the receipt to read the rest.
 - Considered and not done: clearing old tool results earlier. Simulated on the October 11 Sonnet calls, clearing at 35K to 100K tokens changed input cost by -7% to +7%, because each clearing rewrites the cache at 12.5 times the price of reading it. Skipping the calls after a failed one in the same response was tried and removed: the engine cannot tell dependent calls from independent ones, and a helper's independent writes were skipped.
+
+## October 12, 2026 — The user picks the model in the composer; Auto sends small changes to Haiku
+
+This entry supersedes "Sonnet only" (October 11) where it says every request runs on Sonnet.
+
+- The composer has a Model choice: Auto (default), Sonnet or Haiku. It is pinned per request (agent-model:<turnId>), so the agent, its helpers and any resume share one model and one prompt cache.
+- Auto runs a request on Haiku only when it is a small, precise change to an edit that exists: the router (or the plain-edit shortcut) calls it a simple local edit, and it names no new visuals, sound, captions or whole-video change. The first cut, motion graphics, scenes, music, captions, pacing across the video, questions and plans stay on Sonnet. In the October 11 runs Haiku cost about a seventh of Sonnet but left long silences in a first cut, which the completion gate now refuses.
+- The router stays on Sonnet; DREAM_AGENT_MODEL still forces one model for a measured comparison.
