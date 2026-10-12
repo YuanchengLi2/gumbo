@@ -96,13 +96,28 @@ export class CodeWorkspace implements CodeWorkspacePort {
   });}
  private refreshContext(){
   const footage=this.db.footage();this.write('context/assets.json',JSON.stringify(captureOrder(footage.assets).map(a=>({id:a.id,filename:a.filename,kind:a.kind,durationSec:a.durationSec,hasAudio:a.hasAudio,capturedAt:a.capturedAt,width:a.width,height:a.height,fps:a.fps,source:a.source?.path,path:relative(this.db.folder,a.originalPath).replaceAll('\\','/').startsWith('Media/')?relative(this.root,a.originalPath).replaceAll('\\','/'):`../Sources/${a.id}/${basename(a.originalPath)}`,sequence:a.sequence?{fps:a.sequence.fps,frameCount:a.sequence.frameCount,pattern:'%06d.png'}:undefined})),null,2));
-  for(const asset of footage.assets)this.write(`context/transcripts/${asset.id}.json`,JSON.stringify({coverage:this.db.loadState('speech-coverage:'+asset.id)??null,words:footage.words.filter(w=>w.assetId===asset.id)}));
+  for(const asset of footage.assets)this.writeTranscript(asset.id,footage);
   this.write('context/decisions.json',JSON.stringify(this.db.db.prepare('SELECT scope,text FROM project_decisions WHERE active=1').all()));
   this.write('context/published-project.json',JSON.stringify({format:'dream-workspace',version:1,baseVersionId:this.db.head(),timeline:this.db.timeline(),outputs:[]},null,2));
   this.write('context/environment.json',JSON.stringify(workspaceEnvironment(this.root),null,2));
   // The HTML scene guide only matters to the legacy bundling workflow (advanced tools).
   if(process.env.DREAM_AGENT_ADVANCED_TOOLS==='1')this.write('context/live-scenes.md',liveSceneGuide);
   this.write('context/project-schema.json',JSON.stringify(WorkspaceDocumentSchema.toJSONSchema(),null,2));
+ }
+ private writeTranscript(assetId:string,footage=this.db.footage()){this.write(`context/transcripts/${assetId}.json`,JSON.stringify({coverage:this.db.loadState('speech-coverage:'+assetId)??null,words:footage.words.filter(w=>w.assetId===assetId)}));}
+ /** While a command runs, keeps context/ current: a transcript file is rewritten whenever its transcription advances, and
+  * assets.json (with the Sources/ copies) whenever a source is added, so code that waits for a long recording's words or
+  * a new import reads them as they arrive. Between tool calls refreshContext rewrites everything. */
+ private followContext(){
+  const coverage=(id:string)=>JSON.stringify(this.db.loadState('speech-coverage:'+id)??null),sourceIds=()=>this.db.footage().assets.map(a=>a.id).join();
+  const seen=new Map(this.db.footage().assets.map(a=>[a.id,coverage(a.id)]));let sources=sourceIds(),syncing=false;
+  const timer=setInterval(()=>{try{
+   const now=sourceIds();
+   if(now!==sources&&!syncing){sources=now;syncing=true;void this.sources(new AbortController().signal).catch(()=>{}).finally(()=>{syncing=false;});this.refreshContext();for(const a of this.db.footage().assets)seen.set(a.id,coverage(a.id));return;}
+   const changed=[...seen].filter(([id,before])=>{const after=coverage(id);if(after===before)return false;seen.set(id,after);return true;});
+   if(changed.length){const footage=this.db.footage();for(const [id] of changed)this.writeTranscript(id,footage);}
+  }catch{}},2000);
+  return()=>clearInterval(timer);
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
  // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
@@ -243,7 +258,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
     if(commands.length){const install=await this.options.run({id:callId+'-dependencies',projectId:this.db.meta.id,workspace:this.root,command:commands.join(' && '),cwd:'.',timeoutMs:600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(install.status!=='complete')throw new Error('Dependency restoration failed: '+install.output);this.db.setMeta('workspace_dependencies',currentDependencies);}
    }
    let result:ProcessResult;
-   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
+   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext();try{result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});}finally{stopFollowing();}this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
    output=result.output;emit(result.status);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path \"%DREAM_PYTHON_PACKAGES%\" > \"%DREAM_WORKSPACE%\\requirements.lock.txt\"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
    // Commands never publish: a check or install mid-edit must not publish a half-finished project.json. Use publish_project.
    return{process:result};

@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {mkdtempSync,writeFileSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
@@ -29,3 +29,23 @@ it('reads the transcript transcribed without gaps from the start while it runs, 
   expect(done.status).toBe('complete');expect(done.note).toBeUndefined();expect(done.totalWords).toBe(210);expect(done.nextOffset).toBeNull();expect(done.revision).not.toBe(first.revision);
  }finally{db.close();}
 });
+
+it('keeps the transcript file current while a command runs, so code waiting for a long recording sees its words arrive',async()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-live-transcript-'))),path=join(db.folder,'Media/Originals/talk.mp3');writeFileSync(path,'fixture');
+ try{
+  db.saveAsset(AssetSchema.parse({id:'talk',filename:'talk.mp3',kind:'audio',hasAudio:true,durationSec:120,originalPath:path,fingerprint:'talk',status:'ready'}));db.job('talk','transcription','running',30);
+  const word=(n:number)=>({id:'w'+n,assetId:'talk',text:'word'+n,start:n,end:n+.5,confidence:1,speaker:'unknown',pauseBefore:0});
+  db.saveRecords('words',Array.from({length:30},(_,n)=>word(n)) as any);db.setMeta('speech-coverage:talk',JSON.stringify({provider:'groq',status:'partial',ranges:[{start:0,end:30}]}));
+  let ws!:CodeWorkspace;
+  // The command reads the file the way an agent's waiting script does, after transcription has moved on underneath it.
+  const run=async(request:any)=>{
+   db.saveRecords('words',Array.from({length:90},(_,n)=>word(30+n)) as any);db.setMeta('speech-coverage:talk',JSON.stringify({provider:'groq',status:'complete',ranges:[{start:0,end:120}]}));
+   await new Promise(resolve=>setTimeout(resolve,4500));
+   const file=JSON.parse(readFileSync(join(ws.root,'context/transcripts/talk.json'),'utf8'));
+   return{id:request.id,status:'complete' as const,exitCode:0,startedAt:'',finishedAt:'',output:JSON.stringify({status:file.coverage.status,words:file.words.length}),logPath:'',isolation:'local' as const,commandHash:''};
+  };
+  ws=new CodeWorkspace(db,{run,ffmpeg:'',ffprobe:''},()=>{});await ws.initialize();
+  const result=await ws.execute('run_command',{command:'node wait-for-transcript.cjs'},'wait','turn',new AbortController().signal);
+  expect(JSON.parse(result.process.output)).toEqual({status:'complete',words:120});
+ }finally{db.close();}
+},15000);

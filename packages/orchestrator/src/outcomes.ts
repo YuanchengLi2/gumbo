@@ -29,7 +29,7 @@ export function validateOutcome(raw:unknown,messages:any[],pending:any[],results
  }
  for(const receipt of receipts){calls.set(receipt.call_id,receipt.name);if(!receipt.result.is_error)successful.add(receipt.call_id);}
  for(const proof of outcome.evidence){
-  if(!successful.has(proof.toolCallId)||!calls.has(proof.toolCallId)||['report','consult_director'].includes(calls.get(proof.toolCallId)!))throw new Error('Completion evidence must reference a successful project read, preview, or editing tool from this step. Advice alone is not evidence.');
+  if(!successful.has(proof.toolCallId)||!calls.has(proof.toolCallId)||['report'].includes(calls.get(proof.toolCallId)!))throw new Error('Completion evidence must reference a successful project read, preview, or editing tool from this step. Advice alone is not evidence.');
  }
  return outcome;
 }

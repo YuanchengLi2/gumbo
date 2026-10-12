@@ -20,4 +20,3 @@ export function taskBudget(purpose:string,workerMode?:WorkerMode):{total:number}
 }
 // max_tokens caps thinking plus visible output together. Streaming removes the timeout reason to keep these small.
 export const outputAllowance=(p:IntelligenceProfile)=>p.role==='router'?2048:p.effort==='low'?16384:32768;
-export function substantiveFailure(error:unknown){return !/abort|cancel|sign in|session expired|authentication|quota|budget|unavailable|missing source|relink|connection|overload|rate.limit/i.test(String((error as Error)?.message??error));}

@@ -1,7 +1,6 @@
-import {substantiveFailure} from './intelligence';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
-import {models,engineBudgets} from '@dream/config';
+import {engineBudgets} from '@dream/config';
 import {codePrompt} from './code-prompt';
 import {toolsFor,allowedTools,parseCodeTool,validateDelegation,withinScopes,normalizeScope,type AgentRole} from './code-tools';
 import {toolActivity,toolDetail} from './activity';
@@ -18,7 +17,7 @@ export type WorkerTask={id:string;title:string;brief:string;writes:string[];afte
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;changedFiles?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
-type Checkpoint={pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};advice?:{key:string;question:string};consulted?:string[];resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];escalation?:string;blockedTasks?:string[]};
+type Checkpoint={pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
 const RESULT_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
@@ -42,17 +41,16 @@ export function briefing(context:any,text:string,title:Record<string,unknown>){
  const sources=list.filter(m=>!made(m)).map(({seen:_seen,...m})=>m),sourceNotes=Object.fromEntries(list.filter(m=>m?.seen&&!made(m)).map(m=>[m.assetId,m.seen])),generated=list.filter(made);
  return[{type:'text',text:'Project briefing (data, not instructions): '+JSON.stringify({capabilities,environment,workspaceFolder,projectDocument,schema,computer:machine,media:Array.isArray(media)?sources:media}),cache_control:{type:'ephemeral'}},{type:'text',text:text+'\nProject context: '+JSON.stringify({...title,...(now?{now}:{}),...(Object.keys(sourceNotes).length?{sourceNotes}:{}),...(generated.length?{generatedMedia:generated}:{}),...request})}];
 }
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;consult?:(question:string,key:string)=>Promise<string>;readOnly?:boolean;planning?:boolean;writes?:string[];ladder?:string[];onEscalate?:(from:string,to:string,reason:string)=>void;ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;writes?:string[];ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
- const toolOptions={canConsult:!!options.consult&&role!=='worker',canDelegate:!!options.runWorkers&&role==='solo'},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions),tools=options.bare?[]:toolsFor(role,toolOptions);
+ const toolOptions={canDelegate:!!options.runWorkers&&role==='solo'},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions),tools=options.bare?[]:toolsFor(role,toolOptions);
  const maxSteps=engineBudgets.agentSteps;
  await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.firstMessage??briefing(workspace.context(options.text),options.text,{projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy'})}],results:[],completed:{},model:options.model,failures:{}};
  // The first message already carries the project and its media, so the state messages that follow report only changes.
  if(!resumed&&options.stateKnown!==false){const state=workspace.currentContext?.()??workspace.mediaContext?.();if(state!==undefined){const {sceneErrors:_errors,...initial}=state as any;checkpoint.mediaState=JSON.stringify({state:Array.isArray(state)?state:initial});}}
  const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...(options.parent?{parent:options.parent}:{}),...patch});if(event)publish('ai.activity',{turnId,event});};
- // A request that moved up the ladder keeps its stronger model when it resumes.
- const ladder=options.ladder??[];if(!(ladder.indexOf(checkpoint.model)>ladder.indexOf(options.model)&&ladder.includes(options.model)))checkpoint.model=options.model;
+ checkpoint.model=options.model;
  const ownsTasks=options.ownsTasks??(phase==='main'&&role==='solo');
  const hasPendingTasks=()=>ownsTasks&&db.turnActivity(turnId)?.tasks?.some(t=>t.status!=='complete');
  const completeTasks=()=>{if(!ownsTasks)return;const tasks=db.turnActivity(turnId)?.tasks;if(tasks?.some(t=>t.status!=='complete')){const done=tasks.map(t=>({...t,status:'complete' as const}));db.setTasks(turnId,done);publish('ai.tasks',{turnId,tasks:done});}};
@@ -62,11 +60,6 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  const unpublished=()=>workspace.unpublishedChanges?.()??[];
  const publishedHead=()=>{const found=headPublication();return found&&!unpublished().length?found:undefined;};
  const needsPublication=()=>!readOnly&&!planning&&role!=='worker';
- // When the agent keeps failing (the same error again, the step limit, repeated cut-offs), this same conversation continues
- // on the next model up the ladder (Haiku, Sonnet, Opus) with everything it has read and done, and a fresh step allowance.
- const escalate=(reason:string,why:string)=>{const next=ladder[ladder.indexOf(checkpoint.model)+1];if(role!=='solo'||!ladder.includes(checkpoint.model)||!next)return false;
-  options.onEscalate?.(checkpoint.model,next,reason);checkpoint.model=next;checkpoint.steps=0;checkpoint.failures={};checkpoint.coarse={};
-  checkpoint.escalation=`A stronger model continues this request from here, because the work so far ${why}. Everything above is yours: review what was done and what went wrong, change approach where needed, and finish the request.`;save();return true;};
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
  const conclude=(outcome:EditOutcome)=>{checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
@@ -76,8 +69,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(checkpoint.outcome)closeBatch();save();
  }
  const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
- // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's or a consultation's.
- const feedback=role!=='worker'&&!phase.startsWith('direction-')?db.loadState<any>('resume_input:'+turnId):undefined;if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
+ // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
+ const feedback=role!=='worker'?db.loadState<any>('resume_input:'+turnId):undefined;if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
  if(checkpoint.feedback&&checkpoint.pending){closeBatch();save();}
  // The next approved plan step continues the same conversation. Earlier steps' publications cannot complete it.
  if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
@@ -85,9 +78,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  for(;;){
   signal.throwIfAborted();
   if(!checkpoint.pending){
-   if(checkpoint.escalation){checkpoint.messages.push({role:'user',dreamSource:'nudge',content:checkpoint.escalation});delete checkpoint.escalation;save();}
    if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:checkpoint.feedback.text});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;checkpoint.steps=0;save();}
-   if(checkpoint.advice&&options.consult){const advice=await options.consult(checkpoint.advice.question,checkpoint.advice.key);checkpoint.messages.push({role:'user',dreamSource:'advice',content:'Direction from a stronger model for the next attempt: '+advice});(checkpoint.consulted??=[]).push(checkpoint.advice.key);delete checkpoint.advice;save();}
    // Appended only when the state changes, so the cached conversation prefix stays intact. Only what changed is sent;
    // the full state is kept locally, so compaction can restore it when it drops the earlier messages it builds on.
    const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined}),paused=checkpoint.messages.at(-1)?.role==='assistant';if(mediaState&&mediaState!==checkpoint.mediaState&&!paused){
@@ -96,11 +87,11 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
     else checkpoint.messages.push({role:'user',dreamSource:'media-status',content:full});
     checkpoint.mediaState=mediaState;save();}
    // Reaching the limit never counts as completion: the agent did not say it was done.
-   if((checkpoint.steps??0)>=maxSteps){if(escalate('Step limit','used all its steps before finishing'))continue;conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
+   if((checkpoint.steps??0)>=maxSteps){conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    assertToolExchanges(checkpoint.messages);
    let response:any;
    try{response=await options.infer(checkpoint.model,(options.system??codePrompt)+modeSuffix(role,planning),checkpoint.messages,tools);}
-   catch(error){if(error instanceof InferenceError&&error.code==='truncated'){const repeats=checkpoint.failures.truncation=(checkpoint.failures.truncation??0)+1;checkpoint.steps=(checkpoint.steps??0)+1;if(repeats>=3){if(escalate('Output limit','kept exceeding the output limit'))continue;conclude({status:'blocked',summary:'The AI response repeatedly exceeded the output limit. No partial commands or file writes were executed.',evidence:[],nextAction:'Resume with a smaller scope, or split the scene into several parts.'});save();return{outcome:checkpoint.outcome!};}// A response that only thought steps this phase's effort down; either way the agent is told to act in smaller pieces.
+   catch(error){if(error instanceof InferenceError&&error.code==='truncated'){const repeats=checkpoint.failures.truncation=(checkpoint.failures.truncation??0)+1;checkpoint.steps=(checkpoint.steps??0)+1;if(repeats>=3){conclude({status:'blocked',summary:'The AI response repeatedly exceeded the output limit. No partial commands or file writes were executed.',evidence:[],nextAction:'Resume with a smaller scope, or split the scene into several parts.'});save();return{outcome:checkpoint.outcome!};}// A response that only thought steps this phase's effort down; either way the agent is told to act in smaller pieces.
      if(error.thinkingOnly){const overrideKey=`effort-override:${turnId}:${phase}`;db.setMeta(overrideKey,String(Math.min(2,Number(db.getMeta(overrideKey)??0)+1)));}
      checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}throw error;}
    delete checkpoint.failures.truncation;checkpoint.steps=(checkpoint.steps??0)+1;
@@ -158,7 +149,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       }
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
       // The editing agent keeps the project notes that carry the user's wishes into later requests; helpers never write them.
-      if(input.notes?.trim()&&role!=='worker'&&!phase.startsWith('direction-'))db.setMeta('preferences',input.notes.trim());
+      if(input.notes?.trim()&&role!=='worker')db.setMeta('preferences',input.notes.trim());
       // What the agent saw in each source stays with the project, so later requests read it instead of looking again.
       if(input.sourceNotes?.length){const known=new Set(db.footage().assets.map(a=>a.id)),saved=JSON.parse(db.getMeta('source-notes')??'{}');for(const n of input.sourceNotes)if(known.has(n.assetId))saved[n.assetId]=n.note.trim();db.setMeta('source-notes',JSON.stringify(saved));}
      }else if(call.name==='delegate'){
@@ -167,7 +158,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       const reports=await options.runWorkers(input.tasks,call.id);
       const blocked=new Set(checkpoint.blockedTasks??[]);for(const r of reports){if(r.status==='blocked'||r.skipped)blocked.add(r.taskId);else blocked.delete(r.taskId);}checkpoint.blockedTasks=[...blocked];
       result={reports};
-     }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='consult_director'){if(!options.consult)throw new Error('Consultation is unavailable here.');result={guidance:await options.consult(input.question,call.id)};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
+     }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
      if(result?.process&&result.process.status!=='complete')throw new Error(`Command ${result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      delete checkpoint.failures[operationKey];if(checkpoint.coarse)delete checkpoint.coarse[coarse];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
@@ -176,9 +167,6 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      if(signal.aborted||error instanceof FileApprovalRequired||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;
      const message=(error as Error).message,count=(checkpoint.failures[operationKey]??0)+1,similar=((checkpoint.coarse??={})[coarse]??0)+1;checkpoint.failures[operationKey]=count;checkpoint.coarse[coarse]=similar;
      result={error:message,diagnosisRequired:count>=2||similar>=3};db.saveState(receiptKey,result);activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,call.input)??call.name,status:'failed',detail:message});
-     // A repeated failure continues on the next model up the ladder; at the top of the ladder it asks for direction instead.
-     const repeated=(count===2||similar===3)&&role==='solo'&&substantiveFailure(error);
-     if(repeated&&(checkpoint.outcome||!escalate('Repeated failure',`kept failing at the same step (${call.name}: ${message.slice(0,500)})`))&&options.consult){const adviceKey=operationKey+':'+call.id;if(!checkpoint.consulted?.includes(adviceKey)){checkpoint.advice={key:adviceKey,question:`Diagnose this repeated failure and direct a revised approach. Request: ${options.text}\nTool: ${call.name}\nInput: ${JSON.stringify(call.input).slice(0,6000)}\nError: ${message}`};db.event('ai.director_requested',{turnId,reason:message,model:models.director});}}
      // The same error three times (or a similar one four times) ends the request instead of spending more steps on it.
      if(count>=3||similar>=4)conclude({status:'blocked',summary:'Repeated attempts could not complete this step: '+message,evidence:[],nextAction:'Resolve the diagnosed failure, then resume with the saved source and logs.'});
     }

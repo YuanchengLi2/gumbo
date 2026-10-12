@@ -1,8 +1,8 @@
 import {expect,_electron as electron,type Page} from '@playwright/test';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync,writeFileSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,writeFileSync,mkdirSync,existsSync,statSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
+import {join,resolve,dirname} from 'node:path';
 import Database from 'better-sqlite3';
 import {sessionReport,formatReport,type RequestReport} from '../../scripts/session-report';
 
@@ -13,11 +13,27 @@ export type AskOptions={intent?:'auto'|'plan'|'ask';selection?:string[];assetIds
 export type Ask=(name:string,text:string,check:(before:any,after:any,numbers:RequestReport|undefined)=>string|undefined,targets?:(before:any,after:any,numbers:RequestReport|undefined)=>Record<string,boolean>,options?:AskOptions)=>Promise<any>;
 export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>string|undefined;state:()=>Promise<any>;send:(text:string,options?:AskOptions)=>Promise<void>;settled:(before:any)=>Promise<any>;importFiles:(paths:string[])=>Promise<any>;record:(step:Step)=>void;words:(assetId:string)=>{start:number;end:number;text:string}[]};
 
+/** Refuses to spend money on a stale build: the packaged app must be newer than every change to the app's code (committed
+ * or not), and the deployed gateway newer than every change to the gateway's code. A live run on October 11 went to the
+ * wrong model because the gateway had never been deployed after its routing schema changed. */
+export function assertCurrent(executable:string,ref:string){
+ const git=(...args:string[])=>spawnSync('git',args,{encoding:'utf8',windowsHide:true}).stdout.trim();
+ const newest=(paths:string[])=>{const committed=Number(git('log','-1','--format=%ct','--',...paths)||0)*1000;
+  const changed=git('status','--porcelain','--',...paths).split('\n').filter(Boolean).map(line=>line.slice(3).split(' -> ').pop()!.trim().replace(/^"|"$/g,'')).filter(path=>existsSync(path)).map(path=>statSync(path).mtimeMs);
+  return Math.max(committed,...changed);};
+ const asar=join(dirname(executable),'resources','app.asar'),code=newest(['apps','packages']);
+ if(!existsSync(asar)||statSync(asar).mtimeMs<code)throw new Error(`The packaged app is older than its code (changed ${new Date(code).toISOString()}). Run pnpm package first.`);
+ const listed=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase functions list --project-ref ${ref}`],{encoding:'utf8',windowsHide:true});
+ const deployed=Number(JSON.parse(listed.stdout.slice(listed.stdout.indexOf('{'))).functions?.find((f:any)=>f.slug==='dream-gateway')?.updated_at??0),gateway=newest(['supabase/functions']);
+ if(deployed<gateway)throw new Error(`The deployed dream-gateway (${new Date(deployed).toISOString()}) is older than its code (changed ${new Date(gateway).toISOString()}). Run supabase functions deploy dream-gateway first.`);
+}
+
 /** A real editing session in the packaged app against the deployed gateway, on a temporary account whose daily allowance
  * is capped at DREAM_LIVE_BUDGET_USD (default 3). Each step records its numbers from the project's own database; checks are
  * problems, targets are the cost and speed goals; both are soft so the whole session always runs. */
 export async function liveSession(prefix:string,run:(session:Session)=>Promise<void>,options:{computer?:boolean}={}){
- const ref='qewguvfkkwvdoqptiljd',url=`https://${ref}.supabase.co`,keyCommand=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase projects api-keys --project-ref ${ref} --output json`],{encoding:'utf8',windowsHide:true});if(keyCommand.status)throw new Error('Live configuration unavailable.');
+ const ref='qewguvfkkwvdoqptiljd',executable=resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe');assertCurrent(executable,ref);
+ const url=`https://${ref}.supabase.co`,keyCommand=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase projects api-keys --project-ref ${ref} --output json`],{encoding:'utf8',windowsHide:true});if(keyCommand.status)throw new Error('Live configuration unavailable.');
  const keys=JSON.parse(keyCommand.stdout),service=keys.find((k:any)=>k.name==='service_role')?.api_key,anon=keys.find((k:any)=>k.name==='anon')?.api_key;
  const email=`dream-workflow-${crypto.randomUUID()}@example.invalid`,password=crypto.randomUUID()+crypto.randomUUID();let userId:string|undefined;
  async function api(path:string,body?:unknown,method=body?'POST':'GET'){const r=await fetch(url+path,{method,headers:{apikey:service,Authorization:'Bearer '+service,'Content-Type':'application/json',Prefer:'return=representation'},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();if(!r.ok)throw new Error('Live setup failed: '+r.status+' '+text.slice(0,200));return text?JSON.parse(text):null;}
@@ -28,7 +44,7 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
  const meta=(key:string)=>{try{const db=new Database(join(folder,'.dream','project.sqlite'),{readonly:true,fileMustExist:true});try{return(db.prepare('SELECT value FROM meta WHERE key=?').get(key) as {value:string}|undefined)?.value;}finally{db.close();}}catch{return undefined;}};
  try{
   userId=(await api('/auth/v1/admin/users',{email,password,email_confirm:true})).id;await api('/rest/v1/dream_invites',{email});
-  app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});
+  app=await electron.launch({executablePath:executable,args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});
   const page=await app.firstWindow();await page.evaluate(async({email,password})=>window.dream.command({type:'account',action:'signin',email,password}),{email,password});
   await api(`/rest/v1/dream_accounts?id=eq.${userId}`,{daily_budget_usd:Number(process.env.DREAM_LIVE_BUDGET_USD??3)},'PATCH');
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
@@ -70,7 +86,7 @@ export const outOfRange=(s:any)=>s.timeline.spine.filter((c:any)=>{const a=s.foo
 export const clipIds=(s:any)=>s.timeline.spine.map((c:any)=>c.id);
 /** Scenes on the timeline: spine clips and attached items that play a published scene. */
 export const sceneUses=(s:any)=>{const scenes=new Set(s.footage.assets.filter((a:any)=>a.scene).map((a:any)=>a.id));return s.timeline.spine.filter((c:any)=>scenes.has(c.assetId)).length+s.timeline.attached.filter((i:any)=>i.source&&scenes.has(i.source.assetId)).length;};
-/** Goals: a simple follow-up starts without a router call, stays on Haiku and finishes in under a minute for a few cents. */
-export const quick=(_b:any,_a:any,n:RequestReport|undefined)=>({'no router call':!!n&&!n.routed,'Haiku only':!!n&&Object.keys(n.byModel).every(m=>m==='haiku'),'under $0.05':!!n&&n.costUsd<.05,'under 60 s':!!n&&n.seconds<60});
+/** Goals: a simple follow-up starts without a router call, runs on Sonnet only and finishes in under a minute for about ten cents. */
+export const quick=(_b:any,_a:any,n:RequestReport|undefined)=>({'no router call':!!n&&!n.routed,'Sonnet only':!!n&&Object.keys(n.byModel).every(m=>m==='sonnet'),'under $0.15':!!n&&n.costUsd<.15,'under 60 s':!!n&&n.seconds<60});
 export const noOpus=(_b:any,_a:any,n:RequestReport|undefined)=>({'no Opus':!!n&&!n.byModel.opus});
 export const assetNamed=(s:any,filename:string)=>s.footage.assets.find((a:any)=>a.filename===filename)?.id as string|undefined;

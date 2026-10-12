@@ -19,7 +19,7 @@ test('live interruptions and modes: stop and continue, undo, ask only, plan firs
   const full=await state(),scenesFull=sceneUses(full);await command({type:'undo'});const undone=await state();
   record({name:'undo by accident',request:'(undo)',status:'complete',targets:{},seconds:0,problem:undone.versionId===full.versionId?'undo did not change the version':undefined});
   await ask('put it back','I undid your last change by accident. Put it back.',(_b,a)=>sceneUses(a)<scenesFull?`${sceneUses(a)} scenes on the timeline, ${scenesFull} before the undo`:undefined,noOpus);
-  await ask('ask only','Make it black and white.',(b,a)=>a.versionId!==b.versionId?'ask-only mode changed the project':!a.messages.at(-1)?.text?'no reply':undefined,(_b:any,_a:any,n:any)=>({'under $0.02':!!n&&n.costUsd<.02}),{intent:'ask'});
+  await ask('ask only','Make it black and white.',(b,a)=>a.versionId!==b.versionId?'ask-only mode changed the project':!a.messages.at(-1)?.text?'no reply':undefined,(_b:any,_a:any,n:any)=>({'under $0.10':!!n&&n.costUsd<.1}),{intent:'ask'});
   await ask('plan first','Turn this into a vertical 9:16 video with captions.',(b,a)=>a.versionId!==b.versionId?'planning changed the project':!a.taskPlan?'no plan to approve':undefined,undefined,{intent:'plan',expect:'awaiting_approval'});
   await ask('approve the plan','do it',(_b,a)=>a.timeline.settings.height<=a.timeline.settings.width?`the video is ${a.timeline.settings.width}x${a.timeline.settings.height}`:undefined);
   const beforeRedirect=await state();

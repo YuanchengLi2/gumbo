@@ -58,7 +58,7 @@ it('will not finish while the published edit has unresolved must-fix checks, and
  const {root,db,ws}=await fixture();try{
   const doc=document(root);doc.timeline.spine=[clip('a',1.2,7),clip('b',2,5)];
   let step=0;const replies:string[]=[];
-  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Cut the talk',model:models.editor,signal:signal(),publish:()=>{},infer:async(_model:string,_system:string,messages:any[])=>{
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Cut the talk',model:models.agent,signal:signal(),publish:()=>{},infer:async(_model:string,_system:string,messages:any[])=>{
    replies.length=0;for(const m of messages)if(Array.isArray(m?.content))for(const b of m.content)if(b.type==='tool_result')replies.push(typeof b.content==='string'?b.content:JSON.stringify(b.content));
    step++;
    if(step===1)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}}]};

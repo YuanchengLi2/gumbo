@@ -10,7 +10,7 @@ export function inferencePolicy(model:string,purpose:unknown='routine',profile?:
  const format=purpose==='routing'?{format:{type:'json_schema',schema:{type:'object',properties:{route:{type:'string',enum:['local','question','plan','continue']},intelligence:{type:'string',enum:['haiku','sonnet','opus']},complexity:{type:'string',enum:['simple','normal','difficult']},reason:{type:'string'},projectTitle:{type:'string'},approvalQuote:{type:['string','null']}},required:['route','intelligence','complexity','reason','approvalQuote','projectTitle'],additionalProperties:false}}}:{};
  // Haiku's summarized thinking costs the same as omitted; the app shows it as transient progress on the worker's row.
  if(model==='claude-haiku-5-5')return{thinking:{type:'adaptive',display:'summarized',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...format,...budget}};
- if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...budget}};
+ if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...format,...budget}};
  return{};
 }
 /** Tools and system are identical across every request of a role, so they keep a one-hour cache between user requests.

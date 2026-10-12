@@ -3,10 +3,10 @@
 ## Code-first editing by one agent — October 11, 2026
 
 One editing agent owns each request, from looking at the footage to publishing and replying.
-- **It looks for itself.** Nothing interprets the footage at import. The agent gets plain facts about each source and its transcript file, looks at the frames it picks (`view_media`) and at images its own code makes (`read_file`), and measures with code.
+- **It looks for itself.** Nothing interprets the footage at import. The agent gets plain facts about each source and its transcript file (kept current even while its own commands run), looks at the frames it picks (`view_media`) and at images its own code makes (`read_file`), and measures with code.
 - **It edits with code.** Every edit is a change to `project.json`, made directly or by a program the agent writes and runs. ffmpeg, ffprobe, Node and Python are on PATH, and it may install anything else. Processed footage and generated media go under `output/`.
 - **Publishing checks the facts.** Each publication reports footage used twice, cuts inside a word and long silences. The agent cannot report the request done while one of these is neither fixed nor kept with a reason, or while a task it delegated is still blocked.
-- **The router picks the model.** Haiku handles changes and short footage. Sonnet handles big edits such as the first cut of a long recording. Opus is used only for a whole new video or when asked. A request that keeps failing continues in the same conversation on a stronger model.
+- **One model.** Every role runs on Sonnet: the edit, its helpers, plans and replies. A request that keeps failing is told to diagnose and change approach, then stops as blocked with its work saved.
 - **Helpers build separate pieces.** For several scenes, or scenes and music, Haiku helpers write the files in parallel; the agent places them and publishes.
 
 See [the engine documentation](docs/CODE-ENGINE.md) and [DECISIONS.md](DECISIONS.md).

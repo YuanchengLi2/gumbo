@@ -18,20 +18,20 @@ Nothing renders the edit during chat. Published work runs live in the right pane
 
 ## Who does the work
 
-One editing agent owns each request from start to finish: it looks at what it needs, decides, edits, publishes, checks and replies. The router chooses its model; when it keeps failing, the same conversation continues on a stronger model.
+One editing agent owns each request from start to finish: it looks at what it needs, decides, edits, publishes, checks and replies. Every role runs on Sonnet 5.5 (`models.agent`); there is no tier to choose and no hand-over to another model.
 
 | Request | Model | Role |
 |---|---|---|
-| **An edit** | Haiku 5.5 for changes to an existing edit and edits of short footage; Sonnet 5.5 for a big edit (the first cut or a full re-edit of long footage, many sources cut into one video, several new pieces built at once); Opus 5.5 only for a whole new video made from nothing or when the user asks for Opus | **solo**: the editing agent. When the engine sees it fail (the same tool error twice, a similar one three times, the step limit, repeated output cut-offs), this conversation continues on the next model up the ladder (Haiku, Sonnet, Opus) with a fresh step allowance; a resumed request keeps the stronger model. `consult_director` asks the next model up one question, answered with no tools. `delegate` has helpers build separate pieces. |
-| Pieces the agent delegates | Haiku 5.5 | **worker** (a helper): one isolated conversation per task that writes only its declared paths. It never edits `project.json`, publishes, imports media or changes the user's computer; the agent places its outputs and publishes. |
-| A reply: a question, a script, ideas | Haiku 5.5, or Sonnet 5.5 for scripts and concepts | **readonly**: answers directly. Sonnet and Opus reply with no tools. |
-| Planning, and approved plans | Opus 5.5 plans; Sonnet 5.5 runs the steps | **readonly** planner returning an editable plan; the approved steps run as one continuing editing-agent conversation. |
+| **An edit** | Sonnet 5.5 | **solo**: the editing agent. When an attempt keeps failing it is told to diagnose (the second identical failure returns `diagnosisRequired`), and the third identical failure, or the fourth similar one, ends the request as blocked with its work saved. `delegate` has helpers build separate pieces. |
+| Pieces the agent delegates | Sonnet 5.5 | **worker** (a helper): one isolated conversation per task that writes only its declared paths. It never edits `project.json`, publishes, imports media or changes the user's computer; the agent places its outputs and publishes. |
+| A reply: a question, a script, ideas | Sonnet 5.5 | **readonly**: answers directly, looking at what it needs with the read-only tools. |
+| Planning, and approved plans | Sonnet 5.5 | **readonly** planner returning an editable plan; the approved steps run as one continuing editing-agent conversation. |
 
-Every move to a model above Haiku is recorded as an `ai.escalation` event with its kind (route, switch, consult, plan) and reason; `scripts/session-report.ts` lists them per request.
+Earlier projects may hold `ai.escalation` events from the Haiku, Sonnet and Opus ladder; `scripts/session-report.ts` still lists them.
 
 ### Routing, permission modes and effort
 
-Exact local instructions, "continue" phrasing and plain follow-up edits on a titled project with a timeline (`plainEdit`: "make it warmer", "add crossfades") skip the classifier and start with Haiku. Everything else is classified by Haiku with a provider JSON schema, falling back to Haiku and the local heuristic (`routeCodeRequest`) if classification fails. Routes are `question`, `local`, `plan` and `continue` (only while a stopped request exists); intelligence is haiku, sonnet or opus, and the app turns an Opus route on an existing timeline or for a question into Sonnet unless the request names Opus.
+Exact local instructions, "continue" phrasing and plain follow-up edits on a titled project with a timeline (`plainEdit`: "make it warmer", "add crossfades") skip the classifier. Everything else is classified by Sonnet with a provider JSON schema, falling back to the local heuristic (`routeCodeRequest`) if classification fails. Routes are `question`, `local`, `plan` and `continue` (only while a stopped request exists). The routing schema still has an `intelligence` field for older gateways; the app ignores it.
 
 The composer chooses the permission mode and the effort:
 
@@ -74,7 +74,7 @@ Music is a score file (`src/music/*.score.json`) in compact notation (drum step 
 
 ## Footage: facts, and the agent's own looks
 
-Nothing interprets the footage for the agent. Import prepares what the player and Export need (proxy, playback audio, thumbnail, waveform, loudness for auto-level) and runs cloud transcription. The agent is given facts per source: length, size, frame rate, sound, path, capture time, its own earlier notes (`sourceNotes`), and the transcript's state (`status`, `transcribedUntilSec`, word count, and the file `context/transcripts/<id>.json`, whose `coverage` shows how far transcription has got). `read_transcript` reads the same words, including the part transcribed so far while a long recording is still running.
+Nothing interprets the footage for the agent. Import prepares what the player and Export need (proxy, playback audio, thumbnail, waveform, loudness for auto-level) and runs cloud transcription. The agent is given facts per source: length, size, frame rate, sound, path, capture time, its own earlier notes (`sourceNotes`), and the transcript's state (`status`, `transcribedUntilSec`, word count, and the file `context/transcripts/<id>.json`, whose `coverage` shows how far transcription has got). The files in `context/` are never stale copies: between tool calls they are rewritten, and while a command runs each transcript file is rewritten as its transcription advances and `assets.json` (with `Sources/`) when a source is added, so a program can wait on them. `read_transcript` reads the same words, including the part transcribed so far while a long recording is still running.
 
 The agent decides what to look at and what to measure:
 
@@ -97,18 +97,18 @@ With computer access granted the agent imports automatically; changes to compute
 
 ## What the user sees
 
-Every role says in one sentence what it is about to do, adds brief updates when something matters, writes out scripts or copy before building, and ends with a short recap. Between-tool notes and Haiku's summarized thinking are shown as progress; reasoning itself is never shown. Each helper task is a row holding its own notes and actions. Imported and inspected media, and published or draft scenes, appear as thumbnails and live previews in the stream. The run monitor shows the current step, elapsed time, tasks, and the request's cost, tokens and time for Dream (the editing agent) and each helper.
+Every role says in one sentence what it is about to do, adds brief updates when something matters, writes out scripts or copy before building, and ends with a short recap. Between-tool notes are shown as progress; reasoning itself is never shown. Each helper task is a row holding its own notes and actions. Imported and inspected media, and published or draft scenes, appear as thumbnails and live previews in the stream. The run monitor shows the current step, elapsed time, tasks, and the request's cost, tokens and time for Dream (the editing agent) and each helper.
 
 ## The agent loop
 
 Each phase is a checkpointed conversation. Tool calls and results are persisted as complete pairs; a replayed call ID returns its saved receipt and never repeats an effect.
 
 - **Spending limit**: each request may spend $3 (`DREAM_REQUEST_BUDGET_USD`), checked before every model call; at the limit it stops as interrupted with its work saved, and each resume allows the same amount again.
-- **Step limits**: 80 model calls per role. The editing agent continues on the next model up at the limit; at the top of the ladder, or for other roles, it reports a blocker, never completion.
+- **Step limits**: 80 model calls per role. At the limit the request reports a blocker with its work saved, never completion.
 - **Text-only responses**: nudged at most twice. Engine nudges are tagged and dropped at compaction.
-- **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`). The second failure moves the editing agent up the ladder (at the top it asks Opus for direction instead); the third identical failure, or the fourth similar one, ends the request as blocked.
+- **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`). The second failure's result carries `diagnosisRequired`, and the prompt tells the agent to find out why (the error, the log, the files) and change approach; the third identical failure, or the fourth similar one, ends the request as blocked.
 - **Parallel reads**: the reads at the start of a response (`read_file`, `view_media`, `read_transcript`, `search`) run together; results are recorded in order.
-- **Truncation**: a response cut off with visible content retries with double the output allowance, up to 64K, scoped to its phase. A response that only thought is not retried with more room: the agent is told to act in one concrete step, and the phase's effort steps down. Three truncations move the agent up the ladder or end the step.
+- **Truncation**: a response cut off with visible content retries with double the output allowance, up to 64K, scoped to its phase. A response that only thought is not retried with more room: the agent is told to act in one concrete step, and the phase's effort steps down. Three truncations end the step.
 - **Over-long fields**: prose fields (summary, brief, query, title) are shortened instead of failing the call. Paths and code are never trimmed.
 - **Completion**: only when the current head was published (or validated unchanged) in this phase with no unpublished changes and no scene errors, every must-fix check of the request's publications is fixed or listed in `finish.kept` with a reason, and no delegated task is blocked or skipped. Kept reasons go into the recap. Plan notes (`update_tasks.notes`) survive compaction.
 
@@ -120,11 +120,10 @@ Each phase is a checkpointed conversation. Tool calls and results are persisted 
 - **State changes**: when the project or media state changes, a message with only the changed fields (and the media or decision records added, changed or removed) is appended, never edited. The full state is kept locally under each message; compaction restores it when it drops the messages a change report builds on.
 - **Transcript words** carry only id, text, start and end (plus speaker or an uncertainty flag).
 
-Compaction targets are 80K tokens for Haiku (never sent more than 96K, so it stays below the 100K long-context price) and 180K for Sonnet and Opus.
+The compaction target is 180K tokens.
 
 - **Measurement**: the last response's real prompt size calibrates the byte estimate. The token-count endpoint is called only without a calibration or near the target.
-- **Compaction**: an overrun compacts to half the target from the current sticky view. It carries the earlier summary forward and keeps only real instructions, the two latest pieces of advice from a stronger model and the newest state snapshot. Following steps then append to a stable cached prefix. A request that moved up the ladder compacts at its new model's target.
-- **Haiku cap**: if Haiku would still exceed its hard cap, the largest recent tool results are shortened for that request.
+- **Compaction**: an overrun compacts to half the target from the current sticky view. It carries the earlier summary forward and keeps only real instructions and the newest state snapshot. Following steps then append to a stable cached prefix.
 
 ## Inference, caching and cost
 
@@ -134,7 +133,7 @@ Compaction targets are 80K tokens for Haiku (never sent more than 96K, so it sta
 - **Usage tracking**: every response is recorded in the append-only `ai_usage` table: phase, helper, tokens, cost (a parity-tested client mirror of the gateway's price formula), duration and visible size.
 - **Activity**: activity events are rows, one upsert per stream update. Publications record changed files as hashes and line counts; text loads on demand.
 
-The gateway features above (one-hour conversation cache, task budgets, summarized Haiku progress, cost in receipts, the `continue` route) are optional and take effect after `supabase functions deploy dream-gateway`; the app works unchanged against an older deployment.
+The gateway features above (one-hour conversation cache, task budgets, cost in receipts, the `continue` route, the routing schema on Sonnet) are optional and take effect after `supabase functions deploy dream-gateway`; the app works unchanged against an older deployment.
 
 ## Workspace and publication
 
@@ -152,4 +151,4 @@ Without computer access, the Windows host runs commands in an AppContainer with 
 
 ## Verification
 
-`pnpm test` and `pnpm typecheck` cover the engine end to end with fixture gateways. The live session specs (`tests/desktop/agent-*-live.spec.ts`, each behind its own `DREAM_LIVE_*` variable, sharing `tests/desktop/live-session.ts`) record each step's cost, model calls, largest context, escalations and looks at footage and write `session-report.txt`, compared with `DREAM_LIVE_COMPARE` when set; `tsx scripts/session-report.ts <folder> [--compare <older>]` reports any saved project. The packaged desktop specs (`pnpm exec playwright test tests/desktop`) cover the player, export, drag-and-drop, planning and the agent. `pnpm exec tsx scripts/smoke-engine-local.ts --budget=<usd>` runs real requests against the Anthropic API through this repository's gateway code on localhost and reports cost and time per phase. `scripts/compare-export.ts` compares the native export with the browser export. Results are recorded in `docs/ACCEPTANCE.md`.
+`pnpm test` and `pnpm typecheck` cover the engine end to end with fixture gateways. Every live session first checks that the packaged app is newer than the app's code and the deployed gateway newer than the gateway's code (`assertCurrent` in `tests/desktop/live-session.ts`), and refuses to start otherwise. `tests/desktop/agent-smoke-live.spec.ts` (`DREAM_LIVE_SMOKE=1`) is the cheap live check to run before a long session: three minutes of the long-form talk cut into a short clip, then captions. The live session specs (`tests/desktop/agent-*-live.spec.ts`, each behind its own `DREAM_LIVE_*` variable, sharing `tests/desktop/live-session.ts`) record each step's cost, model calls, largest context, escalations and looks at footage and write `session-report.txt`, compared with `DREAM_LIVE_COMPARE` when set; `tsx scripts/session-report.ts <folder> [--compare <older>]` reports any saved project. The packaged desktop specs (`pnpm exec playwright test tests/desktop`) cover the player, export, drag-and-drop, planning and the agent. `pnpm exec tsx scripts/smoke-engine-local.ts --budget=<usd>` runs real requests against the Anthropic API through this repository's gateway code on localhost and reports cost and time per phase. `scripts/compare-export.ts` compares the native export with the browser export. Results are recorded in `docs/ACCEPTANCE.md`.

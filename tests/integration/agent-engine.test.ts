@@ -74,7 +74,7 @@ it('edits without a hash, explains failed matches, and never publishes from a co
 
 it('stops at the step limit and after bounded nudges instead of looping',async()=>{
  const db=fixture();try{
-  const base={db,turnId:'turn',model:models.editor,text:'Edit the opening',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({files:[]})}};
+  const base={db,turnId:'turn',model:models.agent,text:'Edit the opening',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({files:[]})}};
   let reads=0;const capped=await codeAgent({...base,phase:'loop',infer:async()=>toolUse('read'+reads++,'list_files',{path:'.'})});
   expect(capped.outcome.status).toBe('blocked');expect(capped.outcome.summary).toContain('step limit');expect(reads).toBe(80);
   let texts=0;const talker=await codeAgent({...base,phase:'talk',infer:async()=>{texts++;return{content:[{type:'text',text:'I would change the opening.'}],stop_reason:'end_turn',usage:{}};}});
@@ -86,7 +86,7 @@ it('stops at the step limit and after bounded nudges instead of looping',async()
 
 it('accepts completion once published, auto-completing the task list instead of rejecting finish',async()=>{
  const db=fixture();try{db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));db.setMeta('turn_activity:turn',JSON.stringify({turnId:'turn',events:[],tasks:[]}));
-  let n=0;const result=await codeAgent({db,turnId:'turn',model:models.editor,text:'Fix the caption',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({publication:{versionId:db.head(),assets:[]}})},
+  let n=0;const result=await codeAgent({db,turnId:'turn',model:models.agent,text:'Fix the caption',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({publication:{versionId:db.head(),assets:[]}})},
    infer:async()=>[toolUse('tasks','update_tasks',{tasks:[{id:'a',title:'Fix the caption',status:'running'}]}),toolUse('pub','publish_project',{}),toolUse('done','finish',{status:'complete',summary:'Fixed the caption.',evidence:[{toolCallId:'invented',finding:'x'}]})][n++]});
   expect(result.outcome.status).toBe('complete');expect(result.outcome.evidence.map(e=>e.toolCallId)).toEqual(['pub']);expect(db.turnActivity('turn')!.tasks!.every(t=>t.status==='complete')).toBe(true);
  }finally{db.close();}
@@ -96,7 +96,7 @@ it('keeps the compacted provider prefix byte-identical as the conversation grows
  const db=fixture();try{
   const messages:any[]=[{role:'user',content:'Build the scene'}];const exchange=(i:number)=>[{role:'assistant',content:[{type:'tool_use',id:'r'+i,name:'read_file',input:{path:'src/f'+i}}]},{role:'user',content:[{type:'tool_result',tool_use_id:'r'+i,content:'abcdefghijklmn'[i].repeat(40000)}]}];
   for(let i=0;i<12;i++)messages.push(...exchange(i));
-  const input={model:models.editor,purpose:'execution',system:'Work',tools:[],turnId:'turn',max_tokens:16384};
+  const input={model:models.agent,purpose:'execution',system:'Work',tools:[],turnId:'turn',max_tokens:16384};
   const first=budgetRequest(db,{...input,messages},.5).messages;expect(first.length).toBeLessThan(messages.length);assertToolExchanges(first);
   messages.push(...exchange(12),...exchange(13));
   const second=budgetRequest(db,{...input,messages}).messages;
@@ -106,7 +106,7 @@ it('keeps the compacted provider prefix byte-identical as the conversation grows
 
 it('gives a truncated execution response more output room before involving the agent',async()=>{
  const db=fixture();try{const sizes:number[]=[];
-  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.editor,system:'Write',messages:[{role:'user',content:'Write the scene'}],tools:[],purpose:'execution',max_tokens:16384,turnId:'turn'}},{fetch:async(_url,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(sizes.length===1?{content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}}:{content:[{type:'text',text:'complete'}],stop_reason:'end_turn',usage:{}});}});
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.agent,system:'Write',messages:[{role:'user',content:'Write the scene'}],tools:[],purpose:'execution',max_tokens:16384,turnId:'turn'}},{fetch:async(_url,init)=>{sizes.push(JSON.parse(String(init?.body)).max_tokens);return Response.json(sizes.length===1?{content:[{type:'text',text:'partial'}],stop_reason:'max_tokens',usage:{}}:{content:[{type:'text',text:'complete'}],stop_reason:'end_turn',usage:{}});}});
   expect(response.content[0].text).toBe('complete');expect(sizes).toEqual([16384,32768]);
  }finally{db.close();}
 });
@@ -142,8 +142,8 @@ it('enables the server-side refusal fallback for Opus, heals if the provider rej
 
 it('never executes or echoes the declined part of a response that fell back mid-stream',async()=>{
  const db=fixture();try{let calls=0;const executed:string[]=[],histories:any[]=[];
-  const result=await codeAgent({db,turnId:'turn',model:models.director,text:'Make the edit',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async(name:string)=>{executed.push(name);return name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true};}},
-   infer:async(_m,_s,messages)=>{histories.push(JSON.parse(JSON.stringify(messages)));return infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.director,system:'Edit',messages,tools:[],purpose:'execution',max_tokens:16384,turnId:'turn',phase:'fallback-'+calls}},{fetch:async()=>Response.json(calls++===0?{content:[{type:'thinking',thinking:'',signature:'declined'},{type:'tool_use',id:'declined-read',name:'list_files',input:{path:'.'}},{type:'text',text:'Looking at the project.'},{type:'fallback',from:{model:'claude-opus-5-5'},to:{model:'claude-opus-4-8'}},{type:'tool_use',id:'served-publish',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Confirmed.'}}],stop_reason:'tool_use',usage:{}})});}});
+  const result=await codeAgent({db,turnId:'turn',model:models.agent,text:'Make the edit',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async(name:string)=>{executed.push(name);return name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true};}},
+   infer:async(_m,_s,messages)=>{histories.push(JSON.parse(JSON.stringify(messages)));return infer({db,config:{url:'https://fixture.invalid',token:'fixture'},resume:0,input:{model:models.agent,system:'Edit',messages,tools:[],purpose:'execution',max_tokens:16384,turnId:'turn',phase:'fallback-'+calls}},{fetch:async()=>Response.json(calls++===0?{content:[{type:'thinking',thinking:'',signature:'declined'},{type:'tool_use',id:'declined-read',name:'list_files',input:{path:'.'}},{type:'text',text:'Looking at the project.'},{type:'fallback',from:{model:'claude-opus-5-5'},to:{model:'claude-opus-4-8'}},{type:'tool_use',id:'served-publish',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}}:{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Confirmed.'}}],stop_reason:'tool_use',usage:{}})});}});
   expect(result.outcome.status).toBe('complete');expect(executed).toEqual(['publish_project']);
   const replayed=JSON.stringify(histories.at(-1));expect(replayed).not.toContain('declined-read');expect(replayed).not.toContain('"signature":"declined"');expect(replayed).toContain('Looking at the project.');
  }finally{db.close();}
@@ -174,9 +174,9 @@ it('reverts files a scoped worker command changes outside its boundary and repor
 it('does not accept completion after a publication when later changes are unpublished, and never completes at the step limit',async()=>{
  const db=fixture(),ws=workspaceFor(db);let n=0,finishResult='';try{
   await ws.initialize();
-  const result=await codeAgent({db,workspace:ws,turnId:'turn',model:models.editor,text:'Edit',signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{const step=n++;if(step===3)finishResult=JSON.stringify(messages.at(-1));return[toolUse('p1','publish_project',{}),toolUse('w','write_file',{path:'src/later.js',content:'const later=1;'}),toolUse('f1','finish',{status:'complete',summary:'Done.'}),toolUse('p2','publish_project',{}),toolUse('f2','finish',{status:'complete',summary:'Done.'})][step];}});
+  const result=await codeAgent({db,workspace:ws,turnId:'turn',model:models.agent,text:'Edit',signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{const step=n++;if(step===3)finishResult=JSON.stringify(messages.at(-1));return[toolUse('p1','publish_project',{}),toolUse('w','write_file',{path:'src/later.js',content:'const later=1;'}),toolUse('f1','finish',{status:'complete',summary:'Done.'}),toolUse('p2','publish_project',{}),toolUse('f2','finish',{status:'complete',summary:'Done.'})][step];}});
   expect(finishResult).toContain('unpublished changes');expect(finishResult).toContain('src/later.js');expect(result.outcome.status).toBe('complete');expect(ws.unpublishedChanges()).toEqual([]);
-  let calls=0;const limited=await codeAgent({db,workspace:ws,turnId:'limit',model:models.editor,text:'Edit',signal:new AbortController().signal,publish:()=>{},infer:async()=>calls++===0?toolUse('p','publish_project',{}):toolUse('l'+calls,'list_files',{path:'.'})});
+  let calls=0;const limited=await codeAgent({db,workspace:ws,turnId:'limit',model:models.agent,text:'Edit',signal:new AbortController().signal,publish:()=>{},infer:async()=>calls++===0?toolUse('p','publish_project',{}):toolUse('l'+calls,'list_files',{path:'.'})});
   expect(limited.outcome.status).toBe('blocked');expect(limited.outcome.summary).toContain('step limit');
  }finally{db.close();}
 });
@@ -207,8 +207,8 @@ it('plans with Opus and, when the user says "do it", runs the approved plan as o
    return ++agent===1?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});};
   await director.message('Plan a title card for the video',[],'plan');expect(db.getMeta('ai_status')).toBe('awaiting_approval');
   await director.message('do it');expect(db.getMeta('ai_status')).toBe('complete');
-  expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.director);
-  const steps=calls.filter(c=>c.purpose==='execution');expect(steps.length).toBe(2);expect(steps.every(c=>c.model===models.sonnet)).toBe(true);
+  expect(calls.find(c=>c.purpose==='planning')!.model).toBe(models.agent);
+  const steps=calls.filter(c=>c.purpose==='execution');expect(steps.length).toBe(2);expect(steps.every(c=>c.model===models.agent)).toBe(true);
   expect([...new Set(calls.map(c=>c.purpose))].sort()).toEqual(['execution','planning','routing']);
   expect(db.state().messages.some(m=>m.role==='user'&&m.text==='do it')).toBe(true);
  }finally{db.close();}

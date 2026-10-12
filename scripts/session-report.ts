@@ -15,8 +15,9 @@ export function sessionReport(folder:string):RequestReport[]{
   const events=(type:string,turnId:string)=>(db.prepare("SELECT json FROM events WHERE type=? AND json_extract(json,'$.turnId')=?").all(type,turnId) as {json:string}[]).map(e=>JSON.parse(e.json));
   return turns.filter(t=>t.request).map(turn=>{
    const usage=db.prepare('SELECT model,purpose,cost_usd AS cost,input_tokens+cache_read+cache_write AS prompt,cache_read AS cached,output_tokens AS output,created_at AS at FROM ai_usage WHERE turn_id=?').all(turn.turnId) as {model:string;purpose:string|null;cost:number;prompt:number;cached:number;output:number;at:string}[];
-   // Looks at footage: view_media calls the agent made in this request.
-   const looks=(db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE turn_id=? AND json_extract(json,'$.tool')='view_media'").get(turn.turnId) as {n:number}).n;
+   // Looks at footage in this request: view_media calls, and images the agent opened with read_file (frames, crops or
+   // sheets its own code made). A failed read keeps its error as the detail, so it does not count.
+   const looks=(db.prepare("SELECT COUNT(*) AS n FROM activity_events WHERE turn_id=? AND (json_extract(json,'$.tool')='view_media' OR json_extract(json,'$.tool')='read_file' AND (lower(json_extract(json,'$.detail')) LIKE '%.png' OR lower(json_extract(json,'$.detail')) LIKE '%.jpg' OR lower(json_extract(json,'$.detail')) LIKE '%.jpeg' OR lower(json_extract(json,'$.detail')) LIKE '%.webp'))").get(turn.turnId) as {n:number}).n;
    const reply=db.prepare("SELECT MAX(created_at) AS at FROM messages WHERE turn_id=? AND role='assistant'").get(turn.turnId) as {at:string|null};
    const end=[reply.at,...usage.map(u=>u.at)].filter(Boolean).sort().at(-1)??turn.started,byModel:RequestReport['byModel']={};
    for(const u of usage){const m=byModel[short(u.model)]??={calls:0,costUsd:0};m.calls++;m.costUsd+=u.cost;}

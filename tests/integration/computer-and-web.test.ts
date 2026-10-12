@@ -37,19 +37,19 @@ it('reads a page as text and refuses addresses on this computer or its network',
 });
 
 it('gives every agent with tools web search in its model\'s version, resumes a paused search, and counts searches in the cost',async()=>{
- expect(webSearchTool(models.editor).type).toBe('web_search_20250305');expect(webSearchTool(models.sonnet).type).toBe('web_search_20260209');expect(webSearchTool(models.director).type).toBe('web_search_20260209');
- const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.editor,usage)).toBeCloseTo(gatewayCost(models.editor,usage,[.1,.5]));expect(usageCost(models.editor,usage)).toBeGreaterThan(.03);
+ expect(webSearchTool(models.agent).type).toBe('web_search_20260209');
+ const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.agent,usage)).toBeCloseTo(gatewayCost(models.agent,usage,[2,10]));expect(usageCost(models.agent,usage)).toBeGreaterThan(.03);
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-web-')));
  try{
   db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const sent:any[]=[];
-  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'What did Anthropic release this week?',model:models.editor,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));
+  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'What did Anthropic release this week?',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));
    return sent.length===1?{content:[{type:'server_tool_use',id:'s1',name:'web_search',input:{query:'Anthropic release'}},{type:'web_search_tool_result',tool_use_id:'s1',content:[]}],stop_reason:'pause_turn'}:{content:[{type:'text',text:'A new model.'}],stop_reason:'end_turn'};}});
   // The paused turn is sent back unchanged, with nothing added after it.
   expect(sent).toHaveLength(2);expect(sent[1].at(-1).role).toBe('assistant');expect(sent[1].at(-1).content[0].type).toBe('server_tool_use');
   expect(db.turnActivity('turn')?.events?.some((e:any)=>e.tool==='web_search'&&e.detail==='Anthropic release')??JSON.stringify(db.db.prepare("SELECT json FROM activity_events").all()).includes('Searching the web')).toBe(true);
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{});let tools:any[]=[];
   (director as any).infer=async(_m:string,_s:string,_msgs:unknown[],given:any[])=>{tools=given;return{content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{}};};
-  await director.inference(models.editor,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main');
+  await director.inference(models.agent,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main');
   expect(tools.map(t=>t.name)).toEqual(['web_search','read_file']);
  }finally{db.close();}
 });

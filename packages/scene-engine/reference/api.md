@@ -14,7 +14,7 @@ A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose de
 ```
 
 - Sources: `context/assets.json` lists every source (id, file, length, size, frame rate, sound, path your code can read). A clip's `assetId` is a source id, or `output:<id>` for something your files produce.
-- Speech: `context/transcripts/<assetId>.json` holds the timed words (`words`: id, text, start, end in source seconds) and `coverage` (how far transcription has got). Cut between words, never inside one.
+- Speech: `context/transcripts/<assetId>.json` holds the timed words (`words`: id, text, start, end in source seconds) and `coverage` (how far transcription has got; `coverage.status` is `complete` when it is done). The file updates as transcription runs, also while your own commands run, so code may wait on it. Cut between words, never inside one.
 - `publish_project` validates the document (ids, sources, ranges within each source, anchors), publishes it, and returns checks of what changed: footage used twice, a cut inside a spoken word, silence over three seconds inside a clip. Fix those and publish again, or keep one with a reason in `finish.kept`.
 
 ## Declaring outputs

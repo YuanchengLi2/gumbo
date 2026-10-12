@@ -19,3 +19,16 @@ it('reports each request of a session with its cost, model calls, largest contex
  expect(rows[0].costUsd).toBeCloseTo(.21);
  const text=formatReport(rows,rows);expect(text).toContain('opus (switch): Repeated failure');expect(text).toContain('Total: $0.212 (Opus $0.200)');
 });
+
+it('counts looks at footage: frames from view_media and images the agent opened with read_file',()=>{
+ const folder=mkdtempSync(join(tmpdir(),'dream-report-looks-')),db=new ProjectDB(folder,'Looks');
+ try{
+  db.userMessage('Find the shakiest clip','t1');db.recordUsage({requestId:'a',turnId:'t1',model:'claude-haiku-5-5',costUsd:.01});
+  const add=db.db.prepare('INSERT INTO activity_events(turn_id,id,sequence,json,updated_at) VALUES(?,?,?,?,?)');
+  // A failed read keeps its error as the detail, and a script is not a look.
+  [{tool:'view_media',detail:'a_1'},{tool:'read_file',detail:'output/frames/sheet.PNG'},{tool:'read_file',detail:'src/cut.py'},{tool:'read_file',detail:'The file could not be read.'}]
+   .forEach((e,n)=>add.run('t1','tool:'+n,n,JSON.stringify({id:'tool:'+n,kind:'action',status:'complete',...e}),new Date().toISOString()));
+  db.message('assistant','The third clip.','t1',{status:'complete'});
+ }finally{db.close();}
+ expect(sessionReport(folder)[0].looks).toBe(2);
+});

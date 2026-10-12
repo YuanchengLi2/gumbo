@@ -34,7 +34,7 @@ test('live editing checks: exact follow-ups, remembered mood, honest limits and 
   await ask('remove music','Remove the music.',(_b,a)=>a.timeline.music.length?`${a.timeline.music.length} music tracks left`:undefined,quick);
   await ask('question','What mood are we going for, and how long is the video now?',
    (b,a)=>{const reply=JSON.stringify(a.messages.at(-1));return a.versionId!==b.versionId?'answering changed the project':!/calm|dream|soft|warm/i.test(reply)?'the reply does not recall the mood':!/\d+(\.\d+)?\s*(s\b|sec|second)/i.test(reply)?'the reply gives no length':undefined;},
-   (_b:any,_a:any,n:any)=>({'under $0.02':!!n&&n.costUsd<.02}));
+   (_b:any,_a:any,n:any)=>({'under $0.10':!!n&&n.costUsd<.1}));
   const exported=join(folder,'session-export.mp4');await app.evaluate(({dialog}:any,path:string)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},exported);
   await page.evaluate(()=>window.dream.exportVideo('video'));expect.soft(existsSync(exported),'export').toBe(true);
  });

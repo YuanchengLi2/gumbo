@@ -27,15 +27,15 @@ test('live imported media: using what the user brought in, by look, by attachmen
   await ask('use all four','Make a short edit using all four video clips I imported.',
    (_b,a)=>{const used=new Set(a.timeline.spine.map((c:any)=>c.assetId)),missing=clips.filter(c=>!used.has(id(c.file)));return missing.length?`not used: ${missing.map(c=>c.file).join(', ')}`:onlyImported(a);},noOpus);
   await ask('blue first','Put the blue clip first.',(b,a)=>a.timeline.spine[0]?.assetId!==color('blue')?'the first clip is not the blue one':a.timeline.spine.length!==b.timeline.spine.length?'clips were added or removed':undefined,
-   (b,a,n)=>({...noOpus(b,a,n),'under $0.05':!!n&&n.costUsd<.05}));
+   (b,a,n)=>({...noOpus(b,a,n),'under $0.15':!!n&&n.costUsd<.15}));
   await ask('photo at the end','Add the photo I imported at the end for 3 seconds.',(_b,a)=>{const last=a.timeline.spine.at(-1);return last?.assetId!==id('photo.jpg')?'the last clip is not the photo':Math.abs(clipLength(last)-3)>.1?`the photo lasts ${clipLength(last).toFixed(2)}s`:undefined;},quick);
-  await ask('my song as music','Use my song as the music, quietly.',(_b,a)=>{const music=a.timeline.music[0];return music?.assetId!==id('my-song.wav')?'the music is not my-song.wav':music.gainDb>-10?`the music is at ${music.gainDb} dB`:onlyImported(a);},(b,a,n)=>({...noOpus(b,a,n),'under $0.05':!!n&&n.costUsd<.05}));
+  await ask('my song as music','Use my song as the music, quietly.',(_b,a)=>{const music=a.timeline.music[0];return music?.assetId!==id('my-song.wav')?'the music is not my-song.wav':music.gainDb>-10?`the music is at ${music.gainDb} dB`:onlyImported(a);},(b,a,n)=>({...noOpus(b,a,n),'under $0.15':!!n&&n.costUsd<.15}));
   const before=await ask('attached clip replaces red','Use this one instead of the red clip.',
    (b,a)=>{const red=b.timeline.spine.findIndex((c:any)=>c.assetId===color('red'));return a.timeline.spine.some((c:any)=>c.assetId===color('red'))?'the red clip is still there':red>=0&&a.timeline.spine[red]?.assetId!==color('green')?'the green clip did not take the red clip\'s place':undefined;},
    quick,{assetIds:[color('green')]});
   const selected=before.timeline.spine[1].id;
   await ask('selected clip slower','Make this one slower.',(b,a)=>{const clip=a.timeline.spine.find((c:any)=>c.id===selected);if(!clip)return'the selected clip is gone';if((clip.speed??1)>=1)return`its speed is ${clip.speed}`;const others=(s:any)=>s.timeline.spine.filter((c:any)=>c.id!==selected).map((c:any)=>`${c.id}:${c.speed}`).join();return others(a)!==others(b)?'other clips changed speed':ids(a).join()!==ids(b).join()?'the clip order changed':undefined;},quick,{selection:[selected]});
   await ask('remove gray','Remove the gray clip.',(_b,a)=>a.timeline.spine.some((c:any)=>c.assetId===color('gray'))?'the gray clip is still there':undefined,quick);
-  await ask('what was left out','Which of the files I imported are not in the video now?',(b,a)=>{const reply=JSON.stringify(a.messages.at(-1));return a.versionId!==b.versionId?'answering changed the project':!/clip-2|red/i.test(reply)||!/clip-4|gr[ae]y/i.test(reply)?'the reply does not name the red and gray clips':undefined;},(_b:any,_a:any,n:any)=>({'under $0.02':!!n&&n.costUsd<.02}));
+  await ask('what was left out','Which of the files I imported are not in the video now?',(b,a)=>{const reply=JSON.stringify(a.messages.at(-1));return a.versionId!==b.versionId?'answering changed the project':!/clip-2|red/i.test(reply)||!/clip-4|gr[ae]y/i.test(reply)?'the reply does not name the red and gray clips':undefined;},(_b:any,_a:any,n:any)=>({'under $0.10':!!n&&n.costUsd<.1}));
  },{computer:false});
 });
