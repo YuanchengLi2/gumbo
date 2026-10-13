@@ -18,7 +18,7 @@ function Icon({status}:{status:string}){return status==='complete'?<Check size={
 export function TaskDock({project}:{project:ProjectState}){
  const [expanded,setExpanded]=useState(()=>{try{return localStorage.getItem('dream-tasks-expanded')==='true';}catch{return false;}});
  const pending=useEditor(s=>s.pending),workflow=WorkflowStateSchema.safeParse(project.workflow),active=project.aiStatus==='running',working=active||!!pending;
- const events=pending?[]:project.experience?.activity?.events??[],steps=events.filter(step).sort((a,b)=>a.sequence-b.sequence),elapsed=useElapsed(working,pending?.createdAt??events[0]?.startedAt);
+ const events=pending?[]:project.experience?.activity?.events??[],steps=events.filter(step).sort((a,b)=>a.sequence-b.sequence),elapsed=useElapsed(working,pending?.createdAt??project.experience?.runStartedAt??events[0]?.startedAt);
  let tasks:WorkTask[]=project.experience?.activity?.tasks??[];
  if(workflow.success)tasks=workflow.data.plan.steps.map((step,index)=>({id:step.id,title:step.title,evidence:[],status:workflow.data.completed.some(c=>c.stepId===step.id)?'complete':index===workflow.data.cursor?(active?'running':'paused'):'pending'}));
  tasks=tasks.map(task=>({...task,title:editingTask(task.title)})).map(task=>task.status==='running'&&!active?{...task,status:'paused'}:task);
@@ -33,10 +33,16 @@ export function TaskDock({project}:{project:ProjectState}){
  return <div className={'task-dock'+(working?' working':'')} onKeyDown={e=>{if(e.key==='Escape'){toggle(false);e.stopPropagation();}}}>
  <button className="task-dock-toggle" aria-label="Tasks" aria-expanded={expanded} aria-controls="dream-task-window" onClick={()=>toggle(!expanded)}>{working?<LoaderCircle size={13} className="spin"/>:<Check size={13}/>}<span>{label}</span><small>{[working?elapsed:'',rows.length?money(cost):'',tasks.length?`${completed}/${tasks.length}`:''].filter(Boolean).join(' · ')}</small><ChevronUp size={15} className={expanded?'expanded':''}/></button>
  {expanded&&<section id="dream-task-window" className="task-window" aria-label="Tasks in progress">
-  {!!tasks.length&&<><header><strong>Tasks</strong><span>{completed} of {tasks.length} complete</span></header><ol>{tasks.map(task=><li key={task.id} className={task.status}><Icon status={task.status}/><span>{task.title}</span><small>{task.status==='complete'?'Done':task.status==='running'?'In progress':task.status==='paused'?'Paused':task.status==='failed'?'Failed':'Pending'}</small></li>)}</ol></>}
-  {!!owners.length&&<><header className={tasks.length?'task-window-section':''}><strong>Cost</strong><span>{money(cost)} · {owners.reduce((n,o)=>n+o.calls,0)} calls</span></header><ol className="task-window-usage">{owners.map(o=><li key={o.owner}><span>{o.label}<small> · {o.models}</small></span><small>{o.calls} calls · {tokens(o.tokens)} tokens · {seconds(o.ms)} · {money(o.cost)}</small></li>)}</ol></>}
-  <header className={tasks.length||owners.length?'task-window-section':''}><strong>Latest activity</strong><span>{working?'Running · '+elapsed:steps.length?'Finished':'Nothing yet'}</span></header>
-  <ol className="task-window-activity">{steps.slice(-6).map(e=><li key={e.id} className={live(e.status)&&active?'running':e.status}><Icon status={live(e.status)&&!active?'paused':e.status}/><span>{editingActivity(e)}</span></li>)}{!steps.length&&<li className="pending"><LoaderCircle size={14} className={working?'spin':''}/><span>{working?'Understanding your request':'No activity yet'}</span></li>}</ol>
+  {/* Tasks are the main column, with what the request has cost at its top right; the latest activity runs beside them. */}
+  <div className="task-window-main">
+   <header><strong>Tasks{tasks.length?<small> {completed} of {tasks.length}</small>:null}</strong>{!!owners.length&&<span className="task-window-cost" title={owners.map(o=>`${o.label} · ${o.models}: ${o.calls} calls · ${tokens(o.tokens)} tokens · ${seconds(o.ms)} · ${money(o.cost)}`).join('\n')}>{money(cost)} · {owners.reduce((n,o)=>n+o.calls,0)} calls · {[...new Set(rows.map(r=>modelName(r.model)))].join(' + ')}</span>}</header>
+   {tasks.length?<ol>{tasks.map(task=><li key={task.id} className={task.status}><Icon status={task.status}/><span>{task.title}</span><small>{task.status==='complete'?'Done':task.status==='running'?'In progress':task.status==='paused'?'Paused':task.status==='failed'?'Failed':'Pending'}</small></li>)}</ol>:<p className="task-window-empty">{working?'Working without a task list.':'No tasks.'}</p>}
+   {owners.length>1&&<ol className="task-window-usage" aria-label="Cost by helper">{owners.map(o=><li key={o.owner}><span>{o.label}<small> · {o.models}</small></span><small>{o.calls} calls · {money(o.cost)}</small></li>)}</ol>}
+  </div>
+  <div className="task-window-side">
+   <header><strong>Latest activity</strong><span>{working?'Running · '+elapsed:steps.length?'Finished':'Nothing yet'}</span></header>
+   <ol className="task-window-activity">{steps.slice(-6).map(e=><li key={e.id} className={live(e.status)&&active?'running':e.status}><Icon status={live(e.status)&&!active?'paused':e.status}/><span>{editingActivity(e)}</span></li>)}{!steps.length&&<li className="pending"><LoaderCircle size={14} className={working?'spin':''}/><span>{working?'Understanding your request':'No activity yet'}</span></li>}</ol>
+  </div>
  </section>}
  </div>;
 }

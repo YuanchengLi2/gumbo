@@ -32,6 +32,10 @@ function mergeActivitySnapshots(previous:ProjectState,incoming:ProjectState):Pro
 }
 export function acceptRunActivity(turnId:string,event:PublicActivity){const store=useEditor.getState(),project=store.project;if(!project||project.experience?.turnId!==turnId)return;const activity=project.experience.activity??{steps:[],status:project.aiStatus,changes:[]};store.setProject({...project,experience:{...project.experience,activity:{...activity,events:mergeRunEvents(activity.events,[event])}}});}
 
+/** The running request's phase (planning, answering or editing), as soon as the agent sets it. A phase for a newer
+ * request than the one on screen starts that request's activity. */
+export function acceptRunPhase(turnId:string,phase:'answering'|'planning'|'editing'){const store=useEditor.getState(),project=store.project;if(!project)return;const same=project.experience?.turnId===turnId,activity=same&&project.experience?.activity?project.experience.activity:{steps:[],status:'running',changes:[]};store.setProject({...project,experience:{...(project.experience??{firstDraftVersionId:null,steps:[]}),turnId,activity:{...activity,phase}}});}
+
 /** Adds one model call (an ai.usage event) to the running request's totals. */
 export function acceptUsage(event:{turnId?:string;model:string;parent?:string;costUsd?:number;durationMs?:number;usage?:any}){
  if(!event.turnId)return;const store=useEditor.getState(),u=event.usage??{},owner=event.parent??'main';

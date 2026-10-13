@@ -18,10 +18,13 @@ function UserMessage({text,assetIds,selection,project}:{text:string;assetIds?:st
 /** A change as a short pill: "Added 7 clips" reads "+7 clips", "Removed a transition" reads "− transition". */
 const pill=(change:string)=>change.replace(/^Added (\d+) /,'+$1 ').replace(/^Removed (\d+) /,'−$1 ').replace(/^Added (?:an? |the )?/,'+ ').replace(/^Removed (?:an? |the )?/,'− ');
 const steps=(events:PublicActivity[])=>events.filter(e=>e.kind==='action'&&e.tool!=='finish').length;
-/** How long a finished request worked: from the message to the last thing it did. */
+/** How long a finished request worked: from the message to the last thing it did, leaving out long waits (a plan
+ * waiting for approval, a stop before "continue"), so a plan approved hours later does not count the hours. */
+const WAIT_MS=10*60_000;
 function workedFor(messages:Message[],events:PublicActivity[]){
- const times=[...messages.map(m=>m.createdAt),...events.flatMap(e=>[e.startedAt,e.updatedAt])].map(t=>t?Date.parse(t):NaN).filter(Number.isFinite);
- return times.length>1?clock(Math.max(...times)-Math.min(...times)):undefined;
+ const times=[...messages.map(m=>m.createdAt),...events.flatMap(e=>[e.startedAt,e.updatedAt])].map(t=>t?Date.parse(t):NaN).filter(Number.isFinite).sort((a,b)=>a-b);
+ if(times.length<2)return undefined;let total=0;for(let n=1;n<times.length;n++){const gap=times[n]-times[n-1];if(gap<WAIT_MS)total+=gap;}
+ return clock(total);
 }
 
 export function Conversation({project}:{project:ProjectState}){
@@ -42,7 +45,7 @@ export function Conversation({project}:{project:ProjectState}){
  const changes=!running?editingChanges(activity?.changes??[]):[];
  return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} selection={m.selection} project={project}/>)}
  {(events.length>0||last||running)&&<div className="assistant-turn">
- {running?<RunStream events={events} running assets={project.footage.assets}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={project.footage.assets}/></details>}
+ {running?<RunStream events={events} running assets={project.footage.assets} startedAt={project.experience?.runStartedAt}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={project.footage.assets}/></details>}
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
  {changes.length>0&&<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>}
  </div>}</section>;

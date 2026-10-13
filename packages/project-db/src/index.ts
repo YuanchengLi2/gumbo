@@ -23,7 +23,7 @@ export type ContactSheet={data:string;mimeType:'image/jpeg';columns:number;rows:
 export type Version={id:string;parentId:string|null;summary:string;createdAt:string;turnId:string|null};
 export type Message={id:string;role:'user'|'assistant';text:string;createdAt:string;turnId?:string;report?:unknown;assetIds?:string[];selection?:import('@dream/timeline').SelectionRef[];activity?:TurnActivity};
 export type Job={id:string;assetId:string;step:string;status:string;percent:number;error:string|null};
-export type ProjectExperience={firstDraftVersionId:string|null;turnId?:string;steps:ActivityStep[];activity?:TurnActivity;fileWait?:{kind:string;proposal?:any};bootstrap?:{status:string;error?:string}};
+export type ProjectExperience={firstDraftVersionId:string|null;turnId?:string;runStartedAt?:string;steps:ActivityStep[];activity?:TurnActivity;fileWait?:{kind:string;proposal?:any};bootstrap?:{status:string;error?:string}};
 export type ProjectState={experience?:ProjectExperience;meta:ProjectMeta;timeline:TimelineDocument;versionId:string;footage:FootageIndex;messages:Message[];versions:Version[];jobs:Job[];canUndo:boolean;canRedo:boolean;aiStatus:string;outline:unknown;taskPlan?:unknown;workflow?:unknown;eventCursor:number;stateSequence?:number;history?:{messagesBefore:number|null;versionsBefore:number|null}};
 const schema=`
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
@@ -114,7 +114,7 @@ export class ProjectDB {
  publicCommentary(turnId:string,requestId:string,text:string,status:string){this.activityEvent(turnId,{id:requestId,requestId,kind:'commentary',text,status});}
  setTasks(turnId:string,tasks:import('@dream/contracts').WorkTask[]){const activity=this.turnActivity(turnId);if(activity){activity.tasks=tasks;this.saveActivity(turnId,activity);}}
  setPhase(turnId:string,phase:'answering'|'planning'|'editing'){const activity=this.turnActivity(turnId);if(activity){activity.phase=phase;this.saveActivity(turnId,activity);}}
- experience():ProjectExperience{const pending=this.getMeta('pending_request'),wait=this.getMeta('file_wait'),bootstrap=this.getMeta('bootstrap');return{firstDraftVersionId:this.getMeta('first_draft_version')||null,turnId:pending?JSON.parse(pending).turnId:undefined,steps:JSON.parse(this.getMeta('activity_steps')??'[]'),activity:this.turnActivity(pending?JSON.parse(pending).turnId:undefined),fileWait:wait?JSON.parse(wait):undefined,bootstrap:bootstrap?JSON.parse(bootstrap):undefined};}
+ experience():ProjectExperience{const pending=this.getMeta('pending_request'),wait=this.getMeta('file_wait'),bootstrap=this.getMeta('bootstrap');return{firstDraftVersionId:this.getMeta('first_draft_version')||null,turnId:pending?JSON.parse(pending).turnId:undefined,runStartedAt:this.getMeta('run_started_at')||undefined,steps:JSON.parse(this.getMeta('activity_steps')??'[]'),activity:this.turnActivity(pending?JSON.parse(pending).turnId:undefined),fileWait:wait?JSON.parse(wait):undefined,bootstrap:bootstrap?JSON.parse(bootstrap):undefined};}
  touch(){this.meta.updatedAt=new Date().toISOString();this.setMeta('project',JSON.stringify(this.meta));}
  head():string{return(this.db.prepare('SELECT head_id FROM branches WHERE id=?').get(this.getMeta('branch')??'main') as {head_id:string}).head_id;}
  timeline(id=this.head()):TimelineDocument {return this.versionsStore.read(id);}

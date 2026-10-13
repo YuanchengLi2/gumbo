@@ -444,3 +444,33 @@
 .export-error{font-size:12px;color:#c4433a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .export-bar{flex:1;min-width:0}.export-bar progress{width:100%;height:6px;accent-color:#6b4fd8}
 @media(max-width:760px){.export-body{grid-template-columns:1fr}.export-stage{height:260px}}
+
+/* Task window: tasks with the cost at their top right, latest activity beside them; stacked when narrow. */
+.task-window{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:0 14px;container-type:inline-size}.task-window-side{border-left:1px solid #f0f0f3;padding-left:14px}.task-window-main header strong small{font-weight:400;color:var(--side-faint);margin-left:4px}.task-window-cost{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%;cursor:default}.task-window-empty{font-size:12px;color:var(--side-faint);padding:5px 0}.task-window-usage{margin-top:6px!important;padding-top:6px!important;border-top:1px dashed #f0f0f3!important}
+@container (max-width:440px){.task-window-main,.task-window-side{grid-column:1/-1}.task-window-side{border-left:0;padding-left:0;margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f3}}
+
+/* The agent at work in the editor: a blue glow, a status bar with Stop, and its cursor visiting what it changes. */
+.ai-stage{position:relative}
+.agent-glow{position:absolute;inset:6px;border-radius:14px;pointer-events:none;z-index:40;box-shadow:inset 0 0 0 2px #3d7bff,inset 0 0 36px #3d7bff40,0 0 0 1px #3d7bff26;animation:agent-glow 2.6s ease-in-out infinite}
+@keyframes agent-glow{50%{box-shadow:inset 0 0 0 2px #3d7bffb3,inset 0 0 22px #3d7bff26,0 0 0 1px #3d7bff14}}
+.agent-bar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:42;display:flex;align-items:center;gap:9px;max-width:min(560px,80%);padding:6px 6px 6px 13px;border-radius:999px;background:#1f5eff;color:#fff;font-size:12px;box-shadow:0 6px 20px #1f5eff47}
+.agent-bar>span:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.agent-bar-dot{flex:none;width:7px;height:7px;border-radius:50%;background:#fff;animation:breathe 1.4s infinite}
+.agent-bar button{flex:none;display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;background:#ffffff26;color:#fff;font-size:11px}
+.agent-bar button:hover{background:#ffffff40}
+.agent-cursor{position:absolute;left:0;top:0;z-index:43;pointer-events:none;display:flex;align-items:flex-start;gap:2px;transition:transform .42s cubic-bezier(.3,.7,.2,1);filter:drop-shadow(0 2px 4px #0003)}
+.agent-cursor>span{margin-top:15px;padding:2px 7px;border-radius:6px;background:#2f6bff;color:#fff;font-size:10.5px;font-weight:500}
+.manual-clip[data-ai-touched]{outline:2px solid #3d7bff;outline-offset:1px;box-shadow:0 0 0 5px #3d7bff2e;transition:outline-color .3s,box-shadow .3s}
+@media(prefers-reduced-motion:reduce){.agent-cursor{transition:none}.agent-glow{animation:none}}
+
+/* Shortcut hints in the composer menus. */
+:is(.ai-workspace,.fig-home) .composer-popover header{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.composer-popover header kbd{font:inherit;font-size:9.5px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--side-faint)}
+
+/* Dividers you can see: a handle appears where the chat, preview and timeline can be dragged to resize. */
+.chat-resizer{transition:background .15s}.chat-resizer:hover,.chat-resizer:active{background:#3d7bff}
+.chat-resizer:after{content:'';position:absolute;top:50%;left:50%;width:4px;height:34px;transform:translate(-50%,-50%);border-radius:3px;background:#c9ccd6;opacity:0;transition:opacity .15s}.chat-resizer:hover:after{opacity:1;background:#3d7bff}
+.timeline-resizer{height:9px;margin-bottom:-9px}.timeline-resizer:after{content:'';position:absolute;left:50%;top:3px;width:38px;height:3px;transform:translateX(-50%);border-radius:3px;background:#c9ccd6}.timeline-resizer:hover:after,.timeline-resizer:active:after{background:#3d7bff;width:64px}
+/* A block's right-click actions. */
+.clip-menu{position:fixed;z-index:200;min-width:200px;padding:4px;background:#fff;border:1px solid #e4e6ee;border-radius:10px;box-shadow:0 10px 30px #0000001f;font-size:12px;color:#2c3240}
+.clip-menu button{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:7px 9px;border-radius:6px;text-align:left}
+.clip-menu button:hover:not(:disabled){background:#f1f2f7}.clip-menu kbd{font:inherit;font-size:10.5px;color:#9aa1b0}

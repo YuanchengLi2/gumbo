@@ -461,3 +461,13 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Export: each scene frame is drawn in a hidden, transparent, off-screen window in the main process over the same frame protocol, captured with its alpha and composited by the same compositor as footage. A held frame is drawn once.
 - Plans: under a proposed plan, a bar takes what to change (sent as a revision of the saved plan), Accept runs it, and underneath it a model menu (the composer's model by default) picks which model carries it out.
 - Project files: writes go through a temporary copy and a rename, which Windows refuses (EPERM) while OneDrive or a reader holds the file. One helper retries for about a second, then writes in place.
+
+## October 13, 2026 — The editor shows the agent working, and clips show their frames
+
+- Model check: every run after the plan card's "Run with" went to the chosen model. The Northern Vietnam vlog was sent with Opus selected, so its plan ran on Opus (about $0.27) and the approved work on Sonnet. Gateway prices match Anthropic's list; about half of a typical run's cost is prompt-cache writes.
+- Run clock: an approved plan continues the request it was planned in, so the clock counted from the planning hours earlier. Each run records when it starts (`run_started_at`, sent with `ai.status`); the task bar and the live stream count from it, and "Worked for" leaves out waits over ten minutes.
+- While the agent edits, the editor shows it as Codex or Antigravity show an agent using a computer: a blue glow, a status bar with Stop, and Figjam's cursor visiting each block the streamed draft adds, moves or trims. The agent announces its phase (`ai.phase`) as soon as it is set, because full state refreshes reached the window after the first change.
+- Timeline blocks draw real frames along the clip (WebCodecs through Mediabunny, from the playback copy, on a time grid per asset), so media the agent made with effects baked in, which has no import thumbnail, shows its picture instead of a colour block.
+- Selection tiles each have an X. Right-clicking a block opens split, duplicate, delete and playhead moves (a menu, not a toolbar). The chat and timeline dividers show a handle and go further (chat 20–60%, timeline 15–80%).
+- The task window puts tasks first with the cost and models used at their top right, and the latest activity beside them.
+- Shortcuts: Ctrl+L or / types in the chat, Shift+Tab in the chat or Ctrl+1/2/3 pick Edit, Plan or Ask, Ctrl+Shift+M steps through the models.

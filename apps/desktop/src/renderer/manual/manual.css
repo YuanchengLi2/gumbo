@@ -36,3 +36,6 @@
 .manual-timeline-footer { min-height:28px; padding:7px 14px; font-size:9px; color:var(--editor-muted); display:flex; gap:20px; border-top:1px solid var(--editor-border)}
 .manual-timeline-footer span { margin-left:auto}
 
+
+/* Real frames along a video block (CapCut-style), over the single thumbnail while frames decode. */
+.manual-clip-filmstrip{position:absolute;left:0;top:0;pointer-events:none;border-radius:inherit}

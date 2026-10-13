@@ -8,7 +8,9 @@ import {getTimelineSnapThresholdInTicks} from './opencut/timeline/snapping/thres
 import {TICKS_PER_SECOND as TPS} from './opencut/compat';
 export type Look='clip'|'effect'|'filter'|'text'|'graphic'|'overlay'|'sfx'|'music'|'caption';
 /** look: what the block is, for how it is drawn; of: the clip a derived block (a clip's own grade) stands for. */
-export type Item={id:string;kind:'clip'|'item'|'music'|'caption';track:string;start:number;end:number;label:string;assetId?:string;look?:Look;of?:string};
+export type Item={id:string;kind:'clip'|'item'|'music'|'caption';track:string;start:number;end:number;label:string;assetId?:string;look?:Look;of?:string;
+ /** The source second at the block's start and source seconds per timeline second, for drawing its frames. */
+ srcIn?:number;speed?:number};
 const effectNames:Record<string,string>={punch_zoom:'Punch zoom',slow_push:'Slow push',shake:'Shake'};
 type Grade={exposure?:number;contrast?:number;saturation?:number;temperature?:number;[key:string]:unknown};
 const gradeLabel=(g:Grade)=>['Grade',g.temperature?(Number(g.temperature)>0?'warm':'cool'):'',g.exposure?(Number(g.exposure)>0?'brighter':'darker'):'',g.saturation!==undefined&&g.saturation!==1?(Number(g.saturation)>1?'vivid':'muted'):''].filter(Boolean).join(' · ');
@@ -27,8 +29,8 @@ export function clipLooks(t:TimelineDocument,f:FootageIndex):Item[]{
 }
 export const reason='Manual edit';
 export function manualItems(t:TimelineDocument,f:FootageIndex):Item[]{const r=resolve(t,f),assets=new Map(f.assets.map(a=>[a.id,a.filename]));const attachedLabel=(i:{component:string;params:Record<string,unknown>;source?:{assetId:string}},look:Look)=>look==='effect'?effectNames[i.component]??i.component.replaceAll('_',' '):look==='filter'?gradeLabel(i.params as Grade):String(i.params.text??(i.source?assets.get(i.source.assetId)??i.source.assetId.replace(/^output:/,''):undefined)??i.component);return[
- ...r.clips.map(c=>({look:(f.assets.find(a=>a.id===c.assetId)?.scene?'graphic':'clip') as Look,id:c.id,kind:'clip' as const,track:'video',start:c.start,end:c.end,label:assets.get(c.assetId)??c.id,assetId:c.assetId})),
- ...r.items.map(i=>{const look=itemLook(i,f);return{id:i.id,kind:'item' as const,look,track:lookTrack(look,i.layer),start:i.timelineStart,end:i.timelineEnd,label:attachedLabel(i,look),assetId:i.source?.assetId};}),
+ ...r.clips.map(c=>({look:(f.assets.find(a=>a.id===c.assetId)?.scene?'graphic':'clip') as Look,id:c.id,kind:'clip' as const,track:'video',start:c.start,end:c.end,label:assets.get(c.assetId)??c.id,assetId:c.assetId,srcIn:c.srcIn,speed:c.holdSec?0:c.speed})),
+ ...r.items.map(i=>{const look=itemLook(i,f);return{id:i.id,kind:'item' as const,look,track:lookTrack(look,i.layer),start:i.timelineStart,end:i.timelineEnd,label:attachedLabel(i,look),assetId:i.source?.assetId,srcIn:i.source?.srcIn,speed:1};}),
  ...r.music.map(m=>({look:'music' as const,id:m.id,kind:'music' as const,track:'music:'+(m.layer??0),start:m.timelineStart,end:m.timelineEnd,label:assets.get(m.assetId)??m.id,assetId:m.assetId})),
  ...(t.captions?r.words.map(w=>({look:'caption' as const,id:w.id,kind:'caption' as const,track:'captions',start:w.start,end:w.end,label:w.text})):[])
 ];}

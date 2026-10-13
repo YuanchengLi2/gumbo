@@ -18,6 +18,7 @@ import {HomeScreen} from './components/home/HomeScreen';
 import {AIWorkspace} from './components/workspace/AIWorkspace';
 import {ExportDialog,type ExportChoices} from './components/export/ExportDialog';
 import {renderVideo} from './engine/export';
+import {useChatShortcuts} from './shortcuts';
 
 
 
@@ -45,6 +46,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey;if(e.code==='Space'){e.preventDefault();player.current?.toggle();}else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();seek(s.frame+(e.key==='ArrowRight'?1:-1)*(e.shiftKey?project?.timeline.settings.fps??30:1));}else if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();void s.command({type:e.shiftKey?'redo':'undo'});}else if(e.key==='Escape')s.setSelected([]);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[s.route,s.frame,dialog,files,project?.versionId,active]);
 
+ useChatShortcuts();
  async function exportVideo(request:ExportChoices|'timeline'){s.setProgress({status:'rendering',progress:0});
   try{if(request==='timeline'){const result=await window.dream.exportVideo('timeline');if(!result)s.setProgress(null);return;}
    // The engine draws and encodes the video here, on the graphics card; the main process mixes the sound and joins them.
