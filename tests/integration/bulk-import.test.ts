@@ -37,7 +37,8 @@ it('gives the agent find_media results marked with what is already imported, and
   await workspace.initialize();
   expect((workspace.context('today') as any).computer).toMatchObject({access:true,timeZone:expect.any(String),mediaFolders:[{name:'Camera Roll'}]});
   const found:any=await workspace.execute('find_media',{when:'today'},'find',db.head(),new AbortController().signal);
-  expect(found.files.map((f:any)=>f.importedAssetId)).toEqual(['early',undefined]);expect(found.next).toContain('import_media');
+  // Grouped by folder, one short line a file; a file already in the project says which asset it is.
+  expect(found.found).toHaveLength(1);expect(found.found[0].folder).toBe('C:\\Camera');expect(found.found[0].files[0]).toMatch(/^early\.mp4 \| .* \| imported as early$/);expect(found.found[0].files[1]).not.toContain('imported');expect(JSON.stringify(found)).not.toContain('C:\\\\Camera\\\\early.mp4');expect(found.next).toContain('import_media');
   const imported:any=await workspace.execute('import_media',{paths:['C:\\Camera\\late.mp4','C:\\Camera\\early.mp4','C:\\Camera\\broken.mov']},'import',db.head(),new AbortController().signal);
   expect(imported.assets).toEqual(['early','late']);expect(imported.media.map((m:any)=>m.id)).toEqual(['early','late']);expect(imported.failed).toHaveLength(1);
   expect(imported.content.filter((b:any)=>b.type==='image')).toHaveLength(0);expect(JSON.parse(imported.content[0].text).imported.map((i:any)=>i.assetId)).toEqual(['early','late']);

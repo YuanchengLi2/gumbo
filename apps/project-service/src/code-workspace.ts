@@ -1,6 +1,7 @@
 import {bundleScene} from './bundle-scene';
 import {liveSceneGuide} from './live-scene-guide';
 import {sceneReference} from '../../../packages/scene-engine/src/reference-parts';
+import {editingGuide} from '../../../packages/orchestrator/src/editing-guide';
 import {activeDecisions} from '../../../packages/orchestrator/src/project-memory';
 import {searchWorkspace} from './workspace-search';
 import {workspaceEnvironment} from './workspace-environment';
@@ -110,6 +111,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
   if(process.env.DREAM_AGENT_ADVANCED_TOOLS==='1')this.write('context/live-scenes.md',liveSceneGuide);
   // The scene-authoring half of the engine reference, read when a scene or sound is written (not carried on every call).
   this.write('context/engine.md',sceneReference);
+  // How a good editor makes the choices a request leaves open; read before a first cut or a creative decision.
+  this.write('context/editing.md',editingGuide);
   this.write('context/project-schema.json',JSON.stringify(WorkspaceDocumentSchema.toJSONSchema(),null,2));
  }
  private writeTranscript(assetId:string,footage=this.db.footage()){this.write(`context/transcripts/${assetId}.json`,JSON.stringify({coverage:this.db.loadState('speech-coverage:'+assetId)??null,words:footage.words.filter(w=>w.assetId===assetId)}));}
@@ -202,7 +205,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(!this.options.files)throw new Error('Computer file access is unavailable.');
    const result:any=await this.options.files({action:'find_media',...input},signal);if('permissionRequired'in result)throw new FileApprovalRequired();
    const fold=(p:string)=>process.platform==='win32'?p.toLowerCase():p,imported=new Map(this.db.footage().assets.filter(a=>a.source).map(a=>[fold(a.source!.path),a.id]));
-   return{...result,media:undefined,files:result.media.map((m:any)=>({...m,...(imported.has(fold(m.path))?{importedAssetId:imported.get(fold(m.path))}:{})})),next:result.media.length?'Import the files you want with import_media (up to 100 paths per call), then order them by capturedAt.':'Nothing matched. Try a wider window (last_7_days), other kinds, or name a folder.'};
+   // Every later call re-reads this result, so files are grouped by folder as one short line each (name, local capture
+   // time, kind, length, size) instead of a record of full paths and times; the path is the folder joined with the name.
+   return{...result,media:undefined,folders:result.folders,files:undefined,found:compactMedia(result.media,(path:string)=>imported.get(fold(path))),next:result.media.length?'Import the files you want with import_media using folder + name as each path (up to 100 per call), then order them by capture time.':'Nothing matched. Try a wider window (last_7_days), other kinds, or name a folder.'};
   }
   if(name==='import_media'){
    if(!this.options.importMany)throw new Error('Media import is unavailable.');
@@ -321,4 +326,15 @@ export class CodeWorkspace implements CodeWorkspacePort {
   return publication;
  }
 
+}
+
+/** Found media as folders of one-line entries: "name | 2026-10-12 14:03 | video 34s 1920x1080 | 120 MB [| imported as a_1]".
+ * Capture times are local and to the minute; a file without a capture time shows its modified time with "modified". */
+export function compactMedia(media:{path:string;name:string;kind:string;capturedAt?:string;modifiedAt:string;sizeMB:number;durationSec?:number;width?:number;height?:number}[],importedAs:(path:string)=>string|undefined){
+ const local=(iso:string)=>{const d=new Date(iso);if(Number.isNaN(d.getTime()))return iso;const two=(n:number)=>String(n).padStart(2,'0');return `${d.getFullYear()}-${two(d.getMonth()+1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}`;};
+ const groups=new Map<string,string[]>();
+ for(const m of media){const folder=m.path.slice(0,Math.max(0,m.path.length-m.name.length)).replace(/[\\/]+$/,'');const id=importedAs(m.path);
+  const line=[m.name,m.capturedAt?local(m.capturedAt):local(m.modifiedAt)+' modified',[m.kind,m.durationSec?`${Math.round(m.durationSec)}s`:'',m.width&&m.height?`${m.width}x${m.height}`:''].filter(Boolean).join(' '),`${Math.round(m.sizeMB*10)/10} MB`,id?`imported as ${id}`:''].filter(Boolean).join(' | ');
+  (groups.get(folder)??groups.set(folder,[]).get(folder)!).push(line);}
+ return [...groups].map(([folder,files])=>({folder,files}));
 }
