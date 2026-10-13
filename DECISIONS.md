@@ -439,3 +439,9 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - A request failed with "code_execution tool use … was found without a corresponding code_execution_tool_result block". The 20260209 web search brings Anthropic's own code sandbox along (to filter results), and the agent took it for its workspace: it wrote its project.json edit there, next to an ordinary tool call. That code never ran, and the call without a result made the API reject the conversation.
 - Web search uses the 20250305 version on every model, which has no sandbox; filtering results costs some input tokens instead.
 - A server tool call left without its result is dropped from the saved reply (and from saved conversations when they resume), except in a paused turn, which is sent back as it is so the server can finish it.
+
+## October 12, 2026 — Home, media, and no settings page
+
+- Home is one greeting, "What do you want to create?", one box to start an edit (Add media, round send), four idea chips that fill the box, and recent projects as cards that lift on hover ("Edited today", length, an open arrow). The mark is the fig from usefigjam.com and the wordmark says figjam. The top of the page matches the window-control strip.
+- The settings page and its buttons (home and editor header) are gone. Computer file access lives in the composer's mode menu; the local runtime status and the optional speech-model download had no other use.
+- Media is a bin like CapCut's: search and Import, kind toggles with counts (All, Video, Audio, Images, Made by Figjam), 16:9 pictures with their length (tenths under a second), a muted preview on hover, Figjam's scenes as purple graphic tiles and audio as green waveform tiles. Only states that need attention show (preparing, transcribing, a failure to retry, a missing source to relink). Clicking selects for the next message with a sticky "N selected · Clear" bar; files dropped from the computer are imported.

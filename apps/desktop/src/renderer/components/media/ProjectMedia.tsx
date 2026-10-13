@@ -1,25 +1,61 @@
 import React,{useState} from 'react';
-import {Search,Upload,Film,Music2,Check} from 'lucide-react';
+import {Search,Plus,Film,Music2,Check,Sparkles,Upload,AlertCircle,LoaderCircle} from 'lucide-react';
+import type {Asset} from '@dream/footage';
 import type {ProjectState} from '@dream/project-db';
 import type {CommandFn} from '../../hooks/useProjectSession';
-export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:(ids:string[])=>void;onImport:()=>void;command:CommandFn}){
- const [query,setQuery]=useState('');
- return <div className="project-media"><div className="media-heading"><h3>Media</h3><button className="button secondary compact" onClick={p.onImport}><Upload size={14}/> Import</button></div><label className="search"><Search size={15}/><input placeholder="Search your media" value={query} onChange={e=>setQuery(e.target.value)}/></label><p className="media-hint">Select clips to include in your next message. Audio is transcribed in the cloud and cached for future edits.</p>
-  <div className="asset-grid">{p.project.footage.assets.filter(a=>a.generated?.role!=='stem'&&a.filename.toLowerCase().includes(query.toLowerCase())).map(a=><article className={'asset-card '+(p.selected.includes(a.id)?'selected':'')} key={a.id} draggable title="Drag onto the timeline to add it" onDragStart={e=>{e.dataTransfer.setData('application/x-dream-asset',a.id);e.dataTransfer.effectAllowed='copy';}}>
-   <button className="asset-select" onClick={()=>p.onSelect(p.selected.includes(a.id)?p.selected.filter(id=>id!==a.id):[...p.selected,a.id])}><div className="asset-image">{a.thumbnailPath?<img src={'dream-media://'+a.id+'/thumbnail'} alt=""/>:a.kind==='audio'?<Music2 size={28}/>:<Film size={28}/>}<span>{Math.round(a.durationSec)}s</span>{p.selected.includes(a.id)&&<i><Check size={14}/></i>}</div><strong>{a.filename}</strong></button>
-   <div className="asset-status">{a.missing?'Original source missing':a.playback?.ready||a.status==='ready'?'Ready to play':a.status==='failed'?'Playback preparation failed':'Preparing playback…'}</div>
-   {a.hasAudio&&<SpeechStatus assetId={a.id} project={p.project} command={p.command}/>}
-   {a.status==='failed'&&<button className="text-button" onClick={()=>p.command({type:'retry',assetId:a.id,step:'analysis'})}>Retry preparation</button>}
-   {a.missing&&<button className="text-button" onClick={async()=>{const paths=await window.dream.pickMedia();if(paths[0])await p.command({type:'relink',assetId:a.id,path:paths[0]});}}>Relink source</button>}
-  </article>)}</div>
-  {!p.project.footage.assets.length&&<div className="drawer-empty"><Upload size={25}/><p>Add videos, images, or audio.</p><small>Imports are copied into this project.</small></div>}
+
+type Filter='all'|'video'|'audio'|'image'|'made';
+// What Figjam made (scenes, music and sounds it wrote) is its own group, apart from what the user brought.
+const groupOf=(a:Asset):Exclude<Filter,'all'>=>a.scene||a.creation||a.generated?'made':a.kind==='audio'?'audio':a.kind==='image'?'image':'video';
+const filters:{id:Filter;label:string}[]=[{id:'all',label:'All'},{id:'video',label:'Video'},{id:'audio',label:'Audio'},{id:'image',label:'Images'},{id:'made',label:'Made by Figjam'}];
+// A sound shorter than a second reads in tenths, so a 0.2 s click does not show as 0:00.
+const clock=(sec:number)=>{if(sec<1)return sec.toFixed(1)+'s';const s=Math.round(sec);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
+
+/** The project's media as a bin, like CapCut's: search, kinds, pictures with their length, a muted preview on hover. Click
+ * to send a piece with the next message; drag it onto the timeline; drop files from the computer here to import them. */
+export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:(ids:string[])=>void;onImport:()=>void;onImportFiles?:(paths:string[])=>void;command:CommandFn}){
+ const [query,setQuery]=useState(''),[filter,setFilter]=useState<Filter>('all'),[dropping,setDropping]=useState(false);
+ const assets=p.project.footage.assets.filter(a=>a.generated?.role!=='stem'),count=(f:Filter)=>f==='all'?assets.length:assets.filter(a=>groupOf(a)===f).length;
+ const shown=assets.filter(a=>(filter==='all'||groupOf(a)===filter)&&a.filename.toLowerCase().includes(query.trim().toLowerCase()));
+ const toggle=(id:string)=>p.onSelect(p.selected.includes(id)?p.selected.filter(x=>x!==id):[...p.selected,id]);
+ const files=(e:React.DragEvent)=>[...e.dataTransfer.types].includes('Files');
+ return <div className={'project-media'+(dropping?' dropping':'')} onDragOver={e=>{if(files(e)){e.preventDefault();e.dataTransfer.dropEffect='copy';setDropping(true);}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDropping(false);}} onDrop={e=>{if(!files(e))return;e.preventDefault();setDropping(false);const paths=[...e.dataTransfer.files].map(file=>window.dream.mediaPath(file)).filter(Boolean);if(paths.length)p.onImportFiles?.(paths);}}>
+  <div className="media-toolbar"><label className="media-search"><Search size={14}/><input aria-label="Search media" placeholder="Search media" value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="media-import" onClick={p.onImport}><Plus size={14}/>Import</button></div>
+  {assets.length>0&&<div className="media-filters">{filters.filter(f=>f.id==='all'||count(f.id)>0).map(f=><button key={f.id} aria-pressed={filter===f.id} onClick={()=>setFilter(f.id)}>{f.label}<small>{count(f.id)}</small></button>)}</div>}
+  <div className="asset-grid">{shown.map(a=><AssetCard key={a.id} asset={a} project={p.project} selected={p.selected.includes(a.id)} onToggle={()=>toggle(a.id)} command={p.command}/>)}</div>
+  {!assets.length&&<button className="media-empty" onClick={p.onImport}><Upload size={22}/><strong>Drop videos, images or audio here</strong><small>or click to import. Files are copied into this project.</small></button>}
+  {assets.length>0&&!shown.length&&<p className="media-none">Nothing matches{query.trim()?` “${query.trim()}”`:''}.</p>}
+  {p.selected.length>0&&<div className="media-selection"><span><strong>{p.selected.length} selected</strong> · sent with your next message</span><button onClick={()=>p.onSelect([])}>Clear</button></div>}
+  {dropping&&<div className="media-drop" aria-hidden="true"><Upload size={22}/>Drop to import</div>}
  </div>;
 }
 
+function AssetCard({asset:a,project,selected,onToggle,command}:{asset:Asset;project:ProjectState;selected:boolean;onToggle:()=>void;command:CommandFn}){
+ const [hover,setHover]=useState(false),group=groupOf(a),preview=hover&&a.kind==='video'&&!a.scene&&!a.missing&&(a.playback?.ready||a.status==='ready');
+ const visual=a.scene?<span className="asset-graphic"><Sparkles size={18}/></span>
+  :a.thumbnailPath||a.kind==='image'?<img src={'dream-media://'+a.id+'/'+(a.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>
+  :a.kind==='audio'&&a.waveform?.length?<svg className="asset-wave" viewBox="0 0 100 24" preserveAspectRatio="none">{a.waveform.slice(0,100).map((v,n,all)=><line key={n} x1={n/all.length*100} x2={n/all.length*100} y1={12-v*11} y2={12+v*11}/>)}</svg>
+  :<span className="asset-icon">{a.kind==='audio'?<Music2 size={18}/>:<Film size={18}/>}</span>;
+ return <article className={`asset-card ${group} kind-${a.kind}${selected?' selected':''}${a.missing?' missing':''}`} draggable title="Click to send with your next message, or drag onto the timeline" onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onDragStart={e=>{e.dataTransfer.setData('application/x-dream-asset',a.id);e.dataTransfer.effectAllowed='copy';}}>
+  <button className="asset-select" aria-pressed={selected} aria-label={a.filename} onClick={onToggle}>
+   <div className="asset-image">{visual}{preview&&<video src={`dream-media://${a.id}/preview`} muted autoPlay loop playsInline/>}
+    {a.kind!=='image'&&a.durationSec>0&&<span className="asset-length">{clock(a.durationSec)}</span>}
+    {group==='made'&&!a.scene&&<span className="asset-made" title="Made by Figjam"><Sparkles size={10}/></span>}
+    <i className="asset-check">{selected&&<Check size={11} strokeWidth={3}/>}</i>
+   </div>
+   <strong>{a.filename}</strong>
+  </button>
+  <AssetState asset={a} project={project} command={command}/>
+ </article>;
+}
 
-function SpeechStatus({assetId,project,command}:{assetId:string;project:ProjectState;command:CommandFn}){
- const job=project.jobs.find(j=>j.assetId===assetId&&j.step==='transcription');if(!job)return null;
- if(job.status==='complete')return <div className="asset-status">Speech ready</div>;
- if(job.status==='running'||job.status==='queued')return <div className="asset-status">Transcribing speech{job.percent?` · ${Math.round(job.percent)}%`: '…'}</div>;
- return <div className="asset-status asset-scan-error"><details><summary>Speech {job.status==='interrupted'?'paused':'unavailable'}</summary><p>{job.error}</p></details><button className="text-button" onClick={()=>command({type:'retry',assetId,step:'transcription'})}>Retry speech</button></div>;
+/** Only what needs attention: preparing, transcribing, a failure to retry, a missing source to relink. Ready says nothing. */
+function AssetState({asset:a,project,command}:{asset:Asset;project:ProjectState;command:CommandFn}){
+ if(a.missing)return <div className="asset-state warn"><AlertCircle size={11}/>Source missing<button onClick={async()=>{const paths=await window.dream.pickMedia();if(paths[0])await command({type:'relink',assetId:a.id,path:paths[0]});}}>Relink</button></div>;
+ if(a.status==='failed')return <div className="asset-state warn"><AlertCircle size={11}/>Couldn’t prepare<button onClick={()=>command({type:'retry',assetId:a.id,step:'analysis'})}>Retry</button></div>;
+ if(!(a.playback?.ready||a.status==='ready'))return <div className="asset-state"><LoaderCircle size={11} className="spin"/>Preparing…</div>;
+ const speech=a.hasAudio?project.jobs.find(j=>j.assetId===a.id&&j.step==='transcription'):undefined;
+ if(speech&&(speech.status==='running'||speech.status==='queued'))return <div className="asset-state"><LoaderCircle size={11} className="spin"/>Transcribing{speech.percent?` ${Math.round(speech.percent)}%`:'…'}</div>;
+ if(speech&&speech.status!=='complete')return <div className="asset-state warn" title={speech.error??undefined}><AlertCircle size={11}/>Speech {speech.status==='interrupted'?'paused':'unavailable'}<button onClick={()=>command({type:'retry',assetId:a.id,step:'transcription'})}>Retry</button></div>;
+ return null;
 }

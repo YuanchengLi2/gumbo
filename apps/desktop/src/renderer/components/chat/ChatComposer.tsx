@@ -51,7 +51,7 @@ function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoi
 
 
 export function ChatComposer(p:Props){const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null);
- const resize=()=>{const node=textarea.current;if(!node)return;node.style.height='auto';node.style.height=Math.min(p.home?280:200,Math.max(p.home?120:44,node.scrollHeight))+'px';};
+ const resize=()=>{const node=textarea.current;if(!node)return;node.style.height='auto';node.style.height=Math.min(p.home?280:200,Math.max(p.home?76:44,node.scrollHeight))+'px';};
  useLayoutEffect(resize,[p.value,p.home,p.attachments.length]);
  useLayoutEffect(()=>{const node=textarea.current;if(!node)return;let width=node.offsetWidth;const observer=new ResizeObserver(()=>{if(node.offsetWidth!==width){width=node.offsetWidth;resize();}});observer.observe(node);return()=>observer.disconnect();},[]);
  const placeholder=p.home?'Describe the video you want to create…':p.permission==='ask'?'Ask anything about your video…':p.permission==='plan'?'Describe the change; Figjam plans it first…':'Ask Figjam to edit…';
