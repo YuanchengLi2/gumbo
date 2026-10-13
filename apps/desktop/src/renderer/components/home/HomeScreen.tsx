@@ -20,7 +20,7 @@ const ideas:[typeof Film,string,string][]=[
  [Captions,'Add captions','Add bold, readable captions that follow the speech.']
 ];
 
-export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onOpen:(folder?:string)=>void;busy:boolean}){
+export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;busy:boolean}){
  const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model);
  const hour=new Date().getHours(),greeting=hour<5?'Up late?':hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
  return <div className="home-screen fig-home">
@@ -29,7 +29,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <section className="fig-hero">
     <p className="fig-greeting">{greeting}</p>
     <h1>What do you want to create?</h1>
-    <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} onComputer={p.onComputer} busy={p.busy} permission={permission} onPermission={useEditor.getState().setPermission} model={model} onModel={useEditor.getState().setModel}/>
+    <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} busy={p.busy} permission={permission} onPermission={useEditor.getState().setPermission} model={model} onModel={useEditor.getState().setModel}/>
     <div className="fig-ideas">{ideas.map(([Icon,label,prompt])=><button key={label} onClick={()=>p.onChange(prompt)}><Icon size={14}/>{label}</button>)}</div>
    </section>
    <section className="fig-recent" aria-label="Your projects">

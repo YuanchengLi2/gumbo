@@ -18,7 +18,7 @@ export type WorkerTask={id:string;title:string;brief:string;writes:string[];afte
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;changedFiles?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
-type Checkpoint={pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
+type Checkpoint={replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
 const RESULT_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
@@ -103,7 +103,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(checkpoint.blockedTasks?.length)return`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`;
  };
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
- const conclude=(outcome:EditOutcome)=>{checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
+ const conclude=(outcome:EditOutcome)=>{const reply=checkpoint.replyText;if(outcome.status==='complete'&&reply&&reply.length>=400&&!outcome.summary.includes(reply.slice(0,80)))outcome={...outcome,summary:reply+'\n\n'+outcome.summary};checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
   checkpoint.messages=repairSavedExchanges(checkpoint.messages,id=>db.loadState(key+':call:'+id),!!checkpoint.pending);
   const lastAssistant=checkpoint.messages.findLastIndex(m=>m.role==='assistant'),following=checkpoint.messages[lastAssistant+1];if(checkpoint.pending&&following?.role==='user'&&Array.isArray(following.content)&&checkpoint.pending.every(call=>following.content.some((r:any)=>r.type==='tool_result'&&r.tool_use_id===call.id))){delete checkpoint.pending;checkpoint.results=[];}
@@ -143,7 +143,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}throw error;}
    delete checkpoint.failures.truncation;checkpoint.steps=(checkpoint.steps??0)+1;
    if(response.stop_reason!=='pause_turn'){response.content=withoutUnansweredServerCalls(response.content);if(!response.content.length)response.content=[{type:'text',text:'(No output.)'}];}
-   checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];save();
+   checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];
+   // Text written alongside finish is the reply itself (a script, an answer); the saved reply keeps it, not only the summary.
+   const said=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim();if(said&&checkpoint.pending!.some((c:any)=>c.name==='finish'))checkpoint.replyText=said;save();
    for(const block of response.content)if(block.type==='server_tool_use')activity('web:'+block.id,{kind:'action',tool:block.name,text:block.name==='web_search'?'Searching the web':'Reading the web',detail:String(block.input?.query??block.input?.url??'').slice(0,200),status:'complete'});
    // A long run of web searches pauses on the server; sending the conversation back as it is resumes it.
    if(response.stop_reason==='pause_turn'&&!checkpoint.pending!.length){delete checkpoint.pending;checkpoint.pauses=(checkpoint.pauses??0)+1;save();if(checkpoint.pauses<=5)continue;}
