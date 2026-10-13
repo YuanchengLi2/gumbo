@@ -5,7 +5,7 @@ import {WorkspaceDocumentSchema,lineDelta,type PublicationReceipt,type ProcessRe
 import {AssetSchema,type Asset} from '@dream/footage';
 import {resolve as resolveTimeline} from '@dream/timeline';
 import type {ProjectDB} from '@dream/project-db';
-import {digest,workspacePath} from '../../../packages/project-db/src/workspace-store';
+import {digest,workspacePath,replaceFileSync} from '../../../packages/project-db/src/workspace-store';
 import {timelineChanges} from '../../../packages/project-db/src/activity';
 import {probe,fingerprint} from './media';
 import {validateSceneSource,inlineLocalAssets} from './scene-source';
@@ -18,8 +18,8 @@ export const formatCompileErrors=(errors:CompileError[])=>'The scene code does n
 /** Copies a compiled scene's resources into the project's content-addressed store and records them beside the bundle. */
 export function storeEngineScene(projectFolder:string,root:string,compiled:{bundle:string;map:string;resources:Record<string,string>},directory:string):{bundlePath:string;files:Record<string,string>;storeDir:string}{
  const store=join(projectFolder,'Media/Engine/files'),files:Record<string,string>={};mkdirSync(store,{recursive:true});mkdirSync(directory,{recursive:true});
- for(const [key,rel] of Object.entries(compiled.resources)){const bytes=readFileSync(join(root,rel)),hash=digest(bytes),target=join(store,hash);if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,bytes);renameSync(temp,target);}files[key]=hash;}
- const write=(name:string,text:string)=>{const target=join(directory,name);if(existsSync(target)&&readFileSync(target,'utf8')===text)return;const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);};
+ for(const [key,rel] of Object.entries(compiled.resources)){const bytes=readFileSync(join(root,rel)),hash=digest(bytes),target=join(store,hash);if(!existsSync(target))replaceFileSync(target,bytes);files[key]=hash;}
+ const write=(name:string,text:string)=>{const target=join(directory,name);if(existsSync(target)&&readFileSync(target,'utf8')===text)return;replaceFileSync(target,text);};
  write('scene.js',compiled.bundle);if(compiled.map)write('scene.js.map',compiled.map);write('resources.json',JSON.stringify({files}));
  return{bundlePath:join(directory,'scene.js'),files,storeDir:store};
 }
@@ -50,7 +50,7 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
   const html=inlineLocalAssets(readFileSync(workspacePath(root,sourcePath),'utf8'),sourcePath,root);
   validateSceneSource(html);
   const hash=digest(JSON.stringify({html,width:size.width,height:size.height,fps:size.fps,frames:size.durationInFrames})),directory=join(db.folder,'Media/Generated',hash),target=join(directory,'scene.html');
-  mkdirSync(directory,{recursive:true});if(!existsSync(target)){const temp=target+'.dream-write';writeFileSync(temp,html,'utf8');renameSync(temp,target);}
+  mkdirSync(directory,{recursive:true});if(!existsSync(target))replaceFileSync(target,html);
   if(readFileSync(target,'utf8')!==html)throw new Error('Scene copy failed verification.');
   return AssetSchema.parse({id:'code_'+hash,filename:name,kind:'video',originalPath:target,fingerprint:hash,durationSec:size.durationInFrames/size.fps,fps:size.fps,width:size.width,height:size.height,status:'ready',scene:{format:'html',revisionId:hash,durationInFrames:size.durationInFrames}});
  };

@@ -12,7 +12,7 @@ import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,ProcessRunner,ProcessResult,FileService,ReviewRenderer,WorkerScope} from '@dream/contracts';
 import {WorkspaceDocumentSchema,ranToEnd} from '@dream/contracts';
 import {resolve as resolveTimeline} from '@dream/timeline';
-import {digest,workspacePath,authoredFiles} from '../../../packages/project-db/src/workspace-store';
+import {digest,workspacePath,authoredFiles,replaceFileSync} from '../../../packages/project-db/src/workspace-store';
 import {contentHash} from '../../../packages/project-db/src/blob-store';
 import {withinScopes,normalizeScope} from '../../../packages/orchestrator/src/code-tools';
 import {WorkspaceIndex} from '../../../packages/project-db/src/workspace-index';
@@ -133,7 +133,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  private followDraft(turnId:string){
   try{const file=join(this.root,'project.json'),hash=existsSync(file)?digest(readFileSync(file,'utf8')):'';if(hash===this.draftHash)return;this.draftHash=hash;this.publishEvent('workspace.draft',{turnId,draft:workspaceDraft(this.db)});}catch{}
  }
- private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});const temp=target+'.dream-write';writeFileSync(temp,text,'utf8');renameSync(temp,target);return{path,hash:digest(text)};}
+ private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});replaceFileSync(target,text);return{path,hash:digest(text)};}
  // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
  context(query:string){const found=this.index.search(query,6),selected={files:found.files,note:'Authored files; search finds code by content and read_file opens it.'};this.db.event('workspace.context',{availableCharacters:found.availableCharacters,files:found.files.length});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.

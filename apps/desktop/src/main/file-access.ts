@@ -3,6 +3,7 @@ import {dirname,join,resolve,relative,isAbsolute,parse} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import type {FileGrant} from '@dream/contracts';
+import {replaceFileSync} from '../../../../packages/project-db/src/workspace-store';
 
 export function canonicalPath(input:string):string {
  if(!isAbsolute(input)||input.includes('\0')||(process.platform==='win32'&&(/^[\\/]{2}/.test(input)||input.slice(2).includes(':'))))throw new Error('Choose an absolute path on a local drive.');
@@ -11,7 +12,7 @@ export function canonicalPath(input:string):string {
  return resolve(realpathSync.native(existing),...suffix);
 }
 export function within(root:string,target:string){const fold=(p:string)=>process.platform==='win32'?p.toLowerCase():p;const rel=relative(fold(root),fold(target));return !isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..\\')&&!rel.startsWith('../');}
-export function atomicJson(path:string,value:unknown){mkdirSync(dirname(path),{recursive:true});const temporary=path+'.tmp';writeFileSync(temporary,JSON.stringify(value,null,2));renameSync(temporary,path);}
+export function atomicJson(path:string,value:unknown){mkdirSync(dirname(path),{recursive:true});replaceFileSync(path,JSON.stringify(value,null,2),'.tmp');}
 export class FileAccess {
  private grants:FileGrant[]=[];private projects=new Set<string>();private listeners=new Set<()=>void>();
  private file:string;

@@ -1,4 +1,5 @@
 import {existsSync,mkdirSync,readdirSync,readFileSync,statSync,writeFileSync,renameSync} from 'node:fs';
+import {replaceFileSync} from '../../../packages/project-db/src/workspace-store';
 import {basename,dirname,extname,join,relative,sep} from 'node:path';
 import {unzipSync} from 'fflate';
 import {RESOURCE_FILE_LIMIT,RESOURCE_TOTAL_LIMIT} from './engine-compile';
@@ -32,7 +33,7 @@ export function importResources(workspace:string,input:{source:string;include?:s
   if(bytes.byteLength>RESOURCE_FILE_LIMIT){skipped.push(`${rel} (larger than 24 MB)`);return;}
   if(bytes.byteLength>budget){skipped.push(`${rel} (resources/ would exceed 96 MB)`);return;}
   const destination=join(target,...rel.split('/'));if(relative(target,destination).startsWith('..'))return;
-  mkdirSync(dirname(destination),{recursive:true});const temp=destination+'.dream-write';writeFileSync(temp,bytes);renameSync(temp,destination);budget-=bytes.byteLength;
+  mkdirSync(dirname(destination),{recursive:true});replaceFileSync(destination,bytes);budget-=bytes.byteLength;
   files.push({path:`resources/${name}/${rel}`,size:bytes.byteLength,...imageSize(bytes)});
  };
  const stat=statSync(input.source);
