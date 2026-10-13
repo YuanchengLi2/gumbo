@@ -37,6 +37,8 @@ export function AgentCursor({active,label,stage,timeline,footage,onStop}:{active
  if(!active)return null;
  return <>
   <div className="agent-glow" aria-hidden="true"/>
+  {/* The editor is locked while Figjam edits: clicks and drags land on this shield, not the player or timeline. */}
+  <div className="agent-lock" aria-hidden="true" onPointerDown={e=>e.preventDefault()}/>
   <div className="agent-bar" role="status"><span className="agent-bar-dot"/><span>{label}</span><button type="button" onClick={onStop}><Square size={9} fill="currentColor"/>Stop</button></div>
   {spot&&<div className="agent-cursor" aria-hidden="true" style={{transform:`translate(${spot.x}px,${spot.y}px)`}}>
    <svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 1.5 L2 18 L6.6 13.8 L9.6 20.5 L12.6 19.2 L9.7 12.6 L16 12.6 Z" fill="#2f6bff" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round"/></svg>

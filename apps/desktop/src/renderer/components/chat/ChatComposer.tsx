@@ -40,14 +40,14 @@ export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:Mo
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
  // Auto first, then each provider's models; a provider without a key on the gateway is listed but cannot be picked yet.
  const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- const item=(choice:ModelChoice,title:string,detail:string,icon:React.ReactNode,ready=true,price='')=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="permission-icon">{icon}</span><span><strong>{title}{price&&<em title="Input / output, per million tokens">{price}</em>}</strong><small>{detail}</small></span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
+ const item=(choice:ModelChoice,title:string,ready=true)=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span>{title}</span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover permission-menu model-menu" role="menu" aria-label="Model">
    <header>Model<kbd>{shortcutHints.model}</kbd></header>
-   {item('auto','Auto','Picks the best model for each request. Your pick always wins.',<Wand2 size={14}/>)}
+   {item('auto','Auto')}
    {groups.map(g=><React.Fragment key={g.provider}><div className="model-group">{providerLabels[g.provider]}{!available(g.models[0].choice,providers)&&<small>Add its key on the gateway</small>}</div>
-    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),m.detail,g.provider==='anthropic'?(m.choice==='opus'?<Crown size={14}/>:m.choice==='haiku'?<Zap size={14}/>:<Sparkles size={14}/>):<Cpu size={14}/>,available(m.choice,providers),`$${m.price[0]} / $${m.price[1]}`))}</React.Fragment>)}
+    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),available(m.choice,providers)))}</React.Fragment>)}
   </div>}
  </div>;
 }

@@ -2,13 +2,14 @@
  * its streaming events); requests for these models are translated to OpenAI's Responses API or the Chat Completions API
  * (Gemini's OpenAI-compatible endpoint and DeepSeek), and their streams are translated back into the same events, so
  * accounting, receipts, recovery and the app work unchanged. Prices are per million tokens (official pages, October 13,
- * 2026; DeepSeek at its peak rate). Gemini is 3.8 Flash only, by the user's choice. */
+ * 2026; DeepSeek at its peak rate, Gemini 4 Argon before its December 1 increase). */
 export type ProviderId='openai'|'google'|'deepseek';
 export type ProviderModel={provider:ProviderId;api:'responses'|'chat';price:[number,number];cachedRead:number;vision:boolean;reasoning:boolean};
 export const providerModels:Record<string,ProviderModel>={
  'gpt-6-astra':{provider:'openai',api:'responses',price:[10,50],cachedRead:1,vision:true,reasoning:true},
  'gpt-6.1-sol':{provider:'openai',api:'responses',price:[2,10],cachedRead:.1,vision:true,reasoning:true},
  'gpt-6-luna':{provider:'openai',api:'responses',price:[.1,.5],cachedRead:.01,vision:true,reasoning:true},
+ 'gemini-4-argon':{provider:'google',api:'chat',price:[2,10],cachedRead:.1,vision:true,reasoning:true},
  'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,vision:true,reasoning:true},
  'deepseek-v4-pro':{provider:'deepseek',api:'chat',price:[1.32,3.96],cachedRead:.044,vision:false,reasoning:false},
  'deepseek-flash':{provider:'deepseek',api:'chat',price:[.3,1.2],cachedRead:.006,vision:true,reasoning:false}

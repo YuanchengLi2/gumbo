@@ -6,7 +6,7 @@ import {available} from './models';
  * Ctrl+L (or / when not typing) puts the cursor in the chat box; Shift+Tab in the chat box, or Ctrl+1/2/3 anywhere, picks
  * Edit, Plan or Ask; Ctrl+Shift+M steps through the models. (Cmd instead of Ctrl on a Mac.) */
 export const modes:Permission[]=['auto','plan','ask'];
-export const modelOrder:ModelChoice[]=['auto','sonnet','opus','haiku','gpt-astra','gpt-sol','gpt-luna','gemini-flash','deepseek-pro','deepseek-flash'];
+export const modelOrder:ModelChoice[]=['auto','sonnet','opus','haiku','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash','deepseek-pro','deepseek-flash'];
 export const shortcutHints={chat:'Ctrl+L',mode:'Shift+Tab',model:'Ctrl+Shift+M'};
 const next=<T,>(list:T[],value:T)=>list[(list.indexOf(value)+1)%list.length];
 export function useChatShortcuts(){
