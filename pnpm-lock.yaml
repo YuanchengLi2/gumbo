@@ -95,6 +95,9 @@ importers:
       '@dream/composition':
         specifier: workspace:*
         version: link:../../packages/composition
+      '@dream/compositor':
+        specifier: workspace:*
+        version: link:../../packages/compositor
       '@dream/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -258,6 +261,18 @@ importers:
       remotion:
         specifier: 4.0.533
         version: 4.0.533(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+
+  packages/compositor:
+    dependencies:
+      '@dream/footage':
+        specifier: workspace:*
+        version: link:../footage
+      '@dream/timeline':
+        specifier: workspace:*
+        version: link:../timeline
+      mediabunny:
+        specifier: 1.60.0
+        version: 1.60.0
 
   packages/config: {}
 
@@ -3046,6 +3061,9 @@ packages:
 
   mediabunny@1.56.1:
     resolution: {integrity: sha512-DNOm0bRBmeOxJgCK/g3LxNWbxY5morTauNdlychujGmJ9L37ezVezkNoI1WtO2Xdb4WlWWJlYfIKnOEzd5phRw==}
+
+  mediabunny@1.60.0:
+    resolution: {integrity: sha512-CRQ/2D+qUF9w2IyjbjTxxSLEG+PeWeD4whb43UpUBpeNomWb/ffn+ngKgqJSPZ+bmO66MX2yBJQITZ6ijfRjug==}
 
   memfs@3.4.3:
     resolution: {integrity: sha512-eivjfi7Ahr6eQTn44nvTnR60e4a1Fs1Via2kCR5lHo/kyNoiMWaXCNJ/GpSd0ilXas2JSOl9B5FTIhflXu0hlg==}
@@ -6763,6 +6781,11 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   mediabunny@1.56.1:
+    dependencies:
+      '@types/dom-mediacapture-transform': 0.1.12
+      '@types/dom-webcodecs': 0.1.13
+
+  mediabunny@1.60.0:
     dependencies:
       '@types/dom-mediacapture-transform': 0.1.12
       '@types/dom-webcodecs': 0.1.13

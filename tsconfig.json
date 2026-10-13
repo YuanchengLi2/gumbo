@@ -20,6 +20,9 @@
       "@dream/timeline": [
         "packages/timeline/src/index.ts"
       ],
+      "@dream/compositor": [
+        "packages/compositor/src/index.ts"
+      ],
       "@dream/footage": [
         "packages/footage/src/index.ts"
       ],

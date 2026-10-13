@@ -1,0 +1,1 @@
+{"name":"@dream/compositor","version":"0.1.0","type":"module","main":"src/index.ts","dependencies":{"@dream/timeline":"workspace:*","@dream/footage":"workspace:*","mediabunny":"1.60.0"}}
