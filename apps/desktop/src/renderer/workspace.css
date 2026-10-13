@@ -270,12 +270,12 @@
 .ai-workspace .sidebar .add-media{gap:0}
 .ai-workspace .sidebar .add-media>span{width:26px;height:26px;border-radius:6px;background:transparent;color:var(--side-muted)}
 .ai-workspace .sidebar .add-media:hover>span,.ai-workspace .sidebar .add-media[aria-expanded=true]>span{background:var(--side-hover);color:var(--side-text)}
-.ai-workspace .composer-popover-anchor{position:relative;min-width:0}
-.ai-workspace .composer-chip{display:inline-flex;align-items:center;gap:4px;height:26px;max-width:100%;padding:0 7px;border:0;border-radius:6px;background:transparent;font-size:12px;color:#6c6c75}
-.ai-workspace .composer-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ai-workspace .composer-chip>svg{flex:none;color:var(--side-faint)}
-.ai-workspace .composer-chip:hover,.ai-workspace .composer-chip[aria-expanded=true]{background:var(--side-hover);color:var(--side-text)}
-.ai-workspace .permission-chip.plan>svg:first-child{color:var(--side-accent)}.ai-workspace .permission-chip.ask>svg:first-child{color:#3d8a72}
+:is(.ai-workspace,.fig-home) .composer-popover-anchor{position:relative;min-width:0}
+:is(.ai-workspace,.fig-home) .composer-chip{display:inline-flex;align-items:center;gap:4px;height:26px;max-width:100%;padding:0 7px;border:0;border-radius:6px;background:transparent;font-size:12px;color:#6c6c75}
+:is(.ai-workspace,.fig-home) .composer-chip>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(.ai-workspace,.fig-home) .composer-chip>svg{flex:none;color:var(--side-faint)}
+:is(.ai-workspace,.fig-home) .composer-chip:hover,:is(.ai-workspace,.fig-home) .composer-chip[aria-expanded=true]{background:var(--side-hover);color:var(--side-text)}
+:is(.ai-workspace,.fig-home) .permission-chip.plan>svg:first-child{color:var(--side-accent)}:is(.ai-workspace,.fig-home) .permission-chip.ask>svg:first-child{color:#3d8a72}
 .ai-workspace .sidebar .composer .send{width:26px;height:26px;border-radius:50%;background:var(--side-text);color:#fff;box-shadow:none}
 .ai-workspace .sidebar .composer .send:disabled{background:#e4e4e9;color:#fff;opacity:1}
 .ai-workspace .sidebar .composer .send:not(:disabled):hover{background:#3a3a42}
@@ -288,19 +288,19 @@
 .ai-workspace .sidebar .composer .media-tile{width:76px;border-radius:7px;border-color:var(--side-line)}
 .ai-workspace .sidebar .composer .media-tile-label{padding:2px 5px;font-size:10px}
 /* Menus: the mode and model lists, and the attach menu. */
-.ai-workspace .composer-popover,.ai-workspace .sidebar .attachment-menu{position:absolute;bottom:calc(100% + 8px);left:0;z-index:25;width:268px;padding:4px;background:#fff;border:1px solid var(--side-line);border-radius:10px;box-shadow:0 10px 30px #0000001f;color:var(--side-text)}
+:is(.ai-workspace,.fig-home) .composer-popover,.ai-workspace .sidebar .attachment-menu{position:absolute;bottom:calc(100% + 8px);left:0;z-index:25;width:268px;padding:4px;background:#fff;border:1px solid var(--side-line);border-radius:10px;box-shadow:0 10px 30px #0000001f;color:var(--side-text)}
 .ai-workspace .sidebar .attachment-menu{width:200px}
 .ai-workspace .sidebar .attachment-menu button{gap:9px;padding:7px 8px;border-radius:6px;font-size:12.5px}
 .ai-workspace .sidebar .attachment-menu button:hover{background:#f3f3f6}
-.ai-workspace .composer-popover header{padding:5px 8px 4px;font-size:10.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--side-faint)}
-.ai-workspace .permission-menu>button{display:flex;align-items:flex-start;gap:9px;width:100%;padding:7px 8px;border-radius:6px;text-align:left}
-.ai-workspace .permission-menu>button:hover{background:#f3f3f6}.ai-workspace .permission-menu>button.selected{background:#f3f3f6}
-.ai-workspace .permission-menu strong{display:block;font-size:12.5px;font-weight:500}
-.ai-workspace .permission-menu small{display:block;margin-top:1px;font-size:11px;line-height:1.45;color:var(--side-muted)}
-.ai-workspace .permission-icon{flex:none;width:18px;height:18px;margin-top:1px;display:grid;place-items:center;color:#6c6c75}
-.ai-workspace .permission-check{flex:none;margin:2px 0 0 auto;color:var(--side-text)}
-.ai-workspace .permission-computer{display:flex;align-items:center;gap:9px;margin-top:4px;padding:8px 8px 4px;border-top:1px solid #f0f0f3}
-.ai-workspace .permission-computer>span{flex:1;min-width:0}.ai-workspace .permission-computer>svg{flex:none;color:#6c6c75}
+:is(.ai-workspace,.fig-home) .composer-popover header{padding:5px 8px 4px;font-size:10.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--side-faint)}
+:is(.ai-workspace,.fig-home) .permission-menu>button{display:flex;align-items:flex-start;gap:9px;width:100%;padding:7px 8px;border-radius:6px;text-align:left}
+:is(.ai-workspace,.fig-home) .permission-menu>button:hover{background:#f3f3f6}:is(.ai-workspace,.fig-home) .permission-menu>button.selected{background:#f3f3f6}
+:is(.ai-workspace,.fig-home) .permission-menu strong{display:block;font-size:12.5px;font-weight:500}
+:is(.ai-workspace,.fig-home) .permission-menu small{display:block;margin-top:1px;font-size:11px;line-height:1.45;color:var(--side-muted)}
+:is(.ai-workspace,.fig-home) .permission-icon{flex:none;width:18px;height:18px;margin-top:1px;display:grid;place-items:center;color:#6c6c75}
+:is(.ai-workspace,.fig-home) .permission-check{flex:none;margin:2px 0 0 auto;color:var(--side-text)}
+:is(.ai-workspace,.fig-home) .permission-computer{display:flex;align-items:center;gap:9px;margin-top:4px;padding:8px 8px 4px;border-top:1px solid #f0f0f3}
+:is(.ai-workspace,.fig-home) .permission-computer>span{flex:1;min-width:0}:is(.ai-workspace,.fig-home) .permission-computer>svg{flex:none;color:#6c6c75}
 @media(prefers-reduced-motion:reduce){.ai-workspace .shimmer{animation:none;color:#6c6c75;background:none}}
 
 /* The Figjam mark: the fig from usefigjam.com. */
@@ -308,7 +308,7 @@
 
 /* Home: a greeting, one big box to start an edit, quick ideas, and recent projects as cards. The page's top matches the
    window-control strip so the controls sit on it without a box. */
-.fig-home{height:100%;overflow:auto;background:radial-gradient(640px 380px at 14% 34%,#ece6ff 0%,#ece6ff00 70%),radial-gradient(560px 360px at 88% 26%,#e2f4ea 0%,#e2f4ea00 70%),#f5f6f8;color:#1f1f24;font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
+.fig-home{--side-text:#1f1f24;--side-muted:#86868f;--side-faint:#aaaab2;--side-line:#e8e8ec;--side-hover:#f0f0f3;--side-accent:#7d6bc4;height:100%;overflow:auto;background:radial-gradient(640px 380px at 14% 34%,#ece6ff 0%,#ece6ff00 70%),radial-gradient(560px 360px at 88% 26%,#e2f4ea 0%,#e2f4ea00 70%),#f5f6f8;color:#1f1f24;font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
 .fig-home-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;height:52px;padding:0 150px 0 22px;-webkit-app-region:drag}
 .fig-home-top button{-webkit-app-region:no-drag}
 .fig-brand{display:flex;align-items:center;gap:9px;font:700 19px/1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-.5px;color:#17142a}
@@ -325,7 +325,8 @@
 .fig-home .home-composer textarea{min-height:64px;max-height:240px;padding:0 2px;font-size:15px;line-height:1.55;color:#1f1f24}
 .fig-home .home-composer textarea::placeholder{color:#a3a3ad}
 .fig-home .home-composer .composer-actions{margin-top:10px;gap:6px}
-.fig-home .home-composer .add-media{gap:7px;height:32px;padding:0 12px 0 5px;border:1px solid #e6e6ec;border-radius:9px;font-size:13px;color:#3a3a42}
+.fig-home .home-composer .composer-chip{height:32px;padding:0 10px;font-size:13px}
+.fig-home .home-composer .add-media{gap:7px;height:32px;white-space:nowrap;padding:0 12px 0 5px;border:1px solid #e6e6ec;border-radius:9px;font-size:13px;color:#3a3a42}
 .fig-home .home-composer .add-media>span{width:22px;height:22px;border-radius:6px;background:#f0ecfd;color:#6b4fd8}
 .fig-home .home-composer .add-media:hover{background:#f7f7f9;border-color:#dcdce3}
 .fig-home .home-composer .send{width:34px;height:34px;border-radius:50%;background:#17142a;color:#fff;box-shadow:none}
