@@ -32,12 +32,12 @@ function baseReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex):st
  if(piece.kind==='clip'&&!visualAsset(asset(piece.clip!.assetId)))return'the clip is a scene or not footage';
  if(piece.kind==='transition'){if(!['crossfade'].includes(piece.after!.transitionIn!.type))return`a ${piece.after!.transitionIn!.type} transition`;if(!visualAsset(asset(piece.before!.assetId))||!visualAsset(asset(piece.after!.assetId)))return'a transition between scenes';}
  for(const effect of piece.effects)if(!nativeEffects.has(effect.component))return`the ${effect.component} effect`;
- if(piece.kind!=='gap'){for(const clip of [piece.clip,piece.before,piece.after].filter(Boolean) as ResolvedClip[])if(clip.framing?.mode==='face')return'face framing';}
+ if(piece.kind!=='gap'){for(const clip of [piece.clip,piece.before,piece.after].filter(Boolean) as ResolvedClip[]){if(clip.framing?.mode==='face')return'face framing';if(clip.keyframes?.length)return'keyframes';}}
  return;
 }
 /** Why the piece's overlays need the browser, or undefined when ffmpeg draws them all. */
 function overlayReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex):string|undefined{
- for(const item of piece.overlays){if(!item.source)return`the ${item.component} element`;const a=footage.assets.find(x=>x.id===item.source!.assetId);if(!visualAsset(a))return'a scene overlay';if(Number((item.params as any).rotation??0)!==0)return'a rotated overlay';}
+ for(const item of piece.overlays){if(!item.source)return`the ${item.component} element`;if(item.keyframes?.length)return'a keyframed overlay';const a=footage.assets.find(x=>x.id===item.source!.assetId);if(!visualAsset(a))return'a scene overlay';if(Number((item.params as any).rotation??0)!==0)return'a rotated overlay';}
  return;
 }
 

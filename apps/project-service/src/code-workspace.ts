@@ -28,6 +28,7 @@ import {captureOrder} from '../../../packages/orchestrator/src/media-context';
 import type {ComputerStatus} from '@dream/contracts';
 import {publishWorkspace,storeEngineScene} from './code-publication';
 import {compileScene,isEngineScene} from './engine-compile';
+import {rendersTheEdit,RENDER_REFUSAL} from './render-guard';
 import {importResources} from './resource-import';
 import {editChecks,type EditChecks} from './edit-checks';
 import {fetchPage} from './web-fetch';
@@ -262,6 +263,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    const identity=digest(JSON.stringify({command:input.command,cwd:input.cwd??'.'})),old=this.db.db.prepare('SELECT * FROM workspace_processes WHERE id=?').get(callId) as any;
    if(old&&old.identity!==identity)throw new Error('Process ID was reused for a different command.');
    await this.sources(signal);this.refreshContext();workspacePath(this.root,input.cwd??'.');
+   if(rendersTheEdit(String(input.command??''),this.root,input.cwd??'.'))throw new Error(RENDER_REFUSAL);
    if(!old)this.db.db.prepare('INSERT INTO workspace_processes VALUES(?,?,?,?)').run(callId,identity,'prepared',JSON.stringify({sourceSnapshot:this.db.workspace.capture().hash}));
    let output='',lastOutput=0;const emit=(status:string)=>{if(status==='running'&&output&&Date.now()-lastOutput<120)return;lastOutput=Date.now();const event=this.db.activityEvent(turnId,{id:'tool:'+callId,kind:'action',tool:'run_command',text:toolActivity('run_command',input)!,detail:input.command,status,output:output.slice(-12000)});this.publishEvent('ai.activity',{turnId,event});};
    const dependencyHash=()=>digest(['package-lock.json','requirements.lock.txt'].map(file=>existsSync(join(this.root,file))?readFileSync(join(this.root,file),'utf8'):'').join('\n'));

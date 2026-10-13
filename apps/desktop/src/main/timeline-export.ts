@@ -59,9 +59,9 @@ async function exportEditableTimelineUnlocked(state:ProjectState,window:BrowserW
   for(const c of resolved.clips){
    const asset=source(c.assetId);progress('Copying '+asset.filename);const original=await copy(asset.originalPath);
    if(asset.kind!=='audio'){
-    const bake=!!asset.scene||!!asset.sequence||asset.width*timeline.settings.height!==asset.height*timeline.settings.width||c.speed!==1||!!c.framing||!!c.transitionIn&&c.transitionIn.type!=='cut'||!!resolved.clips[resolved.clips.indexOf(c)+1]?.transitionIn&&resolved.clips[resolved.clips.indexOf(c)+1].transitionIn!.type!=='cut'||resolved.items.some(i=>i.type==='effect'&&i.timelineStart<c.end&&i.timelineEnd>c.start);
+    const bake=!!asset.scene||!!asset.sequence||asset.width*timeline.settings.height!==asset.height*timeline.settings.width||c.speed!==1||!!c.framing||!!c.keyframes?.length||!!c.transitionIn&&c.transitionIn.type!=='cut'||!!resolved.clips[resolved.clips.indexOf(c)+1]?.transitionIn&&resolved.clips[resolved.clips.indexOf(c)+1].transitionIn!.type!=='cut'||resolved.items.some(i=>i.type==='effect'&&i.timelineStart<c.end&&i.timelineEnd>c.start);
     const path=bake?await render(visualBase,safe(c.id)+'.mp4',c.start,c.end):original;
-    if(bake)warnings.add('Generated scenes, framing, effects, transitions and speed changes are rendered into individual video clips. Their positions and cuts remain editable; original media is also included.');
+    if(bake)warnings.add('Generated scenes, framing, keyframes, effects, transitions and speed changes are rendered into individual video clips. Their positions and cuts remain editable; original media is also included.');
     clips.push({...visual(c.id,asset.filename,path,timeline.trackSettings?.video?.name??'Video',c.start,c.end,bake?0:c.srcIn,bake?c.end-c.start:c.srcOut,bake?undefined:asset,!timeline.trackSettings?.video?.hidden),trackId:'video',trackOrder:0,linkGroup:c.id});
    }
    completed++;

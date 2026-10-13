@@ -1,4 +1,5 @@
 export * from './schema';
+export * from './keyframes';
 export * from './ops';
 export * from './resolve';
 export * from './apply';

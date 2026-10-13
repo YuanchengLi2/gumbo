@@ -22,6 +22,7 @@ export function apply(t:TimelineDocument,ops:Op[],index:FootageIndex):TimelineDo
  case 'set_track_settings':next.trackSettings??={};next.trackSettings[o.trackId]={...next.trackSettings[o.trackId],...o.settings};break;
  case 'set_speed':clip(o.clipId).speed=o.speed;break;
  case 'set_framing':clip(o.clipId).framing=o.framing;break;
+   case 'set_keyframes':{const target=next.spine.find(c=>c.id===o.id)??next.attached.find(i=>i.id===o.id);if(!target)throw new EditError('clip_not_found',`No clip or layer ${o.id}.`);if(o.keyframes.length)target.keyframes=o.keyframes;else delete target.keyframes;break;}
  case 'set_clip_audio':Object.assign(clip(o.clipId).audio,o.audio);break;
  case 'set_transition':clip(o.clipId).transitionIn=o.transition??undefined;break;
  case 'add_item':unique(o.item.id);next.attached.push(o.item);break;

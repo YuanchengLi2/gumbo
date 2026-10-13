@@ -140,6 +140,8 @@
 .ai-stage .manual-clip.selected .manual-trim{background:#fff}
 .ai-stage .manual-clip.selected .manual-trim::after{content:'';position:absolute;left:3.5px;top:32%;bottom:32%;width:1px;border-radius:1px;background:#1d193066}
 .ai-stage .manual-clip:not(.selected):hover .manual-trim{background:#ffffff55}
+.ai-stage .manual-keyframe{position:absolute;bottom:4px;width:8px;height:8px;margin-left:-4px;transform:rotate(45deg);background:#fff;border:1px solid #1d193059;border-radius:1px;cursor:ew-resize;z-index:2;box-shadow:0 0 0 1px #ffffff40}
+.ai-stage .manual-keyframe:hover,.ai-stage .manual-keyframe:focus-visible{background:#ffd84d;outline:none}
 .ai-stage .manual-marquee{background:#7d6bc41a}
 .manual-empty-hint{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:12px;color:#9a96a6;pointer-events:none}
 .timeline-resizer{flex:none;height:7px;margin-bottom:-7px;cursor:row-resize;position:relative;z-index:20}

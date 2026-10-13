@@ -30,7 +30,7 @@ Scenes, music, sound effects and media your code produces are declared in `outpu
 - Size and frame rate default to the project's; set `width`, `height` or `fps` only to differ.
 - `props` are passed to the component, so one component can serve many shots with different props.
 - `transparent: true` gives the scene no background, for overlays placed on `attached` above footage.
-- Media your programs make (processed, cropped, stabilized, cleaned, generated) goes under `output/` with kind `video`, `audio` or `image`, and is placed like any source.
+- Media your programs make (stabilized, cleaned, converted, generated) goes under `output/` with kind `video`, `audio` or `image`, and is placed like any source.
 - `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
 
 ## Clips
@@ -45,10 +45,24 @@ A clip in `spine` plays seconds `srcIn` to `srcOut` of its source; clips play on
 ```
 
 - `speed` 0.25 to 4 (sound keeps its pitch). An image clip lasts `holdSec`.
-- `framing.mode`: `fit` shows the whole picture (letterboxed when its shape differs from the frame), `fill` covers the frame and crops the overflow. `x` and `y` (0 to 1) choose which part shows when the picture does not exactly fit the frame. `scale` zooms about the centre of the frame. To show one region (a corner, a face, a speaker box), crop it yourself: process the footage into a new output, or write a scene that shows the asset at the size and place you want.
+- `framing.mode`: `fit` shows the whole picture (letterboxed when its shape differs from the frame), `fill` covers the frame and crops the overflow. `x` and `y` (0 to 1) choose which part shows when the picture does not exactly fit the frame. `scale` zooms about the centre of the frame. To show one region (a corner, a face, a speaker box), zoom with `scale` and place it with keyframe `x` and `y` (below), or write a scene that shows the asset at the size and place you want.
 - `framing` also takes `rotation`, `flipX`, `flipY`, `opacity`, and the grade: `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged), `temperature` (-1 cool to 1 warm).
 - `transitionIn.type`: `cut`, `crossfade`, `dip_to_black`, `whip`, `zoom_through` or `slide`.
 - `captions` (optional, on the timeline): `style` `clean`, `karaoke`, `word_pop` or `emphasis`; captions follow the spoken words of each clip.
+
+## Keyframes (camera moves, as in CapCut)
+
+A clip or an attached item can carry `keyframes`, animated live in the player: pans, zooms, drifts, spins, fades, colour over time.
+
+```json
+{"id":"shot2","assetId":"<source id>","srcIn":12.5,"srcOut":18,
+ "keyframes":[{"sec":12.5,"scale":1.2,"y":0.5},{"sec":15,"scale":1.4,"y":0.65,"easing":"ease_in_out"},{"sec":18,"scale":1.2,"y":0.5,"easing":"ease_in_out"}]}
+```
+
+- `sec` is source seconds, like `srcIn` and transcript words, so keyframes stay on their footage through trims and speed changes (an attached item without a source counts from 0).
+- `scale`, `x`/`y` (the picture's centre, 0.5 centred; higher `y` shows more of the top), `rotation`, `opacity`, `exposure`, `contrast`, `saturation`, `temperature`; on attached items as in `params`. They replace the matching `framing` values.
+- The picture covers the frame while `scale` ≥ 1 + 2|x − 0.5| and 1 + 2|y − 0.5|.
+- Each property moves between the keyframes that set it and holds outside them; `easing` (`linear`, `ease_in`, `ease_out`, `ease_in_out`, `hold`) shapes the move into that keyframe.
 
 ## Timeline items (complete examples)
 
@@ -76,7 +90,7 @@ The `timeline` has `spine` (clips that play one after another and set the video'
 
 ## Effects on footage (built in)
 
-An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`. Anything beyond these, make yourself: process the footage, or write a scene.
+An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`. Anything beyond these: keyframes, or a scene.
 
 ```json
 {"id":"push1","type":"effect","component":"slow_push","start":{"kind":"clip","clipId":"shot2","at":"start"},"end":{"kind":"clip","clipId":"shot2","at":"end"},"params":{"amount":0.08}}

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {patchSchema} from './patch-schema';
 import {AnchorSchema,AudioSchema,CaptionSchema,ClipSchema,FramingSchema,ItemSchema,MusicSchema,SettingsSchema,TransitionSchema} from './schema';
+import {KeyframeSchema} from './keyframes';
 const reason={reason:z.string().min(1)};
 const at=z.union([z.number().int().nonnegative(),z.object({after:z.string()})]);
 export const OpSchema=z.discriminatedUnion('type',[
@@ -14,6 +15,7 @@ export const OpSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('set_track_settings'),trackId:z.string(),settings:z.object({name:z.string().max(80).optional(),muted:z.boolean().optional(),hidden:z.boolean().optional(),locked:z.boolean().optional()}),...reason}),
  z.object({type:z.literal('set_speed'),clipId:z.string(),speed:z.number().min(.25).max(4),...reason}),
  z.object({type:z.literal('set_framing'),clipId:z.string(),framing:FramingSchema,...reason}),
+ z.object({type:z.literal('set_keyframes'),id:z.string(),keyframes:z.array(KeyframeSchema),...reason}),
  z.object({type:z.literal('set_clip_audio'),clipId:z.string(),audio:patchSchema(AudioSchema),...reason}),
  z.object({type:z.literal('set_transition'),clipId:z.string(),transition:TransitionSchema.nullable(),...reason}),
  z.object({type:z.literal('add_item'),item:ItemSchema,...reason}),
