@@ -433,3 +433,9 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - The sidebar uses the system UI font (Segoe UI); the rest of the app is unchanged.
 - Timeline: a spare row for a new track keeps one height and only lights up during a drag; opening it moved every track under the cursor, so drops landed on the wrong row.
 - After a stop, a message that ends with "continue" (after the feedback it carries) carries on with the stopped request, as one that starts with it already did.
+
+## October 12, 2026 — Web search without the server sandbox
+
+- A request failed with "code_execution tool use … was found without a corresponding code_execution_tool_result block". The 20260209 web search brings Anthropic's own code sandbox along (to filter results), and the agent took it for its workspace: it wrote its project.json edit there, next to an ordinary tool call. That code never ran, and the call without a result made the API reject the conversation.
+- Web search uses the 20250305 version on every model, which has no sandbox; filtering results costs some input tokens instead.
+- A server tool call left without its result is dropped from the saved reply (and from saved conversations when they resume), except in a paused turn, which is sent back as it is so the server can finish it.

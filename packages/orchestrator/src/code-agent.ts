@@ -7,7 +7,7 @@ import {toolsFor,allowedTools,parseCodeTool,validateDelegation,withinScopes,norm
 import {toolActivity,toolDetail} from './activity';
 import {FileApprovalRequired} from './file-tools';
 import {InferenceError} from './inference';
-import {assertToolExchanges,repairSavedExchanges} from './tool-exchanges';
+import {assertToolExchanges,repairSavedExchanges,withoutUnansweredServerCalls} from './tool-exchanges';
 import {toolIdentity} from './tool-identity';
 import {rememberDecision} from './project-memory';
 import {stateChanges} from './state-delta';
@@ -137,6 +137,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      if(error.thinkingOnly){const overrideKey=`effort-override:${turnId}:${phase}`;db.setMeta(overrideKey,String(Math.min(2,Number(db.getMeta(overrideKey)??0)+1)));}
      checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}throw error;}
    delete checkpoint.failures.truncation;checkpoint.steps=(checkpoint.steps??0)+1;
+   if(response.stop_reason!=='pause_turn'){response.content=withoutUnansweredServerCalls(response.content);if(!response.content.length)response.content=[{type:'text',text:'(No output.)'}];}
    checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];save();
    for(const block of response.content)if(block.type==='server_tool_use')activity('web:'+block.id,{kind:'action',tool:block.name,text:block.name==='web_search'?'Searching the web':'Reading the web',detail:String(block.input?.query??block.input?.url??'').slice(0,200),status:'complete'});
    // A long run of web searches pauses on the server; sending the conversation back as it is resumes it.

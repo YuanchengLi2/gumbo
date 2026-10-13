@@ -10,6 +10,7 @@ import {pageText,privateAddress,fetchPage} from '../../apps/project-service/src/
 import {Director,webSearchTool} from '../../packages/orchestrator/src/code-director';
 import {codeAgent} from '../../packages/orchestrator/src/code-agent';
 import {usageCost as gatewayCost} from '../../supabase/functions/dream-gateway/inference-policy';
+import {withoutUnansweredServerCalls,repairSavedExchanges} from '../../packages/orchestrator/src/tool-exchanges';
 
 it('runs a command on the user\'s computer when computer access is allowed, without the app\'s secrets',async()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-local-')),workspace=join(project,'Workspace');mkdirSync(workspace);
@@ -41,7 +42,8 @@ it('reads a page as text and refuses addresses on this computer or its network',
 });
 
 it('gives every agent with tools web search in its model\'s version, resumes a paused search, and counts searches in the cost',async()=>{
- expect(webSearchTool(models.agent).type).toBe('web_search_20260209');
+ // Later search versions bring a server code sandbox the agent mistook for its workspace.
+ expect(webSearchTool(models.agent).type).toBe('web_search_20250305');
  const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.agent,usage)).toBeCloseTo(gatewayCost(models.agent,usage,[2,10]));expect(usageCost(models.agent,usage)).toBeGreaterThan(.03);
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-web-')));
  try{
@@ -56,4 +58,12 @@ it('gives every agent with tools web search in its model\'s version, resumes a p
   await director.inference(models.agent,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main');
   expect(tools.map(t=>t.name)).toEqual(['web_search','read_file']);
  }finally{db.close();}
+});
+
+it('drops a server tool call the provider left without a result, so the conversation can be sent back',()=>{
+ const orphan={type:'server_tool_use',id:'srvtoolu_1',name:'code_execution',input:{code:'edit project.json'}},search={type:'server_tool_use',id:'srvtoolu_2',name:'web_search',input:{query:'music'}},found={type:'web_search_tool_result',tool_use_id:'srvtoolu_2',content:[]},title={type:'tool_use',id:'toolu_1',name:'set_project_title',input:{title:'T'}};
+ expect(withoutUnansweredServerCalls([orphan,search,found,title])).toEqual([search,found,title]);
+ // A saved conversation from before the fix is repaired the same way when it is resumed; a paused last turn keeps its call.
+ const saved=[{role:'user',content:'Add music'},{role:'assistant',content:[orphan,title]},{role:'user',content:[{type:'tool_result',tool_use_id:'toolu_1',content:'{}'}]},{role:'assistant',content:[orphan]}];
+ const repaired=repairSavedExchanges(saved,()=>undefined);expect(repaired[1].content).toEqual([title]);expect(repaired.at(-1)!.content).toEqual([orphan]);
 });

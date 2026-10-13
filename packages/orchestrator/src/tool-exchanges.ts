@@ -7,11 +7,14 @@ export function assertToolExchanges(messages:Message[]){
   if(messages[n].role==='user'&&Array.isArray(messages[n].content)){const preceding=new Set(n?calls(messages[n-1]).map(c=>c.id):[]);for(const result of messages[n].content.filter((b:any)=>b.type==='tool_result'))if(!preceding.has(result.tool_use_id))throw new Error('Orphan local tool result: '+result.tool_use_id);}
  }
 }
+/** A server tool call the provider left without its result cannot be sent back (the API rejects the conversation), and
+ * nothing ran for it; it is dropped. A paused turn keeps its calls: sending it back as it is lets the server finish them. */
+export function withoutUnansweredServerCalls(content:any[]){const answered=new Set(content.filter(b=>typeof b?.tool_use_id==='string').map(b=>b.tool_use_id));return content.filter(b=>b?.type!=='server_tool_use'||answered.has(b.id));}
 /** One-time migration of saved pre-v2 exchanges. Reorder known results; never replay effects. */
 export function repairSavedExchanges(messages:Message[],receipt:(id:string)=>any,allowPendingTail=false):Message[]{
  const repaired:Message[]=[];
  for(let n=0;n<messages.length;n++){
-  const message=messages[n],expected=calls(message);repaired.push(message);if(!expected.length)continue;
+  const saved=messages[n],message=saved.role==='assistant'&&Array.isArray(saved.content)&&n<messages.length-1?{...saved,content:withoutUnansweredServerCalls(saved.content)}:saved,expected=calls(message);repaired.push(message);if(!expected.length)continue;
   if(n===messages.length-1&&allowPendingTail)continue;
   const following:Message[]=[];while(n+1<messages.length&&messages[n+1].role==='user')following.push(messages[++n]);
   const results=following.flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='tool_result'):[]);

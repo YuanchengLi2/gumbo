@@ -27,7 +27,9 @@ export function parseCodeRoute(raw:unknown,text:string,intent:RequestIntent,inte
 }
 export type AIConfig={url:string;token:string;accountId?:string};
 /** Anthropic's server-side web search: the dynamic-filtering version on Opus 5.5 and Sonnet 5.5, the basic one on Haiku. */
-export const webSearchTool=(model:string)=>({type:model.startsWith('claude-haiku')?'web_search_20250305':'web_search_20260209',name:'web_search',max_uses:8});
+// The 20250305 search on every model: later versions bring Anthropic's own code sandbox along for filtering results,
+// and the agent took it for its project workspace (it wrote project.json edits there, which never ran).
+export const webSearchTool=(_model:string)=>({type:'web_search_20250305',name:'web_search',max_uses:8});
 /** The editing agent's conversation cache: five minutes until a wait for its helpers in this request has outlasted that,
  * then one hour (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
 export const helperWaitCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('helper-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
