@@ -17,6 +17,7 @@ import {HomeScreen} from './components/home/HomeScreen';
 
 import {AIWorkspace} from './components/workspace/AIWorkspace';
 import {ExportDialog,type ExportChoices} from './components/export/ExportDialog';
+import {renderVideo} from './engine/export';
 
 
 
@@ -24,7 +25,7 @@ import {FileAccessPanel} from './components/files/FileAccessPanel';
 
 
 
-export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),[dialog,setDialog]=useState<'history'|'export'|'share'|null>(null),[files,setFiles]=useState(false),[input,setInput]=useState(''),[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
+export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'history'|'export'|'share'|null>(null),[files,setFiles]=useState(false),[input,setInput]=useState(''),[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
  const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',duration=project?resolve(project.timeline,project.footage).durationSec:0;
 
  useEffect(()=>{void window.dream.setTheme('light');},[s.route]);
@@ -43,7 +44,14 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey;if(e.code==='Space'){e.preventDefault();player.current?.toggle();}else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();seek(s.frame+(e.key==='ArrowRight'?1:-1)*(e.shiftKey?project?.timeline.settings.fps??30:1));}else if(mod&&e.key.toLowerCase()==='z'){e.preventDefault();void s.command({type:e.shiftKey?'redo':'undo'});}else if(e.key==='Escape')s.setSelected([]);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[s.route,s.frame,dialog,files,project?.versionId,active]);
 
- async function exportVideo(request:ExportChoices|'timeline'){s.setProgress({status:'rendering',progress:0});try{const result=await window.dream.exportVideo(request);if(!result)s.setProgress(null);}catch(error){s.setProgress({status:'failed',progress:0,error:(error as Error).message});}}
+ async function exportVideo(request:ExportChoices|'timeline'){s.setProgress({status:'rendering',progress:0});
+  try{if(request==='timeline'){const result=await window.dream.exportVideo('timeline');if(!result)s.setProgress(null);return;}
+   // The engine draws and encodes the video here, on the graphics card; the main process mixes the sound and joins them.
+   const job=await window.dream.beginExport(request),abort=new AbortController();exportAbort.current=abort;
+   if(job.video){const current=useEditor.getState().project!;await renderVideo({timeline:current.timeline,footage:current.footage,...job.video,write:(data,position)=>window.dream.exportChunk(job.id,position,data),onProgress:(done,total)=>s.setProgress({status:'rendering',progress:done/total*.98,phase:'Rendering the video'}),signal:abort.signal});}
+   await window.dream.finishExport(job.id);}
+  catch(error){if(exportAbort.current?.signal.aborted)s.setProgress({status:'cancelled',progress:0});else{void window.dream.cancelExport();s.setProgress({status:'failed',progress:0,error:(error as Error).message});}}
+  finally{exportAbort.current=null;}}
 
  return <main className={'app platform-'+s.runtime?.platform+' '+''} onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();void window.dream.registerDropped([...e.dataTransfer.files]).then(paths=>attach(paths)).catch(error=>s.setError(error.message));}}>
 
@@ -53,7 +61,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
 
- {dialog==='export'&&project&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&s.progress?.status!=='rendering')setDialog(null);}}><ExportDialog project={project} frame={s.frame} progress={s.progress} onClose={()=>{setDialog(null);if(s.progress?.status!=='rendering')s.setProgress(null);}} onExport={choices=>void exportVideo(choices)} onCancel={()=>window.dream.cancelExport()} onTimeline={()=>void exportVideo('timeline')} onShare={()=>setDialog('share')}/></div>}
+ {dialog==='export'&&project&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&s.progress?.status!=='rendering')setDialog(null);}}><ExportDialog project={project} frame={s.frame} progress={s.progress} onClose={()=>{setDialog(null);if(s.progress?.status!=='rendering')s.setProgress(null);}} onExport={choices=>void exportVideo(choices)} onCancel={()=>{exportAbort.current?.abort();void window.dream.cancelExport();}} onTimeline={()=>void exportVideo('timeline')} onShare={()=>setDialog('share')}/></div>}
  {dialog&&dialog!=='export'&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null);}}><section className={'dialog '+(dialog==='history'?'wide':'')} role="dialog" aria-label={dialog}><div className="dialog-header"><h2>{dialog==='history'?'Version history':dialog==='share'?'Share your video':'Export video'}</h2><button className="icon-button" aria-label="Close dialog" onClick={()=>setDialog(null)}><X size={20}/></button></div>
 
  {dialog==='history'&&<div className="version-list">{project?.history?.versionsBefore&&<button className="text-button" onClick={async()=>{const page=await s.command({type:'history_page',kind:'versions',before:project.history!.versionsBefore!,limit:50});const current=useEditor.getState().project;if(page&&current)s.setProject({...current,versions:[...current.versions,...page.items],history:{...current.history!,versionsBefore:page.nextBefore}});}}>Load earlier versions</button>}{project?.versions.map(v=><div key={v.id}><span><strong>{editingChanges([v.summary])[0]}</strong><small>{new Date(v.createdAt).toLocaleString()}</small></span>{v.id===project.versionId?<small>Current</small>:<button className="text-button" disabled={active} onClick={()=>s.command({type:'restore',versionId:v.id})}>Restore</button>}</div>)}</div>}

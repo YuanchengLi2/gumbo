@@ -39,7 +39,8 @@
     "ajv": "8.20.0",
     "typescript": "^5.9.3",
     "@dream/scene-engine": "workspace:*",
-    "@dream/compositor": "workspace:*"
+    "@dream/compositor": "workspace:*",
+    "mediabunny": "1.60.0"
   },
   "devDependencies": {
     "electron": "44.5.1",

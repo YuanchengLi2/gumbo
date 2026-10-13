@@ -1,0 +1,58 @@
+import {randomUUID} from 'node:crypto';
+import {spawn} from 'node:child_process';
+import {openSync,writeSync,closeSync,mkdirSync,rmSync,existsSync,unlinkSync,renameSync} from 'node:fs';
+import {join} from 'node:path';
+import {resolve} from '@dream/timeline';
+import type {ProjectState} from '@dream/project-db';
+import {exportAudio} from './native-export';
+import {type ExportSettings,exportPath,outputSize,audioExtension} from './export-settings';
+import {runtimePaths} from './resources';
+
+/** The main process's half of an export. The window draws and encodes the video with the engine and streams it here;
+ * meanwhile the sound is mixed and levelled from the same envelope the player uses. Finishing joins the two without
+ * re-encoding either, with the index at the front so the file starts playing at once. */
+type Job={id:string;state:ProjectState;settings:ExportSettings;videoPath?:string;audioPath?:string;temp?:string;fd?:number;workDir:string;sound?:Promise<boolean>;abort:AbortController;publish:(type:string,payload:unknown)=>void};
+const jobs=new Map<string,Job>();
+export const exportRunning=()=>jobs.size>0;
+
+export function beginExport(state:ProjectState,settings:ExportSettings,publish:Job['publish'],authorize?:(path:string)=>void){
+ if(jobs.size)throw new Error('An export is already running.');const duration=resolve(state.timeline,state.footage).durationSec;if(duration<=0)throw new Error('Add footage to the timeline before exporting.');
+ const missing=state.footage.assets.filter(a=>a.missing&&(state.timeline.spine.some(c=>c.assetId===a.id)||state.timeline.attached.some(i=>i.source?.assetId===a.id)||state.timeline.music.some(m=>m.assetId===a.id)));if(missing.length)throw new Error(`Relink ${missing.map(a=>a.filename).join(', ')} for an original-quality export.`);
+ const folder=settings.folder||join(state.meta.folder,'Exports');mkdirSync(folder,{recursive:true});
+ const job:Job={id:randomUUID(),state,settings,workDir:'',abort:new AbortController(),publish};
+ if(settings.video){job.videoPath=exportPath(folder,settings.name||state.meta.name,settings.format);authorize?.(job.videoPath);job.temp=`${job.videoPath}.${job.id}.video.${settings.format}`;job.fd=openSync(job.temp,'w');}
+ if(settings.audio){job.audioPath=exportPath(folder,settings.name||state.meta.name,audioExtension(settings));authorize?.(job.audioPath);}
+ job.workDir=join(folder,`.figjam-export-${job.id}`);mkdirSync(job.workDir,{recursive:true});
+ const ffmpeg=runtimePaths().ffmpeg,input={ffmpeg,timeline:state.timeline,footage:state.footage,signal:job.abort.signal};
+ // The sound is mixed while the picture renders; it needs little of what the picture uses.
+ if(job.videoPath)job.sound=exportAudio({...input,workDir:join(job.workDir,'mix')},join(job.workDir,'sound.m4a'),'aac');
+ jobs.set(job.id,job);
+ const {width,height,fps}=state.timeline.settings,size=outputSize(settings,width,height);
+ return{id:job.id,video:job.videoPath?{...size,fps:settings.fps==='source'?fps:settings.fps,codec:settings.codec,quality:settings.quality,container:settings.format}:undefined};
+}
+export function exportChunk(id:string,position:number,data:Uint8Array){const job=jobs.get(id);if(!job?.fd&&job?.fd!==0)throw new Error('This export is not running.');writeSync(job.fd,data,0,data.byteLength,position);}
+
+function ffmpeg(args:string[],signal:AbortSignal){return new Promise<void>((resolve,reject)=>{const child=spawn(runtimePaths().ffmpeg,args,{windowsHide:true,signal});let log='';child.stderr.on('data',c=>{log=(log+c).slice(-3000);});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(new Error('Saving the video failed: '+log.slice(-800))));});}
+function probeDuration(path:string){return new Promise<number>((resolve,reject)=>{const child=spawn(runtimePaths().ffprobe,['-v','error','-show_entries','format=duration','-of','csv=p=0',path],{windowsHide:true});let out='';child.stdout.on('data',c=>out+=c);child.on('error',reject);child.on('close',()=>resolve(Number(out.trim())));});}
+
+export async function finishExport(id:string){
+ const job=jobs.get(id);if(!job)throw new Error('This export is not running.');const {publish,abort}=job,written:string[]=[];
+ try{
+  if(job.videoPath&&job.temp){
+   if(job.fd!==undefined){closeSync(job.fd);job.fd=undefined;}
+   publish('export.progress',{status:'rendering',progress:1,phase:'Adding the sound'});const sound=await job.sound,soundFile=join(job.workDir,'sound.m4a');
+   const joined=`${job.videoPath}.${job.id}.joined.${job.settings.format}`;
+   await ffmpeg(['-hide_banner','-v','error','-y','-i',job.temp,...(sound?['-i',soundFile]:[]),'-map','0:v',...(sound?['-map','1:a']:[]),'-c','copy','-movflags','+faststart','-f',job.settings.format,joined],abort.signal);
+   const expected=resolve(job.state.timeline,job.state.footage).durationSec,actual=await probeDuration(joined);
+   if(!(Math.abs(actual-expected)<=Math.max(.1,2/job.state.timeline.settings.fps)))throw new Error(`The saved video is ${actual.toFixed(2)} s long instead of ${expected.toFixed(2)} s.`);
+   renameSync(joined,job.videoPath);written.push(job.videoPath);
+  }
+  if(job.audioPath){publish('export.progress',{status:'rendering',progress:1,phase:'Saving the audio'});
+   if(!await exportAudio({ffmpeg:runtimePaths().ffmpeg,timeline:job.state.timeline,footage:job.state.footage,workDir:join(job.workDir,'audio'),signal:abort.signal},job.audioPath,job.settings.audioFormat)&&!job.videoPath)throw new Error('This edit has no sound to export.');
+   if(existsSync(job.audioPath))written.push(job.audioPath);}
+  publish('export.progress',{status:'completed',progress:1,path:written[0],paths:written});return{path:written[0],paths:written};
+ }catch(error){for(const path of written)if(existsSync(path))unlinkSync(path);publish('export.progress',{status:abort.signal.aborted?'cancelled':'failed',progress:0,error:(error as Error).message});throw error;}
+ finally{cleanup(job);}
+}
+function cleanup(job:Job){if(job.fd!==undefined){try{closeSync(job.fd);}catch{}job.fd=undefined;}for(const path of [job.temp]){if(path&&existsSync(path))rmSync(path,{force:true});}for(const f of [`${job.videoPath}.${job.id}.joined.${job.settings.format}`])if(existsSync(f))rmSync(f,{force:true});rmSync(job.workDir,{recursive:true,force:true});jobs.delete(job.id);}
+export function cancelEngineExport(id?:string){for(const job of jobs.values())if(!id||job.id===id){job.abort.abort();if(job.sound)void job.sound.catch(()=>{}).finally(()=>cleanup(job));else cleanup(job);job.publish('export.progress',{status:'cancelled',progress:0});}}
