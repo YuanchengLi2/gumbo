@@ -31,8 +31,8 @@ const parseColour=(css:string):[number,number,number,number]=>{
 export class Compositor{
  private gl:WebGL2RenderingContext;private program:WebGLProgram;private quad:WebGLVertexArrayObject;private textures=new Map<string,{texture:WebGLTexture;picture?:Picture;width:number;height:number}>();
  private text:OffscreenCanvas;private textContext:OffscreenCanvasRenderingContext2D;private u:Record<string,WebGLUniformLocation|null>={};
- constructor(readonly canvas:HTMLCanvasElement|OffscreenCanvas){
-  const gl=canvas.getContext('webgl2',{alpha:false,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:true}) as WebGL2RenderingContext|null;if(!gl)throw new Error('This computer cannot draw the video with its graphics card (WebGL2 is unavailable).');this.gl=gl;
+ constructor(readonly canvas:HTMLCanvasElement|OffscreenCanvas,options:{transparent?:boolean}={}){
+  const gl=canvas.getContext('webgl2',{alpha:!!options.transparent,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:true}) as WebGL2RenderingContext|null;if(!gl)throw new Error('This computer cannot draw the video with its graphics card (WebGL2 is unavailable).');this.gl=gl;
   const shader=(type:number,source:string)=>{const s=gl.createShader(type)!;gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error('Shader: '+gl.getShaderInfoLog(s));return s;};
   const program=gl.createProgram()!;gl.attachShader(program,shader(gl.VERTEX_SHADER,VERTEX));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,FRAGMENT));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Program: '+gl.getProgramInfoLog(program));this.program=program;
   for(const name of ['rect','matrix','view','uv','picture','opacity','grades','grade','blur','texel','fill','solid'])this.u[name]=gl.getUniformLocation(program,name);
@@ -58,12 +58,13 @@ export class Compositor{
  draw(frame:Frame,source:PictureSource){
   const gl=this.gl,width=this.canvas.width,height=this.canvas.height,scale=width/frame.width;
   gl.viewport(0,0,width,height);gl.useProgram(this.program);gl.bindVertexArray(this.quad);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
-  const [r,g,b]=parseColour(frame.background);gl.clearColor(r,g,b,1);gl.clear(gl.COLOR_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.uniform1i(this.u.picture,0);
+  if(frame.background==='transparent')gl.clearColor(0,0,0,0);else{const [r,g,b]=parseColour(frame.background);gl.clearColor(r,g,b,1);}gl.clear(gl.COLOR_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.uniform1i(this.u.picture,0);
   const full={x:0,y:0,w:frame.width,h:frame.height},none:Matrix=[1,0,0,1,0,0];
   for(let n=0;n<frame.layers.length;n++){const layer=frame.layers[n];
    if(layer.kind==='fill'){if(layer.opacity>0)this.quadDraw(layer.rect,layer.transform,{x:0,y:0,w:1,h:1},layer.opacity,frame,{fill:parseColour(layer.color)});continue;}
    if(layer.kind==='media'){if(layer.opacity<=0||!layer.rect.w||!layer.rect.h)continue;const picture=source(layer);if(!picture)continue;
-    this.texture(layer.media==='video'?'video:'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,layer.media!=='video');
+    // Video and scene pictures change every frame, so each layer keeps one texture; stills are uploaded once.
+    const live=layer.media==='video'||layer.media==='scene';this.texture(live?layer.media+':'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,!live);
     this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h]});continue;}
    // Consecutive text layers are painted together on one canvas the size of the output, then drawn over the frame.
    const run:TextLayer[]=[];while(n<frame.layers.length&&frame.layers[n].kind==='text')run.push(frame.layers[n++] as TextLayer);n--;

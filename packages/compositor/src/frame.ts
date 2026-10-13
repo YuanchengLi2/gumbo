@@ -10,7 +10,9 @@ export type Matrix=[number,number,number,number,number,number];
 export type Rect={x:number;y:number;w:number;h:number};
 export type MediaLayer={kind:'media';
  /** The clip or overlay drawing it: a player keeps one video per key. */
- key:string;assetId:string;media:'video'|'image'|'sequence';
+ key:string;assetId:string;
+ /** A scene is coded motion graphics, drawn by its own document at frameIndex of its frames. */
+ media:'video'|'image'|'sequence'|'scene';
  /** Source seconds to show (video), or the sequence frame to show. */
  time:number;frameIndex?:number;
  /** Source seconds per timeline second while playing (the clip's speed; 0 for a held still). */
@@ -46,7 +48,10 @@ export function fitInBox(sourceW:number,sourceH:number,box:Rect,fit:'contain'|'c
  const x0=Math.max(box.x,left),y0=Math.max(box.y,top),x1=Math.min(box.x+box.w,left+w),y1=Math.min(box.y+box.h,top+h);
  return{rect:{x:x0,y:y0,w:Math.max(0,x1-x0),h:Math.max(0,y1-y0)},uv:{x:(x0-left)/w,y:(y0-top)/h,w:Math.max(0,x1-x0)/w,h:Math.max(0,y1-y0)/h}};
 }
-const mediaKind=(a:Asset):MediaLayer['media']|undefined=>a.sequence?'sequence':a.kind==='image'?'image':a.kind==='video'&&!a.scene?'video':undefined;
+const mediaKind=(a:Asset):MediaLayer['media']|undefined=>a.scene?'scene':a.sequence?'sequence':a.kind==='image'?'image':a.kind==='video'?'video':undefined;
+/** The scene frame shown at a source time: its frame at that moment, held on the last one. */
+const sceneFrame=(a:Asset,sourceTime:number)=>Math.max(0,Math.min((a.scene?.durationInFrames??1)-1,Math.floor(sourceTime*(a.fps||30)+1e-7)));
+const frameOf=(a:Asset,kind:MediaLayer['media'],sourceTime:number)=>kind==='sequence'?sequenceFrame(a,sourceTime):kind==='scene'?sceneFrame(a,sourceTime):undefined;
 
 export type FrameInput={timeline:TimelineDocument;footage:FootageIndex;resolved?:ResolvedTimeline};
 /** Everything that does not change from frame to frame, worked out once. */
@@ -78,7 +83,7 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const layers:Layer[]=background?[{kind:'fill',color:CLIP_BG,rect:box,transform:outer,opacity:outerOpacity}]:[];
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
-  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity,grades:look.grades,blur});}
+  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:look.grades,blur});}
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
 }
@@ -104,7 +109,7 @@ function sourceLayer(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  const box={x:0,y:0,w:width,h:height},placed=fitInBox(asset.width,asset.height,box,q.fit==='contain'||kind==='sequence'?'contain':'cover');
  const transform=aboutCentre(width,height,translate((Number(q.x??.5)-.5)*width,(Number(q.y??.5)-.5)*height),rotation(Number(q.rotation??0)),scaling(Number(q.scale??1),Number(q.scale??1)));
  const g=gradeOf(q),sourceTime=item.source!.srcIn+elapsed;
- return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:isNeutral(g)?[]:[g],blur:0}];
+ return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:isNeutral(g)?[]:[g],blur:0}];
 }
 const components=new Set(['title_card','lower_third','circle_highlight','callout_arrow','counter','progress_bar']);
 /** A drawn element (a title, lower third, highlight, arrow, counter or progress bar), fading in over its first 8 frames. */
@@ -129,7 +134,7 @@ export function frameAt(p:Prepared,time:number):Frame{
  if(!videoHidden){
   const n=r.clips.findIndex(c=>frameNo>=c.from&&frameNo<c.from+c.durationInFrames),clip=r.clips[n];
   // A transition window centred on the incoming clip's start, between two video clips, draws both clips over black.
-  const window=r.clips.findIndex((c,i)=>{if(!i||!c.transitionIn||!drawnTransitions.has(c.transitionIn.type))return false;const a=p.assets.get(c.assetId),b=p.assets.get(r.clips[i-1].assetId);if(a?.kind!=='video'||b?.kind!=='video'||a.scene||b.scene)return false;const from=c.from-Math.round(c.transitionIn.durationSec*fps/2);return frameNo>=from&&frameNo<from+Math.max(1,Math.round(c.transitionIn.durationSec*fps));});
+  const window=r.clips.findIndex((c,i)=>{if(!i||!c.transitionIn||!drawnTransitions.has(c.transitionIn.type))return false;const a=p.assets.get(c.assetId),b=p.assets.get(r.clips[i-1].assetId);if(a?.kind!=='video'||b?.kind!=='video')return false;const from=c.from-Math.round(c.transitionIn.durationSec*fps/2);return frameNo>=from&&frameNo<from+Math.max(1,Math.round(c.transitionIn.durationSec*fps));});
   if(window>0)layers.push({kind:'fill',color:TRANSITION_BG,rect:{x:0,y:0,w:width,h:height},transform:identity,opacity:1},...transitionLayers(p,r.clips[window-1],r.clips[window],time));
   else if(clip){const elapsed=time-clip.start,dip=clip.transitionIn?.type==='dip_to_black'?Math.min(1,(frameNo-clip.from)/(clip.transitionIn.durationSec*fps/2||1)):1;
    layers.push(...clipLayers(p,clip,time,clip.srcIn+(clip.holdSec?0:elapsed*clip.speed),identity,dip));}

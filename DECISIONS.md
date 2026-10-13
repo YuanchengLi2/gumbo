@@ -453,3 +453,11 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Keyframes are white diamonds on their block: press one to jump there, drag to move it, Delete removes it.
 - The agent is told camera moves are keyframes, other visuals are scenes, and processed media is never the edit itself. Commands that render scenes or the composition (the Remotion CLI's render or still, or the renderer API in a script the command runs) are refused before they start.
 - Same day: scores are mastered to about -9 LUFS (one came out at -31 LUFS, inaudible under the music gain and ducking); resuming a conversation repaired for an unanswered server call starts a new journal scope instead of failing; the timeline says why it does not respond while Figjam is editing.
+
+## October 13, 2026 — Motion graphics stay, on the one engine; plans are answered like Codex
+
+- Phase 5 had removed coded scenes from v1. The user reversed it: the agent keeps writing Remotion, drawings and anything else as code, unrestricted. The revert brought the agent's instructions back; the new engine now shows scenes too.
+- Preview: a scene is a layer in the frame model. Its own sandboxed document (dream-engine:// for engine scenes, the file for legacy HTML scenes) is placed, scaled and cropped where the frame model puts it and told which frame to draw. Whatever lies under the first scene is drawn on the engine's canvas below it; whatever lies over it (titles, captions, overlays) on a transparent canvas above. A scene that fails shows its error over the picture and the agent sees it next request, as before.
+- Export: each scene frame is drawn in a hidden, transparent, off-screen window in the main process over the same frame protocol, captured with its alpha and composited by the same compositor as footage. A held frame is drawn once.
+- Plans: under a proposed plan, a bar takes what to change (sent as a revision of the saved plan), Accept runs it, and underneath it a model menu (the composer's model by default) picks which model carries it out.
+- Project files: writes go through a temporary copy and a rename, which Windows refuses (EPERM) while OneDrive or a reader holds the file. One helper retries for about a second, then writes in place.

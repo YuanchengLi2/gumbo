@@ -49,7 +49,7 @@ export interface DreamDesktop {
  pickMedia():Promise<string[]>;
  mediaPath(file:File):string;
  exportVideo(request?:'video'|'timeline'|Record<string,unknown>):Promise<{path:string;format?:'video'|'timeline'}|null>;
- cancelExport():Promise<void>;pickExportFolder(current?:string):Promise<string|null>;beginExport(settings:Record<string,unknown>):Promise<{id:string;video?:{width:number;height:number;fps:number;codec:'h264'|'hevc';quality:'lower'|'recommended'|'higher';container:'mp4'|'mov'}}>;exportChunk(id:string,position:number,data:Uint8Array):Promise<void>;finishExport(id:string):Promise<{path:string;paths:string[]}>;
+ cancelExport():Promise<void>;pickExportFolder(current?:string):Promise<string|null>;beginExport(settings:Record<string,unknown>):Promise<{id:string;video?:{width:number;height:number;fps:number;codec:'h264'|'hevc';quality:'lower'|'recommended'|'higher';container:'mp4'|'mov'}}>;exportChunk(id:string,position:number,data:Uint8Array):Promise<void>;sceneFrame(request:{key:string;source:{url:string}|{html:string};width:number;height:number;frame:number;fps:number}):Promise<{width:number;height:number;data:Uint8Array}>;closeScenes():Promise<void>;finishExport(id:string):Promise<{path:string;paths:string[]}>;
  reveal(path:string):Promise<void>;
  shareExport():Promise<{url:string;id:string}|null>;
  runtime():Promise<RuntimeStatus>;

@@ -1,10 +1,13 @@
-import {prepare,frameAt,Compositor,audioManifest,envelope,type Prepared,type MediaLayer,type AudioSegment} from '@dream/compositor';
+import {prepare,frameAt,Compositor,audioManifest,envelope,type Prepared,type MediaLayer,type AudioSegment,type Frame} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
+import {SceneLayers} from './scenes';
 
 /** The preview player: the engine's frames drawn live on a canvas, the way Export draws them. Video comes from one muted
  * video element per clip (decoded on the graphics card), kept on the frame the timeline asks for; sound from one audio
- * element per sound segment through Web Audio, shaped by the same gain, fade and ducking envelope Export mixes with. */
+ * element per sound segment through Web Audio, shaped by the same gain, fade and ducking envelope Export mixes with.
+ * Coded motion graphics play live in their own sandboxed documents between two canvases: what lies under the first
+ * scene is drawn on the canvas below, what lies over it (titles, captions, overlays) on a transparent canvas above. */
 export type PlayerEvent='frameupdate'|'play'|'pause'|'mutechange'|'ended';
 export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;requestFullscreen():void;
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void;removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void};
@@ -20,7 +23,8 @@ export class EnginePlayer implements PlayerRef{
  private videos=new Map<string,Video>();private images=new Map<string,HTMLImageElement>();private sounds=new Map<string,Sound>();
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
- constructor(readonly canvas:HTMLCanvasElement){this.compositor=new Compositor(canvas);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);}
+ private scenes?:SceneLayers;private over?:Compositor;
+ constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=new Compositor(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);}
  /** A new revision of the edit: the frames and sound follow it without interrupting playback. */
  setProject(timeline:TimelineDocument,footage:FootageIndex){
   this.prepared=prepare({timeline,footage});this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
@@ -82,20 +86,30 @@ export class EnginePlayer implements PlayerRef{
   if(this.stopped)return;this.raf=requestAnimationFrame(this.loop);if(!this.prepared)return;
   const t=this.now();if(this.playing&&t>=this.duration){this.time=Math.max(0,this.duration-1/this.fps);this.playing=false;for(const v of this.videos.values())v.el.pause();for(const s of this.sounds.values())s.el.pause();this.emit('pause');this.emit('ended');this.dirty=true;}
   const time=this.playing?t:this.time,frame=frameAt(this.prepared,time),media=frame.layers.filter((l):l is MediaLayer=>l.kind==='media');
+  const pictured=media.filter(l=>l.media!=='scene');
   for(const layer of media)if(layer.media==='video')this.steer(this.video(layer),layer,this.playing);
   // The next clip is loaded and parked on its first frame half a second early, so a cut shows it at once.
   for(const layer of frameAt(this.prepared,Math.min(this.duration-1e-3,time+.5)).layers)if(layer.kind==='media'&&layer.media==='video'&&!media.some(m=>m.key===layer.key))this.steer(this.video(layer),layer,false);
-  else if(layer.kind==='media'&&layer.media!=='video')this.picture(layer);
+  else if(layer.kind==='media'&&(layer.media==='image'||layer.media==='sequence'))this.picture(layer);
   this.sound(time);
   const now=performance.now();for(const [key,v] of this.videos)if(now-v.lastUsed>4000){v.el.pause();v.el.removeAttribute('src');v.el.load();this.videos.delete(key);}
   if(this.playing){const n=this.getCurrentFrame();if(n!==this.lastFrame){this.lastFrame=n;this.emit('frameupdate',{frame:n});}this.dirty=true;}
   if(!this.dirty)return;
   // Wait for every picture the frame needs (up to a moment), so a seek or cut never flashes an empty frame.
-  const ready=media.every(l=>this.picture(l));if(!ready&&now-this.lastDraw<400)return;
-  this.fit();this.compositor.draw(frame,l=>this.picture(l));this.lastDraw=now;this.dirty=!ready;
+  const ready=pictured.every(l=>this.picture(l));if(!ready&&now-this.lastDraw<400)return;
+  this.fit();this.paint(frame,media);this.lastDraw=now;this.dirty=!ready;
+ }
+ private paint(frame:Frame,media:MediaLayer[]){
+  const first=frame.layers.findIndex(l=>l.kind==='media'&&l.media==='scene'),scenes=media.filter(l=>l.media==='scene');
+  if(first<0||!this.scenes||!this.layers){this.compositor.draw(frame,l=>this.picture(l));if(this.layers)this.layers.overlay.style.visibility='hidden';this.scenes?.update([],this.prepared.assets,1);return;}
+  this.compositor.draw({...frame,layers:frame.layers.slice(0,first)},l=>this.picture(l));
+  this.scenes.update(scenes,this.prepared.assets,this.canvas.getBoundingClientRect().width/frame.width);
+  const above=frame.layers.slice(first).filter(l=>!(l.kind==='media'&&l.media==='scene')),overlay=this.layers.overlay;
+  if(overlay.width!==this.canvas.width||overlay.height!==this.canvas.height){overlay.width=this.canvas.width;overlay.height=this.canvas.height;}
+  this.over??=new Compositor(overlay,{transparent:true});this.over.draw({...frame,background:'transparent',layers:above},l=>this.picture(l));overlay.style.visibility='visible';
  }
  /** The canvas draws at the size it is shown, in device pixels, never above the project's own size. */
  private fit(){const box=this.canvas.getBoundingClientRect(),{width,height}=this.prepared.timeline.settings,k=Math.min(1,(box.width*devicePixelRatio)/width)||1,w=Math.max(2,Math.round(width*k)),h=Math.max(2,Math.round(height*k));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
  redraw(){this.dirty=true;}
- destroy(){this.stopped=true;cancelAnimationFrame(this.raf);for(const v of this.videos.values()){v.el.pause();v.el.removeAttribute('src');v.el.load();}for(const s of this.sounds.values()){s.el.pause();s.el.removeAttribute('src');}this.videos.clear();this.sounds.clear();void this.audio?.close();this.compositor.dispose();}
+ destroy(){this.stopped=true;cancelAnimationFrame(this.raf);for(const v of this.videos.values()){v.el.pause();v.el.removeAttribute('src');v.el.load();}for(const s of this.sounds.values()){s.el.pause();s.el.removeAttribute('src');}this.videos.clear();this.sounds.clear();void this.audio?.close();this.compositor.dispose();this.over?.dispose();this.scenes?.destroy();}
 }

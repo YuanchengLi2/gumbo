@@ -3,6 +3,7 @@ import {prepare,frameAt,Compositor,type MediaLayer} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {previewUrl} from './player';
+import {SceneCaptures} from './scenes';
 
 /** Export, as CapCut does it: each output frame is drawn by the same compositor the player uses, from source frames decoded
  * exactly (WebCodecs, on the graphics card), and encoded by the graphics card's H.264 or HEVC encoder straight from the
@@ -39,7 +40,7 @@ export async function renderVideo(job:VideoJob){
  const output=new Output({format:job.container==='mov'?new MovOutputFormat():new Mp4OutputFormat(),target:new StreamTarget(new WritableStream({write:chunk=>job.write(chunk.data,chunk.position)}),{chunked:true})});
  const source=new CanvasSource(canvas,{codec:job.codec==='hevc'?'hevc':'avc',bitrate:videoBitrate(job),keyFrameInterval:2,hardwareAcceleration:'prefer-hardware',latencyMode:'quality'});
  output.addVideoTrack(source,{frameRate:job.fps});await output.start();
- const inputs=new Map<string,{input:Input;sink:Promise<VideoSampleSink|undefined>}>(),readers=new Map<string,{reader:Reader;last:number}>(),images=new Map<string,ImageBitmap>();
+ const scenes=new SceneCaptures(),inputs=new Map<string,{input:Input;sink:Promise<VideoSampleSink|undefined>}>(),readers=new Map<string,{reader:Reader;last:number}>(),images=new Map<string,ImageBitmap>();
  const sink=(asset:Asset)=>{let entry=inputs.get(asset.id);if(!entry){const input=new Input({source:new UrlSource(originalUrl(asset)),formats:ALL_FORMATS});entry={input,sink:input.getPrimaryVideoTrack().then(async track=>track&&await track.canDecode()?new VideoSampleSink(track):undefined)};inputs.set(asset.id,entry);}return entry.sink;};
  // A source this computer cannot decode (a format WebCodecs does not read) uses the playback copy made at import.
  const fallback=new Map<string,Input>(),playbackSink=async(asset:Asset)=>{let input=fallback.get(asset.id);if(!input){input=new Input({source:new UrlSource(previewUrl(asset)),formats:ALL_FORMATS});fallback.set(asset.id,input);}const track=await input.getPrimaryVideoTrack();return track?new VideoSampleSink(track):undefined;};
@@ -51,6 +52,7 @@ export async function renderVideo(job:VideoJob){
     if(layer.media==='video'){let entry=readers.get(layer.key);
      if(!entry){const s=await sink(asset)??await playbackSink(asset);if(!s)throw new Error(`${asset.filename} has no video this computer can decode.`);entry={reader:new Reader(s),last:n};readers.set(layer.key,entry);}
      entry.last=n;const sample=await entry.reader.at(layer.time);if(sample)pictures.set(layer,sample.toCanvasImageSource());}
+    else if(layer.media==='scene')pictures.set(layer,await scenes.picture(layer,asset));
     else pictures.set(layer,await image(layer.media==='sequence'?previewUrl(asset)+'&frame='+(layer.frameIndex??0):previewUrl(asset)));}
    compositor.draw(frame,layer=>pictures.get(layer));
    await source.add(time,1/job.fps);
@@ -60,5 +62,5 @@ export async function renderVideo(job:VideoJob){
   }
   source.close();await output.finalize();
  }catch(error){await output.cancel().catch(()=>{});throw error;}
- finally{for(const {reader} of readers.values())reader.close();for(const b of images.values())b.close();for(const {input} of inputs.values())input.dispose?.();for(const input of fallback.values())input.dispose?.();compositor.dispose();}
+ finally{scenes.close();for(const {reader} of readers.values())reader.close();for(const b of images.values())b.close();for(const {input} of inputs.values())input.dispose?.();for(const input of fallback.values())input.dispose?.();compositor.dispose();}
 }
