@@ -25,7 +25,7 @@ export function storeEngineScene(projectFolder:string,root:string,compiled:{bund
 }
 
 /** Candidate validation and immutable ingestion happen before the single SQLite commit. */
-export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId:string,ffprobe:string,options:{renderAudio?:AudioRenderer;signal?:AbortSignal;scenes?:boolean}={}):Promise<PublicationReceipt|undefined>{
+export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId:string,ffprobe:string,options:{renderAudio?:AudioRenderer;signal?:AbortSignal}={}):Promise<PublicationReceipt|undefined>{
  if(process.status!=='complete'||process.exitCode!==0)throw new Error('Only a successful process can publish.');
  const replay=db.db.prepare('SELECT json FROM workspace_publications WHERE id=?').get(process.id) as any;if(replay)return JSON.parse(replay.json);
  const root=join(db.folder,'Workspace');let raw:unknown;try{raw=JSON.parse(readFileSync(workspacePath(root,'project.json'),'utf8'));}catch(error){throw new Error('project.json is not valid JSON: '+(error as Error).message);}
@@ -57,9 +57,6 @@ export async function publishWorkspace(db:ProjectDB,process:ProcessResult,turnId
  // Sound first, so scenes can follow the beats of music published with them.
  const ordered=[...candidate.outputs].sort((a,b)=>Number(a.kind==='scene')-Number(b.kind==='scene'));
  for(const output of ordered){
-  // The engine draws footage, images, text elements, captions, keyframes, effects and transitions; coded motion graphics are
-  // not part of this version, so a new scene is refused with what to use instead.
-  if(output.kind==='scene'&&options.scenes===false)throw new Error(`Output "${output.id}" is a scene. Coded motion graphics are not part of Figjam yet: build the visuals from footage, images, text elements (title_card, lower_third, callout_arrow, circle_highlight, counter, progress_bar), captions, keyframes, effects and transitions, and remove "${output.id}" from outputs and the timeline.`);
   if(output.kind==='music'||output.kind==='sfx'){const asset=await soundOutput(db.folder,root,{id:output.id,path:output.path,kind:output.kind},options.renderAudio??inProcessRenderer,options.signal??new AbortController().signal);asset.creation={kind:'code',processId:process.id,outputId:output.id};outputs.set('output:'+output.id,asset);continue;}
   // The message names the output and both ways to fix it, so the agent corrects the declaration instead of guessing.
   if(output.kind!=='scene'&&!output.path.replaceAll('\\','/').startsWith('output/'))throw new Error(`Output "${output.id}" is declared as kind "${output.kind}" at ${output.path}. A file of kind ${output.kind} must be written under output/ (for example output/${output.path.replaceAll('\\','/').split('/').pop()}). If ${output.path} is a scene to play live (.tsx, .ts, .jsx, .js or .html), declare it with kind "scene" instead.`);
