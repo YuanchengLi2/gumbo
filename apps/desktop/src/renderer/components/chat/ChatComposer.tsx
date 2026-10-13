@@ -38,7 +38,7 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
  </div>;
 }
 
-function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
+export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
  const menu=usePopover(),current=modelChoices.find(m=>m.id===value)??modelChoices[0];
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+current.label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{current.label}</span><ChevronDown size={12}/></button>
