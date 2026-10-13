@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {models,engineBudgets,agentModels,autoModel,type ModelChoice,type Provider} from '@dream/config';
+import {modelRouterPrompt,routerMessage,parseRouterReply,fallbackModel,type RouterInput} from './model-router';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
@@ -9,7 +10,7 @@ import {intelligence,outputAllowance,taskBudget,type WorkerMode} from './intelli
 import {runTaskGraph,retryable} from './task-graph';
 import {routeCodeRequest,type RequestIntent} from './routing';
 import {approvesPlan} from '@dream/contracts';
-import {selectionRefs} from '@dream/timeline';
+import {selectionRefs,resolve as resolveTimeline} from '@dream/timeline';
 export {approvesPlan};
 import {proposePlan,approvePlan,executeWorkflow} from './workflow';
 import {FileApprovalRequired} from './file-tools';
@@ -72,7 +73,7 @@ export class Director {
   if(turnId){const resumes=Number(this.db.getMeta('resume_count:'+turnId)??0),limit=requestBudgetUsd(resumes),spent=this.db.turnUsage(turnId).costUsd;if(spent>=limit){this.db.event('ai.request_budget',{turnId,spentUsd:spent,limitUsd:limit});throw new InferenceError(`This request reached its $${limit.toFixed(2)} spending limit ($${spent.toFixed(2)} used). Completed work is saved; resume to continue with another $${requestBudgetUsd(0).toFixed(2)}.`,'request_budget');}}
   const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,0,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
   // Web search runs on Anthropic's servers; it goes first so the cache breakpoint stays on the last of Figjam's own tools.
-  const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&!this.db.getMeta(searchKey);
+  const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&purpose!=='model_routing'&&!this.db.getMeta(searchKey);
   if(withSearch)tools=[webSearchTool(model),...(tools as any[])];
   try{return await this.infer(model,system,messages,tools,turnId,purpose,phase,profile,extra);}
   catch(error){if(withSearch&&error instanceof InferenceError&&error.httpStatus===400&&/web_search/i.test(error.message)){this.db.setMeta(searchKey,'1');this.db.event('ai.web_search_unavailable',{model,error:error.message.slice(0,300)});return this.infer(model,system,messages,(tools as any[]).slice(1),turnId,purpose,phase,profile,extra);}throw error;}
@@ -87,8 +88,26 @@ export class Director {
  // A model picked for a request that already ran (approving its plan, continuing it) replaces the one it ran on.
  private chooseModel(turnId:string,model?:ModelChoice){if(!model)return;this.db.setMeta('model-choice:'+turnId,model);const pinned=this.db.getMeta('agent-model:'+turnId);
   // Auto decides again for the next part of a request it chose for (an approved plan is doing the work, not planning it).
-  if(model==='auto'){if(pinned&&this.db.getMeta('agent-model-source:'+turnId)==='auto')this.db.setMeta('agent-model:'+turnId,'');return;}
+  if(model==='auto'){if(pinned)this.db.setMeta('agent-model:'+turnId,'');return;}
   if(pinned&&pinned!==agentModels[model]){this.db.setMeta('agent-model:'+turnId,agentModels[model]);this.db.setMeta('agent-model-source:'+turnId,'user');this.db.event('ai.model_chosen',{turnId,choice:model,model:agentModels[model],changedFrom:pinned});}}
+ /** Auto: Haiku picks the model for this request, or the next part of it (an approved plan, a continuation), once; the
+  * choice is pinned like a user's pick so the request keeps one prompt cache. Keyword rules decide if Haiku cannot. */
+ private async routeModel(turnId:string,text:string,mode:'edit'|'plan'|'question'){
+  if(this.db.getMeta('model-choice:'+turnId)!=='auto'||process.env.DREAM_AGENT_MODEL||this.db.getMeta('agent-model:'+turnId))return;
+  await this.refreshProviders();const t=this.db.timeline(),footage=this.db.footage(),route=this.db.loadState<any>('routing:'+turnId)??undefined,approvedPlan=this.db.getMeta('route:'+turnId)==='workflow';
+  let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}
+  const input:RouterInput={request:text,mode,approvedPlan,project:{clips:t.spine.length,elements:t.attached.length,audio:t.music.length,minutes,footage:footage.assets.length},providers:this.providers?.value??{}};
+  let model=fallbackModel({...input,route}),reason='keyword rules';
+  try{
+   const response:any=await this.inference(agentModels.haiku,modelRouterPrompt,[{role:'user',content:routerMessage(input)}],[],turnId,undefined,'model_routing','router');
+   const chosen=parseRouterReply((response.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join(''),input.providers);
+   if(chosen){model=chosen.model.id;reason=chosen.reason;}else this.db.event('ai.route_fallback',{turnId,error:'The router named no available model.'});
+  }catch(error){
+   if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;
+   this.db.event('ai.route_fallback',{turnId,error:(error as Error).message});
+  }
+  this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,reason});
+ }
  /** Which other providers have a key on the gateway, asked at most every ten minutes; Claude alone when it cannot be asked. */
  private providers?:{at:number;value:Partial<Record<Provider,boolean>>};
  private async refreshProviders(){
@@ -111,6 +130,7 @@ export class Director {
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
   if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Figjam build.');
   // The window learns the phase at once, so it can show the agent editing from its first change.
+  await this.routeModel(turnId,text,planning?'plan':readOnly?'question':'edit');
   const phaseNow=planning?'planning':readOnly?'answering':'editing';this.db.setPhase(turnId,phaseNow);this.publish('ai.phase',{turnId,phase:phaseNow});const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
   const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
   const model=this.agentModel(turnId,text);

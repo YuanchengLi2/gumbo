@@ -40,14 +40,14 @@ export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:Mo
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
  // Auto first, then each provider's models; a provider without a key on the gateway is listed but cannot be picked yet.
  const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- const item=(choice:ModelChoice,title:string,ready=true)=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span>{title}</span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
+ const item=(choice:ModelChoice,title:string,ready=true,detail='',cost='')=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span><strong>{title}</strong>{detail&&<small>{detail}{cost&&<em>{cost}</em>}</small>}</span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover permission-menu model-menu" role="menu" aria-label="Model">
    <header>Model<kbd>{shortcutHints.model}</kbd></header>
-   {item('auto','Auto')}
+   {item('auto','Auto',true,'Picks the best model for each request')}
    {groups.map(g=><React.Fragment key={g.provider}><div className="model-group">{providerLabels[g.provider]}{!available(g.models[0].choice,providers)&&<small>Add its key on the gateway</small>}</div>
-    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),available(m.choice,providers)))}</React.Fragment>)}
+    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),available(m.choice,providers),m.detail,m.cost))}</React.Fragment>)}
   </div>}
  </div>;
 }

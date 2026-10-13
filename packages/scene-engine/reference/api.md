@@ -146,7 +146,14 @@ Score fields: `tempo` (BPM), `key` ("A minor"), `meter` ("4/4"), `mood` (calm, b
 
 Optional per track: `sections` (names to play in), `repeat` (a count, or `false` to play once; by default a track loops to fill its sections), `octave`, `velocity`, `gainDb`, `pan`. Errors name the field and the token that is wrong.
 
-Sound effects are timeline `sfx` items whose source is an output of kind `sfx`: either a preset, `"path":"preset:Soft whoosh"` (the project state lists the presets), or a sound design file `src/sfx/<name>.sfx.json` with `durationSec` and `layers` (each `wave` sine, triangle, saw, square or noise, `startSec`, `durationSec`, `frequencyHz`, `endFrequencyHz`, `gainDb`, `pan`, `attackSec`, `releaseSec`, `filterHz`).
+Sound effects are timeline `sfx` items whose source is an output of kind `sfx`: either a preset, `"path":"preset:Soft whoosh"` (the project state lists the presets), or a sound design file `src/sfx/<name>.sfx.json`: `durationSec` (up to 30) and `layers` (1 to 32). Each layer needs `wave` (sine, triangle, saw, square or noise), `durationSec` and `frequencyHz` (20 to 20000); it may set `id` (unique within the sound; layer-1, layer-2... by default), `startSec` (0), `endFrequencyHz` (a pitch sweep; no sweep by default), `gainDb` (-60 to 6; -6), `pan` (-1 left to 1 right; 0), `attackSec` (0.01), `releaseSec` (0.1) and `filterHz` (low-pass, 20 to 20000; open). Two rules: every layer ends within the sound (`startSec + durationSec <= durationSec`), and its fades fit inside it (`attackSec + releaseSec <= durationSec` of the layer). Writing the file returns a check listing every problem at once.
+
+```json
+{"durationSec":0.7,"layers":[
+ {"id":"air","wave":"noise","durationSec":0.6,"frequencyHz":600,"endFrequencyHz":2400,"filterHz":3000,"gainDb":-10,"attackSec":0.2,"releaseSec":0.3},
+ {"id":"tone","wave":"sine","startSec":0.05,"durationSec":0.65,"frequencyHz":880,"gainDb":-16,"attackSec":0.005,"releaseSec":0.5}
+]}
+```
 
 ## Example: score
 

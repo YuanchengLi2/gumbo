@@ -3,18 +3,20 @@
  * DEEPSEEK_API_KEY). Prices per million tokens (input, output, cache read) from the official pages on October 13, 2026. */
 export type Provider='anthropic'|'openai'|'google'|'deepseek';
 export type ModelChoice='auto'|'sonnet'|'haiku'|'opus'|'gpt-astra'|'gpt-sol'|'gpt-luna'|'gemini-argon'|'gemini-flash'|'deepseek-pro'|'deepseek-flash';
-export type ModelInfo={choice:Exclude<ModelChoice,'auto'>;id:string;provider:Provider;label:string;detail:string;price:[number,number];cachedRead:number};
+/** detail: what the model is good at, in a few words (the menu shows it under the name, and Auto's router reads it);
+ * cost: its price tier, $ to $$$$$, from its output price. */
+export type ModelInfo={choice:Exclude<ModelChoice,'auto'>;id:string;provider:Provider;label:string;detail:string;cost:string;vision:boolean;price:[number,number];cachedRead:number};
 export const modelCatalog:ModelInfo[]=[
- {choice:'opus',id:'claude-opus-5-5',provider:'anthropic',label:'Claude Opus 5.5',detail:'Most capable Claude, for demanding creative work.',price:[4,20],cachedRead:.2},
- {choice:'sonnet',id:'claude-sonnet-5-5',provider:'anthropic',label:'Claude Sonnet 5.5',detail:'First cuts, long edits, motion graphics and everything in between.',price:[2,10],cachedRead:.2},
- {choice:'haiku',id:'claude-haiku-5-5',provider:'anthropic',label:'Claude Haiku 5.5',detail:'Cheapest and fastest Claude, for small, precise changes.',price:[.1,.5],cachedRead:.01},
- {choice:'gpt-astra',id:'gpt-6-astra',provider:'openai',label:'GPT-6 Astra',detail:'OpenAI\'s flagship. The most expensive model here.',price:[10,50],cachedRead:1},
- {choice:'gpt-sol',id:'gpt-6.1-sol',provider:'openai',label:'GPT-6.1 Sol',detail:'OpenAI\'s everyday model, priced like Sonnet.',price:[2,10],cachedRead:.1},
- {choice:'gpt-luna',id:'gpt-6-luna',provider:'openai',label:'GPT-6 Luna',detail:'OpenAI\'s small, fast model.',price:[.1,.5],cachedRead:.01},
- {choice:'gemini-argon',id:'gemini-4-argon',provider:'google',label:'Gemini 4 Argon',detail:'Google\'s newest reasoning model.',price:[2,10],cachedRead:.1},
- {choice:'gemini-flash',id:'gemini-3.8-flash',provider:'google',label:'Gemini 3.8 Flash',detail:'Fast and inexpensive, good at reading and answering.',price:[.75,3.75],cachedRead:.075},
- {choice:'deepseek-pro',id:'deepseek-v4-pro',provider:'deepseek',label:'DeepSeek V4 Pro',detail:'Strong and inexpensive. Cannot see images.',price:[1.32,3.96],cachedRead:.044},
- {choice:'deepseek-flash',id:'deepseek-flash',provider:'deepseek',label:'DeepSeek V4.1 Flash',detail:'The cheapest model here.',price:[.3,1.2],cachedRead:.006}
+ {choice:'opus',id:'claude-opus-5-5',provider:'anthropic',label:'Claude Opus 5.5',detail:'Best editing judgement and planning',cost:'$$$$',vision:true,price:[4,20],cachedRead:.2},
+ {choice:'sonnet',id:'claude-sonnet-5-5',provider:'anthropic',label:'Claude Sonnet 5.5',detail:'Strong all-round editor, motion graphics',cost:'$$$',vision:true,price:[2,10],cachedRead:.2},
+ {choice:'haiku',id:'claude-haiku-5-5',provider:'anthropic',label:'Claude Haiku 5.5',detail:'Fast, for small precise edits',cost:'$',vision:true,price:[.1,.5],cachedRead:.01},
+ {choice:'gpt-astra',id:'gpt-6-astra',provider:'openai',label:'GPT-6 Astra',detail:'Frontier reasoning, very expensive',cost:'$$$$$',vision:true,price:[10,50],cachedRead:1},
+ {choice:'gpt-sol',id:'gpt-6.1-sol',provider:'openai',label:'GPT-6.1 Sol',detail:'Capable all-rounder',cost:'$$$',vision:true,price:[2,10],cachedRead:.1},
+ {choice:'gpt-luna',id:'gpt-6-luna',provider:'openai',label:'GPT-6 Luna',detail:'Fast, for small edits and questions',cost:'$',vision:true,price:[.1,.5],cachedRead:.01},
+ {choice:'gemini-argon',id:'gemini-4-argon',provider:'google',label:'Gemini 4 Argon',detail:'Strong reasoning, long footage',cost:'$$$',vision:true,price:[2,10],cachedRead:.1},
+ {choice:'gemini-flash',id:'gemini-3.8-flash',provider:'google',label:'Gemini 3.8 Flash',detail:'Fast, good at reading footage and answering',cost:'$$',vision:true,price:[.75,3.75],cachedRead:.075},
+ {choice:'deepseek-pro',id:'deepseek-v4-pro',provider:'deepseek',label:'DeepSeek V4 Pro',detail:'Good at code, cannot see footage',cost:'$$',vision:false,price:[1.32,3.96],cachedRead:.044},
+ {choice:'deepseek-flash',id:'deepseek-flash',provider:'deepseek',label:'DeepSeek V4.1 Flash',detail:'Cheapest, simple edits',cost:'$',vision:true,price:[.3,1.2],cachedRead:.006}
 ];
 export const providerLabels:Record<Provider,string>={anthropic:'Claude',openai:'OpenAI',google:'Google',deepseek:'DeepSeek'};
 export const modelInfo=(idOrChoice:string)=>modelCatalog.find(m=>m.id===idOrChoice||m.choice===idOrChoice);

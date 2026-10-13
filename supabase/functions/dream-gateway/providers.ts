@@ -80,7 +80,9 @@ export function responsesRequest(body:any,model:ProviderModel,maxTokens:number){
   if(parts.length)input.push({role:'user',content:parts});
  }
  const tools=functionTools(body.tools),effort=effortOf(body),instructions=systemText(body.system);
- return{model:body.model,...(instructions?{instructions}:{}),input,...(tools.length?{tools:tools.map(f=>({type:'function',...f,strict:false})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_output_tokens:maxTokens,stream:true,store:false,...(effort?{reasoning:{effort}}:{})};
+ return{model:body.model,...(instructions?{instructions}:{}),input,...(tools.length?{tools:tools.map(f=>({type:'function',...f,strict:false})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_output_tokens:maxTokens,stream:true,store:false,
+  // Every call of one request shares a cache key, so OpenAI routes them to the same cache and the growing prefix is read, not re-billed.
+  ...(body.turnId?{prompt_cache_key:'figjam-'+String(body.turnId).slice(0,56)}:{}),...(effort?{reasoning:{effort}}:{})};
 }
 
 /** Writes Anthropic streaming events: one text or tool_use block open at a time, then the stop reason and usage. */
