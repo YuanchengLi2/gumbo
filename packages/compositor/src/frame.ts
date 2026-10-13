@@ -79,6 +79,7 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
   layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity,grades:look.grades,blur});}
+ else if(asset.scene)layers.push({kind:'text',key:'scene:'+asset.id,component:'audio_card',text:'Motion graphics are not shown in this version',x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
 }
