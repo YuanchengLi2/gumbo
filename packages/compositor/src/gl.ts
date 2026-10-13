@@ -63,7 +63,7 @@ export class Compositor{
   for(let n=0;n<frame.layers.length;n++){const layer=frame.layers[n];
    if(layer.kind==='fill'){if(layer.opacity>0)this.quadDraw(layer.rect,layer.transform,{x:0,y:0,w:1,h:1},layer.opacity,frame,{fill:parseColour(layer.color)});continue;}
    if(layer.kind==='media'){if(layer.opacity<=0||!layer.rect.w||!layer.rect.h)continue;const picture=source(layer);if(!picture)continue;
-    this.texture(layer.media==='video'?'video:'+layer.assetId+':'+n:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,layer.media!=='video');
+    this.texture(layer.media==='video'?'video:'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,layer.media!=='video');
     this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h]});continue;}
    // Consecutive text layers are painted together on one canvas the size of the output, then drawn over the frame.
    const run:TextLayer[]=[];while(n<frame.layers.length&&frame.layers[n].kind==='text')run.push(frame.layers[n++] as TextLayer);n--;

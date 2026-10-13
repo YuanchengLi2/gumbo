@@ -9,7 +9,7 @@ import {emptyTimeline} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
 import {normalizeLoudness} from '../../apps/desktop/src/main/export-loudness';
 import {measureLoudness} from '../../apps/project-service/src/loudness';
-import {audioManifest,autoLevelDb} from '../../packages/composition/src/audio-manifest';
+import {audioManifest,autoLevelDb} from '@dream/compositor';
 
 const make=(file:string,audio:string[])=>{const r=spawnSync(ffmpeg!,['-y','-v','error','-f','lavfi','-i','testsrc2=s=320x180:r=30:d=4',...audio,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-shortest',file],{windowsHide:true});if(r.status)throw new Error(r.stderr.toString());return file;};
 const videoHash=(file:string)=>spawnSync(ffmpeg!,['-v','error','-i',file,'-map','0:v','-c','copy','-f','md5','-'],{encoding:'utf8',windowsHide:true}).stdout.trim();

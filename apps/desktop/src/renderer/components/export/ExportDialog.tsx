@@ -1,6 +1,5 @@
-import React,{useMemo,useState} from 'react';
-import {Thumbnail} from '@remotion/player';
-import {TimelineComposition} from '@dream/composition';
+import React,{useState} from 'react';
+import {EngineView} from '../../engine/EngineView';
 import {resolve} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import type {ExportProgress} from '@dream/contracts';
@@ -21,7 +20,6 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
  const t=p.project.timeline,{width,height,fps}=t.settings,short=Math.min(width,height),duration=resolve(t,p.project.footage).durationSec;
  const [c,setC]=useState<ExportChoices>(()=>({name:p.project.meta.name,folder:p.project.meta.folder.replace(/[\\/]+$/,'')+(p.project.meta.folder.includes('\\')?'\\':'/')+'Exports',video:true,resolution:'source',quality:'recommended',codec:'h264',format:'mp4',fps:'source',audio:false,audioFormat:'mp3',...remembered()}));
  const set=(patch:Partial<ExportChoices>)=>setC(old=>{const next={...old,...patch};try{const {name,folder,...kept}=next;localStorage.setItem('dream-export',JSON.stringify(kept));}catch{}return next;});
- const inputProps=useMemo(()=>({timeline:t,footage:p.project.footage,media:Object.fromEntries(p.project.footage.assets.map(a=>[a.id,'dream-media://'+a.id+'/preview?revision='+(a.proxyPath?'proxy':'original')])),audioMedia:{}}),[t,p.project.footage]);
  const target=c.resolution==='source'?short:Math.min(short,Number(c.resolution)),outW=Math.round(width*target/short/2)*2,outH=Math.round(height*target/short/2)*2,outFps=c.fps==='source'?fps:c.fps;
  const bytes=(c.video?bpp[c.quality]*(c.codec==='hevc'?.6:1)*outW*outH*outFps*duration/8:0)+(c.audio||c.video?(c.audioFormat==='wav'&&!c.video?1536e3:256e3)*duration/8:0);
  const size=bytes>=1e9?(bytes/1e9).toFixed(1)+' GB':Math.max(1,Math.round(bytes/1e6))+' MB';
@@ -35,7 +33,7 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
   <header className="export-head"><h2>Export</h2><button className="icon-button" aria-label="Close" onClick={p.onClose}><X size={18}/></button></header>
   <div className="export-body">
    <div className="export-stage"><div className="export-cover" style={{aspectRatio:`${width}/${height}`,[width>=height?'width':'height']:'100%'}}>
-    {duration>0?<Thumbnail component={TimelineComposition as any} inputProps={inputProps} compositionWidth={width} compositionHeight={height} frameToDisplay={Math.min(Math.max(0,p.frame),Math.max(0,Math.round(duration*fps)-1))} durationInFrames={Math.max(1,Math.round(duration*fps))} fps={fps} style={{width:'100%',height:'100%'}}/>:<Film size={28}/>}
+    {duration>0?<EngineView timeline={t} footage={p.project.footage} frame={Math.min(Math.max(0,p.frame),Math.max(0,Math.round(duration*fps)-1))}/>:<Film size={28}/>}
     {(running||done)&&<div className={'export-cover-state'+(done?' done':'')}>{done?<><span className="export-check"><Check size={22}/></span><strong>Exported</strong></>:<><strong>{Math.round((p.progress?.progress??0)*100)}%</strong><small>{p.progress?.phase??'Exporting'}</small></>}</div>}
    </div></div>
    <div className="export-form">

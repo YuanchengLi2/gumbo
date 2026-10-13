@@ -1,7 +1,7 @@
 import {editingChanges} from './editing-language';
 import React,{useEffect,useRef,useState} from 'react';
 
-import type {PlayerRef} from '@remotion/player';
+import type {PlayerRef} from './engine/EngineView';
 
 import {resolve} from '@dream/timeline';
 

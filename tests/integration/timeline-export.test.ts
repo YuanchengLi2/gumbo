@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import {timelineXML,exchangeTracks,type ExchangeClip} from '../../apps/desktop/src/main/timeline-xml';
-import {audioAutomation,envelope,type AudioSegment} from '../../packages/composition/src/audio-manifest';
+import {audioAutomation,envelope,type AudioSegment} from '@dream/compositor';
 const clip=(id:string,extra:Partial<ExchangeClip>={}):ExchangeClip=>({id,name:id,path:'C:/media/'+id+'.wav',kind:'audio',track:'Same name',trackId:id,trackOrder:0,start:0,end:2,sourceIn:1,sourceOut:3,sourceDuration:5,sourceFps:30,width:0,height:0,enabled:true,...extra});
 it('keeps same-named tracks separate, splits overlapping lanes, and maps both stereo channels',()=>{
  const clips=[clip('a',{trackId:'dialogue',linkGroup:'video'}),clip('b',{trackId:'music'}),clip('c',{trackId:'music',start:1,end:3}),clip('video',{kind:'video',trackId:'video',linkGroup:'video',width:1920,height:1080,sourceFps:24000/1001})];

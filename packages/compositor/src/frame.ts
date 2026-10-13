@@ -8,9 +8,13 @@ export type Grade={exposure:number;contrast:number;saturation:number;temperature
 /** A 2x3 affine transform [a,b,c,d,e,f]: x' = a*x + c*y + e, y' = b*x + d*y + f. */
 export type Matrix=[number,number,number,number,number,number];
 export type Rect={x:number;y:number;w:number;h:number};
-export type MediaLayer={kind:'media';assetId:string;media:'video'|'image'|'sequence';
+export type MediaLayer={kind:'media';
+ /** The clip or overlay drawing it: a player keeps one video per key. */
+ key:string;assetId:string;media:'video'|'image'|'sequence';
  /** Source seconds to show (video), or the sequence frame to show. */
  time:number;frameIndex?:number;
+ /** Source seconds per timeline second while playing (the clip's speed; 0 for a held still). */
+ rate:number;
  /** The part of the source shown (0-1 of its width and height) and where it lands in the frame before the transform. */
  uv:Rect;rect:Rect;transform:Matrix;opacity:number;grades:Grade[];blur:number};
 export type FillLayer={kind:'fill';color:string;rect:Rect;transform:Matrix;opacity:number};
@@ -74,7 +78,7 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const layers:Layer[]=background?[{kind:'fill',color:CLIP_BG,rect:box,transform:outer,opacity:outerOpacity}]:[];
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
-  layers.push({kind:'media',assetId:asset.id,media:kind,time:sourceTime,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity,grades:look.grades,blur});}
+  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity,grades:look.grades,blur});}
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
 }
@@ -100,7 +104,7 @@ function sourceLayer(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  const box={x:0,y:0,w:width,h:height},placed=fitInBox(asset.width,asset.height,box,q.fit==='contain'||kind==='sequence'?'contain':'cover');
  const transform=aboutCentre(width,height,translate((Number(q.x??.5)-.5)*width,(Number(q.y??.5)-.5)*height),rotation(Number(q.rotation??0)),scaling(Number(q.scale??1),Number(q.scale??1)));
  const g=gradeOf(q),sourceTime=item.source!.srcIn+elapsed;
- return[{kind:'media',assetId:asset.id,media:kind,time:sourceTime,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:isNeutral(g)?[]:[g],blur:0}];
+ return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:kind==='sequence'?sequenceFrame(asset,sourceTime):undefined,uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:isNeutral(g)?[]:[g],blur:0}];
 }
 const components=new Set(['title_card','lower_third','circle_highlight','callout_arrow','counter','progress_bar']);
 /** A drawn element (a title, lower third, highlight, arrow, counter or progress bar), fading in over its first 8 frames. */
@@ -135,5 +139,5 @@ export function frameAt(p:Prepared,time:number):Frame{
  return{width,height,background:COMPOSITION_BG,layers};
 }
 /** The source moments of video a frame needs, by asset: what a decoder must deliver for it. */
-export function videoNeeds(frame:Frame){return frame.layers.filter((l):l is MediaLayer=>l.kind==='media'&&l.media==='video').map(l=>({assetId:l.assetId,time:l.time}));}
+export function videoNeeds(frame:Frame){return frame.layers.filter((l):l is MediaLayer=>l.kind==='media'&&l.media==='video').map(l=>({key:l.key,assetId:l.assetId,time:l.time}));}
 export type {SpineClip};

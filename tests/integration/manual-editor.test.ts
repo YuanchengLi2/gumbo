@@ -9,7 +9,7 @@ import {AssetSchema,emptyFootage} from '@dream/footage';
 import {emptyTimeline,ClipSchema,apply,resolve,type TimelineDocument} from '@dream/timeline';
 import {ProjectDB} from '@dream/project-db';
 import {processBatch} from '@dream/guardrails';
-import {audioManifest} from '../../packages/composition/src/audio-manifest';
+import {audioManifest} from '@dream/compositor';
 import {addAsset,trimItems,moveItems,splitItems,duplicateItems} from '../../apps/desktop/src/renderer/manual/model';
 import {selectRange,toggleSelection} from '../../apps/desktop/src/renderer/manual/opencut/selection/state';
 const footage=emptyFootage();footage.assets=[AssetSchema.parse({id:'v',filename:'Video',kind:'video',originalPath:'v.mp4',durationSec:20,hasAudio:true,fingerprint:'v'}),AssetSchema.parse({id:'still',filename:'Still',kind:'image',originalPath:'s.png',durationSec:5,fingerprint:'s'}),AssetSchema.parse({id:'audio',filename:'Audio',kind:'audio',originalPath:'s.wav',durationSec:8,hasAudio:true,fingerprint:'a'})];

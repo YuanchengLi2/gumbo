@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {cpus} from 'node:os';
 import {resolve as resolveTimeline,type TimelineDocument,type ResolvedClip,type ResolvedItem,type ResolvedTimeline,type Keyframe,keyframeValues} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
-import {audioManifest,envelope} from '../../../../packages/composition/src/audio-manifest';
+import {audioManifest,envelope} from '@dream/compositor';
 import {whiteBalance} from '../../../../packages/composition/src/visual-style';
 import {encodeAtLoudness} from './export-loudness';
 

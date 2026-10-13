@@ -2,7 +2,7 @@ import {frameFormat,renderConcurrency} from './render-settings';
 import {withExportLock} from './export-lock';
 import {authoredFiles,workspacePath,digest} from '../../../../packages/project-db/src/workspace-store';
 import {readFileSync} from 'node:fs';
-import {audioManifest,audioAutomation,type AudioSegment} from '../../../../packages/composition/src/audio-manifest';
+import {audioManifest,audioAutomation,type AudioSegment} from '@dream/compositor';
 import {dialog,type BrowserWindow} from 'electron';
 import {copyFile,mkdir,writeFile,rename,rm} from 'node:fs/promises';
 import {existsSync} from 'node:fs';

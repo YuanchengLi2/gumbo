@@ -5,7 +5,7 @@ const pixel=(gl:WebGL2RenderingContext,x:number,y:number)=>{const out=new Uint8A
  const canvas=document.createElement('canvas');canvas.width=200;canvas.height=100;const c=new Compositor(canvas);const gl=(c as any).gl as WebGL2RenderingContext;
  // A picture whose left half is red and right half blue.
  const pic=new OffscreenCanvas(40,20),p=pic.getContext('2d')!;p.fillStyle='#ff0000';p.fillRect(0,0,20,20);p.fillStyle='#0000ff';p.fillRect(20,0,20,20);
- const media=(o:object={})=>({kind:'media',assetId:'a',media:'image',time:0,uv:{x:0,y:0,w:1,h:1},rect:{x:0,y:0,w:200,h:100},transform:[1,0,0,1,0,0],opacity:1,grades:[],blur:0,...o});
+ const media=(o:object={})=>({kind:'media',key:'a',assetId:'a',media:'image',time:0,rate:1,uv:{x:0,y:0,w:1,h:1},rect:{x:0,y:0,w:200,h:100},transform:[1,0,0,1,0,0],opacity:1,grades:[],blur:0,...o});
  const frames:Record<string,Frame>={
   plain:{width:200,height:100,background:'#000000',layers:[media() as any]},
   // Scaled 2x about the centre: the red/blue boundary stays mid-frame and the edges are deep in each half.

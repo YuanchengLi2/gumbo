@@ -4,7 +4,7 @@ import {Conversation} from '../chat/Conversation';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {selectionRefs} from '@dream/timeline';
 import {MediaTile} from '../media/MediaTile';
-import type {PlayerRef} from '@remotion/player';
+import type {PlayerRef} from '../../engine/EngineView';
 import {History,X,ArrowDown} from 'lucide-react';
 import {WorkflowStateSchema,OutlineSchema} from '@dream/contracts';
 import type {ProjectState} from '@dream/project-db';
