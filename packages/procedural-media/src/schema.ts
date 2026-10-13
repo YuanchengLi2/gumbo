@@ -20,7 +20,7 @@ export type ScoreDocument=z.infer<typeof ScoreSchema>;
 export type ScoreTrack=z.infer<typeof TrackSchema>;
 export const ScoreOptionsSchema=z.object({id:z.string(),title:z.string().default('Original score'),seed:z.number().int(),tempo:z.number().min(40).max(200),key:z.number().int().min(0).max(11),durationSec:z.number().positive().max(600),mood:z.enum(['calm','bright','cinematic','pulse','warm']),intensity:z.number().min(0).max(1),instruments:z.array(z.enum(['pad','bass','pluck','lead','keys','drums'])).min(1),buildAtSec:z.number().optional()});
 export type ScoreOptions=z.input<typeof ScoreOptionsSchema>;
-export const SCORE_RENDERER_VERSION='dream-score-2';
+export const SCORE_RENDERER_VERSION='dream-score-3';
 export const SoundDesignSchema=z.object({schemaVersion:z.literal(1),id:z.string().min(1),title:z.string().min(1).max(120),seed:z.number().int(),durationSec:z.number().positive().max(30),layers:z.array(z.object({id:z.string().min(1),wave:z.enum(['sine','triangle','saw','square','noise']),startSec:z.number().nonnegative(),durationSec:z.number().positive().max(30),frequencyHz:z.number().min(20).max(20000),endFrequencyHz:z.number().min(20).max(20000),gainDb:z.number().min(-60).max(6),pan:z.number().min(-1).max(1),attackSec:z.number().nonnegative(),releaseSec:z.number().nonnegative(),filterHz:z.number().min(20).max(20000)})).min(1).max(32)}).superRefine((sound,context)=>{
  const ids=new Set<string>();for(const layer of sound.layers){if(ids.has(layer.id)||layer.startSec+layer.durationSec>sound.durationSec+.00001||layer.attackSec+layer.releaseSec>layer.durationSec)context.addIssue({code:'custom',message:'Sound layers need unique IDs, envelopes within their duration and placement within the sound.'});ids.add(layer.id);}
 });

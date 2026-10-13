@@ -1,9 +1,12 @@
 import {it,expect} from 'vitest';
-import {arrangeScore,renderArrangement,bindScore,renderSound,SoundDesignSchema} from '@dream/procedural-media';
+import {arrangeScore,renderArrangement,bindScore,renderSound,SoundDesignSchema,softLimit,MASTER_RMS} from '@dream/procedural-media';
 const fixture=()=>arrangeScore({id:'score',seed:4,tempo:120,key:0,durationSec:.5,mood:'warm',intensity:.7,instruments:['keys','bass']});
 it('renders editable notes and automation into matching stereo stems and master',()=>{
  const doc=fixture(),stems:Uint8Array[]=[];const first=renderArrangement(doc,(_,wav)=>stems.push(wav));expect(new DataView(first.wav.buffer).getUint16(22,true)).toBe(2);
- for(let n=44;n<first.wav.length;n+=2){const sum=stems.reduce((total,wav)=>total+new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getInt16(n,true),0)*first.masterGain;expect(Math.abs(new DataView(first.wav.buffer).getInt16(n,true)-sum)).toBeLessThan(4);}
+ // The master is the stems' sum at one gain through the soft limiter; the stems' 16-bit rounding is scaled by that gain.
+ const tolerance=2+first.masterGain*stems.length/2;
+ for(let n=44;n<first.wav.length;n+=2){const sum=stems.reduce((total,wav)=>total+new DataView(wav.buffer,wav.byteOffset,wav.byteLength).getInt16(n,true),0);expect(Math.abs(new DataView(first.wav.buffer).getInt16(n,true)-softLimit(sum/32767*first.masterGain)*32767)).toBeLessThan(tolerance);}
+ let energy=0;for(let n=44;n<first.wav.length;n+=2)energy+=(new DataView(first.wav.buffer).getInt16(n,true)/32767)**2;expect(20*Math.log10(Math.sqrt(energy/((first.wav.length-44)/2)))).toBeCloseTo(20*Math.log10(MASTER_RMS),0);
  doc.tracks[0].automation=[{target:'pan',points:[{beat:0,value:-1},{beat:1,value:1}]}];doc.tracks[0].notes[0].pitch+=12;expect(renderArrangement(doc).wav).not.toEqual(first.wav);expect(renderArrangement(doc).wav).toEqual(renderArrangement(doc).wav);
 });
 it('retimes bound notes with their section and rejects silently truncated arrangements',()=>{

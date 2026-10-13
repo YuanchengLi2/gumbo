@@ -111,8 +111,10 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(checkpoint.outcome)closeBatch();save();
  }
  // Every saved conversation drops server calls left without a result before it is sent again; only a paused last reply
- // (no local calls waiting) keeps them, so the server can finish it.
- checkpoint.messages=checkpoint.messages.map((m:any,n:number,all:any[])=>m.role==='assistant'&&Array.isArray(m.content)&&(n<all.length-1||checkpoint.pending?.length)?{...m,content:(c=>c.length?c:[{type:'text',text:'(No output.)'}])(withoutUnansweredServerCalls(m.content))}:m);
+ // (no local calls waiting) keeps them, so the server can finish it. Saved history is append-only, so a repair starts a new one.
+ let dropped=false;
+ checkpoint.messages=checkpoint.messages.map((m:any,n:number,all:any[])=>{if(m.role!=='assistant'||!Array.isArray(m.content)||(n===all.length-1&&!checkpoint.pending?.length))return m;const content=withoutUnansweredServerCalls(m.content);if(content.length===m.content.length)return m;dropped=true;return{...m,content:content.length?content:[{type:'text',text:'(No output.)'}]};});
+ if(dropped)checkpoint.journalEpoch=(checkpoint.journalEpoch??0)+1;
  const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
  // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
  const feedback=role!=='worker'?db.loadState<any>('resume_input:'+turnId):undefined;if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}

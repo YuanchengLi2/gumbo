@@ -67,3 +67,14 @@ it('drops a server tool call the provider left without a result, so the conversa
  const saved=[{role:'user',content:'Add music'},{role:'assistant',content:[orphan,title]},{role:'user',content:[{type:'tool_result',tool_use_id:'toolu_1',content:'{}'}]},{role:'assistant',content:[orphan]}];
  const repaired=repairSavedExchanges(saved,()=>undefined);expect(repaired[1].content).toEqual([title]);expect(repaired.at(-1)!.content).toEqual([orphan]);
 });
+
+it('resumes a current-format conversation saved with an unanswered server call, without rejecting its changed history',async()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-orphan-')));
+ try{
+  const orphan={type:'server_tool_use',id:'srvtoolu_1',name:'code_execution',input:{code:'edit project.json'}};
+  db.saveState('code-agent:turn:main',{turnId:'turn',protocolVersion:2,messages:[{role:'user',content:'Add music'},{role:'assistant',content:[orphan,{type:'text',text:'Working.'}]},{role:'user',content:'continue'}],results:[],completed:{},model:models.agent,failures:{}});
+  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const sent:any[]=[];
+  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'Add music',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));return{content:[{type:'text',text:'Done.'}],stop_reason:'end_turn'};}});
+  expect(sent).toHaveLength(1);expect(sent[0][1].content).toEqual([{type:'text',text:'Working.'}]);
+ }finally{db.close();}
+});
