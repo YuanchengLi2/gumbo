@@ -55,7 +55,7 @@ export class Director {
   if(stopped?.turnId&&!this.db.getMeta('routing:'+turnId)){
    this.controller=new AbortController();this.publish('ai.status',{status:'running'});let route:any;
    try{route=await this.classify(text,turnId,selection,intent,stopped);}catch(error){this.publish('ai.status',{status:'interrupted'});throw error;}finally{this.controller=null;}
-   if(route.route==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...route,continued:true});return this.resume(text);}
+   if(route.route==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...route,continued:true});this.chooseEffort(stopped.turnId,effort);this.chooseModel(stopped.turnId,model);return this.resume(text);}
    this.recordRoute(turnId,route);
   }
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.chooseModel(turnId,model);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
@@ -81,7 +81,8 @@ export class Director {
  // The composer's effort choice holds for the whole request (changing it mid-conversation would reset the prompt cache).
  private chooseEffort(turnId:string,effort?:Effort){if(effort)this.db.setMeta('effort:'+turnId,effort==='auto'?'':effort);}
  // The composer's model choice for this request; without one, Sonnet (or DREAM_AGENT_MODEL for a measured run).
- private chooseModel(turnId:string,model?:ModelChoice){if(model)this.db.setMeta('model-choice:'+turnId,model);}
+ // A model picked for a request that already ran (approving its plan, continuing it) replaces the one it ran on.
+ private chooseModel(turnId:string,model?:ModelChoice){if(!model)return;this.db.setMeta('model-choice:'+turnId,model);const pinned=this.db.getMeta('agent-model:'+turnId);if(pinned&&pinned!==agentModels[model]){this.db.setMeta('agent-model:'+turnId,agentModels[model]);this.db.event('ai.model_chosen',{turnId,choice:model,model:agentModels[model],changedFrom:pinned});}}
  /** The model this request runs on, decided once and pinned: every conversation of the request (the agent, its helpers,
   * resumes) stays on it, so its prompt cache stays valid. DREAM_AGENT_MODEL still forces one model for a measured run. */
  agentModel(turnId:string,_text='',route?:any):string{

@@ -49,3 +49,16 @@ it('stops a request that used all its steps as blocked, with its work saved and 
   expect(db.getMeta('ai_status')).toBe('interrupted');expect(db.state().messages.at(-1)!.text).toContain('step limit');
  }finally{db.close();}
 });
+
+it('runs an approved plan, and a continued request, on the model picked when approving, not the one that planned it',async()=>{
+ const db=fixture();try{withClip(db);
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string}[]=[];
+  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model});
+   if(purpose==='planning')return toolUse('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Intro',goal:'Add an intro',steps:[{id:'intro',title:'Add the intro',instruction:'Build it',acceptance:'Intro plays',review:false}],assumptions:[]}});
+   return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
+  await director.message('Plan an intro for this',[],'plan',[],undefined,undefined,'opus');
+  expect(new Set(calls.map(c=>c.model))).toEqual(new Set([agentModels.opus]));calls.length=0;
+  await director.message('Go ahead',[],'auto',[],undefined,undefined,'sonnet');
+  expect(calls.length).toBeGreaterThan(0);expect(new Set(calls.map(c=>c.model))).toEqual(new Set([agentModels.sonnet]));
+ }finally{db.close();}
+});
