@@ -207,6 +207,8 @@ ${file.text}`).join('');
   if(this.db.getMeta('route:'+turnId)==='workflow'){await this.workflow(turnId);return;}
   let route=this.db.loadState<any>('routing:'+turnId);
   if(!route){route=await this.classify(text,turnId,selection,intent);if(route.route==='continue')route={...route,route:'local'};this.recordRoute(turnId,route);}
+  // Auto's router runs before anything pins the model for this request.
+  await this.routeModel(turnId,text,route.route==='plan'?'plan':route.route==='question'?'question':'edit');
   this.agentModel(turnId,text,route);
   const result=await this.execute(text+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');
   if(result.plan){proposePlan(this.db,turnId,result.plan,selection);return;}this.report(turnId,result.outcome,route.route==='question');

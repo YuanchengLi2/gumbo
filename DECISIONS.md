@@ -509,3 +509,13 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - The model menu shows each model's strengths and a cost tier ($ to $$$$$) under its name.
 - The vlog's run sat on `grep -r ... /` and `find / ...` for ten minutes: the agent was searching the whole computer for the sound-design rules, because the error was vague and context/engine.md listed the layer fields without the required id or the two rules. The reference now gives the full format with defaults, both rules and a valid example.
 - Caching per provider: DeepSeek's automatic prefix cache served about 98% of each call's prompt in the vlog run. OpenAI requests now carry a per-request prompt_cache_key so a request's calls share one cache. Gemini caches implicitly; not yet measured.
+
+## October 13, 2026 — A project's second request was invisible; disk, scenes, dark mode, framing
+
+- The window dropped every live event whose request id differed from the one it had on screen, so from a project's second request on it showed no steps ("Planning next moves"), no editing overlay and no Stop until the run ended. Events carry the service's current request, so a new id now means a new request: the window moves to it and refreshes once. Auto's Haiku router also never ran, because the model was pinned before it; it now runs first.
+- From the moment a message is sent, the send button is Stop and the editor turns blue; a live card in the editor lists the last steps with the current one's command or file, or "Thinking" between steps.
+- Showing a change (a change card, the Elements list) lights it up on the timeline with the playhead on it, without selecting it into the chat.
+- Disk: agent-made music keeps only its mix (the separate instrument tracks, unused by the timeline, were 345 MB in the vlog); the playback copy of imported audio is FLAC instead of WAV (about half the size, same samples); files on this computer's own drive are always linked, never copied, whatever the agent asks. Existing projects keep their current files.
+- Motion-graphics scenes show a still on their timeline block: one frame per scene revision, drawn in a hidden window that closes straight after.
+- Dark mode turned a transparent captions scene into a white sheet over the video: Chromium paints an embedded document whose color scheme differs from the page's with an opaque backdrop. Embedded scene documents keep the default scheme.
+- The main track always fills the project's frame: footage of another shape is cropped to cover it (never letterboxed), never zoomed out below the frame, and moves and shake only travel as far as the zoom leaves room.

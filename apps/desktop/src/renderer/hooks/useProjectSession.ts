@@ -19,7 +19,13 @@ export function useProjectSession(){
   if(event.type==='state')s.setProject(event.payload as any);
   if(event.type==='workspace.draft'){const next=(event.payload as any).draft,last=useEditor.getState().draft;useEditor.getState().setDraft(!next?null:next.timeline?next:last?{...last,error:next.error,hash:next.hash}:null);}
   if(event.type==='state.delta'&&!mergeProjectDelta(event.payload as any))void window.dream.command({type:'state'}).then(s.setProject);
-  if(event.turnId&&current?.experience?.turnId&&event.turnId!==current.experience.turnId&&event.type.startsWith('ai.'))return;
+  // Events carry the request the service is running now, so a new id means a new request has started: the window moves
+  // to it (empty activity, running) and refreshes once, instead of dropping its events until the run ends. Dropping them
+  // left a project's second request with no steps, no editing overlay and no Stop while it ran.
+  if(event.turnId&&event.type.startsWith('ai.')&&current&&current.experience?.turnId!==event.turnId){
+   const p=useEditor.getState().project!;s.setProject({...p,aiStatus:event.type==='ai.status'?(event.payload as any).status:'running',experience:{...(p.experience??{firstDraftVersionId:null,steps:[]}),turnId:event.turnId,steps:[],activity:{steps:[],events:[],status:'running',changes:[]}}});
+   void window.dream.command({type:'state'}).then(next=>{if(next?.timeline)s.setProject(next);}).catch(()=>{});
+  }
   if(event.type==='ai.workflow'){const p=useEditor.getState().project;if(p)s.setProject({...p,workflow:event.payload});}
   if(event.type==='ai.tasks'){const p=useEditor.getState().project;if(p?.experience)s.setProject({...p,experience:{...p.experience,activity:{steps:[],status:p.aiStatus,changes:[],...p.experience.activity,tasks:(event.payload as any).tasks}}});}
   if(event.type==='ai.activity')acceptRunActivity((event.payload as any).turnId,(event.payload as any).event);

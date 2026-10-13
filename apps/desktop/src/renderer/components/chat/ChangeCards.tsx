@@ -4,7 +4,7 @@ import type {TimelineChange} from '@dream/timeline';
 import {useEditorActions} from '../workspace/editor-actions';
 
 /** What a request changed, as Codex and Claude Code show a diff: one card listing each change. Opening a row shows its
- * details and lights it up on the timeline (selected, with the playhead on it, ready to edit by hand); Undo reverts that
+ * details and lights it up on the timeline with the playhead on it (without selecting it, so it does not go into the chat); Undo reverts that
  * change alone as a new undoable step. */
 const clock=(sec?:number)=>sec===undefined?'':`${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
 const icons={added:Plus,removed:Minus,changed:PenLine};
@@ -25,7 +25,7 @@ export function ChangeCards({turnId,refresh,fallback}:{turnId:string;refresh:str
     <button type="button" className="change-main" aria-expanded={expanded} onClick={()=>choose(c)}><span className="change-icon"><Icon size={12}/></span><span className="change-title">{c.title}</span>{c.start!==undefined&&<small>{clock(c.start)}{c.end!==undefined&&c.end-c.start>=.5?`–${clock(c.end)}`:''}</small>}<ChevronRight size={13} className="change-chevron"/></button>
     {c.restore?.length?<button type="button" className="change-undo" disabled={isUndone||actions?.locked} title={isUndone?'Undone':'Undo this change'} aria-label={(isUndone?'Undone: ':'Undo ')+c.title} onClick={()=>void undo(c)}>{isUndone?<Check size={13}/>:<Undo2 size={13}/>}</button>:null}
    </div>
-   {expanded&&<div className="change-details">{c.details.length?<ul>{c.details.map((d,n)=><li key={n}>{d}</li>)}</ul>:null}<p>{c.kind==='removed'?'No longer on the timeline. Undo puts it back.':'Selected on the timeline: drag, trim or right-click it to change it yourself.'}</p></div>}
+   {expanded&&<div className="change-details">{c.details.length?<ul>{c.details.map((d,n)=><li key={n}>{d}</li>)}</ul>:null}<p>{c.kind==='removed'?'No longer on the timeline. Undo puts it back.':'Shown on the timeline. Click it there to change it yourself.'}</p></div>}
   </li>;})}</ol>
   {changes.length>LIMIT&&<button type="button" className="change-more" onClick={()=>setAll(!all)}>{all?'Show fewer':`Show ${changes.length-LIMIT} more`}</button>}
   {error&&<p className="change-error" role="alert">{error}</p>}

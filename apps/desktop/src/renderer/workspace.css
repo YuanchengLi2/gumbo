@@ -616,3 +616,12 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .model-menu>button>span strong{display:block;font-size:13px;font-weight:500}
 .model-menu>button>span small{display:flex;justify-content:space-between;gap:8px;margin-top:1px;font-size:11px;color:var(--n46)}
 .model-menu>button>span small em{font-style:normal;letter-spacing:.5px;color:var(--n56)}
+
+/* Figjam's process, live, in the corner of the editor while it works. */
+.agent-activity{position:absolute;left:18px;bottom:18px;z-index:42;max-width:min(440px,60%);margin:0;padding:10px 12px;list-style:none;border-radius:12px;background:rgb(12 22 48 / .82);backdrop-filter:blur(8px);box-shadow:0 8px 28px rgb(20 60 160 / .35);color:#dfe8ff;font-size:12px;pointer-events:none}
+.agent-activity li{display:grid;grid-template-columns:10px 1fr;align-items:baseline;gap:2px 8px;padding:3px 0;color:#9fb2dd}
+.agent-activity li i{width:7px;height:7px;border-radius:50%;background:#6f8fd6;align-self:center}
+.agent-activity li.complete i{background:#7fd3a2}.agent-activity li.failed i{background:#f09a8c}
+.agent-activity li.live{color:#fff}.agent-activity li.live i{background:#5b95ff;box-shadow:0 0 0 3px rgb(91 149 255 / .3);animation:breathe 1.2s infinite}
+.agent-activity li.live span{background:linear-gradient(100deg,#fff 30%,#9cc0ff 50%,#fff 70%);background-size:250% 100%;background-clip:text;-webkit-text-fill-color:transparent;animation:cook 2s linear infinite}
+.agent-activity code{grid-column:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace;color:#a9c4ff}

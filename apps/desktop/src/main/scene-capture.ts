@@ -42,3 +42,11 @@ export async function sceneFrame(key:string,source:SceneSource,width:number,heig
  return{width:size.width,height:size.height,data:image.toBitmap()};
 }
 export function closeScenes(){for(const {window} of windows.values())if(!window.isDestroyed())window.destroy();windows.clear();}
+/** One small still of a scene for the timeline: drawn in its own hidden window, which is closed straight after, and
+ * returned as a JPEG data URL the width given. */
+export async function sceneStill(source:SceneSource,width:number,height:number,frame:number,fps:number,thumbWidth=240){
+ const key='still:'+Math.random().toString(36).slice(2);
+ try{await sceneFrame(key,source,width,height,frame,fps);const entry=windows.get(key)!,image=await entry.window.webContents.capturePage();
+  return 'data:image/jpeg;base64,'+image.resize({width:thumbWidth,quality:'good'}).toJPEG(80).toString('base64');}
+ finally{const entry=windows.get(key);if(entry&&!entry.window.isDestroyed())entry.window.destroy();windows.delete(key);}
+}

@@ -30,7 +30,8 @@ test('a reply lists its changes as cards that light up, select and undo each one
   // The reply's change card lists both changes; opening one selects it on the timeline.
   const card=page.getByLabel('Changes');await expect(card).toContainText('2 changes');await expect(card).toContainText('Added source.mp4');await expect(card).toContainText('Added title card “Hello”');
   await card.getByRole('button',{name:/^Added source\.mp4/}).click();await expect(card.locator('.change-details')).toContainText('of the source');
-  await expect(page.locator('.selection-strip .media-tile')).toHaveCount(1);await expect(page.locator('.assistant-timeline [data-item-id="c1"]')).toHaveAttribute('aria-selected','true');
+  // Showing a change lights it up on the timeline without selecting it, so nothing goes into the chat box.
+  await expect(page.locator('.assistant-timeline [data-item-id="c1"]')).toHaveAttribute('data-ai-touched','true');await expect(page.locator('.selection-strip')).toHaveCount(0);await expect(page.locator('.assistant-timeline [data-item-id="c1"]')).toHaveAttribute('aria-selected','false');
   // Undo on one card reverts that change alone.
   await card.getByRole('button',{name:'Undo Added title card “Hello”'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).timeline.attached.length,{timeout:15000}).toBe(0);
@@ -41,7 +42,7 @@ test('a reply lists its changes as cards that light up, select and undo each one
   await page.getByRole('button',{name:'Elements',exact:true}).click();const clips=page.getByRole('region',{name:'Clips'});
   await expect(clips).toContainText('source.mp4');await expect(clips).toContainText('Figjam');
   await page.getByLabel('Only what Figjam added').check();await expect(clips).toContainText('source.mp4');
-  await clips.getByRole('button',{name:/source\.mp4/}).first().click();await expect(page.locator('.assistant-timeline [data-item-id="c1"]')).toHaveAttribute('aria-selected','true');
+  await clips.getByRole('button',{name:/source\.mp4/}).first().click();await expect(page.locator('.assistant-timeline [data-item-id="c1"]')).toHaveAttribute('data-ai-touched','true');await expect(page.locator('.selection-strip')).toHaveCount(0);
   await clips.getByRole('button',{name:'Remove source.mp4'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).timeline.spine.length,{timeout:15000}).toBe(0);
   expect(errors).toEqual([]);

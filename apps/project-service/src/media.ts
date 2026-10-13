@@ -108,8 +108,9 @@ export class Ingest {
    await stage('thumbnail',async()=>{await atomicArtifact(thumbnail,async temporary=>{await run(this.ffmpeg,['-y',...(a.kind==='video'?['-ss',String(Math.min(1,a.durationSec/3))]:[]),'-i',a.proxyPath&&existsSync(a.proxyPath)?a.proxyPath:a.originalPath,'-frames:v','1','-vf','scale=480:-2',temporary],signal);});a.thumbnailPath=thumbnail;},thumbnail);
   }
   if(a.hasAudio){
-   const master=join(dir,'audio-v2.wav');
-   const needsAudio=(!a.audioPath||!existsSync(a.audioPath)||requested==='playback_audio')&&(background||!canPreviewAudio(a)||requested==='playback_audio'),audioReady=!needsAudio?!!a.audioPath||canPreviewAudio(a):await stage('playback_audio',async()=>{await atomicArtifact(master,async temporary=>{await run(this.ffmpeg,['-y','-i',a.originalPath,'-vn','-af','aresample=async=1:first_pts=0,apad','-t',String(a.durationSec),'-ar','48000','-ac','2','-c:a','pcm_s16le',temporary],signal);},async temporary=>{await probe(temporary,this.ffprobe);});a.audioPath=master;},master);
+   // Lossless FLAC, about half the size of the WAV it replaces, with the same samples, so sync and export are unchanged.
+   const master=join(dir,'audio-v3.flac');
+   const needsAudio=(!a.audioPath||!existsSync(a.audioPath)||requested==='playback_audio')&&(background||!canPreviewAudio(a)||requested==='playback_audio'),audioReady=!needsAudio?!!a.audioPath||canPreviewAudio(a):await stage('playback_audio',async()=>{await atomicArtifact(master,async temporary=>{await run(this.ffmpeg,['-y','-i',a.originalPath,'-vn','-af','aresample=async=1:first_pts=0,apad','-t',String(a.durationSec),'-ar','48000','-ac','2','-c:a','flac','-f','flac',temporary],signal);},async temporary=>{await probe(temporary,this.ffprobe);});a.audioPath=master;},master);
    if(!background&&!audioReady)throw new Error('The audio could not be prepared for playback.');
    if(background&&audioReady&&a.audioPath){
     await stage('waveform',async()=>{a.waveform=await this.waveform(master,a.durationSec,signal);});

@@ -53,3 +53,13 @@ it('draws overlays by layer, elements fading in, and captions as word pop or a h
  const hidden=frameAt(prepare({timeline:{...t,trackSettings:{'visual:2':{hidden:true},captions:{hidden:true},video:{hidden:true}}},footage:footage()}),1.2);
  expect(hidden.layers.map(l=>l.kind==='text'?(l as TextLayer).component:l.kind)).toEqual(['lower_third']);
 });
+
+it('always fills the project frame on the main track: no letterbox, no zoom out, no move past the edge',()=>{
+ // A wide clip in a vertical project, framed "fit", zoomed out to half and pushed far right: it still covers the frame.
+ const p=prepare({timeline:vertical([clip('c','wide',0,4,{framing:{mode:'fit',scale:.5,x:.5,y:.5},keyframes:[{sec:0,x:.95}]})]),footage:footage()});
+ const media=frameAt(p,1).layers.find(l=>l.kind==='media') as MediaLayer;
+ // Covering: the picture's rectangle is the whole frame, cropped from the wide source.
+ expect(media.rect).toEqual({x:0,y:0,w:1080,h:1920});expect(media.uv.w).toBeLessThan(1);
+ // No zoom below 1 and no shift: at scale 1 there is no room to move.
+ expect(media.transform).toEqual([1,0,0,1,0,0]);
+});

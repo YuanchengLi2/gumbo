@@ -8,7 +8,8 @@ import {workspacePath} from '../../../packages/project-db/src/workspace-store';
 
 /** Renders music or a sound effect; the worker when available (keeps the service responsive), else in process. */
 export type AudioRenderer=(input:{directory:string;score?:ScoreDocument;sound?:SoundDesign;sfxId?:string},signal:AbortSignal)=>Promise<{durationSec:number;beats:number[];waveform:number[]}>;
-export const workerRenderer=(workerPath:string):AudioRenderer=>async(input,signal)=>renderProcedural(workerPath,input,signal,()=>{});
+// Agent-made music keeps only its mix: the timeline never plays the separate instrument tracks.
+export const workerRenderer=(workerPath:string):AudioRenderer=>async(input,signal)=>renderProcedural(workerPath,{...input,stems:false},signal,()=>{});
 export const inProcessRenderer:AudioRenderer=async input=>{
  mkdirSync(input.directory,{recursive:true});
  const result=input.score?renderArrangement(input.score):input.sound?renderSound(input.sound):renderSfx(input.sfxId!);

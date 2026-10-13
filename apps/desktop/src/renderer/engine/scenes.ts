@@ -6,7 +6,7 @@ import {liveSceneDocument} from '../../../../../packages/composition/src/live-sc
  * dream-engine://, a legacy HTML scene from its file), placed and scaled where the frame model puts its layer, and told
  * which of its frames to draw. Export captures the same documents frame by frame. */
 export const sceneUrl=(a:Asset)=>`dream-engine://app/scene/${encodeURIComponent(a.id)}/index.html?r=${a.scene!.revisionId.slice(0,16)}`;
-const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
+export const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
 type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;request:number;lastUsed:number;error?:string};
 
 export class SceneLayers{

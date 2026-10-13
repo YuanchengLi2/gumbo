@@ -4,12 +4,13 @@ import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {ScoreSchema,SoundDesignSchema,renderArrangement,renderSfx,renderSound,SCORE_RENDERER_VERSION} from '@dream/procedural-media';
 
-const {directory,score,sound,sfxId}=workerData as {directory:string;score?:unknown;sound?:unknown;sfxId?:string};
+const {directory,score,sound,sfxId,stems:keepStems=true}=workerData as {directory:string;score?:unknown;sound?:unknown;sfxId?:string;stems?:boolean};
 try{
  mkdirSync(directory,{recursive:true});const stems:{trackId:string;filename:string;waveform:number[];sha256:string}[]=[];
  const write=(filename:string,bytes:Uint8Array)=>{writeFileSync(join(directory,filename),bytes);return createHash('sha256').update(bytes).digest('hex');};
  const document=score?ScoreSchema.parse(score):undefined;
- const result=document?renderArrangement(document,(track,wav,waveform)=>{const filename=`stem-${stems.length}.wav`;stems.push({trackId:track.id,filename,waveform,sha256:write(filename,wav)});},progress=>parentPort!.postMessage({progress})):sound?renderSound(SoundDesignSchema.parse(sound)):renderSfx(sfxId!);
+ // Separate instrument tracks are written only when something will play them (the music library's stem player).
+ const result=document?renderArrangement(document,(track,wav,waveform)=>{if(!keepStems)return;const filename=`stem-${stems.length}.wav`;stems.push({trackId:track.id,filename,waveform,sha256:write(filename,wav)});},progress=>parentPort!.postMessage({progress})):sound?renderSound(SoundDesignSchema.parse(sound)):renderSfx(sfxId!);
  const sha256=write('mix.wav',result.wav);
  const manifest={rendererVersion:SCORE_RENDERER_VERSION,sha256,waveform:result.waveform,stems,durationSec:document?.durationSec??('durationSec' in result?result.durationSec:0),beats:'beats' in result?result.beats:[],masterGain:'masterGain' in result?result.masterGain:1};
  writeFileSync(join(directory,'manifest.json'),JSON.stringify(manifest));parentPort!.postMessage({complete:manifest});

@@ -4,7 +4,7 @@ import type {ScoreDocument,SoundDesign} from '@dream/procedural-media';
 
 export const RenderedScoreSchema=z.object({rendererVersion:z.string(),sha256:z.string().length(64),waveform:z.array(z.number().min(0).max(1)),stems:z.array(z.object({trackId:z.string(),filename:z.string().regex(/^stem-\d+\.wav$/),waveform:z.array(z.number().min(0).max(1)),sha256:z.string().length(64)})),durationSec:z.number().positive(),beats:z.array(z.number().nonnegative()),masterGain:z.number().positive()});
 export type RenderedScore=z.infer<typeof RenderedScoreSchema>;
-export function renderProcedural(workerPath:string,input:{directory:string;score?:ScoreDocument;sound?:SoundDesign;sfxId?:string},signal:AbortSignal,progress:(value:number)=>void){
+export function renderProcedural(workerPath:string,input:{directory:string;score?:ScoreDocument;sound?:SoundDesign;sfxId?:string;stems?:boolean},signal:AbortSignal,progress:(value:number)=>void){
  return new Promise<RenderedScore>((resolve,reject)=>{
   signal.throwIfAborted();let settled=false;
   const worker=new Worker(workerPath,{workerData:input,env:{},resourceLimits:{maxOldGenerationSizeMb:256}});

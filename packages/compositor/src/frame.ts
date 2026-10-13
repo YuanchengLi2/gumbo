@@ -71,9 +71,13 @@ function clipLook(p:Prepared,clip:ResolvedClip,time:number){
  for(const item of p.visible){if(item.type!=='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;const q=item.params as any;
   if(item.component==='slow_push')motion*=1+progress*Number(q.amount??.08);if(item.component==='punch_zoom')motion*=1+Number(q.amount??.15);
   if(item.component==='shake')dx=Math.sin(frame*2.7)*Number(q.amount??.1)*40;if(item.component==='grade'){const e=gradeOf(q);if(!isNeutral(e))grades.push(e);}}
- const scale=(keys.scale??f?.scale??1)*motion,x=keys.x??.5,y=keys.y??.5;
- const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(dx,0),rotation(keys.rotation??f?.rotation??0),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
- return{transform,opacity:keys.opacity??f?.opacity??1,grades,fit:(f?.mode==='fill'||f?.mode==='face'?'cover':'contain') as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5};
+ // A hard rule: the main track always fills the project's frame. Footage of another shape is cropped to cover it (never
+ // letterboxed), it is never zoomed out below the frame, and moves and shake only travel as far as the zoom leaves room,
+ // so no edge or bar ever shows, whatever framing a request sets.
+ const scale=Math.max(1,(keys.scale??f?.scale??1)*motion),room=(scale-1)/2,clampOffset=(v:number)=>Math.max(-room,Math.min(room,v));
+ const x=.5+clampOffset((keys.x??.5)-.5),y=.5+clampOffset((keys.y??.5)-.5),shake=Math.max(-room*width,Math.min(room*width,dx));
+ const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(shake,0),rotation(keys.rotation??f?.rotation??0),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
+ return{transform,opacity:keys.opacity??f?.opacity??1,grades,fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5};
 }
 
 /** A clip's picture: its background and its media, at the source time given, all under one more transform and opacity. */
