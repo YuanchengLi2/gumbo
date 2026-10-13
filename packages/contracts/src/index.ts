@@ -34,7 +34,7 @@ export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:str
 export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;paths?:string[];error?:string;phase?:string;warnings?:string[]};
 export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number};
 export interface DreamDesktop {
- setTheme(theme:'light'|'dark'):Promise<void>;
+ setTheme(theme:'light'|'dark',color?:string):Promise<void>;
  projects():Promise<ProjectSummary[]>;
  createProject(request:InitialRequest):Promise<ProjectState>;
  fileGrants():Promise<FileGrant[]>;

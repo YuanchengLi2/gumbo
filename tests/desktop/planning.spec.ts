@@ -41,7 +41,9 @@ test('a blocked plan stays paused after reload and a follow-up message continues
   const versions=await page.evaluate(async()=>(await window.dream.command({type:'state'})).versions.length);
   await page.reload();await page.getByRole('button',{name:'Tasks',exact:true}).click();const progress=page.getByLabel('Tasks in progress');await expect(progress.getByText('Paused',{exact:true})).toBeVisible();await expect(progress.getByText('Done',{exact:true})).toHaveCount(1);
   await expect(page.getByLabel('Continue saved request')).toHaveCount(0);await page.getByLabel('Ask Figjam to edit').fill('Square format is confirmed; continue.');await page.getByRole('button',{name:'Send prompt'}).click();
-  await expect.poll(async()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).aiStatus),{timeout:60000}).toBe('complete');await expect(progress.getByText('Done',{exact:true})).toHaveCount(2);
+  await expect.poll(async()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).aiStatus),{timeout:60000}).toBe('complete');
+  // The task window closes for each new request (the bar stays small); opening it again shows both steps done.
+  await page.getByRole('button',{name:'Tasks',exact:true}).click();await expect(progress.getByText('Done',{exact:true})).toHaveCount(2);
   const state=await page.evaluate(async()=>window.dream.command({type:'state'}));expect(state.versions).toHaveLength(versions);expect(state.messages.some(m=>m.role==='user'&&m.text==='Square format is confirmed; continue.')).toBe(true);
  }finally{await app.close();await gateway.close();}
 });

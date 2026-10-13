@@ -1,5 +1,5 @@
 import {editingActivity,editingTask} from '../../editing-language';
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {ChevronUp,Check,LoaderCircle,Circle,Pause,AlertCircle} from 'lucide-react';
 import {WorkflowStateSchema,type WorkTask,type PublicActivity} from '@dream/contracts';
 import type {ProjectState} from '@dream/project-db';
@@ -16,7 +16,8 @@ function Icon({status}:{status:string}){return status==='complete'?<Check size={
 
 /** Monitors the latest request above the composer: what it is doing now, how long it has run, and its tasks. */
 export function TaskDock({project}:{project:ProjectState}){
- const [expanded,setExpanded]=useState(()=>{try{return localStorage.getItem('dream-tasks-expanded')==='true';}catch{return false;}});
+ // A small bar (what it is doing, time, cost); the full task window opens only when clicked and closes for each new request.
+ const [expanded,setExpanded]=useState(false),dock=useRef<HTMLDivElement>(null);
  const pending=useEditor(s=>s.pending),workflow=WorkflowStateSchema.safeParse(project.workflow),active=project.aiStatus==='running',working=active||!!pending;
  const events=pending?[]:project.experience?.activity?.events??[],steps=events.filter(step).sort((a,b)=>a.sequence-b.sequence),elapsed=useElapsed(working,pending?.createdAt??project.experience?.runStartedAt??events[0]?.startedAt);
  let tasks:WorkTask[]=project.experience?.activity?.tasks??[];
@@ -26,11 +27,13 @@ export function TaskDock({project}:{project:ProjectState}){
  // Totals saved with the request load once; live ai.usage events keep them current while it runs.
  useEffect(()=>{if(!turnId)return;let current=true;void window.dream.command({type:'turn_usage',turnId}).then((result:any)=>{if(current&&result?.rows&&useEditor.getState().usage?.turnId!==turnId)useEditor.getState().setUsage({turnId,rows:result.rows.map((r:any)=>({owner:r.owner,model:r.model,calls:r.calls,cost:r.cost??0,prompt:r.prompt??0,output:r.output??0,ms:r.ms??0}))});}).catch(()=>{});return()=>{current=false;};},[turnId]);
  const cost=rows.reduce((n,r)=>n+r.cost,0),owners=[...new Set(rows.map(r=>r.owner))].map(owner=>{const mine=rows.filter(r=>r.owner===owner),title=owner==='main'?undefined:events.find(e=>e.id===owner)?.text;return{owner,label:owner==='main'?'Figjam':title?editingTask(title):'Helper',models:[...new Set(mine.map(r=>modelName(r.model)))].join(' + '),calls:mine.reduce((n,r)=>n+r.calls,0),cost:mine.reduce((n,r)=>n+r.cost,0),tokens:mine.reduce((n,r)=>n+r.prompt+r.output,0),ms:mine.reduce((n,r)=>n+r.ms,0)};});
+ useEffect(()=>{setExpanded(false);},[turnId,pending?.requestId]);
+ useEffect(()=>{if(!expanded)return;const close=(e:MouseEvent)=>{if(!dock.current?.contains(e.target as Node))setExpanded(false);};document.addEventListener('mousedown',close);return()=>document.removeEventListener('mousedown',close);},[expanded]);
  if(!tasks.length&&!working)return null;
  const completed=tasks.filter(t=>t.status==='complete').length,current=tasks.find(t=>t.status==='running')??tasks.find(t=>t.status==='paused')??tasks.find(t=>t.status==='pending');
  const now=active?steps.findLast(e=>live(e.status)):undefined,label=working?now?editingActivity(now):pending||!steps.length?'Understanding your request':'Thinking':current?.title??'All tasks complete';
- const toggle=(value:boolean)=>{setExpanded(value);try{localStorage.setItem('dream-tasks-expanded',String(value));}catch{}};
- return <div className={'task-dock'+(working?' working':'')} onKeyDown={e=>{if(e.key==='Escape'){toggle(false);e.stopPropagation();}}}>
+ const toggle=(value:boolean)=>setExpanded(value);
+ return <div ref={dock} className={'task-dock'+(working?' working':'')} onKeyDown={e=>{if(e.key==='Escape'){toggle(false);e.stopPropagation();}}}>
  <button className="task-dock-toggle" aria-label="Tasks" aria-expanded={expanded} aria-controls="dream-task-window" onClick={()=>toggle(!expanded)}>{working?<LoaderCircle size={13} className="spin"/>:<Check size={13}/>}<span>{label}</span><small>{[working?elapsed:'',rows.length?money(cost):'',tasks.length?`${completed}/${tasks.length}`:''].filter(Boolean).join(' · ')}</small><ChevronUp size={15} className={expanded?'expanded':''}/></button>
  {expanded&&<section id="dream-task-window" className="task-window" aria-label="Tasks in progress">
   {/* Tasks are the main column, with what the request has cost at its top right; the latest activity runs beside them. */}

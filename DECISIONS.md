@@ -471,3 +471,10 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Selection tiles each have an X. Right-clicking a block opens split, duplicate, delete and playhead moves (a menu, not a toolbar). The chat and timeline dividers show a handle and go further (chat 20–60%, timeline 15–80%).
 - The task window puts tasks first with the cost and models used at their top right, and the latest activity beside them.
 - Shortcuts: Ctrl+L or / types in the chat, Shift+Tab in the chat or Ctrl+1/2/3 pick Edit, Plan or Ask, Ctrl+Shift+M steps through the models.
+
+## October 13, 2026 — Black and white, dark mode, Settings
+
+- The whole app is black and white. The renderer's ~350 hard-coded colours were converted by script into a grey scale (`--n0` paper to `--n100` ink) and an ink accent, both redefined for dark mode; the blue agent overlay, errors, greens, timeline block colours and shadows were left as they are. Text on pictures (clip labels over frames, length badges) stays white on a dark scrim in both themes.
+- Settings sits at the top right of home and the editor, as in Claude Code: Light / Dark / System (follows the system by default, remembered on this computer) and the keyboard shortcuts. The window's own controls take the page colour (`--chrome`) so the header reads as one strip.
+- The home logo is bigger and monochrome. Version history is gone (Undo/Redo stay); change cards replace it. The task bar above the chat box stays small and opens its window only when clicked; the window closes for each new request.
+- While the agent edits, the video gets a soft blue wash and a slow light sweep on top of the blue outline, and keeps playing underneath.
