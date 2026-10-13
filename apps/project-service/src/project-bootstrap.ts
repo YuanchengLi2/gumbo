@@ -17,7 +17,7 @@ export class ProjectBootstrap {
    for(let i=value.assetIds.length;i<value.paths.length;i++){signal.throwIfAborted();this.publish('ai.step',{id:`import:${i}`,label:`Importing ${basename(value.paths[i])}`,status:'running'});const asset=await this.ingest.register(value.paths[i],true,`${value.requestId}:${i}`,signal);value.assetIds.push(asset.id);this.publish('ai.step',{id:`import:${i}`,label:`Importing ${basename(value.paths[i])}`,status:'complete'});save();}
    if(value.assetIds.length)this.publish('ai.step',{label:'Preparing media for playback',status:'running'});await this.ingest.waitUntilUsable(value.assetIds,signal);signal.throwIfAborted();if(value.assetIds.length)this.publish('ai.step',{label:'Preparing media for playback',status:'complete'});const failed=this.db.footage().assets.filter(a=>value.assetIds.includes(a.id)&&a.status==='failed');if(failed.length)throw new Error(`Could not prepare ${failed.map(a=>a.filename).join(', ')}. Retry the import.`);
    await this.preparePackages?.(signal);signal.throwIfAborted();
-   if(value.text.trim()){const task=this.director.message(value.text,[],'auto',value.assetIds,value.requestId);value.status='dispatched';save();await task;}else{value.status='dispatched';this.db.setMeta('ai_status','idle');save();}
+   if(value.text.trim()){const task=this.director.message(value.text,[],value.intent??'auto',value.assetIds,value.requestId,undefined,value.model);value.status='dispatched';save();await task;}else{value.status='dispatched';this.db.setMeta('ai_status','idle');save();}
   }catch(error){value.status='interrupted';value.error=signal.aborted?'Preparation paused. Your imported files are saved.':(error as Error).message;this.db.setMeta('ai_status','interrupted');save();}
  }
 }

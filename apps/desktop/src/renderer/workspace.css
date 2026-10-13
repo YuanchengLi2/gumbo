@@ -315,10 +315,10 @@
 .fig-brand .dream-mark{width:26px;height:26px}
 .fig-ghost{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:8px;font-size:13px;color:#55555e}
 .fig-ghost:hover{background:#e9e9ee;color:#1f1f24}
-.fig-home-main{max-width:940px;margin:0 auto;padding:7vh 28px 64px}
+.fig-home-main{max-width:940px;margin:0 auto;padding:16vh 28px 64px}
 .fig-hero{text-align:center}
-.fig-greeting{margin:0 0 6px;font-size:13px;font-weight:600;color:#6b4fd8;letter-spacing:.1px}
-.fig-hero h1{margin:0 0 26px;font:700 40px/1.15 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-1.3px;color:#17142a}
+.fig-greeting{margin:0 0 10px;font-size:20px;font-weight:600;color:#6b4fd8;letter-spacing:.1px}
+.fig-hero h1{margin:0 0 34px;font:700 54px/1.1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-1.3px;color:#17142a}
 .fig-home .home-composer{width:100%;max-width:760px;margin:0 auto;padding:0;text-align:left}
 .fig-home .home-composer .composer{min-height:0;padding:16px 14px 12px 18px;border:1px solid #e1e1e7;border-radius:18px;background:#fff;box-shadow:0 1px 2px #0000000a,0 14px 44px #2b1f6614;transition:border-color .15s,box-shadow .15s}
 .fig-home .home-composer .composer:focus-within{border-color:#cfc6f2;box-shadow:0 0 0 4px #6b4fd812,0 14px 44px #2b1f6618}
@@ -358,7 +358,7 @@
 .fig-empty .dream-mark{width:36px;height:36px}
 .fig-empty strong{font-size:14px;font-weight:600;color:#1f1f24}
 .fig-empty p{margin:3px 0 0;font-size:12.5px;line-height:1.55;color:#86868f}
-@media(max-width:760px){.fig-hero h1{font-size:30px}.fig-home-main{padding-top:4vh}}
+@media(max-width:760px){.fig-hero h1{font-size:36px}.fig-greeting{font-size:16px}.fig-home-main{padding-top:8vh}}
 
 /* Media: a bin like CapCut's. Search and import, kinds as small toggles, pictures with their length, a muted preview on
    hover, and only the states that need attention. Click to send with the next message; drag onto the timeline. */

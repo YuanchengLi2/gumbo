@@ -2,6 +2,7 @@ import React from 'react';
 import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight} from 'lucide-react';
 import type {ProjectSummary} from '@dream/contracts';
 import {ChatComposer,type Attachment} from '../chat/ChatComposer';
+import {useEditor} from '../../store/editor';
 
 /** The Figjam mark: a fig with a leaf, as on usefigjam.com. */
 export function DreamMark(){return <svg className="dream-mark" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="36" r="22" fill="#6b4fd8"/><circle cx="25" cy="31" r="3" fill="#fff" opacity=".9"/><path d="M32 14c2-6 8-9 13-8-1 6-6 10-13 8z" fill="#34b27d"/></svg>;}
@@ -20,6 +21,7 @@ const ideas:[typeof Film,string,string][]=[
 ];
 
 export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onComputer:()=>void;onOpen:(folder?:string)=>void;busy:boolean}){
+ const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model);
  const hour=new Date().getHours(),greeting=hour<5?'Up late?':hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
  return <div className="home-screen fig-home">
   <header className="fig-home-top"><div className="fig-brand"><DreamMark/><span>figjam</span></div><span className="spacer"/><button className="fig-ghost" onClick={()=>p.onOpen()}><FolderOpen size={15}/>Open project</button></header>
@@ -27,7 +29,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <section className="fig-hero">
     <p className="fig-greeting">{greeting}</p>
     <h1>What do you want to create?</h1>
-    <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} onComputer={p.onComputer} busy={p.busy}/>
+    <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} onComputer={p.onComputer} busy={p.busy} permission={permission} onPermission={useEditor.getState().setPermission} model={model} onModel={useEditor.getState().setModel}/>
     <div className="fig-ideas">{ideas.map(([Icon,label,prompt])=><button key={label} onClick={()=>p.onChange(prompt)}><Icon size={14}/>{label}</button>)}</div>
    </section>
    <section className="fig-recent" aria-label="Your projects">
