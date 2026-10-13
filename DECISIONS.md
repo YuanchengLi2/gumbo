@@ -478,3 +478,9 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Settings sits at the top right of home and the editor, as in Claude Code: Light / Dark / System (follows the system by default, remembered on this computer) and the keyboard shortcuts. The window's own controls take the page colour (`--chrome`) so the header reads as one strip.
 - The home logo is bigger and monochrome. Version history is gone (Undo/Redo stay); change cards replace it. The task bar above the chat box stays small and opens its window only when clicked; the window closes for each new request.
 - While the agent edits, the video gets a soft blue wash and a slow light sweep on top of the blue outline, and keeps playing underneath.
+
+## October 13, 2026 — Change cards and the elements list
+
+- Under each reply that edited the timeline, a card lists its changes one by one, as Codex and Claude Code show a diff: added, edited (what was trimmed, sped up, recoloured, retimed) and removed clips, elements and audio, captions, settings, order and tracks. Opening a row shows its details and selects the change on the timeline with the playhead on it, lit up, ready to drag, trim or right-click; Undo reverts that change alone as a new undoable step.
+- The diff lives in `@dream/timeline` (`timelineChangeList`) with the operations that undo each change; the service answers `turn_changes` from the version before the request to its last version.
+- An Elements tab lists everything on the timeline (clips, transitions, text, motion graphics, overlays, effects, filters, sound effects, music, captions), marks what Figjam added, can show only that, and selects or removes each one.

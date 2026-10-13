@@ -537,3 +537,47 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .preview-error{color:var(--n87)}
 .fig-ideas button,.fig-ideas button:hover{background:transparent}
 .fig-ideas button svg{color:var(--n56)}
+
+/* Change cards under a reply, as Codex and Claude Code show a diff: a quiet box with one row per change; a row opens to
+   its details and lights the change up on the timeline. */
+.change-card{margin:10px 0 2px;border:1px solid var(--n10);border-radius:12px;background:var(--chrome);overflow:hidden;font-size:12.5px}
+.change-card>header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:9px 12px;border-bottom:1px solid var(--n7);background:var(--n2)}
+.change-card>header strong{font-weight:600;color:var(--n100)}
+.change-card>header span{font:500 11px/1 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--n46);white-space:pre}
+.change-card ol{list-style:none;margin:0;padding:3px}
+.change-line{display:flex;align-items:center;gap:2px}
+.change-main{flex:1;min-width:0;display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;text-align:left;color:var(--n80)}
+.change-main:hover,.change-row.open .change-main{background:var(--n4)}
+.change-icon{flex:none;width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:var(--n6);color:var(--n65)}
+.change-row.added .change-icon{background:#e3f4ea;color:#1d7a46}.change-row.removed .change-icon{background:#fbe6e3;color:#b0402f}
+:root[data-theme=dark] .change-row.added .change-icon{background:#173524;color:#7fd3a2}:root[data-theme=dark] .change-row.removed .change-icon{background:#3d1d19;color:#f09a8c}
+.change-title{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.change-main small{flex:none;font:11px/1 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--n46)}
+.change-chevron{flex:none;color:var(--n35);transition:transform .15s}.change-row.open .change-chevron{transform:rotate(90deg)}
+.change-undo{flex:none;width:28px;height:28px;display:grid;place-items:center;border-radius:7px;color:var(--n46);opacity:0;transition:opacity .12s}
+.change-row:hover .change-undo,.change-row.open .change-undo,.change-undo:focus-visible,.change-row.undone .change-undo{opacity:1}
+.change-undo:hover:not(:disabled){background:var(--n6);color:var(--n100)}
+.change-row.undone .change-title{text-decoration:line-through;color:var(--n46)}
+.change-details{margin:0 8px 6px 35px;padding:7px 10px;border-left:2px solid var(--n10);font-size:12px;color:var(--n65)}
+.change-details ul{margin:0 0 5px;padding-left:15px}.change-details li{padding:1px 0}
+.change-details p{font-size:11px;color:var(--n46)}
+.change-more{width:100%;padding:7px;border-top:1px solid var(--n7);font-size:11.5px;color:var(--n56)}.change-more:hover{color:var(--n100);background:var(--n3)}
+.change-error{padding:6px 12px 9px;font-size:11.5px;color:#b0402f}
+
+/* Elements: everything on the timeline, grouped, each one a click away. */
+.elements-panel{padding:4px 2px 24px;font-size:12.5px}
+.elements-panel>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 4px 10px;font-size:11.5px;color:var(--n46)}
+.elements-filter{display:flex;align-items:center;gap:6px;cursor:pointer}.elements-filter input{accent-color:var(--n100)}
+.elements-empty{padding:30px 6px;text-align:center;color:var(--n46)}
+.elements-panel section{margin-bottom:12px}
+.elements-panel h3{display:flex;align-items:center;gap:7px;margin:0 4px 4px;font-size:11px;font-weight:600;letter-spacing:.2px;text-transform:uppercase;color:var(--n56)}
+.elements-panel h3 small{margin-left:auto;font-weight:500;color:var(--n35)}
+.elements-panel ul{list-style:none;margin:0;padding:0}
+.elements-panel li{display:flex;align-items:center;border-radius:8px}
+.elements-panel li:hover,.elements-panel li.selected{background:var(--n4)}
+.element-main{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:6px 8px;text-align:left;color:var(--n80)}
+.element-main span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.element-main small{flex:none;font:11px/1 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--n46)}
+.element-main em{flex:none;font-style:normal;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--n6);color:var(--n56)}
+.element-remove{flex:none;width:26px;height:26px;margin-right:3px;display:grid;place-items:center;border-radius:6px;color:var(--n46);opacity:0}
+.elements-panel li:hover .element-remove,.element-remove:focus-visible{opacity:1}.element-remove:hover:not(:disabled){background:var(--n8);color:var(--n100)}

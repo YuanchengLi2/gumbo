@@ -5,6 +5,7 @@ import {ChevronRight} from 'lucide-react';
 import type {ProjectState,Message,TurnActivity} from '@dream/project-db';
 import type {PublicActivity} from '@dream/contracts';
 import {MessageText} from './MessageText';
+import {ChangeCards} from './ChangeCards';
 import {useEditor} from '../../store/editor';
 import {MediaTile} from '../media/MediaTile';
 import type {SelectionRef} from '@dream/timeline';
@@ -47,7 +48,9 @@ export function Conversation({project}:{project:ProjectState}){
  {(events.length>0||last||running)&&<div className="assistant-turn">
  {running?<RunStream events={events} running assets={project.footage.assets} startedAt={project.experience?.runStartedAt}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={project.footage.assets}/></details>}
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
- {changes.length>0&&<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>}
+ {(()=>{const pills=changes.length>0?<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>:null;
+  // Edits show as change cards; a request that only touched files keeps its short summary.
+  return !running&&group.turnId&&changes.length?<ChangeCards turnId={group.turnId} refresh={current?project.versionId:'done'} fallback={pills}/>:pills;})()}
  </div>}</section>;
  })}
  {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} project={project}/><div className="assistant-turn"><RunStream events={[]} running startedAt={pending.createdAt}/></div></section>}

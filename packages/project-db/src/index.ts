@@ -13,7 +13,7 @@ import Database from 'better-sqlite3';
 import { randomUUID,createHash } from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,renameSync} from 'node:fs';
 import {join,dirname} from 'node:path';
-import {emptyTimeline,TimelineSchema,diff,type TimelineDocument,type Op} from '@dream/timeline';
+import {emptyTimeline,TimelineSchema,diff,timelineChangeList,type TimelineDocument,type Op} from '@dream/timeline';
 import {emptyFootage,AssetSchema,type Asset,type FootageIndex} from '@dream/footage';
 import {processBatch} from '@dream/guardrails';
 import {persistAsset,hydrateAsset,hydratePath} from './paths';
@@ -98,6 +98,14 @@ export class ProjectDB {
  /** The text of one published file change, read from content-addressed blobs (publications store only hashes). */
  fileDiff(beforeHash?:string,afterHash?:string,maxChars=120000){const text=(hash?:string)=>hash?Buffer.from(this.blobs.get(hash),'base64').toString('utf8'):'';const before=text(beforeHash),after=text(afterHash);return{before:before.slice(0,maxChars),after:after.slice(0,maxChars),truncated:before.length>maxChars||after.length>maxChars};}
  recordUsage(event:{requestId:string;turnId?:string;model:string;purpose?:string;phase?:string;parent?:string;usage?:any;costUsd?:number;durationMs?:number;stopReason?:string}){const u=event.usage??{};this.db.prepare('INSERT OR IGNORE INTO ai_usage(request_id,turn_id,model,purpose,phase,parent,input_tokens,cache_read,cache_write,output_tokens,cost_usd,duration_ms,stop_reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(event.requestId,event.turnId??null,event.model,event.purpose??null,event.phase??null,event.parent??null,u.input_tokens??0,u.cache_read_input_tokens??0,u.cache_creation_input_tokens??0,u.output_tokens??0,event.costUsd??0,event.durationMs??null,event.stopReason??null,new Date().toISOString());}
+ /** What a request changed on the timeline, change by change, from the version before it to its last version, with the
+  * operations that undo each change alone. Change cards in the chat show these. */
+ turnChanges(turnId:string){
+  const last=this.db.prepare('SELECT id FROM versions WHERE turn_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1').get(turnId) as {id:string}|undefined;if(!last)return{changes:[]};
+  const first=this.db.prepare('SELECT parent_id FROM versions WHERE turn_id=? ORDER BY created_at ASC,rowid ASC LIMIT 1').get(turnId) as {parent_id:string|null}|undefined,start=this.turnActivity(turnId)?.startVersionId??first?.parent_id;if(!start)return{changes:[]};
+  const name=(id:string)=>{if(id.startsWith('output:'))return id.slice(7);const row=this.db.prepare('SELECT json FROM assets WHERE id=?').get(id) as {json:string}|undefined;return row?JSON.parse(row.json).filename:'media';};
+  return{startVersionId:start,endVersionId:last.id,changes:timelineChangeList(this.timeline(start),this.timeline(last.id),{name,footage:this.footage()})};
+ }
  /** Cost, tokens and time of a request, in total and per worker. */
  turnUsage(turnId:string){const rows=this.db.prepare('SELECT COALESCE(parent,\'lead\') AS owner,model,COUNT(*) AS calls,SUM(cost_usd) AS cost,SUM(input_tokens+cache_read+cache_write) AS prompt,SUM(output_tokens) AS output,SUM(duration_ms) AS ms FROM ai_usage WHERE turn_id=? GROUP BY owner,model').all(turnId) as {owner:string;model:string;calls:number;cost:number;prompt:number;output:number;ms:number}[];return{rows,costUsd:rows.reduce((n,r)=>n+(r.cost??0),0),calls:rows.reduce((n,r)=>n+r.calls,0)};}
  private updateActivityChanges(activity:TurnActivity){const name=(id:string)=>{const row=this.db.prepare('SELECT json FROM assets WHERE id=?').get(id) as {json:string}|undefined;return row?JSON.parse(row.json).filename:'media';};let changes:string[]=[];if(activity.startVersionId)changes=timelineChanges(this.timeline(activity.startVersionId),this.timeline(),name);activity.changes=[...changes,...Object.values(activity.fileChanges??{}).flat()];}
