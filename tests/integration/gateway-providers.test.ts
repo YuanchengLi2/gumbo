@@ -53,9 +53,9 @@ it('answers a non-streaming request from a Gemini stream, and says which key is 
   {choices:[{index:0,delta:{role:'assistant',content:'Done'}}]},
   {choices:[{index:0,delta:{tool_calls:[{index:0,id:'g1',function:{name:'look',arguments:'{"at":1}'}}]}}]},
   {choices:[{index:0,delta:{},finish_reason:'stop'}],usage:{prompt_tokens:900,completion_tokens:40,prompt_tokens_details:{cached_tokens:0}}}]);
- const result=await handleAI({...conversation,model:'gemini-4-argon',requestId:'gem-1',max_tokens:2048},'user',{db,key:'anthropic',providerKeys:{google:'g-test'},fetcher});
+ const result=await handleAI({...conversation,model:'gemini-3.8-flash',requestId:'gem-1',max_tokens:2048},'user',{db,key:'anthropic',providerKeys:{google:'g-test'},fetcher});
  expect(result.status).toBe(200);expect(result.body.content).toEqual([{type:'text',text:'Done'},{type:'tool_use',id:'g1',name:'look',input:{at:1}}]);expect(result.body.stop_reason).toBe('tool_use');
- expect(result.body.dream_request.costUsd).toBeCloseTo((900*2+40*10)/1e6,9);
+ expect(result.body.dream_request.costUsd).toBeCloseTo((900*.75+40*3.75)/1e6,9);
  const missing=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-1',max_tokens:2048},'user',{db,key:'anthropic',fetcher});
  expect(missing.status).toBe(503);expect(missing.body.error.message).toContain('DEEPSEEK_API_KEY');expect(missing.body.error.type).toBe('provider_not_configured');
 });
