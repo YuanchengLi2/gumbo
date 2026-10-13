@@ -7,7 +7,7 @@ import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import {emptyTimeline,TimelineSchema} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
-import {exportNative,planPieces,parseColour,exportSpace,assertExportSpace} from '../../apps/desktop/src/main/native-export';
+import {exportNative,exportAudio,planPieces,parseColour,exportSpace,assertExportSpace} from '../../apps/desktop/src/main/native-export';
 
 const anchor=(clipId:string,at:'start'|'end'|number='start')=>({kind:'clip' as const,clipId,at,offsetSec:0});
 const clip=(id:string,srcIn:number,srcOut:number,extra:object={})=>({id,assetId:'v',srcIn,srcOut,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},reason:'',...extra});
@@ -70,4 +70,31 @@ it('deletes each graphics layer once its run is encoded, and refuses an export t
  expect(exportSpace([{...pieces[0],from:0,to:30*60,browserLayer:'overlays'}],{width:1920,height:1080,fps:30})).toBeGreaterThan(2.4e9);
  expect(()=>assertExportSpace('C:\exports\work',need,1.2e9)).not.toThrow();
  expect(()=>assertExportSpace('C:\exports\work',4.2e9,1.8e9)).toThrow('Export needs about 4.2 GB free on C:; 1.8 GB is free.');
+},120_000);
+
+it('draws keyframed zoom and pan natively, where the player puts them',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dream-native-keys-')),f=footage(dir),t=emptyTimeline('t');t.settings={...t.settings,width:320,height:180};
+ // Zoomed 1.5x the whole time; the picture's centre moves from the middle to three quarters across over source seconds 1-3.
+ t.spine=[clip('a',1,3.4,{keyframes:[{sec:1,scale:1.5,x:.5},{sec:3,x:.75}]})];
+ const output=join(dir,'out.mp4'),timeline=TimelineSchema.parse(t);
+ expect(planPieces(timeline,f).every(p=>!p.browser)).toBe(true);
+ await exportNative({ffmpeg:ffmpeg!,timeline,footage:f,output,workDir:join(dir,'work'),renderBrowser:async()=>{throw new Error('Keyframed zoom and pan need no browser');}});
+ // The red/blue boundary starts mid-frame (160) and is 40 px right at source second 2 and 80 px right from second 3 on.
+ const boundary=(seconds:number)=>{const row=spawnSync(ffmpeg!,['-v','error','-ss',String(seconds),'-i',output,'-vf','crop=320:1:0:90,format=rgb24','-frames:v','1','-f','rawvideo','-'],{maxBuffer:1<<20}).stdout;let x=0;while(x<319&&row[x*3]>row[x*3+2])x++;return x;};
+ expect(Math.abs(boundary(0)-160)).toBeLessThanOrEqual(3);expect(Math.abs(boundary(1)-200)).toBeLessThanOrEqual(3);expect(Math.abs(boundary(2.2)-240)).toBeLessThanOrEqual(3);
+ // Rotation keyframes still go to the browser.
+ t.spine=[clip('a',1,3.4,{keyframes:[{sec:1,rotation:0},{sec:3,rotation:30}]})];
+ expect(planPieces(TimelineSchema.parse(t),f)[0].browser).toBe('rotation, opacity or colour keyframes');
+},60_000);
+
+it('writes the chosen size, frame rate, codec and container in the one encode, and the sound alone without any picture',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dream-native-out-')),f=footage(dir),t=emptyTimeline('t');t.settings={...t.settings,width:320,height:180};
+ t.spine=[clip('a',0,1.5),clip('b',2,3.5)];const timeline=TimelineSchema.parse(t),output=join(dir,'out.mov');
+ await exportNative({ffmpeg:ffmpeg!,timeline,footage:f,output,workDir:join(dir,'work'),video:{width:160,height:90,fps:24,codec:'hevc',quality:'lower'},container:'mov',renderBrowser:async()=>{throw new Error('No browser');}});
+ const probe=JSON.parse(spawnSync(ffprobe.path,['-v','error','-count_frames','-show_streams','-show_format','-of','json',output],{encoding:'utf8'}).stdout),video=probe.streams.find((s:any)=>s.codec_type==='video');
+ expect(video).toMatchObject({codec_name:'hevc',width:160,height:90,r_frame_rate:'24/1',nb_read_frames:'72'});expect(probe.format.format_name).toContain('mov');
+ expect(Math.abs(Number(probe.format.duration)-3)).toBeLessThan(.06);
+ const mp3=join(dir,'sound.mp3');expect(await exportAudio({ffmpeg:ffmpeg!,timeline,footage:f,workDir:join(dir,'audio-work')},mp3,'mp3')).toBe(true);
+ const audio=JSON.parse(spawnSync(ffprobe.path,['-v','error','-show_streams','-show_format','-of','json',mp3],{encoding:'utf8'}).stdout);
+ expect(audio.streams.map((s:any)=>s.codec_name)).toEqual(['mp3']);expect(Math.abs(Number(audio.format.duration)-3)).toBeLessThan(.1);
 },120_000);

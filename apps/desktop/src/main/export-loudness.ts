@@ -46,7 +46,7 @@ export async function normalizeLoudness(ffmpeg:string,path:string,signal?:AbortS
 
 /** Encodes a finished mix to AAC at the standard level in one go, so an export's sound is encoded once: peaks are kept half
  * a decibel further down, for what AAC adds to them, and normalizeLoudness then finds the file already matching. */
-export async function encodeAtLoudness(ffmpeg:string,mix:string,output:string,signal?:AbortSignal){
+export async function encodeAtLoudness(ffmpeg:string,mix:string,output:string,signal?:AbortSignal,codec?:string[]){
  const measured=await measure(ffmpeg,mix,signal,EXPORT_LOUDNESS.truePeak-.5);
- await ffmpegLog(ffmpeg,['-hide_banner','-nostats','-y','-i',mix,...(measured?['-af',measured.filter]:[]),'-ar','48000',...await aacArgs(ffmpeg),output],signal);
+ await ffmpegLog(ffmpeg,['-hide_banner','-nostats','-y','-i',mix,...(measured?['-af',measured.filter]:[]),'-ar','48000',...(codec??await aacArgs(ffmpeg)),output],signal);
 }

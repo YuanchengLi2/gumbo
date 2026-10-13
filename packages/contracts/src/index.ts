@@ -31,7 +31,7 @@ export const CommandSchema=z.discriminatedUnion('type',[
 ]);
 export type Command=z.input<typeof CommandSchema>;
 export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:string;turnId?:string};
-export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;error?:string;phase?:string;warnings?:string[]};
+export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;paths?:string[];error?:string;phase?:string;warnings?:string[]};
 export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number};
 export interface DreamDesktop {
  setTheme(theme:'light'|'dark'):Promise<void>;
@@ -48,8 +48,8 @@ export interface DreamDesktop {
  pickProject(create?:boolean):Promise<string|null>;
  pickMedia():Promise<string[]>;
  mediaPath(file:File):string;
- exportVideo(format?:'video'|'timeline'):Promise<{path:string;format?:'video'|'timeline'}|null>;
- cancelExport():Promise<void>;
+ exportVideo(request?:'video'|'timeline'|Record<string,unknown>):Promise<{path:string;format?:'video'|'timeline'}|null>;
+ cancelExport():Promise<void>;pickExportFolder(current?:string):Promise<string|null>;
  reveal(path:string):Promise<void>;
  shareExport():Promise<{url:string;id:string}|null>;
  runtime():Promise<RuntimeStatus>;

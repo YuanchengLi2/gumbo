@@ -1,7 +1,8 @@
 import {spawn} from 'node:child_process';
 import {writeFileSync,mkdirSync,rmSync,existsSync,renameSync,statfsSync} from 'node:fs';
 import {join} from 'node:path';
-import {resolve as resolveTimeline,type TimelineDocument,type ResolvedClip,type ResolvedItem,type ResolvedTimeline} from '@dream/timeline';
+import {cpus} from 'node:os';
+import {resolve as resolveTimeline,type TimelineDocument,type ResolvedClip,type ResolvedItem,type ResolvedTimeline,type Keyframe,keyframeValues} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {audioManifest,envelope} from '../../../../packages/composition/src/audio-manifest';
 import {whiteBalance} from '../../../../packages/composition/src/visual-style';
@@ -32,7 +33,7 @@ function baseReason(piece:Omit<Piece,'browser'|'index'>,footage:FootageIndex):st
  if(piece.kind==='clip'&&!visualAsset(asset(piece.clip!.assetId)))return'the clip is a scene or not footage';
  if(piece.kind==='transition'){if(!['crossfade'].includes(piece.after!.transitionIn!.type))return`a ${piece.after!.transitionIn!.type} transition`;if(!visualAsset(asset(piece.before!.assetId))||!visualAsset(asset(piece.after!.assetId)))return'a transition between scenes';}
  for(const effect of piece.effects)if(!nativeEffects.has(effect.component))return`the ${effect.component} effect`;
- if(piece.kind!=='gap'){for(const clip of [piece.clip,piece.before,piece.after].filter(Boolean) as ResolvedClip[]){if(clip.framing?.mode==='face')return'face framing';if(clip.keyframes?.length)return'keyframes';}}
+ if(piece.kind!=='gap'){for(const clip of [piece.clip,piece.before,piece.after].filter(Boolean) as ResolvedClip[]){if(clip.framing?.mode==='face')return'face framing';if(clip.keyframes?.some(k=>(['rotation','opacity','exposure','contrast','saturation','temperature'] as const).some(p=>k[p]!==undefined)))return'rotation, opacity or colour keyframes';}}
  return;
 }
 /** Why the piece's overlays need the browser, or undefined when ffmpeg draws them all. */
@@ -105,6 +106,23 @@ function boxChain(input:string,asset:Asset_,colour:Colour,fit:'contain'|'cover',
  return[`[${input}]setpts=(PTS-STARTPTS)/${num(speed)},fps=${fps},${convert}`,...grades,...(w===asset.width&&h===asset.height?[]:[`scale=${w}:${h}:flags=bicubic`]),...(opaque?[]:['format=rgba']),...(opaque&&w===width&&h===height?[]:[place])].join(',');
 }
 
+/** A keyframed property as an ffmpeg expression of the clip's source clock (an expression itself), the way keyframeValues
+ * works it out for the player: held before the first and after the last keyframe that sets it, eased into each one. */
+export function keyframeExpr(keyframes:Keyframe[]|undefined,prop:'scale'|'x'|'y',clock:string){
+ const points=[...(keyframes??[])].filter(k=>k[prop]!==undefined).sort((a,b)=>a.sec-b.sec);if(!points.length)return;
+ const ease=(easing:Keyframe['easing'],u:string)=>easing==='hold'?'0':easing==='ease_in'?`(${u})*(${u})`:easing==='ease_out'?`(1-(1-(${u}))*(1-(${u})))`:easing==='ease_in_out'?`if(lt(${u},0.5),2*(${u})*(${u}),1-2*(1-(${u}))*(1-(${u})))`:u;
+ let expr=num(points.at(-1)![prop]!);
+ for(let n=points.length-1;n>=1;n--){const a=points[n-1],b=points[n],u=`clip((${clock}-${num(a.sec)})/${num(Math.max(1e-6,b.sec-a.sec))},0,1)`;expr=`if(lt(${clock},${num(b.sec)}),${num(a[prop]!)}+${num(b[prop]!-a[prop]!)}*${ease(b.easing,u)},${expr})`;}
+ return points.length>1?`if(lt(${clock},${num(points[0].sec)}),${num(points[0][prop]!)},${expr})`:expr;
+}
+
+/** Whether a clip's keyframed zoom keeps its picture over the whole frame while keyframes move it (checked across the clip
+ * and at every keyframe): the picture covers it while its scale is at least 1 + 2|x - 0.5| and 1 + 2|y - 0.5|. */
+function covering(clip:ResolvedClip,baseScale:number){
+ const from=clip.srcIn,to=clip.holdSec?clip.srcIn+clip.holdSec:clip.srcOut,times=[...Array.from({length:65},(_,n)=>from+(to-from)*n/64),...(clip.keyframes??[]).map(k=>k.sec).filter(t=>t>=from&&t<=to)];
+ return times.every(t=>{const v=keyframeValues(clip.keyframes,t),s=v.scale??baseScale;return s>=1+2*Math.abs((v.x??.5)-.5)-1e-6&&s>=1+2*Math.abs((v.y??.5)-.5)-1e-6;});
+}
+
 /** One clip as the player draws it: the element box over the clip background, then the CSS transform about the frame centre
  * (shake offset, rotation, scale with effects, flips) and the clip's opacity. Grade layers follow the clip's own grade.
  * When the clip covers the whole frame at every moment (opaque footage filling it, not shrunk, rotated or shaken), the
@@ -112,16 +130,20 @@ function boxChain(input:string,asset:Asset_,colour:Colour,fit:'contain'|'cover',
  * when nothing on it needs RGB (rgb false). The chain then ends at [output] itself (opaque). */
 function clipChain(input:string,output:string,clip:ResolvedClip,asset:Asset_,colour:Colour,piece:Piece,width:number,height:number,fps:number,rgb:boolean){
  const f=clip.framing,cover=f?.mode==='fill'||f?.mode==='face',start=piece.from/fps,clipStart=clip.start,clipLength=Math.max(1e-6,clip.end-clip.start),rotation=(f?.rotation??0)*Math.PI/180;
- // Scale and shake as expressions of TIME, the seconds since the piece starts.
- let scale=`${num(f?.scale??1)}`,dx='0',shrinks=(f?.scale??1)<1;
+ // Scale and shake as expressions of TIME, the seconds since the piece starts. Keyframed zoom replaces the framing's scale,
+ // and keyframed x and y move the picture's centre, all on the clip's source clock.
+ const clock=`(${num(clip.srcIn)}+(${num(start)}+TIME-${num(clipStart)})*${num(clip.holdSec?1:clip.speed)})`,keyScale=keyframeExpr(clip.keyframes,'scale',clock),keyX=keyframeExpr(clip.keyframes,'x',clock),keyY=keyframeExpr(clip.keyframes,'y',clock);
+ // A pan whose zoom keeps the picture over the whole frame at every moment stays on the fast path, moving only its crop.
+ const coversFrame=!!(keyX||keyY)&&covering(clip,f?.scale??1);
+ let scale=keyScale??`${num(f?.scale??1)}`,dx=keyX?`(${keyX}-0.5)*${width}`:'0',dy=keyY?`(${keyY}-0.5)*${height}`:'0',shaken=false,shrinks=keyScale?(clip.keyframes??[]).some(k=>k.scale!==undefined&&k.scale<1):(f?.scale??1)<1;
  for(const e of piece.effects){const amount=Number((e.params as any).amount??(e.component==='slow_push'?.08:e.component==='punch_zoom'?.15:.1));
   if(e.component==='slow_push')scale+=`*(1+max(0,min(1,(${num(start)}+TIME-${num(clipStart)})/${num(clipLength)}))*${num(amount)})`;
   if(e.component==='punch_zoom')scale+=`*${num(1+amount)}`;
   if((e.component==='slow_push'||e.component==='punch_zoom')&&amount<0)shrinks=true;
-  if(e.component==='shake')dx=`sin(max(0,${num(start)}+TIME-${num(clipStart)})*${fps}*2.7)*${num(amount)}*40`;}
- const animated=scale.includes('TIME')||dx!=='0',grades=[...gradeChain(gradeOf(f)),...piece.effects.filter(e=>e.component==='grade').flatMap(e=>gradeChain(e.params as any))];
+  if(e.component==='shake'){shaken=true;dx=`${dx==='0'?'':dx+'+'}sin(max(0,${num(start)}+TIME-${num(clipStart)})*${fps}*2.7)*${num(amount)}*40`;}}
+ const animated=scale.includes('TIME')||dx!=='0'||dy!=='0',grades=[...gradeChain(gradeOf(f)),...piece.effects.filter(e=>e.component==='grade').flatMap(e=>gradeChain(e.params as any))];
  const fit=cover?'cover':'contain',box=boxSize(asset,fit,width,height),opacity=f?.opacity??1;
- const opaque=asset.kind==='video'&&(cover||(box.w===width&&box.h===height))&&!rotation&&dx==='0'&&!shrinks&&opacity>=1;
+ const opaque=asset.kind==='video'&&(cover||(box.w===width&&box.h===height))&&!rotation&&(dx==='0'&&dy==='0'||coversFrame&&!shaken)&&!shrinks&&opacity>=1;
  const yuv=opaque&&!rgb&&!grades.length&&colour.yuv;
  const chain=[boxChain(input,asset,colour,fit,f?.x??.5,f?.y??.5,width,height,fps,clip.speed,grades,opaque,yuv),...(f?.flipX?['hflip']:[]),...(f?.flipY?['vflip']:[])];
  // A changing size rebuilds the scaler every frame, and bilinear rebuilds fastest (it is also how the browser samples a
@@ -129,13 +151,14 @@ function clipChain(input:string,output:string,clip:ResolvedClip,asset:Asset_,col
  // size it started with, so its offset is worked out from the same time expression rather than from the input.)
  const grown=(z:string,frame:number)=>`trunc((${frame}*(${z})-${frame})/4)*4`;
  if(opaque){
-  if(scale!=='1'){const z=scale.replace(/TIME/g,'t');chain.push(`scale=w='${width}+${grown(z,width)}':h='${height}+${grown(z,height)}':eval=${animated?'frame':'init'}:flags=${animated?'bilinear':'bicubic'}`,`crop=w=${width}:h=${height}:x='${grown(z,width)}/2':y='${grown(z,height)}/2'`);}
+  if(scale!=='1'){const z=scale.replace(/TIME/g,'t'),gx=grown(z,width),gy=grown(z,height),ox=dx.replace(/TIME/g,'t'),oy=dy.replace(/TIME/g,'t');
+   chain.push(`scale=w='${width}+${gx}':h='${height}+${gy}':eval=${animated?'frame':'init'}:flags=${animated?'bilinear':'bicubic'}`,`crop=w=${width}:h=${height}:x='${ox==='0'?`${gx}/2`:`clip(${gx}/2-(${ox}),0,${gx})`}':y='${oy==='0'?`${gy}/2`:`clip(${gy}/2-(${oy}),0,${gy})`}'`);}
   return{chain:chain.join(',')+`[${output}]`,overlay:undefined,yuv};
  }
  if(rotation)chain.push(`rotate=${num(rotation)}:ow='rotw(${num(rotation)})':oh='roth(${num(rotation)})':c=none`);
  if(scale!=='1')chain.push(`scale=w='max(2,trunc(iw*(${scale.replace(/TIME/g,'t')})/2)*2)':h='max(2,trunc(ih*(${scale.replace(/TIME/g,'t')})/2)*2)':eval=${animated?'frame':'init'}:flags=${animated?'bilinear':'bicubic'}`);
  if(opacity<1)chain.push(`colorchannelmixer=aa=${num(opacity)}`);
- return{chain:chain.join(',')+`[${output}fg]`,overlay:`[${output}bg][${output}fg]overlay=x='(main_w-overlay_w)/2+${dx.replace(/TIME/g,'t')}':y='(main_h-overlay_h)/2':eval=${animated?'frame':'init'}:format=rgb[${output}]`,yuv:false};
+ return{chain:chain.join(',')+`[${output}fg]`,overlay:`[${output}bg][${output}fg]overlay=x='(main_w-overlay_w)/2+${dx.replace(/TIME/g,'t')}':y='(main_h-overlay_h)/2+${dy.replace(/TIME/g,'t')}':eval=${animated?'frame':'init'}:format=rgb[${output}]`,yuv:false};
 }
 
 /** A footage overlay (b-roll) as the player draws it: a frame-sized box of the source (cover by default, contain when asked)
@@ -164,20 +187,31 @@ export function captionsAss(timeline:TimelineDocument,resolved:ResolvedTimeline,
  return lines.length?head+lines.join('\n')+'\n':undefined;
 }
 
-// ---- Encoding: the graphics card's encoder when this computer has one, else x264. Every piece uses the same settings so
-// the pieces can be joined without re-encoding.
+// ---- Encoding: the graphics card's encoder when this computer has one, else x264 or x265, as CapCut does. The bit rate
+// choice moves the encoder's constant quality: Recommended is the long-standing default, Lower and Higher step either side.
+// Every piece uses the same settings so the pieces can be joined without re-encoding.
 export type Encoder={name:string;args:string[];pixelFormat:string};
-const candidates:Encoder[]=[{name:'h264_nvenc',args:['-c:v','h264_nvenc','-preset','p5','-rc','vbr','-cq','19','-b:v','0'],pixelFormat:'yuv420p'},{name:'h264_qsv',args:['-c:v','h264_qsv','-global_quality','20','-look_ahead','0'],pixelFormat:'nv12'},{name:'h264_amf',args:['-c:v','h264_amf','-quality','quality','-rc','cqp','-qp_i','18','-qp_p','20'],pixelFormat:'yuv420p'}];
-const software:Encoder={name:'libx264',args:['-c:v','libx264','-preset','veryfast','-crf','18'],pixelFormat:'yuv420p'};
-let chosen:Promise<Encoder>|undefined;
-export function pickEncoder(ffmpeg:string){
- if(process.env.DREAM_EXPORT_ENCODER==='software')return Promise.resolve(software);
- return chosen??=(async()=>{for(const encoder of candidates){try{await runFfmpeg(ffmpeg,['-hide_banner','-v','error','-f','lavfi','-i','testsrc2=s=256x144:r=30:d=0.5','-vf',`format=${encoder.pixelFormat}`,...encoder.args,'-f','null','-']);return encoder;}catch{}}return software;})();
+export type VideoCodec='h264'|'hevc';export type VideoQuality='lower'|'recommended'|'higher';
+const step={lower:6,recommended:0,higher:-3};
+function encoders(codec:VideoCodec,quality:VideoQuality){
+ const q=(n:number)=>String(n+step[quality]),hevc=codec==='hevc',tag=hevc?['-tag:v','hvc1']:[];
+ const hardware:Encoder[]=[{name:`${codec}_nvenc`,args:['-c:v',`${codec}_nvenc`,'-preset','p5','-rc','vbr','-cq',q(hevc?23:19),'-b:v','0',...tag],pixelFormat:'yuv420p'},{name:`${codec}_qsv`,args:['-c:v',`${codec}_qsv`,'-global_quality',q(hevc?22:20),'-look_ahead','0',...tag],pixelFormat:'nv12'},{name:`${codec}_amf`,args:['-c:v',`${codec}_amf`,'-quality','quality','-rc','cqp','-qp_i',q(hevc?21:18),'-qp_p',q(hevc?23:20),...tag],pixelFormat:'yuv420p'}];
+ const software:Encoder=hevc?{name:'libx265',args:['-c:v','libx265','-preset','fast','-crf',q(22),'-x265-params','log-level=error',...tag],pixelFormat:'yuv420p'}:{name:'libx264',args:['-c:v','libx264','-preset','veryfast','-crf',q(18)],pixelFormat:'yuv420p'};
+ return{hardware,software};
+}
+const chosen=new Map<string,Promise<Encoder>>();
+export function pickEncoder(ffmpeg:string,codec:VideoCodec='h264',quality:VideoQuality='recommended'){
+ const {hardware,software}=encoders(codec,quality);if(process.env.DREAM_EXPORT_ENCODER==='software')return Promise.resolve(software);
+ const key=codec+':'+quality;if(!chosen.has(key))chosen.set(key,(async()=>{for(const encoder of hardware){try{await runFfmpeg(ffmpeg,['-hide_banner','-v','error','-f','lavfi','-i','testsrc2=s=256x144:r=30:d=0.5','-vf',`format=${encoder.pixelFormat}`,...encoder.args,'-f','null','-']);return encoder;}catch{}}return software;})());
+ return chosen.get(key)!;
 }
 
 function runFfmpeg(ffmpeg:string,args:string[],signal?:AbortSignal,cwd?:string){return new Promise<void>((resolve,reject)=>{const child=spawn(ffmpeg,args,{windowsHide:true,signal,cwd});let log='';child.stderr.on('data',chunk=>{log=(log+chunk.toString()).slice(-4000);});child.on('error',reject);child.on('close',code=>code===0?resolve():reject(new Error('ffmpeg failed: '+log.slice(-1500))));});}
 
-export type NativeExportOptions={ffmpeg:string;timeline:TimelineDocument;footage:FootageIndex;output:string;workDir:string;signal?:AbortSignal;concurrency?:number;
+/** What the video file is: its frame size and rate, codec and quality. The edit is drawn at the project's size and rate and
+ * becomes this in the same encode, as CapCut exports, never by encoding twice. */
+export type VideoOutput={width:number;height:number;fps:number;codec:VideoCodec;quality:VideoQuality};
+export type NativeExportOptions={ffmpeg:string;timeline:TimelineDocument;footage:FootageIndex;output:string;workDir:string;signal?:AbortSignal;concurrency?:number;video?:VideoOutput;container?:'mp4'|'mov';
  /** Renders frames [from,to) of the composition (captions hidden, no audio) with the browser to a video file: the whole frame,
   * or with layer 'overlays' only the overlays, on transparency (the footage is ffmpeg's). */
  renderBrowser:(from:number,to:number,file:string,layer:'all'|'overlays')=>Promise<void>;onProgress?:(done:number,total:number,phase:string)=>void};
@@ -207,12 +241,13 @@ export function assertExportSpace(workDir:string,need:number,free=(()=>{const s=
 
 /** Renders the timeline natively. Returns what it did so callers can report it. */
 export async function exportNative(o:NativeExportOptions){
- const {timeline,footage,ffmpeg,workDir}=o,{width,height,fps}=timeline.settings,resolved=resolveTimeline(timeline,footage),pieces=planPieces(timeline,footage,resolved),encoder=await pickEncoder(ffmpeg);
+ const {timeline,footage,ffmpeg,workDir}=o,{width,height,fps}=timeline.settings,resolved=resolveTimeline(timeline,footage),pieces=planPieces(timeline,footage,resolved),encoder=await pickEncoder(ffmpeg,o.video?.codec,o.video?.quality);
+ const out={width:o.video?.width??width,height:o.video?.height??height,fps:o.video?.fps??fps},outFrame=(frame:number)=>Math.round(frame*out.fps/fps);
  mkdirSync(workDir,{recursive:true});assertExportSpace(workDir,exportSpace(pieces,timeline.settings,o.concurrency??3));const asset=(id:string)=>footage.assets.find(a=>a.id===id)!;
  // Each source's colour tags, read once.
  const used=new Set(pieces.filter(p=>p.browserLayer!=='all').flatMap(p=>[p.clip,p.before,p.after].filter(Boolean).map(c=>c!.assetId).concat(p.browserLayer?[]:p.overlays.map(i=>i.source!.assetId))));
  const colours=new Map(await Promise.all([...used].map(async id=>[id,await probeColour(ffmpeg,asset(id).originalPath,asset(id).kind==='image')] as const)));
- const encode=[...encoder.args,'-pix_fmt',encoder.pixelFormat==='nv12'?'nv12':'yuv420p','-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709','-color_range','tv','-r',String(fps),'-g',String(fps*2),'-video_track_timescale',String(fps*1000),'-an'];
+ const encode=[...encoder.args,'-pix_fmt',encoder.pixelFormat==='nv12'?'nv12':'yuv420p','-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709','-color_range','tv','-r',String(out.fps),'-g',String(out.fps*2),'-video_track_timescale',String(out.fps*1000),'-an'];
 
  /** One piece's part of a run's filter graph: its inputs (numbered from first) and filters, ending at [p<index>] as frame-sized
   * 4:2:0 BT.709 frames, exactly as many as the piece has. Labels carry the piece's index so pieces share one graph. */
@@ -257,8 +292,12 @@ export async function exportNative(o:NativeExportOptions){
  // Runs of pieces rendered by one ffmpeg each: starting the encoder and loading the caption fonts takes a second or two, which
  // a long edit with a cut every few seconds would otherwise pay hundreds of times. A browser piece is a run of its own, and
  // runs are kept short enough that several render at once.
+ // A long stretch is cut into chunks so several runs share it, as CapCut keeps every core busy: one 20-second clip was one
+ // ffmpeg on one core. Chunks join without re-encoding like any runs. (The browser renders its own pieces in parallel.)
+ const limit=o.concurrency??Math.min(6,Math.max(2,Math.floor(cpus().length/3))),chunk=Math.max(fps*2,Math.ceil(resolved.durationInFrames/limit));
+ const parts=pieces.flatMap(p=>p.browserLayer==='all'||p.to-p.from<=chunk?[p]:Array.from({length:Math.ceil((p.to-p.from)/chunk)},(_,k)=>({...p,from:p.from+k*chunk,to:Math.min(p.to,p.from+(k+1)*chunk)}))).map((p,index)=>({...p,index}));
  const runs:Piece[][]=[];
- for(const p of pieces){const run=runs.at(-1);if(run&&p.browserLayer!=='all'&&run[0].browserLayer!=='all'&&run.length<24&&p.to-run[0].from<=fps*90)run.push(p);else runs.push([p]);}
+ for(const p of parts){const run=runs.at(-1);if(run&&p.browserLayer!=='all'&&run[0].browserLayer!=='all'&&run.length<24&&p.to-run[0].from<=Math.min(fps*90,chunk))run.push(p);else runs.push([p]);}
  const runFile=(run:Piece[])=>join(workDir,`run-${String(run[0].index).padStart(5,'0')}.mp4`);let done=0;
  const renderRun=async(run:Piece[])=>{
   o.signal?.throwIfAborted();const from=run[0].from,to=run.at(-1)!.to,args:string[]=['-hide_banner','-v','error','-y'],filters:string[]=[],layers:string[]=[];let inputs=0;
@@ -268,25 +307,29 @@ export async function exportNative(o:NativeExportOptions){
   const ass=captionsAss(timeline,resolved,from,to),assName=`run-${run[0].index}.ass`,assFile=join(workDir,assName);if(ass)writeFileSync(assFile,ass);
   // Filter files are named relative to the work directory, where ffmpeg runs: no drive colon to escape.
   if(ass)filters.push(`[${last}]subtitles=filename=${assName}[sub]`),last='sub';
+  // The chosen size and frame rate, each run holding exactly its share of the output's frames.
+  const frames=outFrame(to)-outFrame(from);
+  if(out.width!==width||out.height!==height)filters.push(`[${last}]scale=${out.width}:${out.height}:flags=lanczos[sized]`),last='sized';
+  if(out.fps!==fps)filters.push(`[${last}]fps=${out.fps},tpad=stop_mode=clone:stop=${frames},trim=end_frame=${frames}[timed]`),last='timed';
   filters.push(`[${last}]format=${encoder.pixelFormat}[out]`);
-  args.push('-filter_complex',filters.join(';'),'-map','[out]','-frames:v',String(to-from),...encode,runFile(run));
+  args.push('-filter_complex',filters.join(';'),'-map','[out]','-frames:v',String(frames),...encode,runFile(run));
   if(process.env.DREAM_EXPORT_DEBUG)writeFileSync(join(workDir,`run-${run[0].index}.json`),JSON.stringify(args));
   try{await runFfmpeg(ffmpeg,args,o.signal,workDir);}catch(error){throw new Error(`Pieces ${run[0].index}-${run.at(-1)!.index} (frames ${from}-${to}): ${(error as Error).message}
 Filters: ${filters.join(';')}`);}finally{if(existsSync(assFile)&&!process.env.DREAM_EXPORT_DEBUG)rmSync(assFile,{force:true});}
-  done+=run.length;o.onProgress?.(done,pieces.length,'Rendering the video');
+  done+=run.length;o.onProgress?.(done,parts.length,'Rendering the video');
   // A browser layer is gigabytes for a long graphic; once its run is encoded it is not needed again.
   }finally{if(!process.env.DREAM_EXPORT_DEBUG)for(const file of layers)rmSync(file,{force:true});}
  };
  // The sound is mixed, levelled and encoded while the picture renders; it needs little of the processor the picture uses.
  const sound=(async()=>{const mix=join(workDir,'mix.wav'),encoded=join(workDir,'sound.m4a');if(!await mixAudio(o,resolved,mix))return;await encodeAtLoudness(ffmpeg,mix,encoded,o.signal);rmSync(mix,{force:true});return encoded;})();
- const limit=o.concurrency??3;let next=0;const errors:unknown[]=[];
+ let next=0;const errors:unknown[]=[];
  const picture=Promise.all(Array.from({length:Math.min(limit,runs.length)},async()=>{while(next<runs.length&&!errors.length){const run=runs[next++];try{await renderRun(run);}catch(error){errors.push(error);}}}));
  const [,audio]=await Promise.all([picture,sound]);
  if(errors.length)throw errors[0];
  const list=join(workDir,'runs.txt');writeFileSync(list,runs.map(run=>`file '${runFile(run).replace(/\\/g,'/').replace(/'/g,"'\\''")}'`).join('\n'));
- o.onProgress?.(pieces.length,pieces.length,'Joining picture and sound');
+ o.onProgress?.(parts.length,parts.length,'Joining picture and sound');
  const temp=o.output+'.native.mp4';
- await runFfmpeg(ffmpeg,['-hide_banner','-v','error','-y','-f','concat','-safe','0','-i',list,...(audio?['-i',audio]:[]),'-map','0:v',...(audio?['-map','1:a']:[]),'-c','copy','-movflags','+faststart','-t',num(resolved.durationInFrames/fps),temp],o.signal);
+ await runFfmpeg(ffmpeg,['-hide_banner','-v','error','-y','-f','concat','-safe','0','-i',list,...(audio?['-i',audio]:[]),'-map','0:v',...(audio?['-map','1:a']:[]),'-c','copy','-movflags','+faststart','-t',num(resolved.durationInFrames/fps),'-f',o.container??'mp4',temp],o.signal);
  renameSync(temp,o.output);
  return{pieces:pieces.length,runs:runs.length,browserPieces:pieces.filter(p=>p.browser).length,encoder:encoder.name};
 }
@@ -295,7 +338,7 @@ Filters: ${filters.join(';')}`);}finally{if(existsSync(assFile)&&!process.env.DR
  * ducking under speech), and placed at its start. Segments are mixed in batches, in timeline order, each batch covering only
  * its own stretch (a long edit has hundreds of segments, more inputs than one command line can hold), and the batches are
  * then mixed into the whole. The filter graphs are read from files for the same reason. */
-async function mixAudio(o:NativeExportOptions,resolved:ResolvedTimeline,output:string){
+async function mixAudio(o:Pick<NativeExportOptions,'ffmpeg'|'timeline'|'footage'|'workDir'|'signal'>,resolved:ResolvedTimeline,output:string){
  const fps=o.timeline.settings.fps,totalSamples=Math.round(resolved.durationInFrames/fps*48000);
  const segments=audioManifest(o.timeline,o.footage).map((segment,i)=>({segment,i})).sort((a,b)=>a.segment.startSample-b.segment.startSample);if(!segments.length)return false;
  // Whether a word is being spoken at a sample: the last word starting by then, or one just before it, still running.
@@ -325,4 +368,13 @@ async function mixAudio(o:NativeExportOptions,resolved:ResolvedTimeline,output:s
  await runFfmpeg(o.ffmpeg,['-hide_banner','-v','error','-y',...parts.flatMap(p=>['-i',p.file]),'-filter_complex_script',graph,'-map','[mix]','-c:a','pcm_f32le',output],o.signal,o.workDir);
  for(const p of parts)rmSync(p.file,{force:true});
  return true;
+}
+
+/** The sound alone, as CapCut's audio export: the same mix as the video's, levelled to the same loudness, written as MP3,
+ * WAV or AAC without drawing a frame. False when the timeline has no sound. */
+export async function exportAudio(o:Pick<NativeExportOptions,'ffmpeg'|'timeline'|'footage'|'workDir'|'signal'>,output:string,format:'mp3'|'wav'|'aac'){
+ mkdirSync(o.workDir,{recursive:true});const mix=join(o.workDir,'mix.wav');
+ try{if(!await mixAudio(o,resolveTimeline(o.timeline,o.footage),mix))return false;
+  await encodeAtLoudness(o.ffmpeg,mix,output,o.signal,format==='mp3'?['-c:a','libmp3lame','-b:a','320k']:format==='wav'?['-c:a','pcm_s16le']:undefined);return true;}
+ finally{rmSync(o.workDir,{recursive:true,force:true});}
 }
