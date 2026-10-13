@@ -110,6 +110,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   checkpoint.journalEpoch=(checkpoint.journalEpoch??0)+1;checkpoint.protocolVersion=2;
   if(checkpoint.outcome)closeBatch();save();
  }
+ // Every saved conversation drops server calls left without a result before it is sent again; only a paused last reply
+ // (no local calls waiting) keeps them, so the server can finish it.
+ checkpoint.messages=checkpoint.messages.map((m:any,n:number,all:any[])=>m.role==='assistant'&&Array.isArray(m.content)&&(n<all.length-1||checkpoint.pending?.length)?{...m,content:(c=>c.length?c:[{type:'text',text:'(No output.)'}])(withoutUnansweredServerCalls(m.content))}:m);
  const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
  // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
  const feedback=role!=='worker'?db.loadState<any>('resume_input:'+turnId):undefined;if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
