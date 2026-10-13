@@ -2,7 +2,7 @@ import {existsSync,mkdirSync,readFileSync,writeFileSync,renameSync} from 'node:f
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {AssetSchema,type Asset} from '@dream/footage';
-import {scoreFromNotation,SoundDesignSchema,renderArrangement,renderSound,renderSfx,sfxCatalog,SCORE_RENDERER_VERSION,type ScoreDocument,type SoundDesign} from '@dream/procedural-media';
+import {describeIssues,scoreFromNotation,SoundDesignSchema,renderArrangement,renderSound,renderSfx,sfxCatalog,SCORE_RENDERER_VERSION,type ScoreDocument,type SoundDesign} from '@dream/procedural-media';
 import {renderProcedural} from './procedural-client';
 import {workspacePath} from '../../../packages/project-db/src/workspace-store';
 
@@ -17,7 +17,7 @@ export const inProcessRenderer:AudioRenderer=async input=>{
  return{durationSec,beats,waveform:result.waveform};
 };
 const digest=(value:string)=>createHash('sha256').update(value).digest('hex');
-const field=(error:unknown)=>{const issue=(error as {issues?:{path:(string|number)[];message:string}[]}).issues?.[0];return issue?`${issue.path.join('.')||'sound'}: ${issue.message}`:String((error as Error).message);};
+const field=(error:unknown)=>{const text=describeIssues(error,'sound');return text.includes('\n')?'\n'+text:text;};
 
 /** Music (a score file in notation or as a full document) and sound effects (a sound design file or preset:<id>)
  * become audio assets. Rendering is cached by the definition's hash, so republishing unchanged sound is instant. */

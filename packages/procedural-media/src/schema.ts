@@ -28,6 +28,21 @@ function soundLayerDefaults(value:unknown){
  return value.map((layer,n)=>layer&&typeof layer==='object'?{startSec:0,pan:0,gainDb:-6,attackSec:.01,releaseSec:.1,filterHz:20000,...layer,id:typeof (layer as any).id==='string'&&(layer as any).id?(layer as any).id:`layer-${n+1}`,endFrequencyHz:(layer as any).endFrequencyHz??(layer as any).frequencyHz}:layer);
 }
 export const SoundDesignSchema=z.object({schemaVersion:z.literal(1),id:z.string().min(1),title:z.string().min(1).max(120),seed:z.number().int(),durationSec:z.number().positive().max(30),layers:z.preprocess(soundLayerDefaults,z.array(z.object({id:z.string().min(1),wave:z.enum(['sine','triangle','saw','square','noise']),startSec:z.number().nonnegative(),durationSec:z.number().positive().max(30),frequencyHz:z.number().min(20).max(20000),endFrequencyHz:z.number().min(20).max(20000),gainDb:z.number().min(-60).max(6),pan:z.number().min(-1).max(1),attackSec:z.number().nonnegative(),releaseSec:z.number().nonnegative(),filterHz:z.number().min(20).max(20000)})).min(1).max(32))}).superRefine((sound,context)=>{
- const ids=new Set<string>();for(const layer of sound.layers){if(ids.has(layer.id)||layer.startSec+layer.durationSec>sound.durationSec+.00001||layer.attackSec+layer.releaseSec>layer.durationSec)context.addIssue({code:'custom',message:'Sound layers need unique IDs, envelopes within their duration and placement within the sound.'});ids.add(layer.id);}
+ // One issue per layer and rule, with the numbers, so a whole sound can be fixed in one pass.
+ const seen=new Map<string,number>(),s=(n:number)=>`${Math.round(n*1000)/1000} s`;
+ sound.layers.forEach((layer,n)=>{
+  const at=['layers',n],name=`layer ${n} (${layer.id})`,end=layer.startSec+layer.durationSec;
+  if(seen.has(layer.id))context.addIssue({code:'custom',path:[...at,'id'],message:`${name} has the same id as layer ${seen.get(layer.id)}; give each layer its own id.`});else seen.set(layer.id,n);
+  if(end>sound.durationSec+.00001)context.addIssue({code:'custom',path:[...at,'durationSec'],message:`${name} starts at ${s(layer.startSec)} and lasts ${s(layer.durationSec)}, so it ends at ${s(end)}, after the sound ends at ${s(sound.durationSec)}; shorten the layer to at most ${s(sound.durationSec-layer.startSec)} or set the sound's durationSec to at least ${s(end)}.`});
+  if(layer.attackSec+layer.releaseSec>layer.durationSec)context.addIssue({code:'custom',path:[...at,'attackSec'],message:`${name}'s attackSec (${s(layer.attackSec)}) plus releaseSec (${s(layer.releaseSec)}) is ${s(layer.attackSec+layer.releaseSec)}, longer than the layer (${s(layer.durationSec)}); make them add up to at most its durationSec.`});
+ });
 });
 export type SoundDesign=z.infer<typeof SoundDesignSchema>;
+/** Every problem a schema found, one line each with where it is ("layers.1.pan: expected a number"), so a file can be
+ * fixed in one pass instead of one error at a time. */
+export function describeIssues(error:unknown,fallback='document',limit=12):string{
+ const issues=(error as {issues?:{path:PropertyKey[];message:string}[]})?.issues;
+ if(!issues?.length)return String((error as Error)?.message??error);
+ const lines=issues.slice(0,limit).map(i=>`${i.path.map(String).join('.')||fallback}: ${i.message}`);
+ return lines.join('\n')+(issues.length>limit?`\n(and ${issues.length-limit} more)`:'');
+}

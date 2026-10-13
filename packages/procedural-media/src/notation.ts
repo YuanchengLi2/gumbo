@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {InstrumentSchema,ScoreSchema,type ScoreDocument,type Instrument} from './schema';
+import {InstrumentSchema,ScoreSchema,describeIssues,type ScoreDocument,type Instrument} from './schema';
 
 /** Music written as data. A score file is either a full ScoreDocument (schemaVersion 2) or this compact notation, which
  * Dream expands into one: drum step patterns, note strings, chord progressions and arpeggios. No authored code runs. */
@@ -84,9 +84,9 @@ function trackLoop(track:z.output<typeof TrackNotation>,index:number,beatUnit:nu
 
 /** Expands notation (or validates a full document) into a ScoreDocument. Errors name the field that is wrong. */
 export function scoreFromNotation(input:unknown,id='score'):ScoreDocument{
- if(input&&typeof input==='object'&&(input as any).schemaVersion===2){const full=ScoreSchema.safeParse({...(input as object),id:(input as any).id??id});if(!full.success){const issue=full.error.issues[0];throw new NotationError(issue.path.join('.')||'score',issue.message);}return full.data;}
+ if(input&&typeof input==='object'&&(input as any).schemaVersion===2){const full=ScoreSchema.safeParse({...(input as object),id:(input as any).id??id});if(!full.success)throw new NotationError('score',describeIssues(full.error,'score'));return full.data;}
  const parsed=ScoreNotationSchema.safeParse(input);
- if(!parsed.success){const issue=parsed.error.issues[0];throw new NotationError(issue.path.join('.')||'score',issue.message);}
+ if(!parsed.success)throw new NotationError('score',describeIssues(parsed.error,'score'));
  const notation=parsed.data,[beatsPerBar,beatUnit]=notation.meter.split('/').map(Number) as [number,4|8],{key,mode}=parseKey(notation.key);
  const barBeats=beatsPerBar,beatSec=60/notation.tempo;
  const loops=notation.tracks.map((track,n)=>trackLoop(track,n,beatUnit,beatsPerBar));
@@ -106,7 +106,7 @@ export function scoreFromNotation(input:unknown,id='score'):ScoreDocument{
   return{id:track.id??`t${n}`,name:track.name??track.instrument,instrument:track.instrument,gainDb:track.gainDb??0,pan:track.pan??0,mute:track.mute??false,notes,automation:[]};
  });
  const document={schemaVersion:2 as const,id,title:notation.title,seed:notation.seed,tempo:notation.tempo,meter:{beatsPerBar,beatUnit},key,mode,durationSec,mood:notation.mood,intensity:notation.intensity,sections,tracks,bindings:[]};
- const checked=ScoreSchema.safeParse(document);if(!checked.success){const issue=checked.error.issues[0];throw new NotationError(issue.path.join('.')||'score',issue.message);}
+ const checked=ScoreSchema.safeParse(document);if(!checked.success)throw new NotationError('score',describeIssues(checked.error,'score'));
  return checked.data;
 }
 

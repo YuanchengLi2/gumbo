@@ -34,7 +34,7 @@ import {importResources} from './resource-import';
 import {editChecks,type EditChecks} from './edit-checks';
 import {fetchPage} from './web-fetch';
 import {workerRenderer} from './sound-outputs';
-import {sfxCatalog,describeScore,SoundDesignSchema} from '@dream/procedural-media';
+import {sfxCatalog,describeScore,SoundDesignSchema,describeIssues} from '@dream/procedural-media';
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
@@ -181,6 +181,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(name==='edit_file'){const matches=old.split(input.oldText).length-1;if(matches!==1)throw new Error(matches?`oldText matches ${matches} places; include more surrounding text so it matches exactly one.`:existsSync(path)?'oldText was not found in the current file; re-read the range you are editing.':'The file does not exist; use write_file to create it.');}
    const content=name==='edit_file'?old.replace(input.oldText,input.newText):input.content;this.db.saveState(receiptKey,{identity,beforeHash:digest(old),afterHash:digest(content),content});const written=this.write(input.path,content);if(normalizeScope(input.path)==='project.json')this.followDraft(turnId);
    // Scene code is compiled (never run) right away, so syntax and import mistakes come back with this write.
+   // Sound and music files are checked the same way: every problem in them comes back with this write.
+   if(/\.(sfx|score)\.json$/.test(input.path)){const checked=this.checkSound({path:input.path});return{...written,check:'errors'in checked?{errors:checked.errors,note:'Check of this file; fix every listed problem before publishing.'}:{valid:true}};}
    if(isEngineScene(input.path)&&normalizeScope(input.path).startsWith('src/'))try{const compiled=await compileScene(this.root,{entry:input.path,mode:'draft'});return{...written,check:compiled.errors.length?{errors:compiled.errors.slice(0,8),note:'Compile check of this file. Errors about files you have not written yet resolve once they exist.'}:{compiles:true}};}catch{}
    return written;
   });
@@ -290,7 +292,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   let json:unknown;try{json=JSON.parse(readFileSync(workspacePath(this.root,entry.path),'utf8'));}catch(error){return{id:entry.id,path:entry.path,errors:[`Not readable JSON: ${(error as Error).message}`]};}
   const sound=entry.kind==='sfx'||entry.path.endsWith('.sfx.json');
   try{return sound?{id:entry.id,path:entry.path,sound:{durationSec:SoundDesignSchema.parse({schemaVersion:1,id:entry.id??'sound',title:entry.id??'sound',seed:1,...(json as object)}).durationSec}}:{id:entry.id,path:entry.path,score:describeScore(json,entry.id)};}
-  catch(error){const issue=(error as {issues?:{path:PropertyKey[];message:string}[]}).issues?.[0];return{id:entry.id,path:entry.path,errors:[issue?`${issue.path.join('.')}: ${issue.message}`:(error as Error).message]};}
+  catch(error){return{id:entry.id,path:entry.path,errors:describeIssues(error,sound?'sound':'score').split('\n')};}
  }
  private async checkOutputs(input:{paths?:string[];scene?:string},callId:string,turnId:string,scope?:WorkerScope){
   let document:any={};try{document=JSON.parse(readFileSync(join(this.root,'project.json'),'utf8'));}catch{}
