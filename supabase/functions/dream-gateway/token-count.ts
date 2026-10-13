@@ -1,7 +1,10 @@
 import {validProfile,inferencePolicy,cachedPrompt,providerHeaders} from './inference-policy.ts';
+import {providerModels} from './providers.ts';
 const models=new Set(['claude-haiku-5-5','claude-haiku-4-5-20251001','claude-sonnet-5-5','claude-opus-5-5']);
 export async function countTokens(body:any,userId:string,db:any,key:string|undefined,fetcher=fetch){
  if(!key)return{status:503,body:{error:'AI service is not configured'}};
+ // Other providers' models are counted with Claude Sonnet's tokenizer: close enough to decide when to compact.
+ if(providerModels[body.model])body={...body,model:'claude-sonnet-5-5'};
  if(!models.has(body.model)||!Array.isArray(body.messages)||!validProfile(body.profile)||new TextEncoder().encode(JSON.stringify(body)).length>12_000_000)return{status:400,body:{error:'Invalid token-count request'}};
  const {data,error}=await db.rpc('dream_allow_token_count',{p_user:userId});if(error||!data)return{status:429,body:{error:'Token-count rate limit reached; retry shortly'}};
  const policy=inferencePolicy(body.model,body.purpose,body.profile);

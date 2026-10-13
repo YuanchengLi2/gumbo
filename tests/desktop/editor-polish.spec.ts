@@ -53,7 +53,7 @@ test('the agent edits visibly, clips show their frames, and selection, clip acti
   await page.keyboard.press('Shift+Tab');await expect(page.getByRole('button',{name:'Permissions: Plan first'})).toBeVisible();
   await page.keyboard.press('Control+3');await expect(page.getByRole('button',{name:'Permissions: Ask only'})).toBeVisible();
   await page.keyboard.press('Control+1');await expect(page.getByRole('button',{name:'Permissions: Edit automatically'})).toBeVisible();
-  await expect(page.getByRole('button',{name:'Model: Sonnet'})).toBeVisible();await page.keyboard.press('Control+Shift+M');await expect(page.getByRole('button',{name:'Model: Opus'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Model: Auto'})).toBeVisible();await page.keyboard.press('Control+Shift+M');await expect(page.getByRole('button',{name:'Model: Sonnet 5.5'})).toBeVisible();
   expect(errors).toEqual([]);
  }finally{await app.close();await gateway.close();}
 });

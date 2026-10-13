@@ -1,8 +1,10 @@
 import React,{useState,useRef,useLayoutEffect,useEffect} from 'react';
 import {MediaTile} from '../media/MediaTile';
-import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown} from 'lucide-react';
+import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown,Wand2,Cpu} from 'lucide-react';
 import type {Permission,ModelChoice} from '../../store/editor';
 import {shortcutHints} from '../../shortcuts';
+import {modelCatalog,providerLabels} from '@dream/config';
+import {useProviders,available,shortLabel} from '../../models';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
 type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
 
@@ -10,11 +12,6 @@ export const permissions:{id:Permission;label:string;short:string;detail:string;
  {id:'auto',label:'Edit automatically',short:'Edit',detail:'Figjam changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
  {id:'plan',label:'Plan first',short:'Plan',detail:'Figjam writes a plan. Nothing changes until you approve it.',icon:<ListChecks size={14}/>},
  {id:'ask',label:'Ask only',short:'Ask',detail:'Answers, scripts and ideas. The project is never changed.',icon:<MessageCircle size={14}/>}
-];
-export const modelChoices:{id:ModelChoice;label:string;detail:string;icon:React.ReactNode}[]=[
- {id:'opus',label:'Opus',detail:'Most capable, for demanding creative work. About twice the cost of Sonnet.',icon:<Crown size={14}/>},
- {id:'sonnet',label:'Sonnet',detail:'The default. First cuts, long edits, motion graphics and everything in between.',icon:<Sparkles size={14}/>},
- {id:'haiku',label:'Haiku',detail:'Cheapest and fastest, for small, precise changes to an edit.',icon:<Zap size={14}/>}
 ];
 
 /** Closes on outside click and Escape. */
@@ -40,12 +37,17 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
 }
 
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
- const menu=usePopover(),current=modelChoices.find(m=>m.id===value)??modelChoices[0];
+ const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
+ // Auto first, then each provider's models; a provider without a key on the gateway is listed but cannot be picked yet.
+ const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
+ const item=(choice:ModelChoice,title:string,detail:string,icon:React.ReactNode,ready=true,price='')=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="permission-icon">{icon}</span><span><strong>{title}{price&&<em title="Input / output, per million tokens">{price}</em>}</strong><small>{detail}</small></span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
-  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+current.label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{current.label}</span><ChevronDown size={12}/></button>
-  {menu.open&&<div className="composer-popover permission-menu" role="menu" aria-label="Model">
+  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
+  {menu.open&&<div className="composer-popover permission-menu model-menu" role="menu" aria-label="Model">
    <header>Model<kbd>{shortcutHints.model}</kbd></header>
-   {modelChoices.map(m=><button key={m.id} type="button" role="menuitemradio" aria-checked={m.id===value} className={m.id===value?'selected':''} onClick={()=>{onChange(m.id);menu.setOpen(false);}}><span className="permission-icon">{m.icon}</span><span><strong>{m.label}</strong><small>{m.detail}</small></span>{m.id===value&&<Check size={14} className="permission-check"/>}</button>)}
+   {item('auto','Auto','Picks the best model for each request. Your pick always wins.',<Wand2 size={14}/>)}
+   {groups.map(g=><React.Fragment key={g.provider}><div className="model-group">{providerLabels[g.provider]}{!available(g.models[0].choice,providers)&&<small>Add its key on the gateway</small>}</div>
+    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),m.detail,g.provider==='anthropic'?(m.choice==='opus'?<Crown size={14}/>:m.choice==='haiku'?<Zap size={14}/>:<Sparkles size={14}/>):<Cpu size={14}/>,available(m.choice,providers),`$${m.price[0]} / $${m.price[1]}`))}</React.Fragment>)}
   </div>}
  </div>;
 }

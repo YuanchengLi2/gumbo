@@ -2,12 +2,10 @@ export const defaults={fps:30,width:1920,height:1080,proxyHeight:720,highlightMs
 /** One model does all the work: the router, the editing agent, its helpers, plans and replies. DREAM_AGENT_MODEL swaps it
  * for a measured comparison (for example claude-haiku-5-5); Sonnet is the default. */
 const chosenModel=typeof process!=='undefined'?process.env?.DREAM_AGENT_MODEL:undefined;
-/** The models a request can run on; the user picks one in the composer. */
-export const agentModels={sonnet:'claude-sonnet-5-5',haiku:'claude-haiku-5-5',opus:'claude-opus-5-5'} as const;
-export type ModelChoice='sonnet'|'haiku'|'opus';
 export const models={agent:chosenModel&&/^claude-(haiku|sonnet|opus)-5-5$/.test(chosenModel)?chosenModel:'claude-sonnet-5-5'};
 
 // Working targets trigger archival of completed exchanges, not task failure. Haiku compacts at 80K and is never sent
 // more than 96K, so it stays under its 100K long-context price tier.
 export const engineBudgets={routerInput:12000,workingInput:180000,haikuInput:80000,haikuHardInput:96000,maxOutput:64000,toolCalls:40,agentSteps:80,maxWorkers:4,textNudges:2,readCalls:12,readRequests:16,cacheBytes:5*1024**3} as const;
 export * from './pricing';
+export * from './models';

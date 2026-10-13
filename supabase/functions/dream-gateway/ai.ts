@@ -1,5 +1,7 @@
 import {requestStatus,type RequestStore} from './inference-requests.ts';
 import {streamProvider} from './streaming.ts';
+import {readMessageStream} from '../_shared/stream.ts';
+import {providerModels,providerSecrets,providerNames,providerEndpoints,chatRequest,responsesRequest,anthropicStream,type ProviderId} from './providers.ts';
 import {inferencePolicy,cachedPrompt,usageCost,validProfile,validTaskBudget,providerHeaders,pricingVersion,promptEstimate,refusalFallback,gatewayFeatures,FALLBACK_BETA,TASK_BUDGET_BETA} from './inference-policy.ts';
 
 // Disabled for this instance if the provider rejects requests carrying fallbacks while accepting them without it.
@@ -8,13 +10,15 @@ let fallbackAccepted=true;
 let taskBudgetAccepted=true;
 export const resetFallbackSupport=()=>{fallbackAccepted=true;taskBudgetAccepted=true;};
 
-const prices:Record<string,[number,number]>={'claude-haiku-5-5':[.1,.5],'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-haiku-4-5-20251001':[1,5]};
-type Dependencies={db:any;key:string|undefined;fetcher?:typeof fetch;timeoutMs?:number;requests?:RequestStore};
-export async function handleAI(body:any,userId:string,{db,key,fetcher=fetch,timeoutMs=350_000,requests}:Dependencies):Promise<{status:number;body:any;stream?:ReadableStream<Uint8Array>;finished?:Promise<void>}>{
+const prices:Record<string,[number,number]>={'claude-haiku-5-5':[.1,.5],'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-haiku-4-5-20251001':[1,5],...Object.fromEntries(Object.entries(providerModels).map(([id,m])=>[id,m.price]))};
+type Dependencies={db:any;key:string|undefined;providerKeys?:Partial<Record<ProviderId,string>>;fetcher?:typeof fetch;timeoutMs?:number;requests?:RequestStore};
+export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fetcher=fetch,timeoutMs=350_000,requests}:Dependencies):Promise<{status:number;body:any;stream?:ReadableStream<Uint8Array>;finished?:Promise<void>}>{
  const failed=(message:string,status:number,code:string)=>({status,body:{error:{message,type:code},dream_request:{status:'failed',retryable:false}}});
  if(!validProfile(body.profile))return failed('Invalid intelligence profile',400,'invalid_request');
  if(!validTaskBudget(body.taskBudget)||body.cacheTtl!==undefined&&body.cacheTtl!=='1h')return failed('Invalid task budget or cache setting',400,'invalid_request');
- if(!key)return failed('AI service is not configured',503,'configuration_error');
+ const other=providerModels[body.model];
+ if(other&&!providerKeys[other.provider])return failed(`${providerNames[other.provider]} models need an API key on the gateway (${providerSecrets[other.provider]}).`,503,'provider_not_configured');
+ if(!other&&!key)return failed('AI service is not configured',503,'configuration_error');
  if(!prices[body.model]||!Array.isArray(body.messages)||typeof body.requestId!=='string'||!body.requestId.length||body.requestId.length>200)return failed('Invalid AI request',400,'invalid_request');
  const encoded=JSON.stringify(body);if(encoded.length>12_000_000)return failed('Request too large',413,'request_too_large');
  const requested=Number(body.max_tokens??4096);if(!Number.isFinite(requested))return failed('Invalid output limit',400,'invalid_request');
@@ -25,8 +29,9 @@ export async function handleAI(body:any,userId:string,{db,key,fetcher=fetch,time
  const {data:usageId,error:limit}=await db.rpc('dream_reserve_usage',{p_user:userId,p_request:body.requestId,p_turn:body.turnId??body.requestId,p_model:body.model,p_reserved:estimate});
  if(limit){const result=failed(limit.message,limit.code==='D0001'?403:limit.code==='D0002'?409:limit.code==='D0003'?429:503,limit.code??'reservation_error');await requests?.finish(userId,body.requestId,'failed',result.body,limit.message);return result;}
  let response:Response;const abort=new AbortController();
+ if(other)return handleProvider(body,userId,{db,usageId,maxTokens,abort,fetcher,timeoutMs,requests,key:providerKeys[other.provider]!});
  const policyFor=(budget:boolean)=>inferencePolicy(body.model,body.purpose,body.profile,budget?{taskBudget:body.taskBudget}:{});
- const send=(fallback:boolean,budget:boolean)=>fetcher('https://api.anthropic.com/v1/messages',{method:'POST',headers:providerHeaders(key,[...(fallback?[FALLBACK_BETA]:[]),...(budget?[TASK_BUDGET_BETA]:[])]),body:JSON.stringify({model:body.model,max_tokens:maxTokens,messages:body.messages,...cachedPrompt(body.system,body.tools,body.cacheTtl),...policyFor(budget),tool_choice:body.tool_choice,stream:body.stream===true,...(fallback?{fallbacks:'default'}:{})}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(timeoutMs)])});
+ const send=(fallback:boolean,budget:boolean)=>fetcher('https://api.anthropic.com/v1/messages',{method:'POST',headers:providerHeaders(key!,[...(fallback?[FALLBACK_BETA]:[]),...(budget?[TASK_BUDGET_BETA]:[])]),body:JSON.stringify({model:body.model,max_tokens:maxTokens,messages:body.messages,...cachedPrompt(body.system,body.tools,body.cacheTtl),...policyFor(budget),tool_choice:body.tool_choice,stream:body.stream===true,...(fallback?{fallbacks:'default'}:{})}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(timeoutMs)])});
  let withFallback=fallbackAccepted&&refusalFallback(body.model),withBudget=taskBudgetAccepted&&!!body.taskBudget;
  try{
   response=await send(withFallback,withBudget);
@@ -51,4 +56,31 @@ export async function handleAI(body:any,userId:string,{db,key,fetcher=fetch,time
  const {error:accountingError}=await db.from('dream_usage').update({status:response.ok?'completed':'failed',input_tokens:usage.input_tokens??0,output_tokens:usage.output_tokens??0,cache_read_tokens:usage.cache_read_input_tokens??0,cache_write_tokens:usage.cache_creation_input_tokens??0,cost_usd:usageCost(body.model,usage,prices[body.model]),provider_request_id:providerRequestId,provider_status:response.status,error_code:result.error?.type??null}).eq('id',usageId);
  const answer={status:response.status,body:{...result,dream_policy:{pricingVersion,thinkingDisplay:policyFor(withBudget).thinking?.display??'omitted',maxTokens,features:gatewayFeatures(taskBudgetAccepted)},dream_request:{status:response.ok?'completed':'failed',retryable,retryAfterMs:retrySeconds>0?Math.ceil(retrySeconds*1000):undefined,providerRequestId,accountingPending:!!accountingError,effectivePolicy:policyFor(withBudget),costUsd:usageCost(body.model,usage,prices[body.model])}}};
  await requests?.finish(userId,body.requestId,response.ok?'completed':'failed',answer.body,result.error?.message);return answer;
+}
+
+/** A request for another provider's model: translated, sent, and its stream translated back into Anthropic events, then
+ * streamed and accounted exactly like a Claude request. A non-streaming request reads the translated stream to the end. */
+async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;maxTokens:number;abort:AbortController;fetcher:typeof fetch;timeoutMs:number;requests?:RequestStore;key:string}){
+ const model=providerModels[body.model],request=model.api==='responses'?responsesRequest(body,model,o.maxTokens):chatRequest(body,model,o.maxTokens);
+ let response:Response;
+ try{response=await o.fetcher(providerEndpoints[model.provider],{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${o.key}`},body:JSON.stringify(request),signal:AbortSignal.any([o.abort.signal,AbortSignal.timeout(o.timeoutMs)])});}
+ catch{
+  await o.requests?.finish(userId,body.requestId,'uncertain',undefined,'The provider connection ended before confirming the response.');await o.db.from('dream_usage').update({status:'uncertain',error_code:'connection_ended'}).eq('id',o.usageId);
+  return{status:503,body:{error:{message:'The provider connection ended before its outcome was received.',type:'connection_ended'},dream_request:{status:'uncertain',retryable:false}}};
+ }
+ const policy={pricingVersion,thinkingDisplay:'omitted',maxTokens:o.maxTokens,features:['cost-receipts']};
+ if(!response.ok){
+  const detail=await response.json().catch(()=>({})) as any,message=detail?.error?.message??`${providerNames[model.provider]} returned ${response.status}.`,retryable=[429,500,502,503,504].includes(response.status);
+  await o.db.from('dream_usage').update({status:'failed',provider_status:response.status,error_code:detail?.error?.type??detail?.error?.code??'provider_error'}).eq('id',o.usageId);
+  const answer={status:response.status,body:{error:{message,type:detail?.error?.type??'provider_error'},dream_policy:policy,dream_request:{status:'failed',retryable,retryAfterMs:retryable?2000:undefined}}};
+  await o.requests?.finish(userId,body.requestId,'failed',answer.body,message);return answer;
+ }
+ const translated=anthropicStream(response,model,body.model,body.requestId);
+ if(body.stream===true)return{status:200,body:null,...streamProvider(translated,{db:o.db,usageId:o.usageId,model:body.model,price:model.price,abort:o.abort,requests:o.requests,userId,maxTokens:o.maxTokens,requestId:body.requestId,effectivePolicy:{},features:policy.features})};
+ let message:any;
+ try{message=await readMessageStream(translated);}
+ catch(error){await o.db.from('dream_usage').update({status:'uncertain',error_code:'invalid_provider_response'}).eq('id',o.usageId);const body_={error:{message:(error as Error).message,type:'invalid_provider_response'},dream_request:{status:'uncertain',retryable:false}};await o.requests?.finish(userId,body.requestId,'uncertain',undefined,(error as Error).message);return{status:502,body:body_};}
+ const usage=message.usage??{},cost=usageCost(body.model,usage,model.price),{error:accountingError}=await o.db.from('dream_usage').update({status:'completed',input_tokens:usage.input_tokens??0,output_tokens:usage.output_tokens??0,cache_read_tokens:usage.cache_read_input_tokens??0,cache_write_tokens:0,cost_usd:cost,provider_status:200}).eq('id',o.usageId);
+ const answer={status:200,body:{...message,dream_policy:policy,dream_request:{status:'completed',retryable:false,accountingPending:!!accountingError,effectivePolicy:{},costUsd:cost}}};
+ await o.requests?.finish(userId,body.requestId,'completed',answer.body);return answer;
 }

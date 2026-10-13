@@ -5,13 +5,13 @@ import {WorkflowStateSchema,type WorkTask,type PublicActivity} from '@dream/cont
 import type {ProjectState} from '@dream/project-db';
 import {useEditor,type UsageRow} from '../../store/editor';
 import {useElapsed} from '../chat/RunStream';
+import {modelName} from '../../models';
 
 const live=(status:string)=>['running','drafting','ready'].includes(status);
 const step=(e:PublicActivity)=>(e.kind==='action'||e.kind==='changes')&&e.tool!=='finish';
 const money=(usd:number)=>usd<.01?`$${usd.toFixed(3)}`:`$${usd.toFixed(2)}`;
 const tokens=(n:number)=>n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${Math.round(n/1e3)}K`:String(n);
 const seconds=(ms:number)=>{const s=Math.round(ms/1000);return s<60?`${s}s`:`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;};
-const modelName=(model:string)=>model.includes('opus')?'Opus':model.includes('haiku')?'Haiku':model.includes('sonnet')?'Sonnet':model;
 function Icon({status}:{status:string}){return status==='complete'?<Check size={14}/>:live(status)?<LoaderCircle size={14} className="spin"/>:status==='paused'?<Pause size={14}/>:['failed','interrupted'].includes(status)?<AlertCircle size={14}/>:<Circle size={14}/>;}
 
 /** Monitors the latest request above the composer: what it is doing now, how long it has run, and its tasks. */

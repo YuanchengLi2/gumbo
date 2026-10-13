@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {models,engineBudgets,agentModels,type ModelChoice} from '@dream/config';
+import {models,engineBudgets,agentModels,autoModel,type ModelChoice,type Provider} from '@dream/config';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
@@ -47,6 +47,7 @@ export class Director {
   const startedAt=new Date().toISOString();this.db.setMeta('run_started_at',startedAt);this.publish('ai.status',{status:'running',startedAt});try{await work();}catch(error){const status=error instanceof FileApprovalRequired?'awaiting_file_permission':'interrupted';this.db.setMeta('ai_status',status);if(error instanceof FileApprovalRequired)this.db.setMeta('file_wait',JSON.stringify(error.proposal?{kind:'approval',proposal:error.proposal}:{kind:'permission'}));else{const message=this.controller.signal.aborted?'Stopped.':(error as Error).message;this.db.message('assistant',message,turnId);if(!this.controller.signal.aborted)this.publish('ai.error',{message});}this.publish('ai.status',{status});}finally{this.controller=null;this.publish('state',this.db.state({bounded:true}));}}
  async message(text:string,selection:string[]=[],intent:RequestIntent='auto',assetIds:string[]=[],requestId?:string,effort?:Effort,model?:ModelChoice):Promise<void>{
   if(this.running)throw new Error('An edit is already running.');const turnId=requestId??randomUUID();if(this.db.getMeta('submitted:'+turnId))return;
+  if(model==='auto')await this.refreshProviders();
   // With a plan waiting, "do it" / "edit it" / "looks good" approves it: the editing agent then works through the steps.
   const waiting=this.db.getMeta('ai_status')==='awaiting_approval'?this.db.loadState<any>('task_plan'):undefined;
   if(waiting?.plan&&intent==='auto'&&approvesPlan(text)){this.db.message('user',text,waiting.turnId);return this.approveTaskPlan(waiting.plan,waiting.versionId,turnId,waiting.revision,effort,model);}
@@ -84,14 +85,27 @@ export class Director {
  private chooseEffort(turnId:string,effort?:Effort){if(effort)this.db.setMeta('effort:'+turnId,effort==='auto'?'':effort);}
  // The composer's model choice for this request; without one, Sonnet (or DREAM_AGENT_MODEL for a measured run).
  // A model picked for a request that already ran (approving its plan, continuing it) replaces the one it ran on.
- private chooseModel(turnId:string,model?:ModelChoice){if(!model)return;this.db.setMeta('model-choice:'+turnId,model);const pinned=this.db.getMeta('agent-model:'+turnId);if(pinned&&pinned!==agentModels[model]){this.db.setMeta('agent-model:'+turnId,agentModels[model]);this.db.event('ai.model_chosen',{turnId,choice:model,model:agentModels[model],changedFrom:pinned});}}
+ private chooseModel(turnId:string,model?:ModelChoice){if(!model)return;this.db.setMeta('model-choice:'+turnId,model);const pinned=this.db.getMeta('agent-model:'+turnId);
+  // Auto decides again for the next part of a request it chose for (an approved plan is doing the work, not planning it).
+  if(model==='auto'){if(pinned&&this.db.getMeta('agent-model-source:'+turnId)==='auto')this.db.setMeta('agent-model:'+turnId,'');return;}
+  if(pinned&&pinned!==agentModels[model]){this.db.setMeta('agent-model:'+turnId,agentModels[model]);this.db.setMeta('agent-model-source:'+turnId,'user');this.db.event('ai.model_chosen',{turnId,choice:model,model:agentModels[model],changedFrom:pinned});}}
+ /** Which other providers have a key on the gateway, asked at most every ten minutes; Claude alone when it cannot be asked. */
+ private providers?:{at:number;value:Partial<Record<Provider,boolean>>};
+ private async refreshProviders(){
+  if(this.providers&&Date.now()-this.providers.at<600_000)return;
+  try{const config=await this.config(this.controller?.signal),response=await fetch(config.url+'/providers',{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(5000)});
+   const value=response.ok?await response.json() as Partial<Record<Provider,boolean>>:{};this.providers={at:Date.now(),value};}catch{this.providers={at:Date.now()-540_000,value:{}};}
+ }
+ async availableProviders(){await this.refreshProviders();return{anthropic:true,...this.providers?.value};}
  /** The model this request runs on, decided once and pinned: every conversation of the request (the agent, its helpers,
   * resumes) stays on it, so its prompt cache stays valid. DREAM_AGENT_MODEL still forces one model for a measured run. */
- agentModel(turnId:string,_text='',route?:any):string{
+ agentModel(turnId:string,text='',route?:any):string{
   const pinned=this.db.getMeta('agent-model:'+turnId);if(pinned)return pinned;
-  const choice=this.db.getMeta('model-choice:'+turnId) as ModelChoice|undefined;
-  const model=choice?agentModels[choice]:models.agent;
-  this.db.setMeta('agent-model:'+turnId,model);this.db.event('ai.model_chosen',{turnId,choice,model,complexity:route?.complexity});return model;
+  const choice=this.db.getMeta('model-choice:'+turnId) as ModelChoice|undefined;route??=this.db.loadState<any>('routing:'+turnId);
+  // A request without a choice (tests, the command line) or a measured run (DREAM_AGENT_MODEL) uses the default model.
+  const approved=this.db.getMeta('route:'+turnId)==='workflow',auto=choice==='auto'&&!process.env.DREAM_AGENT_MODEL;
+  const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel({route:approved&&route?{...route,route:'local'}:route,text,hasEdit:this.db.timeline().spine.length>0,planning:route?.route==='plan'&&!approved,providers:this.providers?.value}):models.agent;
+  this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,auto?'auto':'user');this.db.event('ai.model_chosen',{turnId,choice,model,auto,complexity:route?.complexity});return model;
  }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
@@ -181,7 +195,7 @@ ${file.text}`).join('');
  private report(turnId:string,outcome:any,answer=false){if(!this.db.getMeta('code-reported:'+turnId)){this.db.message('assistant',outcome.summary,turnId,{...outcome,kind:outcome.status==='complete'?answer?'answer':'completion':'blocker'});this.db.setMeta('code-reported:'+turnId,'1');}const status=outcome.status==='blocked'?'interrupted':'complete';this.db.setMeta('ai_status',status);this.publish('ai.status',{status});}
  // Approved plans are multi-step creative work done by one agent in one conversation: each step continues it, so context and cache carry over.
  private async workflow(turnId:string){let last:string|undefined;await executeWorkflow({db:this.db,turnId,signal:this.signal(),publish:this.publish,execute:async(text,_selection,_review,phase)=>{const {outcome}=await this.execute(text,turnId,false,false,'workflow',{id:phase,text});last=outcome.summary;return outcome;}});const saved=JSON.parse(this.db.getMeta('workflow:'+turnId)??'{}');this.report(turnId,{status:'complete',summary:last??saved.completed?.at(-1)?.outcome?.summary??'All approved steps are finished.',evidence:[]});}
- async approveTaskPlan(plan:TaskPlan,expectedVersionId:string,requestId:string,expectedPlanRevision?:number,effort?:Effort,model?:ModelChoice){if(this.running)throw new Error('An edit is already running.');const approved=approvePlan(this.db,plan,expectedVersionId,requestId,expectedPlanRevision);if(approved.replayed)return;this.chooseEffort(approved.turnId,effort);this.chooseModel(approved.turnId,model);await this.lifecycle(()=>this.workflow(approved.turnId),approved.turnId);}
+ async approveTaskPlan(plan:TaskPlan,expectedVersionId:string,requestId:string,expectedPlanRevision?:number,effort?:Effort,model?:ModelChoice){if(this.running)throw new Error('An edit is already running.');if(model==='auto')await this.refreshProviders();const approved=approvePlan(this.db,plan,expectedVersionId,requestId,expectedPlanRevision);if(approved.replayed)return;this.chooseEffort(approved.turnId,effort);this.chooseModel(approved.turnId,model);await this.lifecycle(()=>this.workflow(approved.turnId),approved.turnId);}
  async approve(outline:Outline,expectedVersionId:string,requestId:string){if(this.db.head()!==expectedVersionId)throw new Error('The project changed. Refresh the outline.');return this.message('Implement this previously approved outline through project code: '+JSON.stringify(outline),[],'auto',[],requestId);}
  async resume(feedback?:string):Promise<void>{
   if(this.running)throw new Error('An edit is already running.');const pending=this.db.loadState<any>('pending_request');if(!pending)throw new Error('There is no interrupted request.');

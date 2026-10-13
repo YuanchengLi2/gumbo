@@ -1,3 +1,4 @@
+import {modelCatalog} from './models';
 // Client-side mirror of the gateway's billing formula (supabase/functions/dream-gateway/inference-policy.ts usageCost),
 // so the app can show what each call cost. A parity test keeps the two identical.
 export const modelPrices:Record<string,[number,number]>={'claude-haiku-5-5':[.1,.5],'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-haiku-4-5-20251001':[1,5]};
@@ -5,6 +6,8 @@ const attemptPrices:Record<string,[number,number]>={'claude-opus-5-5':[4,20],'cl
 /** Haiku 5.5 prompts above this many input tokens (including cache reads and writes) are billed at the long-context rate. */
 export const HAIKU_LONG_CONTEXT=100_000;
 export function usageCost(model:string,usage:Record<string,any>,price:[number,number]=modelPrices[model]??[0,0]):number{
+ // Other providers' models: uncached input, cache reads at that model's rate, and output (the gateway's providerCost).
+ const other=modelCatalog.find(m=>m.id===model&&m.provider!=='anthropic');if(other)return((usage.input_tokens??0)*other.price[0]+(usage.cache_read_input_tokens??0)*other.cachedRead+(usage.output_tokens??0)*other.price[1])/1e6;
  if(Array.isArray(usage.iterations)&&usage.iterations.some((entry:any)=>entry?.type==='fallback_message'))return usage.iterations.reduce((sum:number,entry:any)=>{const served=typeof entry?.model==='string'?entry.model:model;return sum+usageCost(served,{...entry,iterations:undefined},attemptPrices[served]??price);},0);
  if(model==='claude-haiku-5-5')price=(usage.input_tokens??0)+(usage.cache_read_input_tokens??0)+(usage.cache_creation_input_tokens??0)>HAIKU_LONG_CONTEXT?[.5,2.5]:[.1,.5];
  const readMultiplier=model==='claude-opus-5-5'?.05:.1;

@@ -1,3 +1,4 @@
+import {providerModels,providerCost} from './providers.ts';
 /** Low-cost defaults with a bounded, purpose-specific escalation path. */
 export function validProfile(value:any){return value===undefined||value&&value.version===1&&['router','editor','executor','planner','consultation','review'].includes(value.role)&&['low','medium','high','xhigh'].includes(value.effort)&&['simple','normal','difficult'].includes(value.complexity)&&typeof value.reason==='string'&&value.reason.length<=500;}
 /** Optional client hints. A task budget lets the model pace a long agent loop; ignored when absent or turned off. */
@@ -23,6 +24,8 @@ export function cachedPrompt(system:unknown,tools:unknown,conversationTtl?:unkno
 // Prices for models that can serve a server-side refusal fallback; billed per attempt from usage.iterations.
 const attemptPrices:Record<string,[number,number]>={'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-opus-5':[5,25],'claude-opus-4-8':[5,25],'claude-sonnet-5':[2,10],'claude-sonnet-4-6':[3,15]};
 export function usageCost(model:string,usage:Record<string,any>,price:[number,number]):number{
+ // Other providers' models: uncached input, cache reads at that model's own rate, and output; no cache writes.
+ if(providerModels[model])return providerCost(providerModels[model],usage);
  if(Array.isArray(usage.iterations)&&usage.iterations.some((entry:any)=>entry?.type==='fallback_message'))return usage.iterations.reduce((sum:number,entry:any)=>{const served=typeof entry?.model==='string'?entry.model:model;return sum+usageCost(served,{...entry,iterations:undefined},attemptPrices[served]??price);},0);
  if(model==='claude-haiku-5-5')price=(usage.input_tokens??0)+(usage.cache_read_input_tokens??0)+(usage.cache_creation_input_tokens??0)>100000?[.5,2.5]:[.1,.5];
  // Cache reads: Opus 5.5 $0.20 on $4 input; Sonnet 5.5 $0.20 on $2 input.

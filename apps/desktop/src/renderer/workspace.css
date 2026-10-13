@@ -581,3 +581,14 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .element-main em{flex:none;font-style:normal;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--n6);color:var(--n56)}
 .element-remove{flex:none;width:26px;height:26px;margin-right:3px;display:grid;place-items:center;border-radius:6px;color:var(--n46);opacity:0}
 .elements-panel li:hover .element-remove,.element-remove:focus-visible{opacity:1}.element-remove:hover:not(:disabled){background:var(--n8);color:var(--n100)}
+
+/* The model menu: Auto, then each provider's models; one without a key on the gateway is shown but can't be picked. */
+:is(.ai-workspace,.fig-home) .composer-popover.model-menu{width:320px;max-height:min(560px,calc(100vh - 220px));overflow:auto;scrollbar-width:thin}
+/* On the home screen the box sits mid-page, so its menus open downward. */
+.fig-home .composer-popover{top:calc(100% + 8px);bottom:auto}
+.fig-home .composer-popover.model-menu{max-height:max(260px,min(560px,calc(100vh - 520px)))}
+.model-menu strong{display:flex!important;align-items:baseline;justify-content:space-between;gap:10px}.model-menu strong em{font:400 10.5px/1 ui-monospace,"Cascadia Mono",Consolas,monospace;color:var(--n46);white-space:nowrap}
+.model-menu .model-group{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:4px;padding:8px 8px 3px;border-top:1px solid var(--n7);font-size:10.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--n46)}
+.model-menu .model-group small{font-weight:400;text-transform:none;letter-spacing:0;color:var(--n35)}
+.model-menu>button:disabled{opacity:.45;cursor:default}
+.model-menu>button:disabled:hover{background:transparent}
