@@ -41,9 +41,9 @@ it('says exactly what is on screen at each moment the agent asks about, with the
  expect(result.content.filter((b:any)=>b.type==='image')).toHaveLength(2);
 });
 
-it('still says what is on screen when no window can draw, and spreads a range over six moments inside the video',async()=>{
+it('still says what is on screen when no window can draw, and spreads a range over about one moment a second inside the video',async()=>{
  const failed=await viewEdit({startSec:0,endSec:10},{versionId:'v1',timeline:timeline(),footage:footage()},async()=>{throw new Error('The editor window is closed');},new AbortController().signal);
- const summary=JSON.parse(failed.content[0].text!);expect(summary.note).toContain('editor window is closed');expect(summary.moments).toHaveLength(6);expect(failed.content).toHaveLength(1);
+ const summary=JSON.parse(failed.content[0].text!);expect(summary.note).toContain('editor window is closed');expect(summary.moments).toHaveLength(10);expect(failed.content).toHaveLength(1);expect(viewTimes({startSec:0,endSec:3},10,30)).toHaveLength(6);expect(viewTimes({startSec:0,endSec:9.9},10,30)).toHaveLength(10);
  expect(viewTimes({times:[-2,4,4,99]},10,30)).toEqual([0,4,9.967]);expect(viewTimes({startSec:3},10,30)).toEqual([3]);
 });
 

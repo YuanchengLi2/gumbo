@@ -4,6 +4,8 @@ import {providerView,conversationBytes} from './conversation';
 /** Conservative planning estimate; near-limit requests require provider counting. */
 export function estimateTokens(value:any):number{
  if(value?.type==='image')return 1600;
+ // Sound is counted by its length (about 32 tokens a second), not by the size of its encoded text.
+ if(value?.type==='audio')return Math.ceil((Number(value.durationSec)||90)*32)+50;
  if(typeof value==='string')return Math.ceil(Buffer.byteLength(value,'utf8')/3);
  if(Array.isArray(value))return value.reduce((n,v)=>n+estimateTokens(v),0);
  if(value&&typeof value==='object')return Object.entries(value).reduce((n,[k,v])=>n+Math.ceil(k.length/3)+estimateTokens(v),0);

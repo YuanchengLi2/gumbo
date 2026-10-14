@@ -35,7 +35,7 @@ export function usageCost(model:string,usage:Record<string,any>,price:[number,nu
  const written=usage.cache_creation_input_tokens??0,hour=Math.min(written,Number(usage.cache_creation?.ephemeral_1h_input_tokens??0));
  return((usage.input_tokens??0)*price[0]+(usage.output_tokens??0)*price[1]+(usage.cache_read_input_tokens??0)*price[0]*readMultiplier+(written-hour)*price[0]*1.25+hour*price[0]*2)/1e6+Number(usage.server_tool_use?.web_search_requests??0)*.01;
 }
-export function promptEstimate(value:any):number{if(value?.type==='image')return 1600;if(typeof value==='string')return Math.ceil(new TextEncoder().encode(value).length/3);if(Array.isArray(value))return value.reduce((n,v)=>n+promptEstimate(v),0);if(value&&typeof value==='object')return Object.entries(value).reduce((n,[k,v])=>n+Math.ceil(k.length/3)+promptEstimate(v),0);return 1;}
+export function promptEstimate(value:any):number{if(value?.type==='image')return 1600;if(value?.type==='audio')return Math.ceil((Number(value.durationSec)||90)*32)+50;if(typeof value==='string')return Math.ceil(new TextEncoder().encode(value).length/3);if(Array.isArray(value))return value.reduce((n,v)=>n+promptEstimate(v),0);if(value&&typeof value==='object')return Object.entries(value).reduce((n,[k,v])=>n+Math.ceil(k.length/3)+promptEstimate(v),0);return 1;}
 
 export const providerHeaders=(key:string,extraBetas:string[]=[])=>({'x-api-key':key,'anthropic-version':'2023-06-01','content-type':'application/json','anthropic-beta':['thinking-binding-controls-2026-08-01','thinking-display-updates-2026-08-18',...extraBetas].join(',')});
 /** Server-side refusal fallback re-runs a policy decline on Anthropic's recommended model. Not available for Haiku 5.5. */

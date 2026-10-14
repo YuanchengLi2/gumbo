@@ -11,7 +11,7 @@ const clean=(message:Message)=>({role:message.role,content:message.content});
 /** Image token cost depends on pixels, not the length of its base64 transport.
  * Keep the original pixels intact; only the compaction measurement is weighted.
  */
-export const conversationBytes=(value:unknown)=>Buffer.byteLength(JSON.stringify(value,(_key,item)=>item?.type==='image'&&item.source?.type==='base64'?{type:'image',source:{type:'base64',media_type:item.source.media_type,data:'0'.repeat(4800)}}:item));
+export const conversationBytes=(value:unknown)=>Buffer.byteLength(JSON.stringify(value,(_key,item)=>(item?.type==='image'||item?.type==='audio')&&item.source?.type==='base64'?{type:item.type,source:{type:'base64',media_type:item.source.media_type,data:'0'.repeat(4800)}}:item));
 const bytes=conversationBytes;
 const prefix=(turn:string)=>`context:${turn}:`;
 const isSnapshot=(m:Message)=>{if(m.dreamSource==='snapshot'||m.dreamSource==='working')return true;if(typeof m.content!=='string')return false;try{const value=JSON.parse(m.content);return !!value.dreamWorkingReads||value.notice?.startsWith('Older tool exchanges were compacted.');}catch{return false;}};

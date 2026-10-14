@@ -49,6 +49,8 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
    else if(b.type==='text')parts.push({type:'text',text:b.text});
    else if(b.type==='image'){const url=dataUrl(b);parts.push(model.vision&&url?{type:'image_url',image_url:{url}}:{type:'text',text:noVision});}
    else if(b.type==='document')parts.push({type:'text',text:'[A document was attached here; this model cannot read it.]'});
+   // Sound to listen to: Gemini hears it (input_audio); other models are told it was there.
+   else if(b.type==='audio')parts.push(model.provider==='google'&&b.source?.data?{type:'input_audio',input_audio:{data:b.source.data,format:b.source.media_type==='audio/wav'?'wav':'mp3'}}:{type:'text',text:'[Audio was attached here; this model cannot hear it.]'});
   }
   if(images.length)parts.unshift({type:'text',text:'Images returned by the tools above:'},...images.map(url=>model.vision?{type:'image_url',image_url:{url}}:{type:'text',text:noVision}));
   if(parts.length)messages.push({role:'user',content:parts.every(p=>p.type==='text')?parts.map(p=>p.text).join('\n\n'):parts});

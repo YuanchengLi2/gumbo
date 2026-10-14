@@ -41,6 +41,7 @@ import {prepareProjectPackages} from './project-packages';
 import {viewEdit} from './edit-view';
 import {downloadMedia,type OnlineMedia} from './media-download';
 import {ShotIndexer,searchShots,shotLine,usedRanges,type ShotIndex} from './shot-index';
+import {extractAudio,mixEditRange,measureClip,MAX_LISTEN_SEC} from './edit-audio';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
@@ -68,7 +69,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  /** Parallel workers share one workspace: commands and publication run one at a time (dependency installs, lockfiles, project.json). */
  private exclusive<T>(work:()=>Promise<T>):Promise<T>{const next=this.queue.then(work,work);this.queue=next.catch(()=>{});return next;}
  async preparePackages(signal:AbortSignal){await this.initialize();await prepareProjectPackages(this.db,this.options.run,this.publishEvent,signal);this.refreshContext();this.db.setMeta('workspace_python_packages',JSON.stringify(workspaceEnvironment(this.root).pythonPackages));this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);}
- constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal,enough?:()=>boolean)=>Promise<void>;transcribeRange?:(assetId:string,startSec:number,endSec:number,options:{language?:string;translate?:boolean},signal:AbortSignal)=>Promise<unknown>;mediaSearch?:(request:{query:string;kind:string;limit:number},signal:AbortSignal)=>Promise<any>;shots?:ShotIndexer;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>;importMany?:(paths:string[],requestId:string,copy:boolean|undefined,signal:AbortSignal)=>Promise<{permissionRequired?:true;results?:({asset:any}|{path:string;error:string})[]}>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
+ constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal,enough?:()=>boolean)=>Promise<void>;transcribeRange?:(assetId:string,startSec:number,endSec:number,options:{language?:string;translate?:boolean},signal:AbortSignal)=>Promise<unknown>;mediaSearch?:(request:{query:string;kind:string;limit:number},signal:AbortSignal)=>Promise<any>;shots?:ShotIndexer;listen?:(clip:{audio:string;durationSec:number;what:string;question?:string},turnId:string,signal:AbortSignal)=>Promise<string>;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>;importMany?:(paths:string[],requestId:string,copy:boolean|undefined,signal:AbortSignal)=>Promise<{permissionRequired?:true;results?:({asset:any}|{path:string;error:string})[]}>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
  /** The authored files of an earlier version (path -> blob), as the workspace held them when it was published. */
  private versionFiles(versionId:string):Record<string,string>{const hash=this.db.workspace.snapshot(versionId);if(!hash)throw new Error(`No saved files for version ${versionId}; use an id from history in the project context.`);return this.db.workspace.files(hash);}
  private computer?:ComputerStatus;
@@ -219,6 +220,22 @@ export class CodeWorkspace implements CodeWorkspacePort {
    const {until,words:all}=readable(),running=until!==undefined;
    return{assetId:asset.id,filename:asset.filename,revision:running?digest('growing:'+asset.id+':'+asset.fingerprint):digest(JSON.stringify(all)),status:status(),coverage:coverageSummary(this.db.loadState('speech-coverage:'+asset.id)),...(running?{transcribedUntilSec:Math.round(until*10)/10,note:`Transcription is still running: speech from the start to ${Math.round(until)}s of ${Math.round(asset.durationSec)}s is transcribed. Work on that part now; read again from nextOffset for more, and state updates show how far it has got.`}:{}),words:wordLines(all.slice(offset,offset+limit)),totalWords:all.length,nextOffset:offset+limit<all.length||running?Math.min(offset+limit,all.length):null};
   }
+  if(name==='listen'){
+   // Listening (edit-audio.ts): a stretch of sound heard by a model that can hear, with its loudness measured beside it.
+   const start=Math.max(0,input.startSec??0),end=Math.min(input.endSec??start+30,start+MAX_LISTEN_SEC);if(end<=start)throw new Error('Choose a stretch whose endSec is after startSec.');
+   let clip:Buffer|undefined,what:string;
+   if(input.target==='preview'){clip=await mixEditRange(this.options.ffmpeg,this.db.timeline(),this.db.footage(),start,end,signal);what=`the published edit from ${start}s to ${end}s`;if(!clip)return{range:{start,end},heard:'Nothing sounds in the edit here.'};}
+   else{
+    const asset=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId):undefined;if(input.assetId&&!asset)throw new Error('Unknown project asset.');
+    const path=asset?(asset.audioPath&&existsSync(asset.audioPath)?asset.audioPath:asset.originalPath):input.path?workspacePath(this.root,input.path):undefined;
+    if(!path)throw new Error('Give an assetId or a workspace path, or target preview for the edit.');if(!existsSync(path))throw new Error('The media file is missing.');if(asset&&!asset.hasAudio)throw new Error('This media has no sound.');
+    clip=await extractAudio(this.options.ffmpeg,path,start,end,signal);what=`${asset?.filename??input.path} from ${start}s to ${end}s`;
+   }
+   const measurements=await measureClip(this.options.ffmpeg,clip,signal).catch(()=>({}));
+   if(!this.options.listen)return{range:{start,end},measurements,note:'No model that can hear is available, so only the loudness was measured.'};
+   try{const heard=await this.options.listen({audio:clip.toString('base64'),durationSec:end-start,what,question:input.question},turnId,signal);return{range:{start,end},heard,measurements,note:'Times in heard count from the start of this stretch.'};}
+   catch(error){signal.throwIfAborted();return{range:{start,end},measurements,note:`Listening failed (${(error as Error).message}); only the loudness was measured.`};}
+  }
   if(name==='find_shots'){
    // The footage index (shot-index.ts): shots found by what is visible, what is said and measured facts, each with its frame.
    const indexer=this.options.shots;if(!indexer)throw new Error('The footage index is unavailable.');
@@ -273,10 +290,14 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Media is read where it is; copies into Sources/ are only made for commands that need the files.
    // The edit itself is looked at as the player draws it (frames drawn by the editor's engine, with what is on screen at
    // each moment); only Export renders video.
-   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal);
+   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:3,width:1536},s):undefined);
    const scene=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId&&a.scene):undefined;
    if(scene)return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',instruction:'Scene source only, not rendered visual evidence. Only Export renders video.'};
-   const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});return result;
+   const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});
+   // The footage index's shots in the range looked at, with their measured facts (camera, light, sharpness, loudness).
+   const index=input.assetId?this.options.shots?.saved(input.assetId):undefined,range=result.evidence.range;
+   if(index){const inRange=index.shots.filter(s=>s.end>range.start&&s.start<range.end).slice(0,16);if(inRange.length)result.content.splice(1,0,{type:'text',text:'Shots in this range (footage index): '+inRange.map((s,n)=>shotLine({shot:s,score:0,words:''},n+1)).join('; ')});}
+   return result;
   }
   if(name==='propose_file_changes'){
    // The same request ID returns the same proposal, so a resumed call reads the user's decision instead of proposing again.
