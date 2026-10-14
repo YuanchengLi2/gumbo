@@ -519,3 +519,8 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Motion-graphics scenes show a still on their timeline block: one frame per scene revision, drawn in a hidden window that closes straight after.
 - Dark mode turned a transparent captions scene into a white sheet over the video: Chromium paints an embedded document whose color scheme differs from the page's with an opaque backdrop. Embedded scene documents keep the default scheme.
 - The main track always fills the project's frame: footage of another shape is cropped to cover it (never letterboxed), never zoomed out below the frame, and moves and shake only travel as far as the zoom leaves room.
+
+## October 13, 2026 — Every part of a request gets done; tests stop filling the disk
+
+- A message with several asks (a list, "and then", "also", several sentences) is split by Haiku into parts when an edit request starts; the agent gets the list, and finishing as complete is refused until it reports each part as done, or not_possible with the reason, which is added to its recap. One plain ask is not split (no extra call) and needs no report.
+- 6.7 GB of the user's disk was test leftovers: about 7,700 scratch projects and profiles from test runs in the temp folder, none from the app. Both test runners now give each run one temp folder (TEMP/TMP/TMPDIR) and delete it at the end; folders from crashed runs older than an hour are removed by the next run.

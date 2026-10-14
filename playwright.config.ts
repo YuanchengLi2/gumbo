@@ -1,1 +1,1 @@
-import {defineConfig} from '@playwright/test';export default defineConfig({testDir:'tests/desktop',timeout:180000,workers:1,use:{trace:'retain-on-failure'},reporter:'list'});
+import {defineConfig} from '@playwright/test';export default defineConfig({testDir:'tests/desktop',globalSetup:'./tests/setup/temp-run.ts',timeout:180000,workers:1,use:{trace:'retain-on-failure'},reporter:'list'});

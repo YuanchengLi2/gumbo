@@ -23,7 +23,10 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   if(options.delayMs)await new Promise(r=>setTimeout(r,options.delayMs));
   const tools:string[]=(body.tools??[]).map((t:any)=>t.name),step=(body.messages??[]).filter((m:any)=>m.role==='assistant').length;calls.push({purpose:body.purpose,model:body.model,tools,step});
   let content:any[];
-  if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
+  // Auto's model router and the request splitter answer simply: Sonnet, and the whole message as one part.
+  if(body.purpose==='model_routing')content=[{type:'text',text:JSON.stringify({model:'sonnet',reason:'Fixture'})}];
+  else if(body.purpose==='request_parts')content=[{type:'text',text:JSON.stringify({parts:[String(body.messages?.[0]?.content??'request').slice(0,300)]})}];
+  else if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
   // Real responses never reuse tool IDs; make scripted IDs unique per response.
   else{const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
   const message={content,stop_reason:content.some(b=>b.type==='tool_use')?'tool_use':'end_turn',usage:{input_tokens:0,output_tokens:0}};

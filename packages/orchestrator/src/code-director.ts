@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {models,engineBudgets,agentModels,autoModel,type ModelChoice,type Provider} from '@dream/config';
 import {modelRouterPrompt,routerMessage,parseRouterReply,fallbackModel,type RouterInput} from './model-router';
+import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
@@ -108,6 +109,14 @@ export class Director {
   }
   this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,reason});
  }
+ /** The separate things an edit request asks for, split once by Haiku (the whole message is one part if it cannot). */
+ private async requestParts(turnId:string,text:string):Promise<RequestPart[]>{
+  const saved=this.db.loadState<RequestPart[]>('request-parts:'+turnId);if(saved)return saved;
+  let parts=parseParts('',text);if(!mightHaveSeveralAsks(text)){this.db.saveState('request-parts:'+turnId,parts);return parts;}
+  try{const response:any=await this.inference(agentModels.haiku,requestPartsPrompt,[{role:'user',content:text.slice(0,6000)}],[],turnId,undefined,'request_parts','router');parts=parseParts((response.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join(''),text);}
+  catch(error){if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;this.db.event('ai.parts_fallback',{turnId,error:(error as Error).message});}
+  this.db.saveState('request-parts:'+turnId,parts);this.db.event('ai.request_parts',{turnId,parts});return parts;
+ }
  /** Which other providers have a key on the gateway, asked at most every ten minutes; Claude alone when it cannot be asked. */
  private providers?:{at:number;value:Partial<Record<Provider,boolean>>};
  private async refreshProviders(){
@@ -210,7 +219,8 @@ ${file.text}`).join('');
   // Auto's router runs before anything pins the model for this request.
   await this.routeModel(turnId,text,route.route==='plan'?'plan':route.route==='question'?'question':'edit');
   this.agentModel(turnId,text,route);
-  const result=await this.execute(text+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');
+  const parts=route.route==='local'?await this.requestParts(turnId,text):[];
+  const result=await this.execute(text+(parts.length>1?partsBriefing(parts):'')+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');
   if(result.plan){proposePlan(this.db,turnId,result.plan,selection);return;}this.report(turnId,result.outcome,route.route==='question');
  }
  // Every finished request ends with the agent's own short recap; questions end with the answer.

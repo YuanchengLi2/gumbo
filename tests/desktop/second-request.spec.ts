@@ -31,7 +31,7 @@ test('a later request in a project shows its steps, the editing overlay and Stop
   await send('Normalise the narration');
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).experience?.activity?.events?.some((e:any)=>e.tool==='run_command'&&e.status==='running')??false,{timeout:30000}).toBe(true);
   await page.waitForTimeout(1500);
-  const seen=await page.evaluate(()=>({bar:!!document.querySelector('.agent-bar'),glow:!!document.querySelector('.agent-glow'),stream:document.querySelector('[aria-label="Figjam activity"]')?.textContent??'',stop:[...document.querySelectorAll('button')].filter(b=>/stop/i.test(b.getAttribute('aria-label')??b.textContent??'')).length}));
+  const seen=await page.evaluate(()=>({bar:!!document.querySelector('.agent-bar'),glow:!!document.querySelector('.agent-glow'),stream:[...document.querySelectorAll('[aria-label="Figjam activity"],[aria-label="What Figjam is doing"]')].map(e=>e.textContent).join(' | '),stop:[...document.querySelectorAll('button')].filter(b=>/stop/i.test(b.getAttribute('aria-label')??b.textContent??'')).length}));
   console.log('SEEN',JSON.stringify(seen));
   expect(seen.stream).toContain('Normalising the narration');expect(seen.bar).toBe(true);expect(seen.glow).toBe(true);expect(seen.stop).toBeGreaterThan(0);
   // Stop ends it.

@@ -12,6 +12,7 @@ import {toolIdentity} from './tool-identity';
 import {rememberDecision} from './project-memory';
 import {stateChanges} from './state-delta';
 import {createHash} from 'node:crypto';
+import {partsBlocker,notPossibleNote,type RequestPart} from './request-parts';
 
 /** A separate piece a helper builds in its own files for the editing agent. */
 export type WorkerTask={id:string;title:string;brief:string;writes:string[];after?:string[];context?:string[]};
@@ -185,6 +186,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       if(planning&&input.status==='complete'&&!input.plan)throw new Error('Return the requested editable plan with finish.');
       let evidence=input.evidence.filter((e:any)=>checkpoint.completed[e.toolCallId]);
       if(input.status==='complete'&&needsPublication()){
+       const parts=db.loadState<RequestPart[]>('request-parts:'+turnId)??[],partBlocker=parts.length?partsBlocker(parts,input.parts):undefined;if(partBlocker)throw new Error(partBlocker);
+       if(parts.length)input.summary=input.summary+notPossibleNote(parts,input.parts);
        const blocker=completionBlocker(new Set((input.kept??[]).map((k:any)=>k.check)));if(blocker)throw new Error(blocker);
        const current=publishedHead()!;
        if(!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];

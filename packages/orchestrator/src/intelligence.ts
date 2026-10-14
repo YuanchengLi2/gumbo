@@ -4,7 +4,7 @@ export type WorkerMode='build';
 const levels=['low','medium','high','xhigh'] as const;
 /** extra.lower steps effort down after a response spent its whole allowance thinking. */
 export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string},failures=0,chosen?:'low'|'medium'|'high'|'',extra:{workerMode?:WorkerMode;lower?:number}={}):IntelligenceProfile{
- const role=purpose==='routing'||purpose==='model_routing'?'router':purpose==='execution'||purpose==='worker'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
+ const role=purpose==='routing'||purpose==='model_routing'||purpose==='request_parts'?'router':purpose==='execution'||purpose==='worker'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
  const complexity=failures>=2||routing?.complexity==='difficult'?'difficult':routing?.complexity==='simple'?'simple':'normal';
  // Sonnet thinks at medium effort and Haiku at xhigh, to make up for being the smaller model; the router classifies
  // within a 2K-token allowance, so it stays low.

@@ -10,8 +10,9 @@ import {fixedPrefix,imageSize,imageTokens} from '../../scripts/cost-anatomy';
 // Every call re-reads the system prompt, the tools and the conversation, so these sizes are what each call costs.
 
 it('keeps the editing agent\'s fixed prefix small: the scene-authoring reference is read from context/engine.md on demand',()=>{
- // About 250 tokens of it are the rule that the user's choices win and the editing-taste summary (October 13, 2026).
- const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(7500);
+ // About 250 tokens of it are the rule that the user's choices win and the editing-taste summary, and about 70 the
+ // per-part finish report (October 13, 2026).
+ const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(7700);
  expect(codePrompt).toContain('## The project document');expect(codePrompt).toContain('read context/engine.md');expect(codePrompt).not.toContain('## @dream/engine');
  expect(sceneReference).toContain('## @dream/engine');expect(sceneReference).toContain('## Example: score');
  // The two halves together are the whole reference.
