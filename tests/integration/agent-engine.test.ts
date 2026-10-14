@@ -198,10 +198,27 @@ it('rebuilds a scene on the timeline when its source file is edited and publishe
  }finally{db.close();}
 });
 
+it('runs a waiting plan when the triage reads the reply as accepting it, in any words',async()=>{
+ const db=fixture();try{
+  const purposes:string[]=[];let agent=0;
+  const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
+  director.inference=async(_model,_s,_m,_t,_turn,_f,purpose='execution')=>{purposes.push(purpose);
+   if(purpose==='triage')return{content:[{type:'text',text:JSON.stringify({kind:purposes.includes('planning')?'continue':'plan',difficulty:2,vision:false,carriesStopped:false,parts:[],reason:'accepts the plan'})}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='planning')return toolUse('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Title card',goal:'Add a title card',steps:[{id:'title',title:'Add the title card',instruction:'Create the title card',acceptance:'Title visible',review:false}],assumptions:[]}});
+   return ++agent===1?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});};
+  await director.message('Plan a title card for the video',[],'plan',[],undefined,undefined,'sonnet');expect(db.getMeta('ai_status')).toBe('awaiting_approval');
+  await director.message('yeah lets do that one then',[],'auto',[],undefined,undefined,'sonnet');expect(db.getMeta('ai_status')).toBe('complete');
+  expect(purposes.filter(p=>p==='planning')).toHaveLength(1);expect(purposes.filter(p=>p==='execution')).toHaveLength(2);
+ }finally{db.close();}
+});
+
 it('plans with Opus and, when the user says "do it", runs the approved plan as one Sonnet agent',async()=>{
  const {approvesPlan}=await import('../../packages/orchestrator/src/code-director');
  for(const yes of ['do it','Edit','looks good, go ahead','ok','Apply the plan.'])expect(approvesPlan(yes)).toBe(true);
  for(const no of ['make the title red','looks good but make it shorter','edit the second step to use blue',''])expect(approvesPlan(no)).toBe(false);
+ // Banana and Supply & Demand answered their plans with "continue" and were given another plan.
+ for(const yes of ['continue','cont','continue work','yeah go ahead','keep going','yes do that'])expect(approvesPlan(yes)).toBe(true);expect(approvesPlan('continue but drop step 2')).toBe(false);
  const db=fixture();try{
   const calls:{purpose:string;model:string}[]=[];let agent=0;
   const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};

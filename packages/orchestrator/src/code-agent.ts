@@ -186,7 +186,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    }
    checkpoint.nudges=0;
   }
-  const scopeFor=()=>role==='worker'?{writes:options.writes??[],canPublish:false,taskId:options.taskId,parent:options.parent}:undefined,started=new Map<string,Promise<any>>();
+  const scopeFor=()=>role==='worker'?{writes:options.writes??[],canPublish:false,taskId:options.taskId,parent:options.parent}:readOnly?{writes:[],canPublish:false,lookOnly:true}:undefined,started=new Map<string,Promise<any>>();
   // Only the reads before the first other call: a read after a write in the same response must see that write.
   const remaining=checkpoint.pending!.slice(checkpoint.results.length),firstOther=remaining.findIndex(call=>!PARALLEL_READS.has(call.name)),reads=(firstOther<0?remaining:remaining.slice(0,firstOther)).filter(call=>!db.loadState(key+':call:'+call.id));
   if(reads.length>1)for(const call of reads){let input:any;try{input=parseCodeTool(call.name,call.input,readOnly,allowed);}catch{continue;}const work=workspace.execute(call.name,input,call.id,turnId,signal,scopeFor());work.catch(()=>{});started.set(call.id,work);}

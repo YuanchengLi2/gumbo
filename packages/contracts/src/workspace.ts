@@ -25,7 +25,8 @@ export type SourceChange={path:string;beforeHash?:string;afterHash?:string;added
 export function lineDelta(before:string,after:string){const counts=new Map<string,number>();for(const line of before?before.split('\n'):[])counts.set(line,(counts.get(line)??0)+1);let added=0;for(const line of after?after.split('\n'):[]){const n=counts.get(line)??0;if(n)counts.set(line,n-1);else added++;}let removed=0;for(const n of counts.values())removed+=n;return{added,removed};}
 export type PublicationReceipt={id:string;versionId:string;baseVersionId:string;sourceSnapshot:string;processId:string;assets:string[];refreshed?:string[];changes:string[];files:SourceChange[];documentHash:string};
 /** A worker's write boundary: path prefixes (empty means any authored file) and whether it owns project.json. */
-export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string;parent?:string};
+/** lookOnly: a reply or plan, which may unpack the user's files to look at them but changes nothing in the project. */
+export type WorkerScope={writes:string[];canPublish:boolean;taskId?:string;parent?:string;lookOnly?:boolean};
 export interface CodeWorkspacePort {
  initialize():Promise<void>;
  execute(name:string,input:any,callId:string,turnId:string,signal:AbortSignal,scope?:WorkerScope):Promise<any>;

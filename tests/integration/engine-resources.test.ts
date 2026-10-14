@@ -44,3 +44,16 @@ it('keeps the prompt copy of the engine reference identical to reference/api.md'
  const lf=(text:string)=>text.replace(/\r\n/g,'\n');expect(lf(engineReferenceModule(readFileSync('packages/scene-engine/reference/api.md','utf8')))).toBe(lf(readFileSync('packages/scene-engine/src/reference.generated.ts','utf8')));
  expect(engineReference).toContain('## @dream/engine');expect(engineReference.length).toBeLessThan(24000);
 });
+
+it('lets a reply unpack the user\'s archive to look at it, outside the project\'s files, so nothing in the project changes',async()=>{
+ const {allowedTools}=await import('../../packages/orchestrator/src/code-tools');
+ expect(allowedTools('readonly').has('import_resources')).toBe(true);expect(allowedTools('readonly').has('run_command')).toBe(false);
+ const root=mkdtempSync(join(tmpdir(),'dream-resources-look-')),db=new ProjectDB(root,'Look');
+ const ws=new CodeWorkspace(db,{run:async()=>{throw Error('unexpected');},ffmpeg:'',ffprobe:'',files:async request=>({paths:(request as any).paths}) as any},()=>{});
+ try{await ws.initialize();const source=join(root,'Untitled design.zip');writeFileSync(source,zipSync({'1.png':png(8,8,()=>[200,150,40]),'2.png':png(8,8,()=>[90,60,30])}));
+  const result=await ws.execute('import_resources',{source,into:'drawings'},'look','turn',new AbortController().signal,{writes:[],canPublish:false,lookOnly:true});
+  expect(result).toMatchObject({imported:2,into:'.cache/look/resources/drawings',index:'.cache/look/resources/drawings/index.json'});
+  expect(existsSync(join(root,'Workspace/.cache/look/resources/drawings/1.png'))).toBe(true);expect(existsSync(join(root,'Workspace/resources/drawings'))).toBe(false);
+  expect(ws.unpublishedChanges()).toEqual([]);
+ }finally{db.close();}
+});

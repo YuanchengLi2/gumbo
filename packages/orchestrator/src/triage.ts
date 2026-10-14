@@ -15,7 +15,7 @@ kind:
 - "edit": they want the video or project made or changed. This includes short follow-ups that act on the conversation ("yeah go ahead", "do it", "go", "no revert that", "its still there" about something they asked to fix).
 - "answer": they want something to read and nothing changed: a question, an opinion, a script, ideas or an outline to read, small talk, thanks, complaints, insults, anything off-topic. A question that needs a look at the video to answer ("why is the screen bright now") is still an answer.
 - "plan": they ask for a plan before anything is built.
-- "continue": a request was stopped (stopped is given) and this message only says to carry on with it ("continue", "keep going", "please continue", "continue work").
+- "continue": a request was stopped (stopped is given) and this message only says to carry on with it ("continue", "keep going", "please continue", "continue work"); or a plan awaits approval (planAwaitingApproval) and this message accepts it or says to go ahead with it, in any words. Asking to change the plan is "plan".
 
 difficulty, 1 to 5, for how much work and judgement doing it well takes:
 1: one setting on one thing ("make the caption white", "mute the music", "delete the last clip"); small talk, thanks, a yes/no about the project.

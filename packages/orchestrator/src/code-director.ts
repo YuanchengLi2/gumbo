@@ -57,6 +57,12 @@ export class Director {
   // With a plan waiting, "do it" / "edit it" / "looks good" approves it: the editing agent then works through the steps.
   const waiting=this.db.getMeta('ai_status')==='awaiting_approval'?this.db.loadState<any>('task_plan'):undefined;
   if(waiting?.plan&&intent==='auto'&&approvesPlan(text)){this.db.message('user',text,waiting.turnId);return this.approveTaskPlan(waiting.plan,waiting.versionId,turnId,waiting.revision,effort,model);}
+  // Other ways of accepting it ("yeah lets do that") are read by the triage: carrying on with a waiting plan approves it.
+  if(waiting?.plan&&intent==='auto'){
+   this.controller=new AbortController();let triage:Triage|undefined;
+   try{triage=await this.triage(turnId,text,intent,undefined,model!==undefined,assetIds.length);}catch{}finally{this.controller=null;}
+   if(triage?.kind==='continue'){this.db.message('user',text,waiting.turnId);return this.approveTaskPlan(waiting.plan,waiting.versionId,turnId,waiting.revision,effort,model);}
+  }
   // The conversation shows what the user typed; the saved plan rides along only in the agent's request.
   const proposal=this.db.loadState<any>('task_plan');let request=text;if(this.db.getMeta('ai_status')==='awaiting_approval'&&proposal){intent='plan';request=text+'\nRevise the saved plan: '+JSON.stringify(proposal.plan);}
   // After a stop, the next message is a new request unless the router reads it as carrying on with the stopped one.
@@ -123,7 +129,8 @@ export class Director {
    if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;
    this.db.event('ai.triage_fallback',{turnId,error:(error as Error).message});
   }
-  return withMode(result,intent,!!stopped);
+  // Carrying on means a stopped request, or a plan waiting for approval.
+  return withMode(result,intent,!!stopped||!!input.planWaiting);
  }
  private triageInput(turnId:string,text:string,intent:RequestIntent,stopped?:{text:string},attachments=0):TriageInput{
   const t=this.db.timeline(),footage=this.db.footage();let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}

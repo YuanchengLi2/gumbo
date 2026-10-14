@@ -67,7 +67,9 @@ export type ToolOptions={canDelegate?:boolean;advanced?:boolean};
 export function allowedTools(role:AgentRole,options:ToolOptions={}):Set<ToolName>{
  const advanced=options.advanced??process.env.DREAM_AGENT_ADVANCED_TOOLS==='1';
  const all=(Object.keys(codeSchemas) as ToolName[]).filter(name=>name!=='bundle_scene'||advanced);
- if(role==='readonly')return new Set(all.filter(n=>!sideEffects.has(n)&&n!=='delegate'));
+ // Replies may unpack the user's archives and folders to look at them (a script for drawings sent as a .zip); the copy goes
+ // to a scratch folder outside the project's files.
+ if(role==='readonly')return new Set(all.filter(n=>(!sideEffects.has(n)||n==='import_resources')&&n!=='delegate'));
  // A helper builds its piece in its own files: it never delegates, publishes, edits the project's settings or memory, or
  // changes the user's computer.
  if(role==='worker')return new Set(all.filter(n=>!['delegate','update_tasks','set_project_title','remember_decision','publish_project','propose_file_changes','import_media'].includes(n)));

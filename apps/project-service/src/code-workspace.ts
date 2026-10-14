@@ -201,6 +201,8 @@ export class CodeWorkspace implements CodeWorkspacePort {
   if(name==='import_resources')return this.exclusive(async()=>{
    if(!this.options.files)throw new Error('Computer file access is unavailable.');
    const allowed=await this.options.files({action:'authorize_import',paths:[input.source]},signal);if('permissionRequired'in allowed)throw new FileApprovalRequired();
+   // A reply unpacks into .cache/look, which is not part of the project's files, so looking changes nothing.
+   if(scope?.lookOnly){const look='.cache/look',result:any=importResources(join(this.root,'.cache','look'),input);return{...result,into:`${look}/${result.into}`,index:`${look}/${result.index}`,use:`A copy to look at: read_file ${look}/${result.into}/<path> (images come back as pictures). An edit imports them again into resources/ to use them.`};}
    return this.scoped(scope,async()=>importResources(this.root,input));
   });
   if(name==='bundle_scene'){if(!process.env.DREAM_SHARED_LIBRARIES)throw new Error('The editing tools are unavailable.');const libraries=process.env.DREAM_SHARED_LIBRARIES;return this.exclusive(()=>bundleScene(this.root,libraries,input,signal));}
