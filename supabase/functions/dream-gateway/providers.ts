@@ -11,7 +11,6 @@ export const providerModels:Record<string,ProviderModel>={
  'gpt-6-luna':{provider:'openai',api:'responses',price:[.1,.5],cachedRead:.01,vision:true,reasoning:true},
  'gemini-4-argon':{provider:'google',api:'chat',price:[2,10],cachedRead:.1,vision:true,reasoning:true},
  'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,vision:true,reasoning:true},
- 'deepseek-v4-pro':{provider:'deepseek',api:'chat',price:[1.32,3.96],cachedRead:.044,vision:false,reasoning:false},
  'deepseek-flash':{provider:'deepseek',api:'chat',price:[.3,1.2],cachedRead:.006,vision:true,reasoning:false}
 };
 export const providerSecrets:Record<ProviderId,string>={openai:'OPENAI_API_KEY',google:'GEMINI_API_KEY',deepseek:'DEEPSEEK_API_KEY'};

@@ -1,7 +1,8 @@
 import {randomUUID} from 'node:crypto';
 import {models,engineBudgets,agentModels,autoModel,type ModelChoice,type Provider} from '@dream/config';
-import {modelRouterPrompt,routerMessage,parseRouterReply,fallbackModel,type RouterInput} from './model-router';
+import {triagePrompt,triageMessage,parseTriage,ruleTriage,withMode,routeRecord,type Triage,type TriageInput} from './triage';
 import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
+import type {RequestScore} from '@dream/config';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
@@ -58,10 +59,12 @@ export class Director {
   // After a stop, the next message is a new request unless the router reads it as carrying on with the stopped one.
   const stopped=intent==='auto'&&this.db.getMeta('ai_status')==='interrupted'?this.db.loadState<any>('pending_request'):undefined;
   if(stopped?.turnId&&!this.db.getMeta('routing:'+turnId)){
-   this.controller=new AbortController();this.publish('ai.status',{status:'running'});let route:any;
-   try{route=await this.classify(text,turnId,selection,intent,stopped);}catch(error){this.publish('ai.status',{status:'interrupted'});throw error;}finally{this.controller=null;}
-   if(route.route==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...route,continued:true});this.chooseEffort(stopped.turnId,effort);this.chooseModel(stopped.turnId,model);return this.resume(text);}
-   this.recordRoute(turnId,route);
+   this.controller=new AbortController();this.publish('ai.status',{status:'running'});let triage:Triage;
+   try{triage=await this.triage(turnId,text,intent,stopped,model!==undefined,assetIds.length);}catch(error){this.publish('ai.status',{status:'interrupted'});throw error;}finally{this.controller=null;}
+   if(triage.kind==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...routeRecord(triage),continued:true});this.chooseEffort(stopped.turnId,effort);this.chooseModel(stopped.turnId,model);return this.resume(text);}
+   // A new message that still wants what the stopped request asked ("aside from that…") carries those asks along.
+   if(triage.carriesStopped)request+=`\n\nStill wanted from the request that was stopped before it finished (do this too): ${String(stopped.text).slice(0,4000)}`;
+   this.recordTriage(turnId,triage);
   }
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.chooseModel(turnId,model);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
@@ -91,23 +94,44 @@ export class Director {
   // Auto decides again for the next part of a request it chose for (an approved plan is doing the work, not planning it).
   if(model==='auto'){if(pinned)this.db.setMeta('agent-model:'+turnId,'');return;}
   if(pinned&&pinned!==agentModels[model]){this.db.setMeta('agent-model:'+turnId,agentModels[model]);this.db.setMeta('agent-model-source:'+turnId,'user');this.db.event('ai.model_chosen',{turnId,choice:model,model:agentModels[model],changedFrom:pinned});}}
- /** Auto: Haiku picks the model for this request, or the next part of it (an approved plan, a continuation), once; the
-  * choice is pinned like a user's pick so the request keeps one prompt cache. Keyword rules decide if Haiku cannot. */
- private async routeModel(turnId:string,text:string,mode:'edit'|'plan'|'question'){
+ /** Auto: the triage's score for this request (or the next part of it: an approved plan, a continuation) picks the tier,
+  * and the cheapest model in it that can run does the work. Decided once and pinned like a user's pick, so the request
+  * keeps one prompt cache. */
+ private async routeModel(turnId:string){
   if(this.db.getMeta('model-choice:'+turnId)!=='auto'||process.env.DREAM_AGENT_MODEL||this.db.getMeta('agent-model:'+turnId))return;
-  await this.refreshProviders();const t=this.db.timeline(),footage=this.db.footage(),route=this.db.loadState<any>('routing:'+turnId)??undefined,approvedPlan=this.db.getMeta('route:'+turnId)==='workflow';
-  let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}
-  const input:RouterInput={request:text,mode,approvedPlan,project:{clips:t.spine.length,elements:t.attached.length,audio:t.music.length,minutes,footage:footage.assets.length},providers:this.providers?.value??{}};
-  let model=fallbackModel({...input,route}),reason='keyword rules';
-  try{
-   const response:any=await this.inference(agentModels.haiku,modelRouterPrompt,[{role:'user',content:routerMessage(input)}],[],turnId,undefined,'model_routing','router');
-   const chosen=parseRouterReply((response.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join(''),input.providers);
-   if(chosen){model=chosen.model.id;reason=chosen.reason;}else this.db.event('ai.route_fallback',{turnId,error:'The router named no available model.'});
+  await this.refreshProviders();const score=this.score(turnId),model=autoModel(score,this.providers?.value??{});
+  this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,difficulty:score.difficulty,reason:this.db.loadState<any>('routing:'+turnId)?.reason});
+ }
+ /** The score Auto picks by: the triage of this request; an approved plan is doing the work it planned, at the plan's score. */
+ private score(turnId:string):RequestScore{
+  const route=this.db.loadState<any>('routing:'+turnId),approved=this.db.getMeta('route:'+turnId)==='workflow';
+  const difficulty=Number(route?.difficulty)||(route?.complexity==='simple'?1:route?.complexity==='difficult'?4:3);
+  return{kind:approved?'edit':route?.route==='plan'?'plan':route?.route==='question'?'answer':'edit',difficulty,vision:!!route?.vision};
+ }
+ /** Triage (see triage.ts): what the message is, how hard, its parts. Requests from the composer (they carry a model
+  * choice) are scored by Haiku with the recent conversation; others, and any failure, use the word rules. */
+ private async triage(turnId:string,text:string,intent:RequestIntent,stopped?:{text:string},scored=true,attachments=0):Promise<Triage>{
+  const input=this.triageInput(turnId,text,intent,stopped,attachments);let result=ruleTriage(input,!!stopped);
+  if(scored)try{
+   const response:any=await this.inference(agentModels.haiku,triagePrompt,[{role:'user',content:triageMessage(input)}],[],turnId,undefined,'triage','router');
+   const parsed=parseTriage((response.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join(''));
+   if(parsed)result={...parsed,source:'model'};else this.db.event('ai.triage_fallback',{turnId,error:'The triage reply was not valid.'});
   }catch(error){
    if(this.signal().aborted||error instanceof InferenceError&&['quota','authentication','request_budget'].includes(error.code))throw error;
-   this.db.event('ai.route_fallback',{turnId,error:(error as Error).message});
+   this.db.event('ai.triage_fallback',{turnId,error:(error as Error).message});
   }
-  this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,reason});
+  return withMode(result,intent,!!stopped);
+ }
+ private triageInput(turnId:string,text:string,intent:RequestIntent,stopped?:{text:string},attachments=0):TriageInput{
+  const t=this.db.timeline(),footage=this.db.footage();let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}
+  const recent=(this.db.db.prepare("SELECT role,text FROM messages WHERE text<>'' AND (turn_id IS NULL OR turn_id<>?) ORDER BY rowid DESC LIMIT 6").all(turnId) as {role:string;text:string}[]).reverse();
+  return{message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments};
+ }
+ private recordTriage(turnId:string,triage:Triage){
+  this.recordRoute(turnId,routeRecord(triage));
+  this.db.event('ai.triaged',{turnId,kind:triage.kind,difficulty:triage.difficulty,vision:triage.vision,carriesStopped:triage.carriesStopped,reason:triage.reason,source:triage.source});
+  // Haiku's parts are what finishing reports on; with the word rules, an edit is split separately when it may hold several asks.
+  if(triage.source==='model'&&triage.parts.length){const parts=parseParts(JSON.stringify({parts:triage.parts}),triage.parts[0]);this.db.saveState('request-parts:'+turnId,parts);if(parts.length>1)this.db.event('ai.request_parts',{turnId,parts});}
  }
  /** The separate things an edit request asks for, split once by Haiku (the whole message is one part if it cannot). */
  private async requestParts(turnId:string,text:string):Promise<RequestPart[]>{
@@ -132,14 +156,14 @@ export class Director {
   const choice=this.db.getMeta('model-choice:'+turnId) as ModelChoice|undefined;route??=this.db.loadState<any>('routing:'+turnId);
   // A request without a choice (tests, the command line) or a measured run (DREAM_AGENT_MODEL) uses the default model.
   const approved=this.db.getMeta('route:'+turnId)==='workflow',auto=choice==='auto'&&!process.env.DREAM_AGENT_MODEL;
-  const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel({route:approved&&route?{...route,route:'local'}:route,text,hasEdit:this.db.timeline().spine.length>0,planning:route?.route==='plan'&&!approved,providers:this.providers?.value}):models.agent;
+  const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel(this.score(turnId),this.providers?.value):models.agent;
   this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,auto?'auto':'user');this.db.event('ai.model_chosen',{turnId,choice,model,auto,complexity:route?.complexity});return model;
  }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
   if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Figjam build.');
   // The window learns the phase at once, so it can show the agent editing from its first change.
-  await this.routeModel(turnId,text,planning?'plan':readOnly?'question':'edit');
+  await this.routeModel(turnId);
   const phaseNow=planning?'planning':readOnly?'answering':'editing';this.db.setPhase(turnId,phaseNow);this.publish('ai.phase',{turnId,phase:phaseNow});const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
   const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
   const model=this.agentModel(turnId,text);
@@ -205,9 +229,6 @@ ${file.text}`).join('');
  }
  async edit(text:string,turnId:string,selection:string[]=[],_review=false,phase='main'){return(await this.execute(text+'\nSelected: '+JSON.stringify(selection),turnId,false,false,phase)).outcome;}
  async outline(text:string,turnId:string){return this.runTurn(text,turnId,[],'plan');}
- // Whether a message is an edit, a question to answer, or carrying on with a stopped request is read from its words and the
- // composer's permission mode; no model call. The model is the one the user picked.
- private async classify(text:string,_turnId:string,_selection:string[],intent:RequestIntent,stopped?:{text:string}){return routeCodeRequest(text,intent,!!stopped);}
  private recordRoute(turnId:string,route:any){
   if(route.projectTitle&&!this.db.getMeta('project_title_source')){this.db.rename(route.projectTitle);this.db.setMeta('project_title_source','ai');this.publish('state',this.db.state({bounded:true}));}
   this.db.setMeta('routing:'+turnId,JSON.stringify(route));this.db.event('ai.routed',{turnId,...route});
@@ -215,9 +236,9 @@ ${file.text}`).join('');
  async runTurn(text:string,turnId:string,selection:string[],intent:RequestIntent='auto'){
   if(this.db.getMeta('route:'+turnId)==='workflow'){await this.workflow(turnId);return;}
   let route=this.db.loadState<any>('routing:'+turnId);
-  if(!route){route=await this.classify(text,turnId,selection,intent);if(route.route==='continue')route={...route,route:'local'};this.recordRoute(turnId,route);}
-  // Auto's router runs before anything pins the model for this request.
-  await this.routeModel(turnId,text,route.route==='plan'?'plan':route.route==='question'?'question':'edit');
+  if(!route){const pending=this.db.loadState<any>('pending_request');this.recordTriage(turnId,await this.triage(turnId,text,intent,undefined,!!this.db.getMeta('model-choice:'+turnId),pending?.turnId===turnId?pending.assetIds?.length??0:0));route=this.db.loadState<any>('routing:'+turnId);}
+  // Auto picks before anything pins the model for this request.
+  await this.routeModel(turnId);
   this.agentModel(turnId,text,route);
   const parts=route.route==='local'?await this.requestParts(turnId,text):[];
   const result=await this.execute(text+(parts.length>1?partsBriefing(parts):'')+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');

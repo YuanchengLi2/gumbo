@@ -32,6 +32,6 @@ export type ComputerStatus={access:boolean;now:string;timeZone:string;folders?:{
 export type FileRequest=z.infer<typeof FileRequestSchema>;
 export type FileResponse=FilePage|FileProposal|MediaCatalog|ComputerStatus|{paths:string[]}|{text:string;nextOffset?:number}|{permissionRequired:true};
 export type FileService=(request:FileRequest,signal?:AbortSignal)=>Promise<FileResponse>;
-export const InitialRequestSchema=z.object({requestId:z.string().min(1).max(100),text:z.string().max(12000),paths:z.array(z.string()).max(200).default([]),intent:z.enum(['auto','plan','ask']).optional(),model:z.enum(['auto','sonnet','haiku','opus','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash','deepseek-pro','deepseek-flash']).optional()});
+export const InitialRequestSchema=z.object({requestId:z.string().min(1).max(100),text:z.string().max(12000),paths:z.array(z.string()).max(200).default([]),intent:z.enum(['auto','plan','ask']).optional(),model:z.enum(['auto','sonnet','haiku','opus','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash','deepseek-flash']).optional()});
 export type InitialRequest=z.infer<typeof InitialRequestSchema>;
 export type ProjectSummary={id:string;folder:string;name:string;updatedAt:string;durationSec:number;thumbnail?:string;missing?:boolean};

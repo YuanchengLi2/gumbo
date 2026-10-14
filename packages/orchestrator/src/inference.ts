@@ -1,4 +1,5 @@
 import {RunStream} from './run-stream';
+import {routerPurposes} from './intelligence';
 import {gzipSync,gunzipSync} from 'node:zlib';
 import {assertToolExchanges} from './tool-exchanges';
 import {budgetRequest} from './context-budget';
@@ -130,7 +131,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   if(promptTokens(usage)>0)db.setMeta(actualKey,JSON.stringify({tokens:promptTokens(usage),estimated:budget.estimated}));
   if(Array.isArray(response?.dream_policy?.features))db.setMeta('gateway_features',JSON.stringify(response.dream_policy.features));
  };
- if(receipt.status==='complete'&&receipt.response){if(input.turnId&&input.purpose!=='routing')new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)).finish(receipt.response);session.record(receipt.response.content);if(!receipt.usageRecorded){receipt.usageRecorded=true;recordUsage(receipt.response);db.saveState(key,receipt);}return receipt.response;}
+ if(receipt.status==='complete'&&receipt.response){if(input.turnId&&!routerPurposes.has(String(input.purpose)))new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)).finish(receipt.response);session.record(receipt.response.content);if(!receipt.usageRecorded){receipt.usageRecorded=true;recordUsage(receipt.response);db.saveState(key,receipt);}return receipt.response;}
  signal?.throwIfAborted();
  const prefixHash=createHash('sha256').update(JSON.stringify({model:input.model,system:input.system,tools:input.tools,profile:input.profile})).digest('hex'),prefixKey='cache-prefix:'+input.turnId+':'+input.model+':'+(input.phase??'main');const previousPrefix=db.getMeta(prefixKey);if(previousPrefix!==prefixHash){db.setMeta(prefixKey,prefixHash);db.event('ai.cache_prefix',{turnId:input.turnId,model:input.model,prefixHash,changed:!!previousPrefix,reason:'Prompt, capability set, or intelligence profile changed; actual reuse is reported by provider usage.'});}
  const metricsKey='inference-context:'+fingerprint;
@@ -165,7 +166,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   }
   started=Date.now();signal?.throwIfAborted();if(receipt.attempt>0&&options.connect){const renewed=await options.connect();if(renewed.url!==config.url||accountScope(renewed)!==accountScope(config))throw new Error('The AI connection changed. Resume to use the new account configuration.');config=renewed;}signal?.throwIfAborted();receipt.status='inflight';save();
   let response:Response,body:any;
-  const live=input.turnId&&input.purpose!=='routing'?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)):undefined;
+  const live=input.turnId&&!routerPurposes.has(String(input.purpose))?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)):undefined;
   // Idle watchdog instead of a total timeout: long generations are fine while events keep arriving (the gateway pings every 5s).
   const idle=new AbortController();let providerRequestId:string|undefined,timer:ReturnType<typeof setTimeout>|undefined;const touch=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>idle.abort(Object.assign(new Error('The AI stream stopped sending data.'),{code:'idle_timeout'})),dependencies.idleMs??IDLE_MS);};
   try{

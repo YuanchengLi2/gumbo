@@ -25,7 +25,8 @@ it('translates the agent\'s requests for Chat Completions and the Responses API,
  expect(chat.messages[4].content[1]).toEqual({type:'image_url',image_url:{url:'data:image/png;base64,iVBORw0KGgo='}});expect(chat.messages[4].content.at(-1)).toEqual({type:'text',text:'Go on'});
  expect(chat.tools).toEqual([{type:'function',function:{name:'look',description:'Look at a frame',parameters:conversation.tools[0].input_schema}}]);expect(chat.reasoning_effort).toBe('high');
  // A model without vision gets a note instead of the picture.
- expect(JSON.stringify(chatRequest({...conversation,model:'deepseek-v4-pro'},providerModels['deepseek-v4-pro'],4096))).not.toContain('image_url');
+ expect(JSON.stringify(chatRequest({...conversation,model:'deepseek-flash'},{...providerModels['deepseek-flash'],vision:false},4096))).not.toContain('image_url');
+ expect(providerModels['deepseek-v4-pro']).toBeUndefined();
  const responses=responsesRequest({...conversation,model:'gpt-6.1-sol'},providerModels['gpt-6.1-sol'],4096);
  expect(responses).toMatchObject({instructions:'You edit videos.',store:false,max_output_tokens:4096,reasoning:{effort:'high'}});
  expect(responses.input.map((i:any)=>i.type??i.role)).toEqual(['user','assistant','function_call','function_call_output','user']);

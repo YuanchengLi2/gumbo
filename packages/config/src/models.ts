@@ -2,40 +2,47 @@
  * Claude models always run; GPT, Gemini and DeepSeek run once their key is on the gateway (OPENAI_API_KEY, GEMINI_API_KEY,
  * DEEPSEEK_API_KEY). Prices per million tokens (input, output, cache read) from the official pages on October 13, 2026. */
 export type Provider='anthropic'|'openai'|'google'|'deepseek';
-export type ModelChoice='auto'|'sonnet'|'haiku'|'opus'|'gpt-astra'|'gpt-sol'|'gpt-luna'|'gemini-argon'|'gemini-flash'|'deepseek-pro'|'deepseek-flash';
-/** detail: what the model is good at, in a few words (the menu shows it under the name, and Auto's router reads it);
- * cost: its price tier, $ to $$$$$, from its output price. */
-export type ModelInfo={choice:Exclude<ModelChoice,'auto'>;id:string;provider:Provider;label:string;detail:string;cost:string;vision:boolean;price:[number,number];cachedRead:number};
+export type ModelChoice='auto'|'sonnet'|'haiku'|'opus'|'gpt-astra'|'gpt-sol'|'gpt-luna'|'gemini-argon'|'gemini-flash'|'deepseek-flash';
+/** How much work a model is trusted with when Auto picks: light for small precise changes and quick answers, strong for
+ * real editing, frontier for the hardest work and planning it. */
+export type Tier='light'|'strong'|'frontier';
+/** detail: what the model is good at, in a few words (the menu shows it under the name); cost: its price tier, $ to $$$$$,
+ * from its output price. */
+export type ModelInfo={choice:Exclude<ModelChoice,'auto'>;id:string;provider:Provider;label:string;detail:string;cost:string;tier:Tier;vision:boolean;price:[number,number];cachedRead:number};
 export const modelCatalog:ModelInfo[]=[
- {choice:'opus',id:'claude-opus-5-5',provider:'anthropic',label:'Claude Opus 5.5',detail:'Best editing judgement and planning',cost:'$$$$',vision:true,price:[4,20],cachedRead:.2},
- {choice:'sonnet',id:'claude-sonnet-5-5',provider:'anthropic',label:'Claude Sonnet 5.5',detail:'Strong all-round editor, motion graphics',cost:'$$$',vision:true,price:[2,10],cachedRead:.2},
- {choice:'haiku',id:'claude-haiku-5-5',provider:'anthropic',label:'Claude Haiku 5.5',detail:'Fast, for small precise edits',cost:'$',vision:true,price:[.1,.5],cachedRead:.01},
- {choice:'gpt-astra',id:'gpt-6-astra',provider:'openai',label:'GPT-6 Astra',detail:'Frontier reasoning, very expensive',cost:'$$$$$',vision:true,price:[10,50],cachedRead:1},
- {choice:'gpt-sol',id:'gpt-6.1-sol',provider:'openai',label:'GPT-6.1 Sol',detail:'Capable all-rounder',cost:'$$$',vision:true,price:[2,10],cachedRead:.1},
- {choice:'gpt-luna',id:'gpt-6-luna',provider:'openai',label:'GPT-6 Luna',detail:'Fast, for small edits and questions',cost:'$',vision:true,price:[.1,.5],cachedRead:.01},
- {choice:'gemini-argon',id:'gemini-4-argon',provider:'google',label:'Gemini 4 Argon',detail:'Strong reasoning, long footage',cost:'$$$',vision:true,price:[2,10],cachedRead:.1},
- {choice:'gemini-flash',id:'gemini-3.8-flash',provider:'google',label:'Gemini 3.8 Flash',detail:'Fast, good at reading footage and answering',cost:'$$',vision:true,price:[.75,3.75],cachedRead:.075},
- {choice:'deepseek-pro',id:'deepseek-v4-pro',provider:'deepseek',label:'DeepSeek V4 Pro',detail:'Good at code, cannot see footage',cost:'$$',vision:false,price:[1.32,3.96],cachedRead:.044},
- {choice:'deepseek-flash',id:'deepseek-flash',provider:'deepseek',label:'DeepSeek V4.1 Flash',detail:'Cheapest, simple edits',cost:'$',vision:true,price:[.3,1.2],cachedRead:.006}
+ {choice:'opus',id:'claude-opus-5-5',provider:'anthropic',label:'Claude Opus 5.5',detail:'Best judgement, for the hardest edits and plans',cost:'$$$$',tier:'frontier',vision:true,price:[4,20],cachedRead:.2},
+ {choice:'sonnet',id:'claude-sonnet-5-5',provider:'anthropic',label:'Claude Sonnet 5.5',detail:'Strong all-round editor, motion graphics',cost:'$$$',tier:'strong',vision:true,price:[2,10],cachedRead:.2},
+ {choice:'haiku',id:'claude-haiku-5-5',provider:'anthropic',label:'Claude Haiku 5.5',detail:'Fast and inexpensive, small precise edits',cost:'$',tier:'light',vision:true,price:[.1,.5],cachedRead:.01},
+ {choice:'gpt-astra',id:'gpt-6-astra',provider:'openai',label:'GPT-6 Astra',detail:'Frontier reasoning, very expensive',cost:'$$$$$',tier:'frontier',vision:true,price:[10,50],cachedRead:1},
+ {choice:'gpt-sol',id:'gpt-6.1-sol',provider:'openai',label:'GPT-6.1 Sol',detail:'Capable all-rounder',cost:'$$$',tier:'strong',vision:true,price:[2,10],cachedRead:.1},
+ {choice:'gpt-luna',id:'gpt-6-luna',provider:'openai',label:'GPT-6 Luna',detail:'Fast and inexpensive, small edits and questions',cost:'$',tier:'light',vision:true,price:[.1,.5],cachedRead:.01},
+ {choice:'gemini-argon',id:'gemini-4-argon',provider:'google',label:'Gemini 4 Argon',detail:'Strong reasoning, long footage',cost:'$$$',tier:'strong',vision:true,price:[2,10],cachedRead:.1},
+ {choice:'gemini-flash',id:'gemini-3.8-flash',provider:'google',label:'Gemini 3.8 Flash',detail:'Fast, reads footage and answers questions',cost:'$$',tier:'light',vision:true,price:[.75,3.75],cachedRead:.075},
+ {choice:'deepseek-flash',id:'deepseek-flash',provider:'deepseek',label:'DeepSeek V4.1 Flash',detail:'Inexpensive, small edits',cost:'$',tier:'light',vision:true,price:[.3,1.2],cachedRead:.006}
 ];
 export const providerLabels:Record<Provider,string>={anthropic:'Claude',openai:'OpenAI',google:'Google',deepseek:'DeepSeek'};
 export const modelInfo=(idOrChoice:string)=>modelCatalog.find(m=>m.id===idOrChoice||m.choice===idOrChoice);
 /** Model ids by composer choice (Auto excluded: it resolves per request). */
 export const agentModels=Object.fromEntries(modelCatalog.map(m=>[m.choice,m.id])) as Record<Exclude<ModelChoice,'auto'>,string>;
 
-// Work that needs Sonnet however it is phrased: new visuals, sound, captions, or anything across the whole video.
-const bigWork=/\b(?:motion|graphics?|animat\w*|scenes?|intro|outro|title cards?|chapters?|lower thirds?|overlays?|3d|music|score|soundtrack|sound effects?|voice-?over|captions?|subtitles?|first cut|re-?edit|from scratch|whole|entire|every|throughout|restructure|story)\b/i;
-/** A plain follow-up edit: an instruction to change the video, not a question, plan or script. */
-export const plainEdit=(text:string)=>text.length<400&&/^(?:(?:ok(?:ay)?|now|also|and|please|then)[,]?\s+)*(?:add|make|put|cut|trim|remove|delete|drop|swap|replace|change|move|speed|slow|open|start|end|use|shorten|lengthen|mute|unmute|fade|grade|colou?r|crop|zoom|split|reorder|insert|turn|give|set|apply|lower|raise|increase|decrease|keep|caption|title|tighten|brighten|darken|warm|cool|boost|reduce|fix|extend|stretch|shrink|rotate|flip)\b/i.test(text.trim())&&!/\?|\b(?:plan|script|ideas?|concepts?|outline|storyboard)\b/i.test(text);
-
-/** Auto: the best model for this request among those that can run. Claude does the editing (the tools and prompts are
- * built around it): Haiku for a small, precise change to an edit that exists, Opus to plan difficult work (a plan is a few
- * calls, and the approved plan then runs on the model Auto picks for doing it), Sonnet for everything else. A question that changes nothing goes to Gemini Flash when its
- * key is set: it reads footage and answers well for a third of Sonnet's price. A model the user picks always wins over Auto. */
-export function autoModel(input:{route?:{route?:string;complexity?:string};text:string;hasEdit:boolean;planning?:boolean;providers?:Partial<Record<Provider,boolean>>}):string{
- const r=input.route,can=(p:Provider)=>p==='anthropic'||!!input.providers?.[p];
- if(r?.route==='question'&&can('google'))return agentModels['gemini-flash'];
- if(input.planning&&r?.complexity==='difficult')return agentModels.opus;
- if(r?.route==='local'&&input.hasEdit&&!bigWork.test(input.text)&&(r.complexity==='simple'||plainEdit(input.text)))return agentModels.haiku;
- return agentModels.sonnet;
+/** What a request is and how hard, as scored for Auto (see the orchestrator's triage): edit changes the project, answer
+ * only replies, plan returns a plan first. Difficulty runs from 1 (one setting on one thing, small talk) to 5 (a first cut
+ * of long footage, a whole-video restructure). */
+export type RequestScore={kind:'edit'|'answer'|'plan';difficulty:number;vision?:boolean};
+/** The tier a scored request needs: an edit of 1 is light, 2–4 strong, 5 frontier; a plan of 4–5 is frontier work; an
+ * answer of 1–2 is light, harder answers strong. */
+export function tierFor(score:RequestScore):Tier{
+ const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3));
+ if(score.kind==='answer')return d<=2?'light':'strong';
+ if(score.kind==='plan')return d>=4?'frontier':'strong';
+ return d<=1?'light':d>=5?'frontier':'strong';
+}
+const listPrice=(m:ModelInfo)=>m.price[0]+m.price[1];
+/** Auto: the cheapest model in the scored tier among the providers that can run (a price tie goes to the first listed, so
+ * Claude, whose tools and prompts the editor is built around); work that needs to look at footage skips models that
+ * cannot see. A model the user picks always wins over Auto. */
+export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>):string{
+ const can=(p:Provider)=>p==='anthropic'||!!providers?.[p],tier=tierFor(score);
+ const pool=modelCatalog.filter(m=>m.tier===tier&&can(m.provider)&&(!score.vision||m.vision));
+ return pool.reduce<ModelInfo|undefined>((best,m)=>!best||listPrice(m)<listPrice(best)?m:best,undefined)?.id??agentModels.sonnet;
 }
