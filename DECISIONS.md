@@ -524,3 +524,8 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 
 - A message with several asks (a list, "and then", "also", several sentences) is split by Haiku into parts when an edit request starts; the agent gets the list, and finishing as complete is refused until it reports each part as done, or not_possible with the reason, which is added to its recap. One plain ask is not split (no extra call) and needs no report.
 - 6.7 GB of the user's disk was test leftovers: about 7,700 scratch projects and profiles from test runs in the temp folder, none from the app. Both test runners now give each run one temp folder (TEMP/TMP/TMPDIR) and delete it at the end; folders from crashed runs older than an hour are removed by the next run.
+
+## October 13, 2026 — The installed app is 1.6 GB, not 3.1 GB
+
+- Left out of the installed app: ffmpeg-static and ffprobe-static (414 MB, binaries for every platform; the installed app always used staged/media-runtime, and they are now looked up only when running from source), the local analysis runtime staged/ingest (1 GB; only the retired audio_features step ran it), and imageio-ffmpeg's own ffmpeg (84 MB; agent commands set IMAGEIO_FFMPEG_EXE to the app's ffmpeg).
+- Kept for now: the headless Chrome and Remotion renderer (about 330 MB) still serve the editable-timeline XML export and the old export code; moving those to the engine would remove them. The bundled Python and Node libraries (about 700 MB) are what the agent's own code uses.

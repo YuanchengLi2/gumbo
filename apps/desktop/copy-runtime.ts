@@ -27,5 +27,6 @@ export function copyRuntimeDependencies(destination:string){
   for(const dependency of Object.keys(pkg.optionalDependencies??{}))copy(dependency,nested,target,true,chain);
   for(const dependency of Object.keys(pkg.peerDependencies??{}))copy(dependency,nested,target,!!pkg.peerDependenciesMeta?.[dependency]?.optional,chain);
  }
- for(const dependency of ['better-sqlite3','sqlite-vec','ffmpeg-static','ffprobe-static','@remotion/renderer'])copy(dependency,appRequire,destination);
+ // ffmpeg-static and ffprobe-static are not shipped: the app uses staged/media-runtime once installed.
+ for(const dependency of ['better-sqlite3','sqlite-vec','@remotion/renderer'])copy(dependency,appRequire,destination);
 }
