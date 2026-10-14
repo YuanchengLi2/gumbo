@@ -43,8 +43,9 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
   const blocks:any[]=Array.isArray(m.content)?m.content:[];
   if(m.role==='assistant'){
    const text=blocks.filter(b=>b.type==='text').map(b=>b.text).join(''),calls=blocks.filter(b=>b.type==='tool_use').map(b=>({id:b.id,type:'function',function:{name:b.name,arguments:JSON.stringify(b.input??{})},
-    // Gemini 3 signs each function call and refuses the next request (400) unless the signature comes back with it.
-    ...(b.signature&&model.provider==='google'?{extra_content:{google:{thought_signature:b.signature}}}:{})}));
+    // Gemini 3 signs each function call and refuses the next request (400) unless the signature comes back with it. A
+    // call made without one (by another model, or before signatures were kept) carries Google's documented placeholder.
+    ...(model.provider==='google'?{extra_content:{google:{thought_signature:typeof b.signature==='string'&&b.signature?b.signature:'skip_thought_signature_validator'}}}:{})}));
    if(text||calls.length)messages.push({role:'assistant',content:text||null,...(calls.length?{tool_calls:calls}:{})});continue;
   }
   const parts:any[]=[],images:string[]=[];
@@ -123,6 +124,12 @@ async function* records(body:ReadableStream<Uint8Array>){
  finally{reader.releaseLock();}
 }
 
+/** The thought_signature anywhere in a value (Gemini puts it in extra_content.google, on the call or around it). */
+function thoughtSignature(value:unknown,depth=0):string|undefined{
+ if(!value||typeof value!=='object'||depth>6)return undefined;
+ for(const [key,item] of Object.entries(value as Record<string,unknown>)){if((key==='thought_signature'||key==='thoughtSignature')&&typeof item==='string'&&item)return item;const found=thoughtSignature(item,depth+1);if(found)return found;}
+ return undefined;
+}
 /** A provider's stream as an Anthropic event stream (a Response, so the gateway's streaming and accounting take it as is). */
 export function anthropicStream(response:Response,model:ProviderModel,modelId:string,requestId:string):Response{
  const encoder=new TextEncoder();
@@ -131,14 +138,18 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
   try{
    if(!response.body)throw new Error('The provider sent no stream.');
    if(model.api==='chat'){
-    let stop:'end_turn'|'max_tokens'|'refusal'='end_turn',usage={input:0,cached:0,output:0};const toolIds=new Map<number,string>();
+    let stop:'end_turn'|'max_tokens'|'refusal'='end_turn',usage={input:0,cached:0,output:0};const toolIds=new Map<number,string>();let pending:string|undefined,lastTool:string|undefined;
     for await(const {data} of records(response.body)){
      if(data.error)throw new Error(data.error.message??'The provider reported an error.');out.start();
      const choice=data.choices?.[0],delta=choice?.delta??{};
      if(typeof delta.content==='string')out.text(delta.content);
+     // Gemini's signature for a function call may come on the call, on the delta or on the choice: wherever it is in the
+     // chunk, it belongs to the call in that chunk, or to the next call when it comes first.
+     const signed=thoughtSignature(data);if(signed)pending=signed;
      for(const call of delta.tool_calls??[]){const n=Number(call.index??0);
       if(!toolIds.has(n)||call.id&&call.id!==toolIds.get(n)){const id=call.id??`call_${n}_${toolIds.size}`;toolIds.set(n,id);out.tool(id,id,call.function?.name??'tool');}
-      out.args(toolIds.get(n)!,call.function?.arguments??'');const signature=call.extra_content?.google?.thought_signature;if(typeof signature==='string')out.signature(toolIds.get(n)!,signature);}
+      out.args(toolIds.get(n)!,call.function?.arguments??'');const own=thoughtSignature(call)??pending;if(own){out.signature(toolIds.get(n)!,own);pending=undefined;}lastTool=toolIds.get(n);}
+     if(pending&&lastTool&&!(delta.tool_calls??[]).length){out.signature(lastTool,pending);pending=undefined;}
      if(choice?.finish_reason)stop=choice.finish_reason==='length'?'max_tokens':choice.finish_reason==='content_filter'?'refusal':'end_turn';
      if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:u.completion_tokens??0};}
     }

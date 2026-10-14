@@ -20,7 +20,7 @@ async function read(stream:ReadableStream<Uint8Array>){const reader=stream.getRe
 it('translates the agent\'s requests for Chat Completions and the Responses API, without Anthropic-only parts',()=>{
  const chat=chatRequest({...conversation,model:'gemini-3.8-flash'},providerModels['gemini-3.8-flash'],4096);
  expect(chat.messages[0]).toEqual({role:'system',content:'You edit videos.'});
- expect(chat.messages[2]).toEqual({role:'assistant',content:'Looking first.',tool_calls:[{id:'call_1',type:'function',function:{name:'look',arguments:'{"at":2}'}}]});
+ expect(chat.messages[2]).toEqual({role:'assistant',content:'Looking first.',tool_calls:[{id:'call_1',type:'function',function:{name:'look',arguments:'{"at":2}'},extra_content:{google:{thought_signature:'skip_thought_signature_validator'}}}]});
  expect(chat.messages[3]).toEqual({role:'tool',tool_call_id:'call_1',content:'Frame at 2s\n[image attached below]'});
  expect(chat.messages[4].content[1]).toEqual({type:'image_url',image_url:{url:'data:image/png;base64,iVBORw0KGgo='}});expect(chat.messages[4].content.at(-1)).toEqual({type:'text',text:'Go on'});
  expect(chat.tools).toEqual([{type:'function',function:{name:'look',description:'Look at a frame',parameters:conversation.tools[0].input_schema}}]);expect(chat.reasoning_effort).toBe('high');
@@ -73,4 +73,17 @@ it('sends Gemini\'s signature on a function call back with it, so a second step 
  expect(chatRequest(next,providerModels['gemini-3.8-flash'],1000).messages[2].tool_calls[0]).toEqual({id:'call_1',type:'function',function:{name:'read_file',arguments:'{"path":"project.json"}'},extra_content:{google:{thought_signature:'SIG=='}}});
  expect(chatRequest({...next,model:'deepseek-flash'},providerModels['deepseek-flash'],1000).messages[2].tool_calls[0].extra_content).toBeUndefined();
  expect(JSON.stringify(anthropicMessages(next.messages))).not.toContain('SIG==');
+});
+
+it('finds Gemini\'s signature wherever the stream puts it, and gives a call without one Google\'s placeholder',async()=>{
+ const {anthropicStream}=await import('../../supabase/functions/dream-gateway/providers');
+ const stream=(chunks:any[])=>new Response(chunks.map(c=>'data: '+JSON.stringify(c)).join('\n\n')+'\n\ndata: [DONE]\n\n');
+ const callOf=async(chunks:any[])=>(await read(anthropicStream(stream(chunks),providerModels['gemini-3.8-flash'],'gemini-3.8-flash','r').body!)).result().content.find((b:any)=>b.type==='tool_use');
+ // On the choice instead of the call.
+ expect(await callOf([{choices:[{delta:{tool_calls:[{index:0,id:'c1',type:'function',function:{name:'search',arguments:'{"query":"x"}'}}]},extra_content:{google:{thought_signature:'ON_CHOICE'}}}]}])).toMatchObject({signature:'ON_CHOICE'});
+ // In a later chunk, after the call opened.
+ expect(await callOf([{choices:[{delta:{tool_calls:[{index:0,id:'c2',type:'function',function:{name:'search',arguments:'{"query":"x"}'}}]}}]},{choices:[{delta:{extra_content:{google:{thought_signature:'LATER'}}},finish_reason:'tool_calls'}]}])).toMatchObject({signature:'LATER'});
+ // A call saved before signatures were kept (the vlog's read_file) goes back with the placeholder instead of being refused.
+ const old={model:'gemini-3.8-flash',system:'x',messages:[{role:'user',content:'q'},{role:'assistant',content:[{type:'tool_use',id:'old',name:'read_file',input:{path:'project.json'}}]},{role:'user',content:[{type:'tool_result',tool_use_id:'old',content:'{}'}]}]};
+ expect(chatRequest(old,providerModels['gemini-3.8-flash'],1000).messages[2].tool_calls[0].extra_content).toEqual({google:{thought_signature:'skip_thought_signature_validator'}});
 });
