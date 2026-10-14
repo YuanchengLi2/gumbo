@@ -25,6 +25,18 @@ export class ProjectContext {
   const result=[...new Map([...exact,...lexical].map(row=>[row.id,row])).values()].slice(0,size);cache.set(key,result);if(cache.size>64)cache.delete(cache.keys().next().value!);return structuredClone(result) as (Omit<Chunk,'hash'>&{score:number;revision:string})[];
  }
  read(id:string,expectedRevision?:string,startLine?:number,endLine?:number){this.sync();const found=this.project.db.prepare('SELECT id,kind,owner,text,hash AS revision FROM context_chunks WHERE id=?').get(id) as Omit<Chunk,'hash'>|undefined;if(!found)throw new Error('Project chunk not found; search again after project changes.');if(expectedRevision&&(found as any).revision!==expectedRevision)throw new Error('Project record changed; search and read its current revision.');if(startLine!==undefined||endLine!==undefined){const start=z.number().int().min(1).parse(startLine??1),end=z.number().int().min(start).max(start+199).parse(endLine??start+199);const text=this.project.blobs.get((found as any).revision);return{...found,text:text.split('\n').slice(start-1,end).join('\n').slice(0,16000),startLine:start,endLine:end,truncated:text.split('\n').slice(start-1,end).join('\n').length>16000,notice:'Requested source line range; read subsequent lines for remaining content.'};}const index=Number(id.slice(id.lastIndexOf(':')+1)),next=id.slice(0,id.lastIndexOf(':')+1)+(index+1);return{...found,nextChunk:this.project.db.prepare('SELECT id FROM context_chunks WHERE id=?').get(next)?next:null,notice:'Exact text chunk; a long record may span several chunks.'};}
+ /** The edit's earlier versions, newest first: when, the request that made each and the start of its reply. The agent reads
+  * its own files as they were in one (read_file or list_files with version) to bring earlier work back instead of redoing it
+  * from memory ("revert the text change", "add back all the drawings"). */
+ history(limit=12){
+  const p=this.project,version=p.db.prepare('SELECT id,parent_id AS parent,summary,created_at AS at,turn_id AS turnId FROM versions WHERE id=?'),ask=p.db.prepare("SELECT text FROM messages WHERE turn_id=? AND role='user' AND text<>'' ORDER BY rowid LIMIT 1"),said=p.db.prepare("SELECT text FROM messages WHERE turn_id=? AND role='assistant' AND text<>'' ORDER BY rowid DESC LIMIT 1");
+  const line=(text:unknown,max:number)=>{const s=String(text??'').replace(/\s+/g,' ').trim();return s.length>max?s.slice(0,max-1)+'…':s;};
+  const out:string[]=[],seen=new Set<string>();let id:string|undefined=p.head();
+  while(id&&out.length<limit&&!seen.has(id)){seen.add(id);const v=version.get(id) as any;if(!v)break;
+   const request=v.turnId?(ask.get(v.turnId) as any)?.text:undefined,reply=v.turnId?(said.get(v.turnId) as any)?.text:undefined;
+   out.push([v.id,String(v.at).slice(0,16).replace('T',' '),...(out.length?[]:['current']),request?'asked: '+line(request,140):line(v.summary,80),...(reply?['reply: '+line(reply,140)]:[])].join(' | '));id=v.parent??undefined;}
+  return out;
+ }
  initial(query='',selection:string[]=[],assetIds:string[]=[]){
   this.sync();const p=this.project,t=p.timeline(),wanted=new Set(selection),picked=new Map<string,unknown>();
   const add=(id:string)=>{const row=p.db.prepare('SELECT id,kind,owner,text,hash AS revision FROM context_chunks WHERE id=?').get(id);if(row)picked.set(id,row);};
@@ -41,7 +53,7 @@ export class ProjectContext {
   // reply comes in full (a script or an answer the user is building on) and earlier ones nearly so; a longer one says where
   // the rest is.
   const previous=(p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 8").all() as {id:string;role:string;text:string}[]).map((m,n,all)=>{const limit=m.role==='assistant'&&all.findIndex(x=>x.role==='assistant')===n?8000:m.role==='assistant'?2500:1500;return m.text.length>limit?{...m,text:m.text.slice(0,limit),rest:`read_file scope project id conversation:${m.id}:0 (follow nextChunk)`}:m;});
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json.'};
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),history:this.history(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json. read_file and list_files with version (an id from history) show your files as they were then: write one back to bring that version of it back.'};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();
