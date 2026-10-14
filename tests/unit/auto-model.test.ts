@@ -20,6 +20,21 @@ it('Auto picks the best model for the kind of work at its difficulty, not the ch
  expect(autoModel({kind:'plan',difficulty:5},{})).toBe(agentModels.opus);expect(autoModel({kind:'plan',difficulty:3},{})).toBe(agentModels.sonnet);
 });
 
+it('runs the model Haiku chose from every model that can run, the table when it cannot, and a stronger one after a rejection',()=>{
+ const all={deepseek:true,openai:true,google:true};
+ expect(autoModel({kind:'edit',difficulty:3,work:'footage',model:'gemini-argon'},all)).toBe('gemini-4-argon');
+ expect(autoModel({kind:'answer',difficulty:2,work:'write',model:'gpt-sol'},all)).toBe('gpt-6.1-sol');
+ expect(autoModel({kind:'answer',difficulty:1,work:'talk',model:'deepseek-flash'},all)).toBe('deepseek-flash');
+ // Its pick needs a key on the gateway, and must be a real model; otherwise the table decides.
+ expect(autoModel({kind:'edit',difficulty:3,work:'footage',model:'gemini-argon'},{})).toBe(agentModels.opus);
+ expect(autoModel({kind:'edit',difficulty:3,work:'fix',model:'gpt-9-ultra'},all)).toBe(agentModels.sonnet);
+ // After a rejection the model must be stronger than the one that made the result: a pick at the same level climbs.
+ expect(autoModel({kind:'edit',difficulty:3,work:'fix',model:'gpt-sol',escalation:1,previousModel:'sonnet'},all)).toBe(agentModels.opus);
+ expect(autoModel({kind:'edit',difficulty:3,work:'fix',model:'opus',escalation:1,previousModel:'sonnet'},all)).toBe(agentModels.opus);
+ expect(autoModel({kind:'edit',difficulty:1,work:'fix',model:'gpt-sol',escalation:1,previousModel:'deepseek-flash'},all)).toBe('gpt-6.1-sol');
+ expect(modelCatalog.every(m=>m.guide.length>20)).toBe(true);
+});
+
 it('reads the work from the score when the triage did not name it, and every kind of work has a model at every difficulty',()=>{
  expect(workOf({kind:'edit',difficulty:1})).toBe('fix');expect(workOf({kind:'edit',difficulty:5})).toBe('restructure');
  expect(workOf({kind:'answer',difficulty:1})).toBe('talk');expect(workOf({kind:'answer',difficulty:3})).toBe('look');

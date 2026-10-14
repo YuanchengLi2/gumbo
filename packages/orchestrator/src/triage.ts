@@ -10,8 +10,8 @@ export type TriageKind='edit'|'answer'|'plan'|'continue';
 /** How a message reacts to the result before it: negative when it says that result is wrong, still broken or not what was
  * meant ("its still there", "no revert that"), positive when it approves or builds on it. */
 export type Feedback='positive'|'negative'|'none';
-export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;escalation?:number};
-export type TriageInput={message:string;mode:RequestIntent;recent:{role:string;text:string}[];stopped?:string;planWaiting?:boolean;project:{clips:number;overlays:number;audio:number;minutes:number;footageFiles:number};attachments:number};
+export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;escalation?:number;model?:string};
+export type TriageInput={message:string;mode:RequestIntent;recent:{role:string;text:string}[];stopped?:string;planWaiting?:boolean;models?:{id:string;name:string;bestAt:string;cost:string}[];previousModel?:string;project:{clips:number;overlays:number;audio:number;minutes:number;footageFiles:number};attachments:number};
 
 export const triagePrompt=`You read one message a user sent to Figjam, a video editor where an AI agent makes every edit by writing code, and decide how it is handled. Reply with JSON only.
 
@@ -31,19 +31,21 @@ Score what this message needs now, using the conversation to understand short fo
 
 work: the kind of work: "talk" (small talk, thanks, complaints, questions about the app), "look" (a question that needs a look at the video), "write" (a script, ideas, an outline to read), "fix" (precise changes or fixes to what exists), "footage" (choosing, cutting or pacing shots, b-roll, finding footage), "graphics" (motion graphics, titles, animation, drawn elements), "sound" (music, sound effects, the mix, voice), "restructure" (a first cut, condensing long footage, reworking the whole video). Pick the main one.
 feedback: how this message reacts to the previous result in the conversation: "negative" when it says that result is wrong, still broken, ugly or not what they meant, or asks to undo it ("its still there", "no revert that", "the b roll is ugly", "no you dont understand"); "positive" when it approves it or builds on it ("perfect", "nice, now add music"); "none" otherwise.
+model: the id (from models) of the model that will do this request best. Match the work to what each model is best at; cost only decides between models equally good for it. Small talk and one setting on one thing need no strong model; choosing footage, reworking a video and writing that must be good do. When feedback is negative, choose a stronger model than previousResultBy.
 vision: true when doing it well needs looking at the footage or the edit's frames.
 carriesStopped: true when a request was stopped and this new message still wants what that request asked ("aside from that…", adds to it); false when it replaces or drops it, or nothing was stopped.
 parts: every separate thing the message asks for, each one short instruction in the user's words (fix spelling only), including small asks mentioned in passing; one item for a single ask. When carriesStopped, also list the stopped request's asks.
 reason: a short phrase.`;
 
 /** The JSON schema the gateway enforces for purpose 'triage'. */
-export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},reason:{type:'string'}},required:['kind','difficulty','work','feedback','vision','carriesStopped','parts','reason'],additionalProperties:false} as const;
+export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','reason'],additionalProperties:false} as const;
 
 export const triageMessage=(input:TriageInput)=>JSON.stringify({message:input.message.slice(0,6000),composerMode:input.mode==='plan'?'plan first':input.mode==='ask'?'answer only':'normal',
  ...(input.stopped?{stopped:input.stopped.slice(0,3000)}:{}),...(input.planWaiting?{planAwaitingApproval:true}:{}),
- recentConversation:input.recent.map(m=>({role:m.role,text:m.text.slice(0,m.role==='user'?800:600)})),project:input.project,attachedFiles:input.attachments});
+ recentConversation:input.recent.map(m=>({role:m.role,text:m.text.slice(0,m.role==='user'?800:600)})),project:input.project,attachedFiles:input.attachments,
+ ...(input.models?.length?{models:input.models}:{}),...(input.previousModel?{previousResultBy:input.previousModel}:{})});
 
-const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),reason:z.coerce.string().default('')});
+const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),model:z.string().optional().transform(m=>m?.trim()||undefined),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),reason:z.coerce.string().default('')});
 /** Haiku's triage, or undefined when its reply is not one. */
 export function parseTriage(text:string):Omit<Triage,'source'>|undefined{
  try{const json=JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));const r=Reply.parse(json);

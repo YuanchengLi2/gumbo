@@ -94,6 +94,23 @@ it('Auto steps up a model after the user rejects the last result of the same kin
  }finally{db.close();}
 });
 
+it('Auto runs the model Haiku chose from every model with a key, shown what each is best at',async()=>{
+ const db=fixture();try{withClip(db);
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string;first:string}[]=[];let score:Record<string,unknown>={};
+  (director as any).providers={at:Date.now(),value:{openai:true,google:true}};
+  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model,first:JSON.stringify(messages[0])});
+   if(purpose==='triage')return text(JSON.stringify({kind:'edit',difficulty:3,work:'footage',feedback:'none',vision:true,carriesStopped:false,parts:['x'],reason:'fixture',...score}));
+   return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
+  const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
+  score={model:'gemini-argon'};await director.message('go through all my clips and pick the best scenery',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe('gemini-4-argon');
+  // Haiku saw the models that can run (no DeepSeek key here), each with what it is best at.
+  expect(asked().models.map((m:any)=>m.id)).toEqual(['opus','sonnet','haiku','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash']);expect(asked().models[0].bestAt).toMatch(/footage/);
+  // A pick without a key falls back to the table; the next message is told which model made the result it reacts to.
+  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);expect(asked().previousResultBy).toBe('gemini-argon');
+  const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({picked:'deepseek-flash',pickedBy:'table',work:'footage'});
+ }finally{db.close();}
+});
+
 it('runs an approved plan, and a continued request, on the model picked when approving, not the one that planned it',async()=>{
  const db=fixture();try{withClip(db);
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string}[]=[];

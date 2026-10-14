@@ -19,6 +19,9 @@ it('reads Haiku\'s triage, clamped and trimmed, and refuses anything else',()=>{
  expect(parseTriage('Sure! Here is my answer')).toBeUndefined();
  // The kind of work and how the message takes the last result; an unknown work is dropped, an unknown feedback is none.
  expect(parseTriage('{"kind":"edit","difficulty":3,"work":"footage","feedback":"negative","vision":true,"carriesStopped":false,"parts":["redo the b roll"],"reason":"x"}')).toMatchObject({work:'footage',feedback:'negative'});
+ expect(parseTriage('{"kind":"edit","difficulty":2,"work":"write","feedback":"none","model":" gpt-sol ","vision":false,"carriesStopped":false,"parts":[],"reason":"x"}')?.model).toBe('gpt-sol');
+ const sent=JSON.parse(triageMessage({message:'its still there',mode:'auto',recent:[],project:{clips:1,overlays:0,audio:0,minutes:1,footageFiles:1},attachments:0,models:[{id:'sonnet',name:'Claude Sonnet 5.5',bestAt:'x',cost:'$$$'}],previousModel:'haiku'}));
+ expect(sent).toMatchObject({models:[{id:'sonnet'}],previousResultBy:'haiku'});
  expect(parseTriage('{"kind":"edit","difficulty":3,"work":"juggling","feedback":"meh","vision":true,"carriesStopped":false,"parts":[],"reason":"x"}')).toMatchObject({work:undefined,feedback:'none'});
 });
 
@@ -41,7 +44,7 @@ it('lets the composer mode win, and carries a stopped request only while one exi
 
 it('runs triage as a small router call with its own reply schema, and sets the agent\'s effort from the score',()=>{
  const profile=intelligence('claude-haiku-5-5','triage');expect(profile).toMatchObject({role:'router',effort:'low'});expect(outputAllowance(profile)).toBe(2048);
- expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','work','feedback','vision','carriesStopped','parts','reason']);
+ expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','reason']);
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:1}).effort).toBe('low');
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:3}).effort).toBe('medium');
  expect(intelligence('claude-opus-5-5','execution',{difficulty:5}).effort).toBe('high');
