@@ -19,8 +19,10 @@ it('publishes executable scenes without a process, probe or render and finishes 
   expect(result.outcome.status).toBe('complete');expect(calls).toBe(2);expect(commands).toBe(0);expect(renders).toBe(0);expect(events).toContain('state');
   const asset=db.footage().assets[0];expect(asset.scene?.durationInFrames).toBe(90);expect(asset.sequence).toBeUndefined();expect(readFileSync(asset.originalPath,'utf8')).toBe(source);
   expect(readdirSync(join(root,'Workspace/output'))).toEqual([]);
-  // Nothing renders during chat: the preview check returns metadata and the live player runs the published code.
-  const metadata=await ws.execute('view_media',{target:'preview'},'inspect','live',new AbortController().signal);expect(metadata.preview).toBe('live');expect(metadata.evidence).toBeUndefined();expect(renders).toBe(0);
+  // Publishing drew nothing; the agent's own look at the edit asks the player's engine for the frames it chose, once,
+  // and always says what is on screen there.
+  const look=await ws.execute('view_media',{target:'preview',times:[1]},'inspect','live',new AbortController().signal);expect(renders).toBe(1);
+  const summary=JSON.parse(look.content[0].text);expect(summary.moments[0].onScreen.some((l:any)=>l.kind==='scene')).toBe(true);expect(look.evidence).toBeUndefined();
   writeFileSync(join(root,'Workspace/src/scene.html'),'changed draft');expect(readFileSync(asset.originalPath,'utf8')).toBe(source);
   db.undo();expect(db.timeline().spine).toHaveLength(0);db.undo(true);expect(db.timeline().spine[0].assetId).toBe(asset.id);
  }finally{db.close();}

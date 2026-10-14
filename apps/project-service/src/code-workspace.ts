@@ -38,6 +38,7 @@ import {sfxCatalog,describeScore,SoundDesignSchema,describeIssues} from '@dream/
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
+import {viewEdit} from './edit-view';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
@@ -223,11 +224,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
   if(name==='view_media'){
    if(input.scope==='computer'&&input.path){if(!this.options.importSources)throw new Error('Source intake is unavailable.');const imported=await this.options.importSources([input.path],callId,signal);if(imported.permissionRequired)throw new FileApprovalRequired();input={...input,assetId:imported.assets[0].id,path:undefined};}
    // Media is read where it is; copies into Sources/ are only made for commands that need the files.
-   // Chat never renders: the live player shows published code immediately, and only Export renders video.
-   if(input.target==='preview'){
-    const timeline=this.db.timeline(),resolved=resolveTimeline(timeline,this.db.footage());
-    return{versionId:this.db.head(),durationInFrames:resolved.durationInFrames,timeline,warnings:resolved.warnings,preview:'live',instruction:'The right panel runs the published scene code live. This is timeline metadata, not rendered visual evidence; nothing renders until Export.'};
-   }
+   // The edit itself is looked at as the player draws it (frames drawn by the editor's engine, with what is on screen at
+   // each moment); only Export renders video.
+   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal);
    const scene=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId&&a.scene):undefined;
    if(scene)return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',instruction:'Scene source only, not rendered visual evidence. Only Export renders video.'};
    const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});return result;

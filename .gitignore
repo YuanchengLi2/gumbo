@@ -21,6 +21,8 @@ __pycache__/
 .venv/
 *.pyc
 runtime/
+# The scene engine's own runtime source is code, not a staged runtime.
+!packages/scene-engine/src/runtime/
 models/
 .secrets/
 apps/desktop/resources/staged/

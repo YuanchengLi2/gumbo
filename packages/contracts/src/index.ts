@@ -54,6 +54,8 @@ export interface DreamDesktop {
  shareExport():Promise<{url:string;id:string}|null>;
  runtime():Promise<RuntimeStatus>;
  catalog():Promise<{scores:Record<string,unknown>[];sfx:Record<string,unknown>[]}>;
+ /** Answers a frames.request event: frames the editor's engine drew for the agent, or the error that stopped it. */
+ framesResult(id:string,result:unknown):Promise<void>;
  onEvent(handler:(event:DesktopEvent)=>void):()=>void;
 }
 declare global {interface Window {dream:DreamDesktop;}}
