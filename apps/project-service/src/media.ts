@@ -26,7 +26,10 @@ export class Ingest {
  private speechQueue:Asset[]=[];
  private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;this.db.saveAsset(asset);}
  constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>){}
- recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence||asset.creation)continue;if(!asset.missing&&asset.hasAudio&&!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete'))this.startSpeech(asset);if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
+ recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence)continue;
+  // Speech is transcribed (or a saved transcript fitted to its sound again, from saved chunks) for imports and for media
+  // the agent made with code alike.
+  if(!asset.missing&&asset.hasAudio&&!asset.generated&&(!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete')||!this.db.getMeta('speech-fit:v1:'+asset.id)))this.startSpeech(asset);if(asset.creation)continue;if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
  async register(path:string,copy=false,requestKey?:string,signal?:AbortSignal,quiet=false){
   const assetId=requestKey?'a_'+createHash('sha256').update(requestKey).digest('hex').slice(0,24):`a_${randomUUID()}`;
   const existing=this.db.footage().assets.find(a=>a.id===assetId);if(existing){if(existing.status==='failed')this.retry(existing);return existing;}
@@ -45,9 +48,11 @@ export class Ingest {
   return results;
  }
  private startSpeech(asset:Asset){
-  if(!this.speech||!asset.hasAudio||asset.sequence||asset.generated||asset.creation||asset.durationSec<=0||this.speeches.has(asset.id))return;
+  // Media the agent made with code (a cleaned-up narration, a downloaded clip) is transcribed like an import, so captions and
+  // cuts can follow its speech; synthesized scores and sound effects are not.
+  if(!this.speech||!asset.hasAudio||asset.sequence||asset.generated||asset.durationSec<=0||this.speeches.has(asset.id))return;
   // Clips under two seconds rarely carry usable speech and are not sent for transcription.
-  if(asset.durationSec<2){this.db.job(asset.id,'transcription','complete',100);return;}
+  if(asset.durationSec<2){this.db.job(asset.id,'transcription','complete',100);this.db.setMeta('speech-fit:v1:'+asset.id,'1');return;}
   if(this.speeches.size>=2){if(!this.speechQueue.some(a=>a.id===asset.id)){this.speechQueue.push(asset);this.db.job(asset.id,'transcription','queued');}return;}
   const controller=new AbortController();this.speeches.set(asset.id,controller);this.db.job(asset.id,'transcription','running');
   void (async()=>{await this.authorize?.([asset.originalPath],controller.signal);await this.speech!({...asset},controller.signal);controller.signal.throwIfAborted();this.db.job(asset.id,'transcription','complete',100);})().catch(error=>{this.db.job(asset.id,'transcription',controller.signal.aborted?'interrupted':'failed',0,(error as Error).message);}).finally(()=>{this.speeches.delete(asset.id);const queued=this.speechQueue.shift();if(queued)this.startSpeech(queued);this.publish('state',this.db.state({bounded:true}));void this.drain();});

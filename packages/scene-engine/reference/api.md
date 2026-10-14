@@ -48,7 +48,7 @@ A clip in `spine` plays seconds `srcIn` to `srcOut` of its source; clips play on
 - `framing.mode`: `fit` shows the whole picture (letterboxed when its shape differs from the frame), `fill` covers the frame and crops the overflow. `x` and `y` (0 to 1) choose which part shows when the picture does not exactly fit the frame. `scale` zooms about the centre of the frame. To show one region (a corner, a face, a speaker box), zoom with `scale` and place it with keyframe `x` and `y` (below), or write a scene that shows the asset at the size and place you want.
 - `framing` also takes `rotation`, `flipX`, `flipY`, `opacity`, and the grade: `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged), `temperature` (-1 cool to 1 warm).
 - `transitionIn.type`: `cut`, `crossfade`, `dip_to_black`, `whip`, `zoom_through` or `slide`.
-- `captions` (optional, on the timeline): `style` `clean`, `karaoke`, `word_pop` or `emphasis`; captions follow the spoken words of each clip.
+- `captions` (optional, on the timeline): `style` `clean`, `karaoke`, `word_pop` or `emphasis`; captions follow the speech heard: unmuted clips and music items at -10 dB or louder; `params.sources` (ids) picks exactly.
 
 ## Keyframes (camera moves, as in CapCut)
 

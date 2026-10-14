@@ -30,7 +30,7 @@ export const AssetSchema = z.object({
   generated:z.object({kind:z.enum(['score','sfx']),definitionId:z.string(),revisionId:z.string(),rendererVersion:z.string(),role:z.enum(['mix','stem']),trackId:z.string().optional(),beats:z.array(z.number().nonnegative()).max(20000).optional()}).optional()
 });
 export type Asset = z.infer<typeof AssetSchema>;
-export const WordSchema = z.object({id:z.string(),assetId:z.string(),text:z.string(),start:z.number().nonnegative(),end:z.number().positive(),confidence:z.number().min(0).max(1),speaker:z.string().default('unknown'),pauseBefore:z.number().nonnegative().default(0)});
+export const WordSchema = z.object({id:z.string(),assetId:z.string(),text:z.string(),start:z.number().nonnegative(),end:z.number().positive(),confidence:z.number().min(0).max(1),speaker:z.string().default('unknown'),pauseBefore:z.number().nonnegative().default(0),language:z.string().max(32).optional()});
 export type Word = z.infer<typeof WordSchema>;
 export const ShotSchema = z.object({id:z.string(),assetId:z.string(),start:z.number(),end:z.number(),framePaths:z.array(z.string()).default([]),log:z.object({description:z.string(),framing:z.string(),tags:z.array(z.string()),energy:z.enum(['low','medium','high']),usableAsBroll:z.boolean()}).optional(),
   // Measured on the source: brightness 0-1, blur and motion as reported by ffmpeg, shake in pixels per frame at analysis size,
