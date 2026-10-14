@@ -71,6 +71,29 @@ it('Auto runs each request on the model its triage score calls for, and keeps a 
  }finally{db.close();}
 });
 
+it('Auto steps up a model after the user rejects the last result of the same kind of work, and starts again when one is accepted',async()=>{
+ const db=fixture();try{withClip(db);
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string;effort?:string}[]=[];let score:Record<string,unknown>={};
+  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model});
+   if(purpose==='triage')return text(JSON.stringify({kind:'edit',difficulty:3,work:'fix',feedback:'none',vision:true,carriesStopped:false,parts:['x'],reason:'fixture',...score}));
+   return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
+  const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model;
+  // The green tint: Sonnet first; "its still there" goes to Opus; rejected again, Opus thinks harder.
+  await director.message('theres a weird green tint at 13 seconds',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
+  score={feedback:'negative'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
+  const routed=()=>db.loadState<any>('auto-escalation');expect(routed()).toMatchObject({work:'fix',level:1});
+  await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);expect(routed()).toMatchObject({level:2});
+  // Accepted: back to the best model for the work.
+  score={feedback:'positive'};await director.message('perfect, now soften the colours a bit',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);expect(routed()).toMatchObject({level:0});
+  // A rejection of a different kind of work starts its own climb at one step: a one-setting fix on Haiku goes to Sonnet.
+  score={difficulty:1,work:'fix',feedback:'none'};await director.message('make the caption white',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.haiku);
+  score={difficulty:1,work:'fix',feedback:'negative'};await director.message('they are still dark',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
+  const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({work:'fix',escalation:1,difficulty:1});
+  // The step up in thinking: Sonnet at a scored 1 thinks low, one rejection later medium.
+  const {intelligence}=await import('../../packages/orchestrator/src/intelligence');expect(intelligence(agentModels.sonnet,'execution',{difficulty:1}).effort).toBe('low');expect(intelligence(agentModels.sonnet,'execution',{difficulty:1,escalation:1}).effort).toBe('medium');expect(intelligence(agentModels.sonnet,'execution',{difficulty:3,escalation:2}).effort).toBe('high');
+ }finally{db.close();}
+});
+
 it('runs an approved plan, and a continued request, on the model picked when approving, not the one that planned it',async()=>{
  const db=fixture();try{withClip(db);
   const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string}[]=[];

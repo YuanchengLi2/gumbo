@@ -17,6 +17,9 @@ it('reads Haiku\'s triage, clamped and trimmed, and refuses anything else',()=>{
  expect(parseTriage('{"kind":"edit","difficulty":9,"vision":true,"carriesStopped":false,"parts":[],"reason":"x"}')?.difficulty).toBe(5);
  expect(parseTriage('{"kind":"delete everything","difficulty":2}')).toBeUndefined();
  expect(parseTriage('Sure! Here is my answer')).toBeUndefined();
+ // The kind of work and how the message takes the last result; an unknown work is dropped, an unknown feedback is none.
+ expect(parseTriage('{"kind":"edit","difficulty":3,"work":"footage","feedback":"negative","vision":true,"carriesStopped":false,"parts":["redo the b roll"],"reason":"x"}')).toMatchObject({work:'footage',feedback:'negative'});
+ expect(parseTriage('{"kind":"edit","difficulty":3,"work":"juggling","feedback":"meh","vision":true,"carriesStopped":false,"parts":[],"reason":"x"}')).toMatchObject({work:undefined,feedback:'none'});
 });
 
 it('falls back to word rules that score real requests from the logs sensibly',()=>{
@@ -38,7 +41,7 @@ it('lets the composer mode win, and carries a stopped request only while one exi
 
 it('runs triage as a small router call with its own reply schema, and sets the agent\'s effort from the score',()=>{
  const profile=intelligence('claude-haiku-5-5','triage');expect(profile).toMatchObject({role:'router',effort:'low'});expect(outputAllowance(profile)).toBe(2048);
- expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','vision','carriesStopped','parts','reason']);
+ expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','work','feedback','vision','carriesStopped','parts','reason']);
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:1}).effort).toBe('low');
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:3}).effort).toBe('medium');
  expect(intelligence('claude-opus-5-5','execution',{difficulty:5}).effort).toBe('high');
