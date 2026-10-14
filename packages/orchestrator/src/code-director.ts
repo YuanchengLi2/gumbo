@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {models,engineBudgets,agentModels,autoModel,workOf,modelCatalog,modelInfo,type ModelChoice,type Provider} from '@dream/config';
+import {models,engineBudgets,agentModels,autoModel,workOf,modelCatalog,modelInfo,typicalCost,type ModelChoice,type Provider} from '@dream/config';
 import {triagePrompt,triageMessage,parseTriage,ruleTriage,withMode,routeRecord,type Triage,type TriageInput} from './triage';
 import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
 import type {RequestScore} from '@dream/config';
@@ -109,13 +109,13 @@ export class Director {
  private async routeModel(turnId:string){
   if(this.db.getMeta('model-choice:'+turnId)!=='auto'||process.env.DREAM_AGENT_MODEL||this.db.getMeta('agent-model:'+turnId))return;
   await this.refreshProviders();const score=this.score(turnId),model=autoModel(score,this.providers?.value??{});
-  const route=this.db.loadState<any>('routing:'+turnId);this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,work:workOf(score),...(score.model?{picked:score.model,pickedBy:modelInfo(score.model)?.id===model?'haiku':'table'}:{}),difficulty:score.difficulty,...(route?.escalation?{escalation:route.escalation}:{}),reason:route?.reason});
+  const route=this.db.loadState<any>('routing:'+turnId);this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,work:workOf(score),...(score.model?{picked:score.model,pickedBy:modelInfo(score.model)?.id===model?'haiku':'table'}:{}),difficulty:score.difficulty,reason:route?.reason});
  }
  /** The score Auto picks by: the triage of this request; an approved plan is doing the work it planned, at the plan's score. */
  private score(turnId:string):RequestScore{
   const route=this.db.loadState<any>('routing:'+turnId),approved=this.db.getMeta('route:'+turnId)==='workflow';
   const difficulty=Number(route?.difficulty)||(route?.complexity==='simple'?1:route?.complexity==='difficult'?4:3);
-  return{kind:approved?'edit':route?.route==='plan'?'plan':route?.route==='question'?'answer':'edit',difficulty,vision:!!route?.vision,...(route?.work?{work:route.work}:{}),...(route?.escalation?{escalation:route.escalation}:{}),...(route?.model?{model:route.model}:{}),...(route?.previousModel?{previousModel:route.previousModel}:{})};
+  return{kind:approved?'edit':route?.route==='plan'?'plan':route?.route==='question'?'answer':'edit',difficulty,vision:!!route?.vision,...(route?.work?{work:route.work}:{}),...(route?.model?{model:route.model}:{})};
  }
  /** The model that made the result of the request before this one, the one a reply like "its still there" is about. */
  private previousModel(turnId:string){const last=(this.db.db.prepare("SELECT turn_id FROM messages WHERE role='user' AND turn_id IS NOT NULL AND turn_id<>? ORDER BY rowid DESC LIMIT 1").get(turnId) as any)?.turn_id;return last?modelInfo(this.db.getMeta('agent-model:'+last)??'')?.choice:undefined;}
@@ -139,26 +139,13 @@ export class Director {
   const t=this.db.timeline(),footage=this.db.footage();let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}
   const recent=(this.db.db.prepare("SELECT role,text FROM messages WHERE text<>'' AND (turn_id IS NULL OR turn_id<>?) ORDER BY rowid DESC LIMIT 6").all(turnId) as {role:string;text:string}[]).reverse();
   // Every model that can run, with what it is best at, and the model that made the result this message may be reacting to.
-  const can=this.providers?.value??{},available=modelCatalog.filter(m=>m.provider==='anthropic'||!!(can as any)[m.provider]).map(m=>({id:m.choice,name:m.label,bestAt:m.guide,cost:m.cost}));
+  const can=this.providers?.value??{},available=modelCatalog.filter(m=>m.provider==='anthropic'||!!(can as any)[m.provider]).map(m=>({id:m.choice,name:m.label,bestAt:m.guide,costPerRequest:`about $${typicalCost(m).toFixed(2)}`}));
   const previousModel=this.previousModel(turnId);
   return{models:available,...(previousModel?{previousModel}:{}),message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments};
  }
- /** Rejections push the same kind of work up. A message that says the last result is wrong ("its still there", "no revert
-  * that") moves the next request of that kind of work a step up the model ladder (Haiku, Sonnet, Opus) and a step up in
-  * thinking, one step more for each rejection in a row, at most two; anything accepted or a different kind of work starts
-  * again. The green tint took four tries on one model. Decided once per request. */
- private escalate(turnId:string,triage:Triage):Triage{
-  if(triage.source!=='model'||!triage.work)return triage;
-  const saved=this.db.loadState<{turnId:string;work:string;level:number;before:{work:string;level:number}}>('auto-escalation'),previous=saved?.turnId===turnId?saved.before:saved?{work:saved.work,level:saved.level}:{work:'',level:0};
-  const level=triage.feedback==='negative'?Math.min(2,(previous.work===triage.work?previous.level:0)+1):0;
-  this.db.saveState('auto-escalation',{turnId,work:triage.work,level,before:previous});
-  return level?{...triage,escalation:level}:triage;
- }
  private recordTriage(turnId:string,triage:Triage){
-  triage=this.escalate(turnId,triage);
-  const previousModel=triage.escalation?this.previousModel(turnId):undefined;
-  this.recordRoute(turnId,{...routeRecord(triage),...(triage.work?{work:triage.work}:{}),...(triage.model?{model:triage.model}:{}),...(triage.escalation?{escalation:triage.escalation}:{}),...(previousModel?{previousModel}:{})});
-  this.db.event('ai.triaged',{turnId,kind:triage.kind,work:triage.work,feedback:triage.feedback,model:triage.model,difficulty:triage.difficulty,...(triage.escalation?{escalation:triage.escalation}:{}),vision:triage.vision,carriesStopped:triage.carriesStopped,reason:triage.reason,source:triage.source});
+  this.recordRoute(turnId,{...routeRecord(triage),...(triage.work?{work:triage.work}:{}),...(triage.model?{model:triage.model}:{})});
+  this.db.event('ai.triaged',{turnId,kind:triage.kind,work:triage.work,feedback:triage.feedback,model:triage.model,difficulty:triage.difficulty,vision:triage.vision,carriesStopped:triage.carriesStopped,reason:triage.reason,source:triage.source});
   // Haiku's parts are what finishing reports on; with the word rules, an edit is split separately when it may hold several asks.
   if(triage.source==='model'&&triage.parts.length){const parts=parseParts(JSON.stringify({parts:triage.parts}),triage.parts[0]);this.db.saveState('request-parts:'+turnId,parts);if(parts.length>1)this.db.event('ai.request_parts',{turnId,parts});}
  }

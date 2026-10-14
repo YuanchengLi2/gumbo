@@ -28,13 +28,13 @@ export class ProjectContext {
  /** The edit's earlier versions, newest first: when, the request that made each and the start of its reply. The agent reads
   * its own files as they were in one (read_file or list_files with version) to bring earlier work back instead of redoing it
   * from memory ("revert the text change", "add back all the drawings"). */
- history(limit=12){
+ history(limit=6){
   const p=this.project,version=p.db.prepare('SELECT id,parent_id AS parent,summary,created_at AS at,turn_id AS turnId FROM versions WHERE id=?'),ask=p.db.prepare("SELECT text FROM messages WHERE turn_id=? AND role='user' AND text<>'' ORDER BY rowid LIMIT 1"),said=p.db.prepare("SELECT text FROM messages WHERE turn_id=? AND role='assistant' AND text<>'' ORDER BY rowid DESC LIMIT 1");
   const line=(text:unknown,max:number)=>{const s=String(text??'').replace(/\s+/g,' ').trim();return s.length>max?s.slice(0,max-1)+'…':s;};
   const out:string[]=[],seen=new Set<string>();let id:string|undefined=p.head();
   while(id&&out.length<limit&&!seen.has(id)){seen.add(id);const v=version.get(id) as any;if(!v)break;
    const request=v.turnId?(ask.get(v.turnId) as any)?.text:undefined,reply=v.turnId?(said.get(v.turnId) as any)?.text:undefined;
-   out.push([v.id,String(v.at).slice(0,16).replace('T',' '),...(out.length?[]:['current']),request?'asked: '+line(request,140):line(v.summary,80),...(reply?['reply: '+line(reply,140)]:[])].join(' | '));id=v.parent??undefined;}
+   out.push([v.id,String(v.at).slice(0,16).replace('T',' '),...(out.length?[]:['current']),request?'asked: '+line(request,110):line(v.summary,80),...(reply?['reply: '+line(reply,100)]:[])].join(' | '));id=v.parent??undefined;}
   return out;
  }
  initial(query='',selection:string[]=[],assetIds:string[]=[]){

@@ -49,7 +49,7 @@ it('briefs the agent with the same facts in fewer words: library versions once, 
  const [cached,request]=briefing(context,'Cut it',{projectTitle:'Talk'}) as any[];
  expect(cached.text).toContain('"nodeLibraries":"react 19.1.1"');expect(cached.text).toContain('"pythonLibraries":"numpy 2.2.6"');expect(cached.text).not.toContain('sharedLibraries');
  expect(cached.text).toContain('any of Soft, Bright followed by any of whoosh, pop, hit');
- expect(request.text).toContain('"generatedMedia":[{"assetId":"code_abc","filename":"title","kind":"video","durationSec":3}]');
+ expect(request.text).toContain('"generatedMedia":["code_abc title"]');
 });
 
 it('counts image tokens from the picture size, not its encoded text',()=>{

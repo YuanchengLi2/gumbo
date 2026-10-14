@@ -9,14 +9,13 @@ export const routerPurposes=new Set(['routing','model_routing','request_parts','
 export const quietPurposes=new Set([...routerPurposes,'web_search','shot_index','listening']);
 /** Small helper calls that think briefly whatever the request: a search, describing shots, listening to a stretch of sound. */
 export const helperPurposes=new Set(['web_search','shot_index','listening']);
-export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string;difficulty?:number;escalation?:number},failures=0,chosen?:'low'|'medium'|'high'|'',extra:{workerMode?:WorkerMode;lower?:number}={}):IntelligenceProfile{
+export function intelligence(model:string,purpose:string,routing?:{complexity?:string;route?:string;reason?:string;difficulty?:number},failures=0,chosen?:'low'|'medium'|'high'|'',extra:{workerMode?:WorkerMode;lower?:number}={}):IntelligenceProfile{
  const role=routerPurposes.has(purpose)?'router':purpose==='execution'||purpose==='worker'?'executor':purpose==='consultation'?'consultation':purpose==='review'?'review':purpose==='planning'||routing?.route==='plan'&&purpose!=='execution'?'planner':'editor';
  const complexity=failures>=2||routing?.complexity==='difficult'?'difficult':routing?.complexity==='simple'?'simple':'normal';
  // The triage's difficulty sets how hard the model thinks: 1 low, 2–4 medium, 5 high, with Haiku one step higher to make
  // up for being the smaller model. Without a score, Sonnet thinks at medium and Haiku at xhigh. The router classifies
  // within a 2K-token allowance, so it stays low.
- // A request after the user rejected the last result of its kind (escalation) also thinks harder, a step per rejection.
- const d=Number(routing?.difficulty)+(Number(routing?.escalation)||0),scored=d>=1?(d<=1?0:d>=5?2:1)+(model.startsWith('claude-haiku')?1:0):undefined;
+ const d=Number(routing?.difficulty),scored=d>=1?(d<=1?0:d>=5?2:1)+(model.startsWith('claude-haiku')?1:0):undefined;
  const quick=role==='router'||helperPurposes.has(purpose),automatic=quick?'low':scored!==undefined?levels[Math.min(3,scored)]:model.startsWith('claude-haiku')?'xhigh':'medium';
  // An effort the user picked in the composer applies to every model in the request except the router.
  // DREAM_BUILD_WORKER_EFFORT overrides helpers only, for measuring effort against speed, cost and quality.

@@ -20,7 +20,7 @@ it('reads Haiku\'s triage, clamped and trimmed, and refuses anything else',()=>{
  // The kind of work and how the message takes the last result; an unknown work is dropped, an unknown feedback is none.
  expect(parseTriage('{"kind":"edit","difficulty":3,"work":"footage","feedback":"negative","vision":true,"carriesStopped":false,"parts":["redo the b roll"],"reason":"x"}')).toMatchObject({work:'footage',feedback:'negative'});
  expect(parseTriage('{"kind":"edit","difficulty":2,"work":"write","feedback":"none","model":" gpt-sol ","vision":false,"carriesStopped":false,"parts":[],"reason":"x"}')?.model).toBe('gpt-sol');
- const sent=JSON.parse(triageMessage({message:'its still there',mode:'auto',recent:[],project:{clips:1,overlays:0,audio:0,minutes:1,footageFiles:1},attachments:0,models:[{id:'sonnet',name:'Claude Sonnet 5.5',bestAt:'x',cost:'$$$'}],previousModel:'haiku'}));
+ const sent=JSON.parse(triageMessage({message:'its still there',mode:'auto',recent:[],project:{clips:1,overlays:0,audio:0,minutes:1,footageFiles:1},attachments:0,models:[{id:'sonnet',name:'Claude Sonnet 5.5',bestAt:'x',costPerRequest:'about $0.28'}],previousModel:'haiku'}));
  expect(sent).toMatchObject({models:[{id:'sonnet'}],previousResultBy:'haiku'});
  expect(parseTriage('{"kind":"edit","difficulty":3,"work":"juggling","feedback":"meh","vision":true,"carriesStopped":false,"parts":[],"reason":"x"}')).toMatchObject({work:undefined,feedback:'none'});
 });

@@ -144,7 +144,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});replaceFileSync(target,text);return{path,hash:digest(text)};}
  // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
- context(query:string){const found=this.index.search(query,6),selected={files:found.files,note:'Authored files; search finds code by content and read_file opens it.'};this.db.event('workspace.context',{availableCharacters:found.availableCharacters,files:found.files.length});
+ context(query:string){const found=this.index.search(query,6),selected={files:found.files.slice(0,40).map(f=>`${f.path} (${f.characters} chars)`),...(found.files.length>40?{moreFiles:found.files.length-40}:{}),note:'Authored files; search finds code by content and read_file opens it (with its hash).'};this.db.event('workspace.context',{availableCharacters:found.availableCharacters,files:found.files.length});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
   return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}

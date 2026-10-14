@@ -61,5 +61,5 @@ it('keeps the cached briefing the same when the agent rewrites its notes or make
  const later={...base,computer:{access:false,now:'t2'},media:[{assetId:'a',filename:'a.mp4',seen:'A beach at sunset'},{assetId:'b',filename:'b.mp4'},{assetId:'code_1',filename:'title.tsx',kind:'video'}]};
  const first=briefing(base,'Make it warmer',{}) as any[],second=briefing(later,'Add a title',{}) as any[];
  expect(second[0].text).toBe(first[0].text);
- expect(second[1].text).toContain('"sourceNotes":{"a":"A beach at sunset"}');expect(second[1].text).toContain('"generatedMedia":[{"assetId":"code_1"');
+ expect(second[1].text).toContain('"sourceNotes":{"a":"A beach at sunset"}');expect(second[1].text).toContain('"generatedMedia":["code_1 ');
 });

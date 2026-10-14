@@ -71,26 +71,19 @@ it('Auto runs each request on the model its triage score calls for, and keeps a 
  }finally{db.close();}
 });
 
-it('Auto steps up a model after the user rejects the last result of the same kind of work, and starts again when one is accepted',async()=>{
+it('Auto tells Haiku which model made a rejected result and runs what it then picks, without forcing a pricier model',async()=>{
  const db=fixture();try{withClip(db);
-  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string;effort?:string}[]=[];let score:Record<string,unknown>={};
-  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model});
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string;first:string}[]=[];let score:Record<string,unknown>={};
+  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model,first:JSON.stringify(messages[0])});
    if(purpose==='triage')return text(JSON.stringify({kind:'edit',difficulty:3,work:'fix',feedback:'none',vision:true,carriesStopped:false,parts:['x'],reason:'fixture',...score}));
    return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
-  const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model;
-  // The green tint: Sonnet first; "its still there" goes to Opus; rejected again, Opus thinks harder.
+  const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
   await director.message('theres a weird green tint at 13 seconds',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
-  score={feedback:'negative'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
-  const routed=()=>db.loadState<any>('auto-escalation');expect(routed()).toMatchObject({work:'fix',level:1});
-  await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);expect(routed()).toMatchObject({level:2});
-  // Accepted: back to the best model for the work.
-  score={feedback:'positive'};await director.message('perfect, now soften the colours a bit',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);expect(routed()).toMatchObject({level:0});
-  // A rejection of a different kind of work starts its own climb at one step: a one-setting fix on Haiku goes to Sonnet.
-  score={difficulty:1,work:'fix',feedback:'none'};await director.message('make the caption white',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.haiku);
-  score={difficulty:1,work:'fix',feedback:'negative'};await director.message('they are still dark',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
-  const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({work:'fix',escalation:1,difficulty:1});
-  // The step up in thinking: Sonnet at a scored 1 thinks low, one rejection later medium.
-  const {intelligence}=await import('../../packages/orchestrator/src/intelligence');expect(intelligence(agentModels.sonnet,'execution',{difficulty:1}).effort).toBe('low');expect(intelligence(agentModels.sonnet,'execution',{difficulty:1,escalation:1}).effort).toBe('medium');expect(intelligence(agentModels.sonnet,'execution',{difficulty:3,escalation:2}).effort).toBe('high');
+  // "its still there": Haiku hears which model made it and the cost of each, and keeps Sonnet; nothing forces Opus.
+  score={feedback:'negative',model:'sonnet'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
+  expect(asked().previousResultBy).toBe('sonnet');expect(asked().models.find((m:any)=>m.id==='opus').costPerRequest).toBe('about $0.55');
+  score={feedback:'negative',model:'opus'};await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
+  expect(db.loadState('auto-escalation')).toBeUndefined();
  }finally{db.close();}
 });
 
@@ -106,7 +99,7 @@ it('Auto runs the model Haiku chose from every model with a key, shown what each
   // Haiku saw the models that can run (no DeepSeek key here), each with what it is best at.
   expect(asked().models.map((m:any)=>m.id)).toEqual(['opus','sonnet','haiku','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash']);expect(asked().models[0].bestAt).toMatch(/footage/);
   // A pick without a key falls back to the table; the next message is told which model made the result it reacts to.
-  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);expect(asked().previousResultBy).toBe('gemini-argon');
+  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);expect(asked().previousResultBy).toBe('gemini-argon');
   const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({picked:'deepseek-flash',pickedBy:'table',work:'footage'});
  }finally{db.close();}
 });
