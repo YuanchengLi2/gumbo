@@ -30,6 +30,8 @@ export interface CodeWorkspacePort {
  initialize():Promise<void>;
  execute(name:string,input:any,callId:string,turnId:string,signal:AbortSignal,scope?:WorkerScope):Promise<any>;
  unpublishedChanges?():string[];
+ /** Commands still running in the background past their wait window; finishing waits for them. */
+ runningCommands?():{id:string;command:string;runningSec:number}[];
  /** Errors scenes reported while playing (player or chat preview) for scenes changed in this request and its current drafts. */
  sceneErrors?(turnId?:string):{scene:string;assetId?:string;location?:string;message:string}[];
  /** Fact checks of what this request has published so far (mustFix blocks finishing unless kept with a reason). */

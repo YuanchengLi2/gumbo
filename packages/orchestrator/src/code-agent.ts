@@ -99,6 +99,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  // reason, or delegated work left blocked. Unfinished work is never reported as done.
  const completionBlocker=(kept:Set<string>=new Set()):string|undefined=>{
   if(!needsPublication())return;
+  const running=workspace.runningCommands?.()??[];
+  if(running.length)return`Commands are still running in the background: ${running.slice(0,4).map(c=>`${c.id} (${c.runningSec}s: ${c.command.slice(0,80)})`).join('; ')}. Wait for them with run_command processId, or stop them, before finishing.`;
   if(unchanged()&&!checkpoint.blockedTasks?.length)return;
   const current=publishedHead(),pending=current?[]:unpublished();
   if(!current&&pending.length&&headPublication())return`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`;

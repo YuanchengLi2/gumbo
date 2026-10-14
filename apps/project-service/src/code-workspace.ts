@@ -248,7 +248,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Publication rewrites project.json (new baseVersionId, resolved IDs); hand back its hash so the next edit is not stale.
    return{publication,...(checks&&(checks.mustFix.length||checks.notes.length)?{checks:{...checks,instruction:'Fix mustFix items and publish again, or keep one by listing its id with a reason in finish.kept. Notes are for your judgement.'}}:{}),projectJson:existsSync(document)?{hash:digest(readFileSync(document,'utf8')),baseVersionId:this.db.head(),note:'project.json now holds the published timeline with outputs emptied. Re-read it before further timeline edits.'}:undefined};
   });
-  if(name==='run_command')return this.exclusive(()=>this.scoped(scope,()=>this.command(input,callId,turnId,signal)));
+  if(name==='run_command')return input.processId?this.awaitCommand(input,signal):this.exclusive(()=>this.scoped(scope,()=>this.command(input,callId,turnId,signal)));
   throw new Error('Unknown workspace capability.');
  }
  /** Commands can touch any workspace file, so a scoped worker's command is checked afterwards: changes outside its boundary are reverted and reported. */
@@ -263,6 +263,20 @@ export class CodeWorkspace implements CodeWorkspacePort {
   for(const path of outside){const target=workspacePath(this.root,path),saved=before.get(path);if(saved){mkdirSync(dirname(target),{recursive:true});writeFileSync(target,saved);}else if(existsSync(target))unlinkSync(target);}
   if(outside.length)throw new Error(`This command changed files outside the task scope, so those changes were reverted: ${outside.slice(0,12).join(', ')}. Only change files under ${scope.writes.join(', ')||'your assigned paths'}${scope.canPublish?'':' and leave project.json to the lead'}.`);
   if(failure)throw failure;return result!;
+ }
+ /** Commands still running after the wait window keep running in the background (until their own timeout or a stop):
+  * the call returns their output so far, so the agent can tell the user what is happening, do other work, wait again or
+  * stop them, instead of sitting silent for ten minutes. Finishing the request waits for them. */
+ private background=new Map<string,{done:Promise<ProcessResult>;output:()=>string;started:number;command:string;stop:AbortController}>();
+ private readonly commandWaitMs=Number(process.env.DREAM_COMMAND_WAIT_MS)||240_000;
+ runningCommands(){return[...this.background].map(([id,b])=>({id,command:b.command.slice(0,200),runningSec:Math.round((Date.now()-b.started)/1000)}));}
+ private stillRunning(id:string,output:string,started:number){return{process:{id,status:'running',output:output.slice(-6000)},note:`Still running after ${Math.round((Date.now()-started)/1000)} s; it continues in the background until its timeout. Call run_command with processId "${id}" to wait for it again, or with processId and stop true to end it. Finishing the request waits for it.`};}
+ private async awaitCommand(input:any,signal:AbortSignal){
+  const entry=this.background.get(input.processId);
+  if(!entry){const row=this.db.db.prepare('SELECT status,json FROM workspace_processes WHERE id=?').get(input.processId) as {status:string;json:string}|undefined;if(row&&row.status!=='running'&&row.status!=='prepared')return{process:JSON.parse(row.json)};throw new Error('No command with that processId is running.');}
+  if(input.stop){entry.stop.abort();return{process:await entry.done,note:'Stopped.'};}
+  const result=await Promise.race([entry.done,new Promise<undefined>(resolve=>{const timer=setTimeout(resolve,this.commandWaitMs);signal.addEventListener('abort',()=>{clearTimeout(timer);resolve(undefined);},{once:true});})]);
+  signal.throwIfAborted();return result?{process:result}:this.stillRunning(input.processId,entry.output(),entry.started);
  }
  private async command(input:any,callId:string,turnId:string,signal:AbortSignal){
   {
@@ -279,7 +293,18 @@ export class CodeWorkspace implements CodeWorkspacePort {
     if(commands.length){const install=await this.options.run({id:callId+'-dependencies',projectId:this.db.meta.id,workspace:this.root,command:commands.join(' && '),cwd:'.',timeoutMs:600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(install.status!=='complete')throw new Error('Dependency restoration failed: '+install.output);this.db.setMeta('workspace_dependencies',currentDependencies);}
    }
    let result:ProcessResult;
-   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext(turnId);try{result=await this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},signal,text=>{output=(output+text).slice(-12000);emit('running');});}finally{stopFollowing();}this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(result.status,JSON.stringify(result),callId);}
+   if(old?.status==='complete'||old?.status==='failed'||old?.status==='cancelled')result=JSON.parse(old.json);else{
+    emit('running');this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);const stopFollowing=this.followContext(turnId),own=new AbortController(),started=Date.now();
+    const done=this.options.run({id:callId,projectId:this.db.meta.id,workspace:this.root,command:input.command,cwd:input.cwd??'.',timeoutMs:input.timeoutMs??600000},AbortSignal.any([signal,own.signal]),text=>{output=(output+text).slice(-12000);emit('running');})
+     .finally(stopFollowing).then(finished=>{this.db.db.prepare('UPDATE workspace_processes SET status=?,json=? WHERE id=?').run(finished.status,JSON.stringify(finished),callId);return finished;});
+    const first=await Promise.race([done,new Promise<undefined>(resolve=>setTimeout(resolve,this.commandWaitMs))]);
+    if(!first){
+     // Past the wait window: the command goes on in the background and this call returns, freeing publishing and other commands.
+     this.background.set(callId,{started,command:String(input.command),output:()=>output,stop:own,done:done.then(finished=>{output=finished.output;emit(ranToEnd(finished)?'complete':finished.status);this.followDraft(turnId);this.refreshContext();return finished;},error=>{const failed={id:callId,status:'failed',exitCode:null,startedAt:new Date(started).toISOString(),finishedAt:new Date().toISOString(),output:output+'\n'+String((error as Error)?.message??error),logPath:'',isolation:'local',commandHash:digest(String(input.command))} as ProcessResult;emit('failed');return failed;}).finally(()=>this.background.delete(callId))});
+     return this.stillRunning(callId,output,started);
+    }
+    result=first;
+   }
    output=result.output;emit(ranToEnd(result)?'complete':result.status);this.followDraft(turnId);signal.throwIfAborted();if(result.status==='complete'){const pythonPackages=JSON.stringify(workspaceEnvironment(this.root).pythonPackages);if(existsSync(join(this.root,'.python-packages'))&&pythonPackages!==this.db.getMeta('workspace_python_packages')){const lock=await this.options.run({id:callId+'-python-lock',projectId:this.db.meta.id,workspace:this.root,command:'python -m pip freeze --path "$DREAM_PYTHON_PACKAGES" > "$DREAM_WORKSPACE/requirements.lock.txt"',cwd:'.',timeoutMs:60000},signal,text=>{output=(output+text).slice(-12000);emit('running');});if(lock.status!=='complete')throw new Error('Could not record Python dependencies: '+lock.output);this.db.setMeta('workspace_python_packages',pythonPackages);}this.db.setMeta('workspace_dependencies',dependencyHash());this.refreshContext();}
    // Commands never publish: a check or install mid-edit must not publish a half-finished project.json. Use publish_project.
    return{process:result};

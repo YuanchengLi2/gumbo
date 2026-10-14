@@ -6,6 +6,14 @@ import {ProcessRequestSchema,type ProcessRequest,type ProcessResult} from '@drea
 import {workspacePath} from '../../../../packages/project-db/src/workspace-store';
 
 const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
+/** Unix tools for programs that start their own shell: Python's os.system, Node's exec and npm scripts get cmd.exe on
+ * Windows, where head, grep or sed did not exist ("'head' is not recognized"). Each is a one-line .cmd that runs BusyBox's
+ * tool, placed last on PATH so the computer's own programs of the same name still win. */
+export const unixTools=['awk','basename','cat','cut','diff','dirname','du','env','expr','find','grep','gunzip','gzip','head','ls','md5sum','mkdir','mktemp','mv','cp','printf','readlink','realpath','rm','sed','seq','sh','sha256sum','sleep','sort','stat','tail','tar','tee','touch','tr','uniq','unzip','wc','wget','which','xargs'];
+export function unixToolShims(folder:string,busybox:string){
+ const marker=join(folder,'.busybox');if(existsSync(marker)&&readFileSync(marker,'utf8')===busybox)return folder;
+ mkdirSync(folder,{recursive:true});for(const tool of unixTools)writeFileSync(join(folder,tool+'.cmd'),`@"${busybox}" ${tool} %*\r\n`);writeFileSync(marker,busybox);return folder;
+}
 // The app's own secrets never reach a command run on the user's computer.
 const secret=/^(?:DREAM_|SUPABASE|ANTHROPIC|OPENAI|GROQ|ELECTRON_|NODE_OPTIONS$)|(?:TOKEN|SECRET|PASSWORD|API_?KEY)/i;
 export class CodeRuntime {
@@ -41,7 +49,8 @@ export class CodeRuntime {
   // The app's own ffmpeg and ffprobe, so the agent's programs can process media without installing them first.
   const mediaTools=[...new Set([dirname(this.paths.ffmpeg),dirname(this.paths.ffprobe)])].filter(dir=>existsSync(dir));
   // An explicit environment keeps app/provider credentials out of child processes.
-  const environment={SystemRoot:systemRoot,WINDIR:systemRoot,ComSpec:join(systemRoot,'System32','cmd.exe'),PATH:[join(root,'node_modules','.bin'),join(root,'.npm'),join(root,'.python-packages','bin'),join(root,'.venv','Scripts'),...(shared?[join(libraries,'node_modules','.bin')]:[]),node,python,...mediaTools,join(systemRoot,'System32')].join(';'),PATHEXT:'.COM;.EXE;.BAT;.CMD',NODE_OPTIONS:'--preserve-symlinks --preserve-symlinks-main'+(shared?' --require='+JSON.stringify(join(libraries,'shared-modules.cjs')):''),...(shared?{NODE_PATH:join(libraries,'node_modules'),DREAM_SHARED_NODE:libraries}:{}),MPLCONFIGDIR:join(cache,'matplotlib'),IMAGEIO_FFMPEG_EXE:this.paths.ffmpeg,XDG_CACHE_HOME:cache,TEMP:cache,TMP:cache,DREAM_TEMP:longPath(join(cache,'tmp')),HOME:cache,USERPROFILE:cache,APPDATA:cache,LOCALAPPDATA:cache,PYTHONHOME:python,PYTHONPATH:[longPath(join(root,'.python-packages')),...(shared?[longPath(join(libraries,'python'))]:[])].join(';'),PYTHONNOUSERSITE:'1',PIP_TARGET:longPath(join(root,'.python-packages')),PIP_CACHE_DIR:join(cache,'pip'),PIP_DISABLE_PIP_VERSION_CHECK:'1',npm_config_cache:join(cache,'npm'),npm_config_prefix:join(root,'.npm'),npm_config_update_notifier:'false',npm_config_audit:'false',npm_config_dangerously_allow_all_scripts:'true',DREAM_WORKSPACE:root,DREAM_PYTHON_PACKAGES:longPath(join(root,'.python-packages'))};
+  const shims=unixToolShims(join(cache,'unix-tools'),shell);
+  const environment={SystemRoot:systemRoot,WINDIR:systemRoot,ComSpec:join(systemRoot,'System32','cmd.exe'),PATH:[join(root,'node_modules','.bin'),join(root,'.npm'),join(root,'.python-packages','bin'),join(root,'.venv','Scripts'),...(shared?[join(libraries,'node_modules','.bin')]:[]),node,python,...mediaTools,join(systemRoot,'System32'),shims].join(';'),PATHEXT:'.COM;.EXE;.BAT;.CMD',NODE_OPTIONS:'--preserve-symlinks --preserve-symlinks-main'+(shared?' --require='+JSON.stringify(join(libraries,'shared-modules.cjs')):''),...(shared?{NODE_PATH:join(libraries,'node_modules'),DREAM_SHARED_NODE:libraries}:{}),MPLCONFIGDIR:join(cache,'matplotlib'),IMAGEIO_FFMPEG_EXE:this.paths.ffmpeg,XDG_CACHE_HOME:cache,TEMP:cache,TMP:cache,DREAM_TEMP:longPath(join(cache,'tmp')),HOME:cache,USERPROFILE:cache,APPDATA:cache,LOCALAPPDATA:cache,PYTHONHOME:python,PYTHONPATH:[longPath(join(root,'.python-packages')),...(shared?[longPath(join(libraries,'python'))]:[])].join(';'),PYTHONNOUSERSITE:'1',PIP_TARGET:longPath(join(root,'.python-packages')),PIP_CACHE_DIR:join(cache,'pip'),PIP_DISABLE_PIP_VERSION_CHECK:'1',npm_config_cache:join(cache,'npm'),npm_config_prefix:join(root,'.npm'),npm_config_update_notifier:'false',npm_config_audit:'false',npm_config_dangerously_allow_all_scripts:'true',DREAM_WORKSPACE:root,DREAM_PYTHON_PACKAGES:longPath(join(root,'.python-packages'))};
   const controller=new AbortController();this.owned.add(controller);const stop=()=>controller.abort();signal.addEventListener('abort',stop,{once:true});
   // Old staged dream-render clients receive a terminal migration response; no
   // render implementation or rendering binaries are exposed to chat processes.
@@ -63,7 +72,9 @@ export class CodeRuntime {
  private runLocal(request:ProcessRequest,shell:string,script:string,cwd:string,sandbox:Record<string,string>,signal:AbortSignal,receiptPath:string,logPath:string,commandHash:string,onOutput:(text:string)=>void){
   const user=Object.fromEntries(Object.entries(process.env).filter(([key,value])=>value!==undefined&&!secret.test(key))) as Record<string,string>;
   const {HOME:_home,USERPROFILE:_profile,APPDATA:_appData,LOCALAPPDATA:_localAppData,TEMP:_temp,TMP:_tmp,SystemRoot:_root,WINDIR:_windir,ComSpec:_comspec,...tools}=sandbox;
-  const env:Record<string,string>={...user,...tools,PATH:[sandbox.PATH,user.PATH??user.Path??''].filter(Boolean).join(';')};delete env.Path;
+  // The Unix tool shims go last, after the user's own PATH.
+  const [shims]=sandbox.PATH.split(';').slice(-1),own=sandbox.PATH.split(';').slice(0,-1).join(';');
+  const env:Record<string,string>={...user,...tools,PATH:[own,user.PATH??user.Path??'',shims].filter(Boolean).join(';')};delete env.Path;
   const startedAt=new Date().toISOString();let output='';
   return new Promise<ProcessResult>((ok,fail)=>{
    const child=spawn(shell,['sh','-c',script],{cwd,env:env as NodeJS.ProcessEnv,windowsHide:true,stdio:['ignore','pipe','pipe']});
@@ -72,9 +83,15 @@ export class CodeRuntime {
    const abort=()=>{reason='cancelled';kill();};signal.addEventListener('abort',abort,{once:true});
    const take=(chunk:Buffer)=>{const text=chunk.toString();output=(output+text).slice(-12000);appendFileSync(logPath,text);onOutput(text);};
    child.stdout.on('data',take);child.stderr.on('data',take);child.on('error',error=>{clearTimeout(timer);signal.removeEventListener('abort',abort);fail(error);});
-   child.on('close',code=>{clearTimeout(timer);signal.removeEventListener('abort',abort);
-    const result:ProcessResult={id:request.id,status:reason??(code===0?'complete':'failed'),exitCode:code,startedAt,finishedAt:new Date().toISOString(),output:reason==='interrupted'?output+`\nStopped after ${Math.round(request.timeoutMs/1000)} seconds.`:output,logPath:request.id+'.log',isolation:'local',commandHash};
-    writeFileSync(receiptPath,JSON.stringify(result));ok({...result,logPath});});
+   // A command is over when its shell exits. Waiting for its output pipes to close as well hung until the timeout whenever
+   // the command left a program running in the background (it keeps the pipes open), so after the shell exits the pipes
+   // get a moment to drain and are then let go.
+   let done=false,drain:ReturnType<typeof setTimeout>|undefined;
+   const finish=(code:number|null,detached=false)=>{if(done)return;done=true;clearTimeout(timer);if(drain)clearTimeout(drain);signal.removeEventListener('abort',abort);
+    const result:ProcessResult={id:request.id,status:reason??(code===0?'complete':'failed'),exitCode:code,startedAt,finishedAt:new Date().toISOString(),output:(reason==='interrupted'?output+`\nStopped after ${Math.round(request.timeoutMs/1000)} seconds.`:output)+(detached&&!reason?'\n(A program this command started is still running in the background; its later output is not captured.)':''),logPath:request.id+'.log',isolation:'local',commandHash};
+    writeFileSync(receiptPath,JSON.stringify(result));ok({...result,logPath});};
+   child.on('exit',code=>{drain=setTimeout(()=>{child.stdout?.destroy();child.stderr?.destroy();finish(code,true);},1500);});
+   child.on('close',code=>finish(code));
   });
  }
  stop(){for(const controller of this.owned)controller.abort();}
