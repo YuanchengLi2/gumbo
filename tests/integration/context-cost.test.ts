@@ -12,7 +12,8 @@ import {fixedPrefix,imageSize,imageTokens} from '../../scripts/cost-anatomy';
 it('keeps the editing agent\'s fixed prefix small: the scene-authoring reference is read from context/engine.md on demand',()=>{
  // About 250 tokens of it are the rule that the user's choices win and the editing-taste summary, and about 70 the
  // per-part finish report (October 13, 2026).
- const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(7700);
+ // Raised from 7,700 on October 14, 2026 for the footage index (find_shots) and listening: core capabilities, not wording.
+ const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(8000);
  expect(codePrompt).toContain('## The project document');expect(codePrompt).toContain('read context/engine.md');expect(codePrompt).not.toContain('## @dream/engine');
  expect(sceneReference).toContain('## @dream/engine');expect(sceneReference).toContain('## Example: score');
  // The two halves together are the whole reference.

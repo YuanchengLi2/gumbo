@@ -25,7 +25,7 @@ export class Ingest {
  // Transcription runs for at most two sources at a time, so a bulk import does not flood the speech service.
  private speechQueue:Asset[]=[];
  private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;if(current?.license)asset.license=current.license;this.db.saveAsset(asset);}
- constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>){}
+ constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>,private indexShots?:(asset:Asset)=>void){}
  recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence)continue;
   // Speech is transcribed (or a saved transcript fitted to its sound again, from saved chunks) for imports and for media
   // the agent made with code alike.
@@ -132,6 +132,8 @@ export class Ingest {
   }
   if(!background){a.status='ready';a.playback=playbackCapabilities(a);this.save(a);publish();if(!requested)this.onReady?.(a);return;}
   // Nothing here interprets the footage for the agent: it looks at frames and measures what it needs itself.
+  // The footage index (shot-index.ts) is built in its own queue, so a long video's shots never hold up its other steps.
+  if(a.kind!=='audio')this.indexShots?.(a);
   if(a.hasAudio&&a.audioPath&&existsSync(a.audioPath))await stage('loudness',async()=>{a.loudnessLufs=await measureLoudness(this.ffmpeg,a.audioPath!,signal);},undefined,':loudness-1');
   const sidecar=process.env.DREAM_INGEST_BINARY;
   for(const name of requested==='audio_features'?['audio_features' as const]:[]){

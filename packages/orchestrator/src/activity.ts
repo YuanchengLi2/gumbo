@@ -6,6 +6,7 @@ export function toolActivity(name:string|undefined,input:any):string|undefined{
  const command=String(input.command??'');
  if(name==='delegate'&&Array.isArray(input.tasks))return input.tasks.length===1?String(input.tasks[0]?.title??'Assigning the edit'):`Working on ${input.tasks.length} parts in parallel`;
  const generic:Record<string,string>={remember_decision:'Remembering your editing preference',set_project_title:'Naming project',list_files:'Checking project materials',search:'Searching project context',read_file:'Reviewing the edit',write_file:'Creating the edit',edit_file:'Refining the edit',fetch_url:'Reading a web page',web_search:'Searching the web',import_media:'Importing media',run_command:/\b(?:npm (?:install|ci|rebuild)|pip install)\b/.test(command)?'Preparing editing tools':'Preparing the edit',bundle_scene:'Preparing the scene',check_outputs:'Previewing the scene',import_resources:'Bringing in files',read_transcript:'Reading the transcript',publish_project:'Updating the preview',view_media:'Inspecting media',update_tasks:'Updating tasks',propose_file_changes:typeof input.title==='string'&&input.title.trim()?input.title.trim():'Preparing file changes',finish:'Completing the request'};
+ if(name==='find_shots')return input.query?`Searching your footage for “${String(input.query).slice(0,60)}”`:'Going through your footage';
  if(name==='find_media')return input.online?`Searching free ${input.online} libraries`:'Finding media on your computer';
  if(name&&generic[name])return generic[name];
  if(name==='computer_files'){
