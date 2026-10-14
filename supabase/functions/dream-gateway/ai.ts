@@ -1,7 +1,7 @@
 import {requestStatus,type RequestStore} from './inference-requests.ts';
 import {streamProvider} from './streaming.ts';
 import {readMessageStream} from '../_shared/stream.ts';
-import {providerModels,providerSecrets,providerNames,providerEndpoints,chatRequest,responsesRequest,anthropicStream,type ProviderId} from './providers.ts';
+import {providerModels,providerSecrets,providerNames,providerEndpoints,chatRequest,responsesRequest,anthropicStream,anthropicMessages,type ProviderId} from './providers.ts';
 import {inferencePolicy,cachedPrompt,usageCost,validProfile,validTaskBudget,providerHeaders,pricingVersion,promptEstimate,refusalFallback,gatewayFeatures,FALLBACK_BETA,TASK_BUDGET_BETA} from './inference-policy.ts';
 
 // Disabled for this instance if the provider rejects requests carrying fallbacks while accepting them without it.
@@ -31,7 +31,7 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
  let response:Response;const abort=new AbortController();
  if(other)return handleProvider(body,userId,{db,usageId,maxTokens,abort,fetcher,timeoutMs,requests,key:providerKeys[other.provider]!});
  const policyFor=(budget:boolean)=>inferencePolicy(body.model,body.purpose,body.profile,budget?{taskBudget:body.taskBudget}:{});
- const send=(fallback:boolean,budget:boolean)=>fetcher('https://api.anthropic.com/v1/messages',{method:'POST',headers:providerHeaders(key!,[...(fallback?[FALLBACK_BETA]:[]),...(budget?[TASK_BUDGET_BETA]:[])]),body:JSON.stringify({model:body.model,max_tokens:maxTokens,messages:body.messages,...cachedPrompt(body.system,body.tools,body.cacheTtl),...policyFor(budget),tool_choice:body.tool_choice,stream:body.stream===true,...(fallback?{fallbacks:'default'}:{})}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(timeoutMs)])});
+ const send=(fallback:boolean,budget:boolean)=>fetcher('https://api.anthropic.com/v1/messages',{method:'POST',headers:providerHeaders(key!,[...(fallback?[FALLBACK_BETA]:[]),...(budget?[TASK_BUDGET_BETA]:[])]),body:JSON.stringify({model:body.model,max_tokens:maxTokens,messages:anthropicMessages(body.messages),...cachedPrompt(body.system,body.tools,body.cacheTtl),...policyFor(budget),tool_choice:body.tool_choice,stream:body.stream===true,...(fallback?{fallbacks:'default'}:{})}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(timeoutMs)])});
  let withFallback=fallbackAccepted&&refusalFallback(body.model),withBudget=taskBudgetAccepted&&!!body.taskBudget;
  try{
   response=await send(withFallback,withBudget);
@@ -70,7 +70,7 @@ async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;ma
  }
  const policy={pricingVersion,thinkingDisplay:'omitted',maxTokens:o.maxTokens,features:['cost-receipts']};
  if(!response.ok){
-  const detail=await response.json().catch(()=>({})) as any,message=detail?.error?.message??`${providerNames[model.provider]} returned ${response.status}.`,retryable=[429,500,502,503,504].includes(response.status);
+  const body_=await response.json().catch(()=>({})) as any,detail=Array.isArray(body_)?body_[0]:body_,message=detail?.error?.message?`${providerNames[model.provider]} refused the request (${response.status}): ${String(detail.error.message).slice(0,300)}`:`${providerNames[model.provider]} returned ${response.status}.`,retryable=[429,500,502,503,504].includes(response.status);
   await o.db.from('dream_usage').update({status:'failed',provider_status:response.status,error_code:detail?.error?.type??detail?.error?.code??'provider_error'}).eq('id',o.usageId);
   const answer={status:response.status,body:{error:{message,type:detail?.error?.type??'provider_error'},dream_policy:policy,dream_request:{status:'failed',retryable,retryAfterMs:retryable?2000:undefined}}};
   await o.requests?.finish(userId,body.requestId,'failed',answer.body,message);return answer;

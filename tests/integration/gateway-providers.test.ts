@@ -60,3 +60,17 @@ it('answers a non-streaming request from a Gemini stream, and says which key is 
  const missing=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-1',max_tokens:2048},'user',{db,key:'anthropic',fetcher});
  expect(missing.status).toBe(503);expect(missing.body.error.message).toContain('DEEPSEEK_API_KEY');expect(missing.body.error.type).toBe('provider_not_configured');
 });
+
+it('sends Gemini\'s signature on a function call back with it, so a second step is not refused, and never sends it to Claude',async()=>{
+ // Gemini 3 answered the vlog's first step with a call to read_file, then refused the next step (400): the call's
+ // thought_signature had not come back with it.
+ const sse=['data: '+JSON.stringify({choices:[{delta:{tool_calls:[{index:0,id:'call_1',type:'function',function:{name:'read_file',arguments:''},extra_content:{google:{thought_signature:'SIG=='}}}]}}]}),
+  'data: '+JSON.stringify({choices:[{delta:{tool_calls:[{index:0,function:{arguments:'{"path":"project.json"}'}}]},finish_reason:'tool_calls'}],usage:{prompt_tokens:10,completion_tokens:5}}),'data: [DONE]'].join('\n\n')+'\n\n';
+ const {anthropicStream,anthropicMessages}=await import('../../supabase/functions/dream-gateway/providers');
+ const assembled=(await read(anthropicStream(new Response(sse),providerModels['gemini-3.8-flash'],'gemini-3.8-flash','r1').body!)).result();
+ const call=assembled.content.find((b:any)=>b.type==='tool_use');expect(call).toMatchObject({id:'call_1',name:'read_file',input:{path:'project.json'},signature:'SIG=='});
+ const next={model:'gemini-3.8-flash',system:'x',messages:[{role:'user',content:'why is it choppy'},{role:'assistant',content:[call]},{role:'user',content:[{type:'tool_result',tool_use_id:'call_1',content:'{}'}]}]};
+ expect(chatRequest(next,providerModels['gemini-3.8-flash'],1000).messages[2].tool_calls[0]).toEqual({id:'call_1',type:'function',function:{name:'read_file',arguments:'{"path":"project.json"}'},extra_content:{google:{thought_signature:'SIG=='}}});
+ expect(chatRequest({...next,model:'deepseek-flash'},providerModels['deepseek-flash'],1000).messages[2].tool_calls[0].extra_content).toBeUndefined();
+ expect(JSON.stringify(anthropicMessages(next.messages))).not.toContain('SIG==');
+});

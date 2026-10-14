@@ -23,6 +23,8 @@ export function providerCost(model:ProviderModel,usage:Record<string,any>){retur
 const systemText=(system:unknown)=>typeof system==='string'?system:Array.isArray(system)?system.filter((b:any)=>b?.type==='text').map((b:any)=>b.text).join('\n\n'):'';
 const dataUrl=(b:any)=>b?.source?.type==='base64'?`data:${b.source.media_type};base64,${b.source.data}`:b?.source?.type==='url'?b.source.url:undefined;
 const noVision='[An image was here; this model cannot see images.]';
+/** The conversation as Anthropic takes it: a signature on a tool call (Gemini's, kept for Gemini) is not one of its fields. */
+export const anthropicMessages=(messages:any[])=>messages.map(m=>Array.isArray(m?.content)&&m.content.some((b:any)=>b?.type==='tool_use'&&'signature' in b)?{...m,content:m.content.map((b:any)=>{if(b?.type!=='tool_use'||!('signature' in b))return b;const {signature:_signature,...rest}=b;return rest;})}:m);
 /** Custom tools as plain functions; Anthropic's own server tools (web search) have no equivalent and are left out. */
 export function functionTools(tools:unknown){return(Array.isArray(tools)?tools:[]).filter((t:any)=>t&&typeof t.name==='string'&&(!t.type||t.type==='custom')).map((t:any)=>({name:t.name,description:t.description??'',parameters:t.input_schema??{type:'object',properties:{}}}));}
 /** A tool result's text, with any images it carried returned separately (both APIs take images only in user turns). */
@@ -40,7 +42,9 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
   if(typeof m.content==='string'){messages.push({role:m.role,content:m.content});continue;}
   const blocks:any[]=Array.isArray(m.content)?m.content:[];
   if(m.role==='assistant'){
-   const text=blocks.filter(b=>b.type==='text').map(b=>b.text).join(''),calls=blocks.filter(b=>b.type==='tool_use').map(b=>({id:b.id,type:'function',function:{name:b.name,arguments:JSON.stringify(b.input??{})}}));
+   const text=blocks.filter(b=>b.type==='text').map(b=>b.text).join(''),calls=blocks.filter(b=>b.type==='tool_use').map(b=>({id:b.id,type:'function',function:{name:b.name,arguments:JSON.stringify(b.input??{})},
+    // Gemini 3 signs each function call and refuses the next request (400) unless the signature comes back with it.
+    ...(b.signature&&model.provider==='google'?{extra_content:{google:{thought_signature:b.signature}}}:{})}));
    if(text||calls.length)messages.push({role:'assistant',content:text||null,...(calls.length?{tool_calls:calls}:{})});continue;
   }
   const parts:any[]=[],images:string[]=[];
@@ -95,6 +99,8 @@ class Events{
  text(delta:string){if(!delta)return;this.start();if(this.open?.kind!=='text'){this.close();this.index++;this.open={kind:'text'};this.send('content_block_start',{type:'content_block_start',index:this.index,content_block:{type:'text',text:''}});}
   this.send('content_block_delta',{type:'content_block_delta',index:this.index,delta:{type:'text_delta',text:delta}});}
  tool(key:string,id:string,name:string){this.start();this.close();this.index++;this.tools++;this.open={kind:'tool',key};this.send('content_block_start',{type:'content_block_start',index:this.index,content_block:{type:'tool_use',id,name,input:{}}});}
+ /** A tool call's signature (Gemini's thought_signature), kept on the call so it can be sent back with it. */
+ signature(key:string,value:string){if(value&&this.open?.kind==='tool'&&this.open.key===key)this.send('content_block_delta',{type:'content_block_delta',index:this.index,delta:{type:'signature_delta',signature:value}});}
  args(key:string,partial:string){if(partial&&this.open?.kind==='tool'&&this.open.key===key)this.send('content_block_delta',{type:'content_block_delta',index:this.index,delta:{type:'input_json_delta',partial_json:partial}});}
  isOpenTool(key:string){return this.open?.kind==='tool'&&this.open.key===key;}
  finish(stop:'end_turn'|'max_tokens'|'refusal'|'tool_use',usage:{input:number;cached:number;output:number}){
@@ -132,7 +138,7 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
      if(typeof delta.content==='string')out.text(delta.content);
      for(const call of delta.tool_calls??[]){const n=Number(call.index??0);
       if(!toolIds.has(n)||call.id&&call.id!==toolIds.get(n)){const id=call.id??`call_${n}_${toolIds.size}`;toolIds.set(n,id);out.tool(id,id,call.function?.name??'tool');}
-      out.args(toolIds.get(n)!,call.function?.arguments??'');}
+      out.args(toolIds.get(n)!,call.function?.arguments??'');const signature=call.extra_content?.google?.thought_signature;if(typeof signature==='string')out.signature(toolIds.get(n)!,signature);}
      if(choice?.finish_reason)stop=choice.finish_reason==='length'?'max_tokens':choice.finish_reason==='content_filter'?'refusal':'end_turn';
      if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:u.completion_tokens??0};}
     }
