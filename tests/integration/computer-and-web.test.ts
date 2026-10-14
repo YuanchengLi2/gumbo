@@ -43,7 +43,7 @@ it('reads a page as text and refuses addresses on this computer or its network',
 
 it('gives every agent with tools web search in its model\'s version, resumes a paused search, and counts searches in the cost',async()=>{
  // Later search versions bring a server code sandbox the agent mistook for its workspace.
- expect(webSearchTool(models.agent).type).toBe('web_search_20250305');
+ expect(webSearchTool(models.agent)).toMatchObject({type:'web_search_20250305'});
  const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.agent,usage)).toBeCloseTo(gatewayCost(models.agent,usage,[2,10]));expect(usageCost(models.agent,usage)).toBeGreaterThan(.03);
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-web-')));
  try{

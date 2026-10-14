@@ -39,6 +39,7 @@ import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
 import {viewEdit} from './edit-view';
+import {downloadMedia,type OnlineMedia} from './media-download';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
@@ -66,7 +67,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  /** Parallel workers share one workspace: commands and publication run one at a time (dependency installs, lockfiles, project.json). */
  private exclusive<T>(work:()=>Promise<T>):Promise<T>{const next=this.queue.then(work,work);this.queue=next.catch(()=>{});return next;}
  async preparePackages(signal:AbortSignal){await this.initialize();await prepareProjectPackages(this.db,this.options.run,this.publishEvent,signal);this.refreshContext();this.db.setMeta('workspace_python_packages',JSON.stringify(workspaceEnvironment(this.root).pythonPackages));this.db.workspace.associate(this.db.head(),this.db.workspace.capture().hash);}
- constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal,enough?:()=>boolean)=>Promise<void>;transcribeRange?:(assetId:string,startSec:number,endSec:number,options:{language?:string;translate?:boolean},signal:AbortSignal)=>Promise<unknown>;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>;importMany?:(paths:string[],requestId:string,copy:boolean|undefined,signal:AbortSignal)=>Promise<{permissionRequired?:true;results?:({asset:any}|{path:string;error:string})[]}>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
+ constructor(private db:ProjectDB,private options:{run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;ensureTranscript?:(assetId:string,signal:AbortSignal,enough?:()=>boolean)=>Promise<void>;transcribeRange?:(assetId:string,startSec:number,endSec:number,options:{language?:string;translate?:boolean},signal:AbortSignal)=>Promise<unknown>;mediaSearch?:(request:{query:string;kind:string;limit:number},signal:AbortSignal)=>Promise<any>;renderReview?:ReviewRenderer;importSources?:(paths:string[],requestId:string,signal:AbortSignal)=>Promise<any>;importMany?:(paths:string[],requestId:string,copy:boolean|undefined,signal:AbortSignal)=>Promise<{permissionRequired?:true;results?:({asset:any}|{path:string;error:string})[]}>},private publishEvent:(type:string,payload:any)=>void){this.root=join(db.folder,'Workspace');this.index=new WorkspaceIndex(db,this.root);}
  private computer?:ComputerStatus;
  /** What the agent knows about the user's computer: whether access is allowed, where new media usually lands, and the local date and time zone that "today" refers to. */
  private computerContext(){const clock={now:new Date().toISOString(),timeZone:Intl.DateTimeFormat().resolvedOptions().timeZone};return this.computer?.access?{access:true,...clock,mediaFolders:(this.computer.folders??[]).filter(f=>f.exists).map(f=>({name:f.name,path:f.path,...(f.removable?{removable:true}:{})}))}:{access:false,...clock,note:'find_media and import_media ask the user to allow computer access when they are first used.'};}
@@ -98,7 +99,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   const words=this.db.db.prepare("SELECT COUNT(*) AS n FROM index_records WHERE kind='words' AND json_extract(json,'$.assetId')=?"),job=this.db.db.prepare("SELECT status FROM jobs WHERE asset_id=? AND step='transcription'");
   return captureOrder(this.db.footage().assets).map(asset=>{
    const status=(job.get(asset.id) as any)?.status??'not_started',until=status==='running'?this.transcribedUntil(asset.id):0;
-   return{assetId:asset.id,filename:asset.filename,kind:asset.kind,durationSec:asset.durationSec,...(asset.width?{width:asset.width,height:asset.height}:{}),...(asset.fps?{fps:asset.fps}:{}),hasAudio:asset.hasAudio,...(asset.capturedAt?{capturedAt:asset.capturedAt}:{}),...(notes[asset.id]?{seen:notes[asset.id]}:{}),
+   return{assetId:asset.id,filename:asset.filename,kind:asset.kind,durationSec:asset.durationSec,...(asset.license?{license:asset.license.name,...(asset.license.attribution?{credit:asset.license.attribution}:{})}:{}),...(asset.width?{width:asset.width,height:asset.height}:{}),...(asset.fps?{fps:asset.fps}:{}),hasAudio:asset.hasAudio,...(asset.capturedAt?{capturedAt:asset.capturedAt}:{}),...(notes[asset.id]?{seen:notes[asset.id]}:{}),
     path:relative(this.db.folder,asset.originalPath).replaceAll('\\','/').startsWith('Media/')?relative(this.root,asset.originalPath).replaceAll('\\','/'):`../Sources/${asset.id}/${basename(asset.originalPath)}`,
     transcript:asset.hasAudio?{status,...(until?{transcribedUntilSec:Math.round(until)}:{}),wordCount:(words.get(asset.id) as any).n,file:`context/transcripts/${asset.id}.json`}:undefined};
   });}
@@ -206,6 +207,13 @@ export class CodeWorkspace implements CodeWorkspacePort {
    const {until,words:all}=readable(),running=until!==undefined;
    return{assetId:asset.id,filename:asset.filename,revision:running?digest('growing:'+asset.id+':'+asset.fingerprint):digest(JSON.stringify(all)),status:status(),coverage:coverageSummary(this.db.loadState('speech-coverage:'+asset.id)),...(running?{transcribedUntilSec:Math.round(until*10)/10,note:`Transcription is still running: speech from the start to ${Math.round(until)}s of ${Math.round(asset.durationSec)}s is transcribed. Work on that part now; read again from nextOffset for more, and state updates show how far it has got.`}:{}),words:wordLines(all.slice(offset,offset+limit)),totalWords:all.length,nextOffset:offset+limit<all.length||running?Math.min(offset+limit,all.length):null};
   }
+  if(name==='find_media'&&input.online){
+   // Free-to-use libraries online; each result is saved so importing online:<id> fetches exactly it, with its license.
+   if(!this.options.mediaSearch)throw new Error('Online media search is unavailable.');if(!input.query)throw new Error('Give a query for the online search.');
+   const found=await this.options.mediaSearch({query:input.query,kind:input.online,limit:Math.min(8,input.limit??8)},signal),results:OnlineMedia[]=found.results??[];
+   for(const r of results)this.db.saveState('online-media:'+r.id,r);
+   return{query:found.query,kind:found.kind,found:results.map(r=>[`online:${r.id}`,r.kind,r.title,r.creator||'unknown',r.license,r.durationSec?r.durationSec+'s':'',(r as any).width?`${(r as any).width}x${(r as any).height}`:'',r.source].filter(Boolean).join(' | ')),searched:found.sources,...(found.notSetUp?.length?{notSetUp:found.notSetUp}:{}),next:results.length?'Import the ones that may fit with import_media (paths online:<id>), then look at them before using them. Their license and credit stay with each file.':'Nothing usable matched. Try other words.'};
+  }
   if(name==='find_media'){
    if(!this.options.files)throw new Error('Computer file access is unavailable.');
    const result:any=await this.options.files({action:'find_media',...input},signal);if('permissionRequired'in result)throw new FileApprovalRequired();
@@ -216,10 +224,15 @@ export class CodeWorkspace implements CodeWorkspacePort {
   }
   if(name==='import_media'){
    if(!this.options.importMany)throw new Error('Media import is unavailable.');
-   const outcome=await this.options.importMany(input.paths,callId,input.copy,signal);if(outcome.permissionRequired)throw new FileApprovalRequired();
-   const results=outcome.results??[],assets=results.flatMap(r=>'asset'in r?[r.asset]:[]),failed=results.flatMap(r=>'error'in r?[r]:[]);
+   // online:<id> from a search is downloaded into Media/Downloaded first and imported like a file, keeping its license.
+   const local:string[]=input.paths.filter((p:string)=>!p.startsWith('online:')),downloads:{path:string;item:OnlineMedia}[]=[],failedOnline:{path:string;error:string}[]=[];
+   for(const p of input.paths.filter((p:string)=>p.startsWith('online:'))){const item=this.db.loadState<OnlineMedia>('online-media:'+p.slice(7));if(!item){failedOnline.push({path:p,error:'Not a result of an online find_media search in this project.'});continue;}
+    try{downloads.push({path:await downloadMedia(item,join(this.db.folder,'Media','Downloaded'),signal),item});}catch(error){signal.throwIfAborted();failedOnline.push({path:p,error:(error as Error).message});}}
+   const outcome=local.length||downloads.length?await this.options.importMany([...local,...downloads.map(d=>d.path)],callId,input.copy,signal):{results:[]};if(outcome.permissionRequired)throw new FileApprovalRequired();
+   downloads.forEach((d,n)=>{const r=outcome.results?.[local.length+n];if(!r||!('asset'in r))return;const current=this.db.footage().assets.find(a=>a.id===r.asset.id);if(!current)return;current.license={name:d.item.license,url:d.item.licenseUrl,source:d.item.source,page:d.item.page,creator:d.item.creator,attribution:d.item.attribution};this.db.saveAsset(current);r.asset.license=current.license;});
+   const results=[...(outcome.results??[]),...failedOnline],assets=results.flatMap(r=>'asset'in r?[r.asset]:[]),failed=results.flatMap(r=>'error'in r?[r]:[]);
    const ordered=[...assets].sort((a,b)=>(a.capturedAt??'').localeCompare(b.capturedAt??''));
-   const content:any[]=[{type:'text',text:JSON.stringify({imported:ordered.map(a=>({assetId:a.id,filename:a.filename,kind:a.kind,capturedAt:a.capturedAt,durationSec:a.durationSec,width:a.width,height:a.height,hasAudio:a.hasAudio})),failed,note:'Listed in capture order. Playback copies and transcripts continue in the background. Look at what you need with view_media (frames at the times you choose) or with your own code; the timed words arrive in context/transcripts/<assetId>.json.'})}];
+   const content:any[]=[{type:'text',text:JSON.stringify({imported:ordered.map(a=>({assetId:a.id,filename:a.filename,kind:a.kind,capturedAt:a.capturedAt,durationSec:a.durationSec,width:a.width,height:a.height,hasAudio:a.hasAudio,...(a.license?{license:a.license.name,...(a.license.attribution?{credit:a.license.attribution}:{})}:{})})),failed,note:'Listed in capture order. Playback copies and transcripts continue in the background. Look at what you need with view_media (frames at the times you choose) or with your own code; the timed words arrive in context/transcripts/<assetId>.json.'})}];
    this.refreshContext();
    return{assets:ordered.map(a=>a.id),media:ordered.map(a=>({id:a.id,name:a.filename,kind:a.kind})),failed,content};
   }

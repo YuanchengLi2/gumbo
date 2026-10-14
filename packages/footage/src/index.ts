@@ -1,4 +1,6 @@
 import { z } from 'zod';
+/** Where downloaded media came from and the license it may be used under (what crediting it takes, when it does). */
+export const MediaLicenseSchema=z.object({name:z.string().max(80),url:z.string().max(500).optional(),source:z.string().max(120),page:z.string().max(1000),creator:z.string().max(200).optional(),attribution:z.string().max(600).optional()});
 export const AssetSchema = z.object({
   id: z.string(), filename: z.string(), kind: z.enum(['video','audio','image']),
   durationSec: z.number().nonnegative(), fps: z.number().nonnegative().default(30),
@@ -19,6 +21,7 @@ export const AssetSchema = z.object({
   scene:z.object({format:z.enum(['html','engine']),revisionId:z.string().regex(/^[a-f0-9]{64}$/),durationInFrames:z.number().int().positive(),
    engine:z.object({version:z.number().int().positive(),chunks:z.array(z.string()).default(['core']),props:z.record(z.string(),z.unknown()).optional(),assets:z.array(z.string()).default([]),music:z.record(z.string(),z.string()).default({}),files:z.number().int().nonnegative().optional(),transparent:z.boolean().default(false)}).optional()}).optional(),
   creation:z.object({kind:z.literal('code'),processId:z.string(),outputId:z.string(),sourcePath:z.string().optional()}).optional(),
+  license:MediaLicenseSchema.optional(),
   // When the media was captured (camera metadata, else file time) and which file it was imported from.
   capturedAt:z.string().optional(),capturedAtSource:z.enum(['quicktime','mp4','exif','file']).optional(),
   source:z.object({path:z.string(),size:z.number().nonnegative(),modifiedAt:z.string()}).optional(),

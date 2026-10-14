@@ -6,6 +6,8 @@ import type {RequestScore} from '@dream/config';
 import type {ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
+import {webSearchFunction} from './code-tools';
+import {searchPrompt,searchReport} from './web-search';
 import {workerPrompt,workerScope} from './code-prompt';
 import {infer,InferenceError} from './inference';
 import {intelligence,outputAllowance,taskBudget,type WorkerMode} from './intelligence';
@@ -32,7 +34,8 @@ export type AIConfig={url:string;token:string;accountId?:string};
 /** Anthropic's server-side web search: the dynamic-filtering version on Opus 5.5 and Sonnet 5.5, the basic one on Haiku. */
 // The 20250305 search on every model: later versions bring Anthropic's own code sandbox along for filtering results,
 // and the agent took it for its project workspace (it wrote project.json edits there, which never ran).
-export const webSearchTool=(_model:string)=>({type:'web_search_20250305',name:'web_search',max_uses:8});
+// Other providers' models get web_search as a plain function, answered by a small Haiku search (webSearch below).
+export const webSearchTool=(model:string)=>model.startsWith('claude-')?{type:'web_search_20250305',name:'web_search',max_uses:8}:webSearchFunction();
 /** The editing agent's conversation cache: five minutes until a wait for its helpers in this request has outlasted that,
  * then one hour (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
 export const helperWaitCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('helper-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
@@ -77,7 +80,7 @@ export class Director {
   if(turnId){const resumes=Number(this.db.getMeta('resume_count:'+turnId)??0),limit=requestBudgetUsd(resumes),spent=this.db.turnUsage(turnId).costUsd;if(spent>=limit){this.db.event('ai.request_budget',{turnId,spentUsd:spent,limitUsd:limit});throw new InferenceError(`This request reached its $${limit.toFixed(2)} spending limit ($${spent.toFixed(2)} used). Completed work is saved; resume to continue with another $${requestBudgetUsd(0).toFixed(2)}.`,'request_budget');}}
   const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,0,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
   // Web search runs on Anthropic's servers; it goes first so the cache breakpoint stays on the last of Figjam's own tools.
-  const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&purpose!=='model_routing'&&!this.db.getMeta(searchKey);
+  const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&purpose!=='model_routing'&&purpose!=='web_search'&&!this.db.getMeta(searchKey);
   if(withSearch)tools=[webSearchTool(model),...(tools as any[])];
   try{return await this.infer(model,system,messages,tools,turnId,purpose,phase,profile,extra);}
   catch(error){if(withSearch&&error instanceof InferenceError&&error.httpStatus===400&&/web_search/i.test(error.message)){this.db.setMeta(searchKey,'1');this.db.event('ai.web_search_unavailable',{model,error:error.message.slice(0,300)});return this.infer(model,system,messages,(tools as any[]).slice(1),turnId,purpose,phase,profile,extra);}throw error;}
@@ -165,7 +168,7 @@ export class Director {
   // The window learns the phase at once, so it can show the agent editing from its first change.
   await this.routeModel(turnId);
   const phaseNow=planning?'planning':readOnly?'answering':'editing';this.db.setPhase(turnId,phaseNow);this.publish('ai.phase',{turnId,phase:phaseNow});const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
-  const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish};
+  const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish,webSearch:(query:string)=>this.webSearch(query,turnId,phase)};
   const model=this.agentModel(turnId,text);
   if(planning)return codeAgent({...common,planning:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
   // Replies look at what they need with the read-only tools.
@@ -175,6 +178,12 @@ export class Director {
   return codeAgent({...common,role:'solo',model,followUp,
    runWorkers:(tasks,callId)=>this.runWorkers(tasks,callId,turnId,phase),
    infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'execution',phase)});
+ }
+ /** Web search for GPT, Gemini and DeepSeek, which have no Anthropic server-side search: one Haiku call searches and reports
+  * what the pages say, citing them. Its cost counts toward the request like any other call. */
+ private async webSearch(query:string,turnId:string,phase:string){
+  const model=agentModels.haiku,response=await this.inference(model,searchPrompt,[{role:'user',content:query}],[{type:'web_search_20250305',name:'web_search',max_uses:3}],turnId,undefined,'web_search',phase);
+  return searchReport(query,response.content);
  }
  /** Helpers build separate pieces for the editing agent, as a task graph of isolated Sonnet conversations. Every helper in a
   * call starts from the same project snapshot (one cached prefix), then its own task, scope and context files; none of them
@@ -204,7 +213,7 @@ ${file.text}`).join('');
    try{
     // The snapshot stands for the project state only while the published version is the one it describes.
     let stateKnown=false;try{stateKnown=JSON.parse(snapshot).overview?.versionId===this.db.head();}catch{}
-    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:this.agentModel(turnId),role:'worker',system:workerPrompt,writes:task.writes,taskId:task.id,parent:id,signal,publish:this.publish,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
+    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:this.agentModel(turnId),role:'worker',system:workerPrompt,writes:task.writes,taskId:task.id,parent:id,signal,publish:this.publish,webSearch:query=>this.webSearch(query,turnId,phase),infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
     const saved=this.db.loadState<any>(`code-agent:${turnId}:${phase}`),completed=saved?.completed??{};
     const changedFiles=[...new Set((saved?.messages??[]).flatMap((m:any)=>m.role==='assistant'&&Array.isArray(m.content)?m.content:[]).filter((b:any)=>b.type==='tool_use'&&completed[b.id]&&['write_file','edit_file','import_resources'].includes(b.name)).map((b:any)=>b.name==='import_resources'?String(b.input?.into??''):String(b.input?.path??'')).filter(Boolean))] as string[];
     return{taskId:task.id,title:task.title,status:outcome.status,summary:outcome.summary.slice(0,2000),nextAction:outcome.status==='blocked'?outcome.nextAction:undefined,changedFiles};

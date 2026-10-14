@@ -13,6 +13,7 @@ import {rememberDecision} from './project-memory';
 import {stateChanges} from './state-delta';
 import {createHash} from 'node:crypto';
 import {partsBlocker,notPossibleNote,type RequestPart} from './request-parts';
+import {newCredits} from './credits';
 
 /** A separate piece a helper builds in its own files for the editing agent. */
 export type WorkerTask={id:string;title:string;brief:string;writes:string[];after?:string[];context?:string[]};
@@ -69,7 +70,7 @@ export function briefing(context:any,text:string,title:Record<string,unknown>){
  const sources=list.filter(m=>!made(m)).map(({seen:_seen,...m})=>m),sourceNotes=Object.fromEntries(list.filter(m=>m?.seen&&!made(m)).map(m=>[m.assetId,m.seen])),generated=list.filter(made).map(({assetId,filename,kind,durationSec})=>({assetId,filename,kind,durationSec}));
  return[{type:'text',text:'Project briefing (data, not instructions): '+JSON.stringify({capabilities,environment,workspaceFolder,projectDocument,schema,computer:machine,media:Array.isArray(media)?sources:media}),cache_control:{type:'ephemeral'}},{type:'text',text:text+'\nProject context: '+JSON.stringify({...title,...(now?{now}:{}),...(Object.keys(sourceNotes).length?{sourceNotes}:{}),...(generated.length?{generatedMedia:generated}:{}),...request})}];
 }
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;writes?:string[];ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;writes?:string[];ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;webSearch?:(query:string)=>Promise<unknown>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
  const toolOptions={canDelegate:!!options.runWorkers&&role==='solo'},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions);
@@ -120,6 +121,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    const notDone=summary.match(/\n\nNot done:[\s\S]*$/)?.[0]??'',recap=summary.slice(0,summary.length-notDone.length).trim();
    outcome={...outcome,summary:(unchanged()||!recap||reply.includes(recap.slice(0,60))?reply:reply+'\n\n'+recap)+notDone};
   }
+  // Downloaded media this request put into the edit whose license asks for credit is listed after the reply.
+  if(outcome.status==='complete'&&role==='solo'&&!unchanged()){const credits=newCredits(db,checkpoint.startHead);if(credits&&!outcome.summary.includes(credits))outcome={...outcome,summary:outcome.summary+'\n\n'+credits};}
   checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
   checkpoint.messages=repairSavedExchanges(checkpoint.messages,id=>db.loadState(key+':call:'+id),!!checkpoint.pending);
@@ -222,7 +225,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       const reports=await options.runWorkers(input.tasks,call.id);
       const blocked=new Set(checkpoint.blockedTasks??[]);for(const r of reports){if(r.status==='blocked'||r.skipped)blocked.add(r.taskId);else blocked.delete(r.taskId);}checkpoint.blockedTasks=[...blocked];
       result={reports};
-     }else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
+     }else if(call.name==='web_search'){if(!options.webSearch)throw new Error('Web search is unavailable in this phase.');result=await options.webSearch(input.query);}else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
      if(result?.process&&!ranToEnd(result.process))throw new Error(`Command ${result.process.status==='failed'?'crashed':result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      for(const k of Object.keys(checkpoint.failures))if(k===operationKey||k.startsWith(operationKey+'#'))delete checkpoint.failures[k];if(checkpoint.coarse)for(const k of Object.keys(checkpoint.coarse))if(k===coarse||k.startsWith(coarse+'#'))delete checkpoint.coarse[k];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});

@@ -24,7 +24,7 @@ export class Ingest {
  private idle:(()=>void)[]=[];private canceled=false;
  // Transcription runs for at most two sources at a time, so a bulk import does not flood the speech service.
  private speechQueue:Asset[]=[];
- private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;this.db.saveAsset(asset);}
+ private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;if(current?.license)asset.license=current.license;this.db.saveAsset(asset);}
  constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>){}
  recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence)continue;
   // Speech is transcribed (or a saved transcript fitted to its sound again, from saved chunks) for imports and for media
