@@ -18,7 +18,11 @@ it('saves a quoted preference whatever form of message ID the agent sends, and r
   expect(rememberDecision(db,{sourceId:`conversation:${message.id}:0`,scope:'whole video',text}).sourceId).toBe(message.id);
   expect(rememberDecision(db,{sourceId:'afdb23d2-da39-455c-a5cb-302bec15a231',scope:'mood',text:'feel calm and dreamy:  slow pacing'}).sourceId).toBe(message.id);
   expect(rememberDecision(db,{scope:'pace',text:'Keep that in mind for everything after this.'}).sourceId).toBe(message.id);
-  expect(()=>rememberDecision(db,{scope:'mood',text:'Make everything bright and fast.'})).toThrow(/exactly/);
+  expect(()=>rememberDecision(db,{scope:'mood',text:'Make everything bright and fast.'})).toThrow(/own words/);
+  // A quote with the spelling fixed still finds the message the user typed fast ("make the caption white").
+  const typed=db.message('user','just amke teh caption white everywhere','turn2');
+  expect(rememberDecision(db,{scope:'captions',text:'make the captions white everywhere'}).sourceId).toBe(typed.id);
+  expect(()=>rememberDecision(db,{scope:'captions',text:'make the captions yellow and huge'})).toThrow(/own words/);
  }finally{db.close();}
 });
 

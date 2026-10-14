@@ -19,7 +19,7 @@ export type WorkerTask={id:string;title:string;brief:string;writes:string[];afte
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;changedFiles?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
-type Checkpoint={replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
+type Checkpoint={startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
 const RESULT_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
@@ -77,7 +77,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  // still refuses every call that would change something.
  const tools=options.bare?[]:role==='readonly'?toolsFor('solo',{canDelegate:true}):toolsFor(role,toolOptions);
  const maxSteps=engineBudgets.agentSteps;
- await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.firstMessage??briefing(workspace.context(options.text),options.text+(options.system?'':modeNote(role,planning)),{projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy'})}],results:[],completed:{},model:options.model,failures:{}};
+ await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.firstMessage??briefing(workspace.context(options.text),options.text+(options.system?'':modeNote(role,planning)),{projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy'})}],results:[],completed:{},model:options.model,failures:{},startHead:db.head()};
  // The first message already carries the project and its media, so the state messages that follow report only changes.
  if(!resumed&&options.stateKnown!==false){const state=workspace.currentContext?.()??workspace.mediaContext?.();if(state!==undefined){const {sceneErrors:_errors,...initial}=state as any;checkpoint.mediaState=JSON.stringify({state:Array.isArray(state)?state:initial});}}
  const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...(options.parent?{parent:options.parent}:{}),...patch});if(event)publish('ai.activity',{turnId,event});};
@@ -91,11 +91,15 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  const unpublished=()=>workspace.unpublishedChanges?.()??[];
  const publishedHead=()=>{const found=headPublication();return found&&!unpublished().length?found:undefined;};
  const needsPublication=()=>!readOnly&&!planning&&role!=='worker';
+ // Nothing to publish: the project is still the version this request started from and no workspace file has changed. A
+ // reply, a script, or a request that turned out to need no change then completes without a no-op publication.
+ const unchanged=()=>checkpoint.startHead!==undefined&&db.head()===checkpoint.startHead&&!unpublished().length;
  // One gate for every way an edit can end complete: the finish call, a plain reply and running out of nudges. It names
  // what still stands in the way: an unpublished head, scenes that failed while playing, must-fix checks not kept with a
  // reason, or delegated work left blocked. Unfinished work is never reported as done.
  const completionBlocker=(kept:Set<string>=new Set()):string|undefined=>{
   if(!needsPublication())return;
+  if(unchanged()&&!checkpoint.blockedTasks?.length)return;
   const current=publishedHead(),pending=current?[]:unpublished();
   if(!current&&pending.length&&headPublication())return`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`;
   if(!current)return'Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.';
@@ -106,7 +110,15 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(checkpoint.blockedTasks?.length)return`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`;
  };
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
- const conclude=(outcome:EditOutcome)=>{const reply=checkpoint.replyText;if(outcome.status==='complete'&&reply&&reply.length>=400&&!outcome.summary.includes(reply.slice(0,80)))outcome={...outcome,summary:reply+'\n\n'+outcome.summary};checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
+ // The saved reply is what the agent wrote to the user (a script, an answer, ideas), not only the short recap it gives finish.
+ // The recap follows the reply when the request changed the project and the recap says something the reply does not.
+ const conclude=(outcome:EditOutcome)=>{
+  const reply=checkpoint.replyText?.trim(),summary=outcome.summary.trim();
+  if(outcome.status==='complete'&&reply&&reply!==summary&&!summary.includes(reply.slice(0,80))&&(reply.length>=200||reply.length>summary.length)){
+   const notDone=summary.match(/\n\nNot done:[\s\S]*$/)?.[0]??'',recap=summary.slice(0,summary.length-notDone.length).trim();
+   outcome={...outcome,summary:(unchanged()||!recap||reply.includes(recap.slice(0,60))?reply:reply+'\n\n'+recap)+notDone};
+  }
+  checkpoint.outcome=outcome;if(outcome.status==='complete'&&needsPublication())completeTasks();};
  if(checkpoint.protocolVersion!==2){
   checkpoint.messages=repairSavedExchanges(checkpoint.messages,id=>db.loadState(key+':call:'+id),!!checkpoint.pending);
   const lastAssistant=checkpoint.messages.findLastIndex(m=>m.role==='assistant'),following=checkpoint.messages[lastAssistant+1];if(checkpoint.pending&&following?.role==='user'&&Array.isArray(following.content)&&checkpoint.pending.every(call=>following.content.some((r:any)=>r.type==='tool_result'&&r.tool_use_id===call.id))){delete checkpoint.pending;checkpoint.results=[];}
@@ -148,7 +160,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    if(response.stop_reason!=='pause_turn'){response.content=withoutUnansweredServerCalls(response.content);if(!response.content.length)response.content=[{type:'text',text:'(No output.)'}];}
    checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];
    // Text written alongside finish is the reply itself (a script, an answer); the saved reply keeps it, not only the summary.
-   const said=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim();if(said&&checkpoint.pending!.some((c:any)=>c.name==='finish'))checkpoint.replyText=said;save();
+   // Text that ends the agent's work (sent with finish, or a response with no tool calls) is its reply to the user; a later
+   // short line ("Done.") does not replace a substantive one.
+   const said=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim();if(said&&(!checkpoint.pending!.length||checkpoint.pending!.some((c:any)=>c.name==='finish'))&&(!checkpoint.replyText||said.length>=200||said.length>=checkpoint.replyText.length))checkpoint.replyText=said;save();
    for(const block of response.content)if(block.type==='server_tool_use')activity('web:'+block.id,{kind:'action',tool:block.name,text:block.name==='web_search'?'Searching the web':'Reading the web',detail:String(block.input?.query??block.input?.url??'').slice(0,200),status:'complete'});
    // A long run of web searches pauses on the server; sending the conversation back as it is resumes it.
    if(response.stop_reason==='pause_turn'&&!checkpoint.pending!.length){delete checkpoint.pending;checkpoint.pauses=(checkpoint.pauses??0)+1;save();if(checkpoint.pauses<=5)continue;}
@@ -163,7 +177,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      conclude(!planning&&current&&!blocker&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:[answer,blocker].filter(Boolean).join('\n\n')||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':blocker?'Resume to fix what is listed, then finish.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
     }
     checkpoint.nudges=nudges+1;
-    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':current&&blocker?`The request is not finished: ${blocker} Then call finish.`:'Continue the requested work using the available capabilities, or call finish (complete once published, or blocked with a concrete reason).'});save();continue;
+    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':current&&blocker?`The request is not finished: ${blocker} Then call finish.`:'Continue the requested work using the available capabilities, or call finish: complete once any change is published (a request that needs no change finishes complete with your answer as the summary), or blocked with a concrete reason.'});save();continue;
    }
    checkpoint.nudges=0;
   }
@@ -189,8 +203,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
        const parts=db.loadState<RequestPart[]>('request-parts:'+turnId)??[],partBlocker=parts.length?partsBlocker(parts,input.parts):undefined;if(partBlocker)throw new Error(partBlocker);
        if(parts.length)input.summary=input.summary+notPossibleNote(parts,input.parts);
        const blocker=completionBlocker(new Set((input.kept??[]).map((k:any)=>k.check)));if(blocker)throw new Error(blocker);
-       const current=publishedHead()!;
-       if(!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
+       const current=publishedHead();
+       if(current&&!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
       }
       // A helper's scenes that failed while playing must be fixed before it reports done (errors come from the visible player and chat previews).
       const broken=input.status==='complete'&&role==='worker'?workspace.sceneErrors?.(turnId)??[]:[];

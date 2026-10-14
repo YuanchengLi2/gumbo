@@ -83,7 +83,10 @@ it('sets effort by role and task budgets, and steps effort down after a thinking
 });
 
 it('shortens over-long prose fields instead of failing the tool call, but never code or paths',()=>{
- const finish=parseCodeTool('finish',{status:'complete',summary:'s'.repeat(9000),evidence:[]}) as any;expect(finish.summary.length).toBeLessThanOrEqual(4000);
+ const finish=parseCodeTool('finish',{status:'complete',summary:'s'.repeat(20000),evidence:[]}) as any;expect(finish.summary.length).toBeLessThanOrEqual(12000);
+ // Limits the model is not shown never fail a call: a long note, a long part id, too many evidence lines.
+ const loose=parseCodeTool('finish',{status:'complete',summary:'Done.',notes:'n'.repeat(3000),parts:[{id:'p1-captions-white',status:'done',note:'x'.repeat(900)}],evidence:Array.from({length:60},(_,n)=>({toolCallId:'t'+n,finding:'f'}))}) as any;
+ expect(loose.notes.length).toBeLessThanOrEqual(1200);expect(loose.parts[0].note.length).toBeLessThanOrEqual(400);expect(loose.evidence).toHaveLength(40);
  const search=parseCodeTool('search',{query:'q'.repeat(900)}) as any;expect(search.query.length).toBeLessThanOrEqual(500);
  expect(()=>parseCodeTool('write_file',{path:'p'.repeat(3000),content:'x'})).toThrow();
 });

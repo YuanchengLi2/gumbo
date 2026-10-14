@@ -84,6 +84,7 @@ it('keeps a script the agent wrote alongside finish in the saved reply, not only
  try{
   db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const script='SCENE 1. Ooga. '.repeat(40).trim();
   const result=await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true,finished:true})} as any,turnId:'turn',text:'Write me a script',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async()=>({content:[{type:'text',text:script},{type:'tool_use',id:'toolu_f',name:'finish',input:{status:'complete',summary:'Wrote a 16-scene script.'}}],stop_reason:'tool_use'})});
-  expect(result.outcome.summary.startsWith(script)).toBe(true);expect(result.outcome.summary.endsWith('Wrote a 16-scene script.')).toBe(true);
+  // Nothing changed, so the script is the whole reply: no recap line repeated under it.
+  expect(result.outcome.summary).toBe(script);
  }finally{db.close();}
 });

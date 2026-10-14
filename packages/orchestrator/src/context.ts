@@ -37,9 +37,11 @@ export class ProjectContext {
   const relevant:unknown[]=[];let remaining=3000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
   // Spoken words only: what footage shows is for the agent to look at, not an earlier description of it.
   const footage=p.search(terms(query).join(' ')).filter(hit=>hit.kind==='words').slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
-  // Follow-ups ("do that", "make it bluer") depend on the preceding exchange.
-  const previous=p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 6").all() as {id:string;role:string;text:string}[];
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse().map(m=>({id:m.id,role:m.role,text:m.text.slice(0,m.role==='user'?1500:700)})),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json.'};
+  // Follow-ups ("do that", "make it bluer", "generate captions for this") depend on the preceding exchange, so the latest
+  // reply comes in full (a script or an answer the user is building on) and earlier ones nearly so; a longer one says where
+  // the rest is.
+  const previous=(p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 8").all() as {id:string;role:string;text:string}[]).map((m,n,all)=>{const limit=m.role==='assistant'&&all.findIndex(x=>x.role==='assistant')===n?8000:m.role==='assistant'?2500:1500;return m.text.length>limit?{...m,text:m.text.slice(0,limit),rest:`read_file scope project id conversation:${m.id}:0 (follow nextChunk)`}:m;});
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json.'};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();
