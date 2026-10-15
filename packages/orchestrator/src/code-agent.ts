@@ -106,7 +106,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   const current=publishedHead(),pending=current?[]:unpublished();
   if(!current&&pending.length&&headPublication())return`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`;
   if(!current)return'Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.';
-  const broken=workspace.sceneErrors?.(turnId)??[];
+  const broken=workspace.sceneErrors?.(turnId,{inEdit:true})??[];
   if(broken.length)return`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them and publish again before finishing.`;
   const open=(workspace.editChecks?.(turnId)?.mustFix??[]).filter(c=>!kept.has(c.id));
   if(open.length)return`The published edit still has: ${open.slice(0,8).map(c=>`[${c.id}] ${c.text}`).join(' ')}${open.length>8?` …and ${open.length-8} more.`:''} Fix these and publish again, or keep one by listing its id with a reason in kept.`;

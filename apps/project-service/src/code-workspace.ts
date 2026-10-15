@@ -59,9 +59,14 @@ export class CodeWorkspace implements CodeWorkspacePort {
  private sceneRevisions(timeline:TimelineDocument){const assets=new Map(this.db.footage().assets.map(a=>[a.id,a]));return[...timeline.spine.map(c=>c.assetId),...timeline.attached.flatMap(i=>i.source?[i.source.assetId]:[])].map(id=>assets.get(id)).filter(a=>a?.scene?.format==='engine').map(a=>a!.scene!.revisionId);}
  /** Errors reported by scenes on the timeline (by default only those changed in this request, published since it
   * started) and by this request's current drafts. The project state shows all of them; finishing checks the changed ones. */
- sceneErrors(turnId?:string,options:{changedOnly?:boolean}={}){
+ sceneErrors(turnId?:string,options:{changedOnly?:boolean;inEdit?:boolean}={}){
   const start=this.db.getMeta('turn_start_version'),before=new Set(options.changedOnly!==false&&start?this.sceneRevisions(this.db.timeline(start)):[]),revisions=this.sceneRevisions(this.db.timeline()).filter(r=>!before.has(r));
-  const drafts=turnId?Object.values(JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}') as Record<string,string>):[];
+  // For finishing (inEdit), only drafts of scenes still in the edit count: one declared in project.json or published on
+  // the timeline. A draft of a scene that was taken out (its errors can no longer show anywhere) does not hold up finishing.
+  const inEdit=()=>{let declared:string[]=[];try{declared=(JSON.parse(readFileSync(join(this.root,'project.json'),'utf8')).outputs??[]).map((o:any)=>normalizeScope(String(o.path)));}catch{}
+   const onTimeline=new Set(this.sceneRevisions(this.db.timeline()));return new Set([...declared,...this.db.footage().assets.filter(a=>a.scene&&onTimeline.has(a.scene.revisionId)&&a.creation?.sourcePath).map(a=>normalizeScope(a.creation!.sourcePath!))]);};
+  const live=options.inEdit?inEdit():undefined;
+  const drafts=turnId?Object.entries(JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}') as Record<string,string>).filter(([key])=>!live||live.has(key.slice(0,key.lastIndexOf('#')))).map(([,hash])=>hash):[];
   const names=new Map(this.db.footage().assets.map(a=>[a.scene?.revisionId,a.filename]));
   return this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
  }
@@ -390,7 +395,12 @@ export class CodeWorkspace implements CodeWorkspacePort {
  private async checkOutputs(input:{paths?:string[];scene?:string},callId:string,turnId:string,scope?:WorkerScope){
   let document:any={};try{document=JSON.parse(readFileSync(join(this.root,'project.json'),'utf8'));}catch{}
   const settings=document.timeline?.settings??this.db.timeline().settings,outputs:any[]=Array.isArray(document.outputs)?document.outputs:[];
-  const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>(o.kind==='scene'&&isEngineScene(String(o.path))||o.kind==='music'||o.kind==='sfx'&&!String(o.path).startsWith('preset:'))&&(!input.scene||o.id===input.scene));
+  // Publishing empties outputs in project.json (each became a scene asset), so a scene file already published is drafted
+  // with the size, props and transparency it was published with: without its props its draft failed on data it never got.
+  const used=new Set([...(document.timeline?.attached??[]).flatMap((i:any)=>i.source?[i.source.assetId]:[]),...(document.timeline?.spine??[]).map((c:any)=>c.assetId)]);
+  const published=(path:string)=>{const scenes=this.db.footage().assets.filter(a=>a.scene&&a.creation?.sourcePath&&normalizeScope(a.creation.sourcePath)===normalizeScope(path)),a=scenes.find(s=>used.has(s.id))??scenes.at(-1);
+   return a?.scene?{id:a.creation?.outputId,path,kind:'scene',width:a.width,height:a.height,fps:a.fps,durationInFrames:a.scene.durationInFrames,props:a.scene.engine?.props,transparent:a.scene.engine?.transparent}:undefined;};
+  const entries=input.paths?.length?input.paths.map(path=>{const declared=outputs.find(o=>normalizeScope(o.path)===normalizeScope(path));return declared??published(path)??{id:basename(path).replace(/\.[^.]+$/,''),path};}):outputs.filter(o=>(o.kind==='scene'&&isEngineScene(String(o.path))||o.kind==='music'||o.kind==='sfx'&&!String(o.path).startsWith('preset:'))&&(!input.scene||o.id===input.scene));
   // Nothing to check is an answer, not an error.
   if(!entries.length)return{checked:[],note:input.scene?`project.json declares no checkable output with id "${input.scene}". Pass scene files (src/....tsx) or score files (src/music/....score.json) as paths.`:'project.json declares no engine scene, score or sound file to check. Pass scene files (src/....tsx) or score files (src/music/....score.json) as paths.'};
   const results:any[]=[],drafts:any[]=[],recorded=JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}');

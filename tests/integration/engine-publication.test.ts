@@ -61,3 +61,24 @@ it('checks scene code on write, previews drafts without publishing, and refuses 
   expect(result.outcome).toMatchObject({status:'blocked'});expect(n).toBe(3);
  }finally{db.close();}
 });
+
+// Publishing empties outputs in project.json, so a draft of a published scene got no props and failed on data it never
+// had; the agent then chased that error for dozens of steps, and a draft of a scene it had taken out still blocked finishing.
+it('drafts a published scene with its props, and only drafts of scenes in the edit block finishing',async()=>{
+ const {recordSceneError}=await import('../../apps/project-service/src/scene-errors');
+ const root=mkdtempSync(join(tmpdir(),'dream-engine-drafts-')),db=new ProjectDB(root,'Drafts'),events:{type:string;payload:any}[]=[];
+ const ws=new CodeWorkspace(db,{run:async()=>{throw Error('No command expected');},ffmpeg:'unavailable',ffprobe:'unavailable'},(type,payload)=>events.push({type,payload}));
+ try{await ws.initialize();db.setMeta('pending_request',JSON.stringify({text:'Captions',turnId:'turn'}));const signal=new AbortController().signal;
+  write(root,'src/caps.tsx',"export default function Caps({chunks}:{chunks:string[]}){ return <div>{chunks.join(' ')}</div>; }\n");
+  write(root,'src/old.tsx',"export default function Old(){ return <div>old</div>; }\n");
+  const d=doc(root);d.outputs=[{id:'caps',path:'src/caps.tsx',kind:'scene',durationInFrames:30,transparent:true,props:{chunks:['hello']}}];d.timeline.spine=[{id:'i',assetId:'output:caps',srcIn:0,srcOut:1,speed:1,audio:{mute:true},reason:'Captions'}];writeFileSync(join(root,'Workspace/project.json'),JSON.stringify(d));
+  await ws.execute('publish_project',{},'p1','turn',signal);expect(doc(root).outputs).toEqual([]);
+  await ws.execute('check_outputs',{paths:['src/caps.tsx','src/old.tsx']},'c1','turn',signal);
+  const drafts=events.filter(e=>e.type==='scene.draft').map(e=>e.payload),caps=drafts.find(p=>p.source.config.props)!,old=drafts.find(p=>p!==caps)!;
+  expect(caps.source.config).toMatchObject({props:{chunks:['hello']},transparent:true,durationInFrames:30});
+  await recordSceneError(db,{draft:caps.hash,message:'caps-broke'});await recordSceneError(db,{draft:old.hash,message:'old-broke'});
+  // The agent still hears about both; finishing waits only on the scene that is in the edit.
+  expect(ws.sceneErrors('turn').map(e=>e.message).sort()).toEqual(['caps-broke','old-broke']);
+  expect(ws.sceneErrors('turn',{inEdit:true}).map(e=>e.message)).toEqual(['caps-broke']);
+ }finally{db.close();}
+});

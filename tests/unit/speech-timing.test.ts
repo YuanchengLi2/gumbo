@@ -2,6 +2,10 @@ import {it,expect} from 'vitest';
 import {speechMask,fitToSpeech,longestWord} from '../../apps/project-service/src/speech-timing';
 import {emptyTimeline,TimelineSchema,resolve} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
+import {ProjectDB} from '@dream/project-db';
+import {mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 /** 16 kHz mono PCM16 WAV: quiet room noise, with a tone wherever speech is. */
 function wav(seconds:number,speech:[number,number][]){
@@ -43,4 +47,29 @@ it('captions speech on the music track at foreground level, not beds, scores or 
  // Chosen sources win.
  const chosen=TimelineSchema.parse({...timeline,captions:{style:'clean',params:{sources:['bed']},overrides:[]}});
  expect(resolve(chosen,footage).words.map(w=>w.text)).toEqual(['la']);
+});
+
+// A song the transcriber heard one word in ("Bye.") is not narration, even at foreground level.
+it('does not caption the odd word heard in music on the music track',()=>{
+ const footage=emptyFootage();footage.assets=[
+  AssetSchema.parse({id:'cam',filename:'cam.mp4',kind:'video',originalPath:'cam.mp4',durationSec:30,width:1920,height:1080,fps:30,hasAudio:false,fingerprint:'c',status:'ready'}),
+  AssetSchema.parse({id:'lofi',filename:'lofi.mp3',kind:'audio',originalPath:'l.mp3',durationSec:30,fps:30,hasAudio:true,fingerprint:'l',status:'ready'})];
+ footage.words=[{id:'l1',assetId:'lofi',text:'Bye.',start:0,end:.3}] as any;
+ const t=emptyTimeline('t'),clip={id:'a',assetId:'cam',srcIn:0,srcOut:20,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:true},reason:''};
+ const timeline=TimelineSchema.parse({...t,spine:[clip],captions:{style:'clean',params:{},overrides:[]},music:[{id:'intro',assetId:'lofi',srcIn:0,srcOut:15,start:{kind:'clip',clipId:'a',at:'start',offsetSec:0},gainDb:-10}]});
+ expect(resolve(timeline,footage).words).toEqual([]);
+ // Chosen as a caption source, it is captioned as asked.
+ expect(resolve(TimelineSchema.parse({...timeline,captions:{style:'clean',params:{sources:['intro']},overrides:[]}}),footage).words.map(w=>w.text)).toEqual(['Bye.']);
+});
+
+// The player, the agent's view of the edit and Export read the words through playbackFootage, which only loaded the main
+// track's words: narration on the music track resolved to no captions at all.
+it('loads the words of narration on the music track for playback',()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-playback-words-')),'Words');
+ try{
+  db.saveAsset(AssetSchema.parse({id:'voice',filename:'narration.m4a',kind:'audio',originalPath:'n.m4a',durationSec:30,fps:30,hasAudio:true,fingerprint:'v',status:'ready'}));
+  db.saveRecords('words',[{id:'v1',assetId:'voice',text:'Made',start:2,end:2.4},{id:'v2',assetId:'voice',text:'later',start:20,end:20.4}]);
+  const timeline=TimelineSchema.parse({...emptyTimeline('t'),music:[{id:'narration',assetId:'voice',srcIn:0,srcOut:10,start:{kind:'project',at:'start',offsetSec:0},gainDb:0}]});
+  expect(db.playbackFootage(timeline).words.map(w=>w.text)).toEqual(['Made']);
+ }finally{db.close();}
 });
