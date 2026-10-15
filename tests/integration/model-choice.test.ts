@@ -79,10 +79,10 @@ it('Auto tells Haiku which model made a rejected result and runs what it then pi
    return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
   const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
   await director.message('theres a weird green tint at 13 seconds',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
-  // "its still there": Haiku hears which model made it and the cost of each, and keeps Sonnet; nothing forces Opus.
-  score={feedback:'negative',model:'sonnet'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
-  expect(asked().previousResultBy).toBe('sonnet');expect(asked().models.find((m:any)=>m.id==='opus').costPerRequest).toBe('about $0.55');
-  score={feedback:'negative',model:'opus'};await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
+  // "its still there": Haiku hears which tier made it and the cost of each, and keeps a strong model; nothing forces a frontier one.
+  score={feedback:'negative',model:'strong'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
+  expect(asked().previousResultBy).toBe('strong');expect(asked().models.find((m:any)=>m.id==='frontier').costPerRequest).toBe('about $0.55');
+  score={feedback:'negative',model:'frontier'};await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
   expect(db.loadState('auto-escalation')).toBeUndefined();
  }finally{db.close();}
 });
@@ -96,10 +96,10 @@ it('Auto runs the model Haiku chose from every model with a key, shown what each
    return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
   const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
   score={model:'gemini-argon'};await director.message('go through all my clips and pick the best scenery',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe('gemini-4-argon');
-  // Haiku saw the models that can run (no DeepSeek key here), in a rotating order, each with what it is best at.
-  expect(asked().models.map((m:any)=>m.id).sort()).toEqual(['gemini-argon','gemini-flash','gpt-astra','gpt-luna','gpt-sol','haiku','opus','sonnet']);expect(asked().models.find((m:any)=>m.id==='gpt-sol').bestAt).toMatch(/footage/);
+  // Haiku saw the tiers of model that can run, each with what it is for and its cost, and no provider or model name.
+  expect(asked().models.map((m:any)=>m.id)).toEqual(['light','strong','frontier']);expect(asked().models[1].bestAt).toMatch(/footage/);expect(JSON.stringify(asked().models)).not.toMatch(/claude|sonnet|opus|haiku|gpt|gemini|deepseek/i);
   // A pick without a key falls back to the table (any strong model: footage at difficulty 3); the next message is told which model made the result it reacts to.
-  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect([agentModels.sonnet,'gpt-6.1-sol','gemini-4-argon']).toContain(ran());expect(asked().previousResultBy).toBe('gemini-argon');
+  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect([agentModels.sonnet,'gpt-6.1-sol','gemini-4-argon']).toContain(ran());expect(asked().previousResultBy).toBe('strong');
   const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({picked:'deepseek-flash',pickedBy:'table',work:'footage'});
  }finally{db.close();}
 });

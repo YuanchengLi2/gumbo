@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {models,engineBudgets,agentModels,autoModel,fairOrder,workOf,modelCatalog,modelInfo,typicalCost,type ModelChoice,type Provider} from '@dream/config';
+import {models,engineBudgets,agentModels,autoModel,routerChoices,isTier,workOf,modelInfo,type ModelChoice,type Provider} from '@dream/config';
 import {triagePrompt,triageMessage,parseTriage,ruleTriage,withMode,routeRecord,type Triage,type TriageInput} from './triage';
 import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
 import type {RequestScore} from '@dream/config';
@@ -109,7 +109,7 @@ export class Director {
  private async routeModel(turnId:string){
   if(this.db.getMeta('model-choice:'+turnId)!=='auto'||process.env.DREAM_AGENT_MODEL||this.db.getMeta('agent-model:'+turnId))return;
   await this.refreshProviders();const score=this.score(turnId),model=autoModel(score,this.providers?.value??{},turnId);
-  const route=this.db.loadState<any>('routing:'+turnId);this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,work:workOf(score),...(score.model?{picked:score.model,pickedBy:modelInfo(score.model)?.id===model?'haiku':'table'}:{}),difficulty:score.difficulty,reason:route?.reason});
+  const route=this.db.loadState<any>('routing:'+turnId);this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,work:workOf(score),...(score.model?{picked:score.model,pickedBy:(isTier(score.model)?modelInfo(model)?.tier===score.model:modelInfo(score.model)?.id===model)?'haiku':'table'}:{}),difficulty:score.difficulty,reason:route?.reason});
  }
  /** The score Auto picks by: the triage of this request; an approved plan is doing the work it planned, at the plan's score. */
  private score(turnId:string):RequestScore{
@@ -118,7 +118,7 @@ export class Director {
   return{kind:approved?'edit':route?.route==='plan'?'plan':route?.route==='question'?'answer':'edit',difficulty,vision:!!route?.vision,...(route?.work?{work:route.work}:{}),...(route?.model?{model:route.model}:{})};
  }
  /** The model that made the result of the request before this one, the one a reply like "its still there" is about. */
- private previousModel(turnId:string){const last=(this.db.db.prepare("SELECT turn_id FROM messages WHERE role='user' AND turn_id IS NOT NULL AND turn_id<>? ORDER BY rowid DESC LIMIT 1").get(turnId) as any)?.turn_id;return last?modelInfo(this.db.getMeta('agent-model:'+last)??'')?.choice:undefined;}
+ private previousModel(turnId:string){const last=(this.db.db.prepare("SELECT turn_id FROM messages WHERE role='user' AND turn_id IS NOT NULL AND turn_id<>? ORDER BY rowid DESC LIMIT 1").get(turnId) as any)?.turn_id;return last?modelInfo(this.db.getMeta('agent-model:'+last)??'')?.tier:undefined;}
  /** Triage (see triage.ts): what the message is, how hard, its parts. Requests from the composer (they carry a model
   * choice) are scored by Haiku with the recent conversation; others, and any failure, use the word rules. */
  private async triage(turnId:string,text:string,intent:RequestIntent,stopped?:{text:string},scored=true,attachments=0):Promise<Triage>{
@@ -138,8 +138,9 @@ export class Director {
  private triageInput(turnId:string,text:string,intent:RequestIntent,stopped?:{text:string},attachments=0):TriageInput{
   const t=this.db.timeline(),footage=this.db.footage();let minutes=0;try{minutes=Math.round(resolveTimeline(t,footage).durationSec/6)/10;}catch{}
   const recent=(this.db.db.prepare("SELECT role,text FROM messages WHERE text<>'' AND (turn_id IS NULL OR turn_id<>?) ORDER BY rowid DESC LIMIT 6").all(turnId) as {role:string;text:string}[]).reverse();
-  // Every model that can run, with what it is best at, and the model that made the result this message may be reacting to.
-  const can=this.providers?.value??{},available=fairOrder(modelCatalog.filter(m=>m.provider==='anthropic'||!!(can as any)[m.provider]),turnId).map(m=>({id:m.choice,name:m.label,bestAt:m.guide,costPerRequest:`about $${typicalCost(m).toFixed(2)}`}));
+  // The tiers of model that can run (never providers or model names, so the router judges only how much model the request
+  // needs), and the tier that made the result this message may be reacting to.
+  const available=routerChoices(this.providers?.value??{});
   const previousModel=this.previousModel(turnId);
   return{models:available,...(previousModel?{previousModel}:{}),message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments};
  }

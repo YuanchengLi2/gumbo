@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {autoModel,fairOrder,workOf,bestFor,works,agentModels,modelCatalog,modelInfo,typicalCost,usageCost} from '@dream/config';
+import {autoModel,fairOrder,routerChoices,isTier,workOf,bestFor,works,agentModels,modelCatalog,modelInfo,typicalCost,usageCost} from '@dream/config';
 
 const all:Partial<Record<'deepseek'|'openai'|'google',boolean>>={deepseek:true,openai:true,google:true};
 const seeds=Array.from({length:60},(_,n)=>'turn-'+n);
@@ -54,4 +54,17 @@ it('lists every model once with its price, without DeepSeek V4 Pro, and bills ot
  expect(modelCatalog.some(m=>/deepseek-v4-pro/.test(m.id))).toBe(false);
  expect(modelCatalog.some(m=>/cheapest/i.test(m.detail))).toBe(false);
  expect(usageCost('deepseek-flash',{input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000},undefined,new Date('2026-10-14T02:00:00Z'))).toBeCloseTo(.3+.006+1.2,9);
+});
+
+// The router is Claude (Haiku); shown "Claude Sonnet 5.5" beside GPT and Gemini at the same price and description, it
+// still chose Claude. It is now shown tiers only, and the app picks which provider's model of the tier runs.
+it('shows the router tiers without providers, and spreads the tier it names across every provider',()=>{
+ const choices=routerChoices(all,new Date('2026-10-15T12:00:00Z'));
+ expect(choices.map(c=>c.id)).toEqual(['light','strong','frontier']);expect(JSON.stringify(choices)).not.toMatch(/claude|sonnet|opus|haiku|gpt|gemini|deepseek|anthropic|openai|google/i);
+ expect(choices[1].costPerRequest).toBe('about $0.28');expect(routerChoices(all,new Date('2026-12-02T12:00:00Z'))[1].costPerRequest).toBe('about $0.28-0.55');
+ expect(routerChoices({}).map(c=>c.id)).toEqual(['light','strong','frontier']);
+ expect(across({kind:'edit',difficulty:3,work:'fix',model:'strong'})).toEqual(tier('strong'));
+ expect(across({kind:'edit',difficulty:1,work:'fix',model:'frontier'})).toEqual(tier('frontier'));
+ expect(across({kind:'edit',difficulty:3,work:'fix',model:'strong'},{})).toEqual(new Set([agentModels.sonnet]));
+ expect(isTier('strong')).toBe(true);expect(isTier('sonnet')).toBe(false);
 });

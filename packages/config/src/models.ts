@@ -75,8 +75,18 @@ export function workOf(score:RequestScore):Work{
  * wins over Auto. */
 export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>,seed=''):string{
  const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3)),can=(m:ModelInfo)=>(m.provider==='anthropic'||!!providers?.[m.provider])&&(!score.vision||m.vision);
- const tier:Tier=score.kind==='plan'?(d>=4?'frontier':'strong'):(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier;
- const chosen=score.model?modelInfo(score.model):undefined,runnable=modelCatalog.filter(can);
+ // The router names a tier (it is shown tiers, not providers); a model id is still honoured.
+ const named=isTier(score.model)?score.model:undefined,tier:Tier=named??(score.kind==='plan'?(d>=4?'frontier':'strong'):(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier);
+ const chosen=!named&&score.model?modelInfo(score.model):undefined,runnable=modelCatalog.filter(can);
  const picked=chosen&&can(chosen)?chosen:fairOrder(runnable.filter(m=>m.tier===tier),seed)[0]??fairOrder(runnable,seed)[0];
  return picked?.id??agentModels.sonnet;
+}
+export const tiers:Tier[]=['light','strong','frontier'];
+export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
+/** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
+ * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */
+export function routerChoices(providers?:Partial<Record<Provider,boolean>>,at=new Date()){
+ return tiers.flatMap(tier=>{const runnable=modelCatalog.filter(m=>m.tier===tier&&(m.provider==='anthropic'||!!providers?.[m.provider]));if(!runnable.length)return[];
+  const costs=runnable.map(m=>typicalCost(m,at)),low=Math.min(...costs),high=Math.max(...costs);
+  return[{id:tier,name:tier[0].toUpperCase()+tier.slice(1)+' model',bestAt:runnable[0].guide,costPerRequest:low===high?`about $${low.toFixed(2)}`:`about $${low.toFixed(2)}-${high.toFixed(2)}`}];});
 }
