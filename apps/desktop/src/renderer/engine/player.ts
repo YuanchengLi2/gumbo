@@ -9,7 +9,7 @@ import {SceneLayers} from './scenes';
  * Coded motion graphics play live in their own sandboxed documents between two canvases: what lies under the first
  * scene is drawn on the canvas below, what lies over it (titles, captions, overlays) on a transparent canvas above. */
 export type PlayerEvent='frameupdate'|'play'|'pause'|'mutechange'|'ended';
-export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;requestFullscreen():void;
+export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void;removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void};
 
 export const previewUrl=(a:Asset)=>'dream-media://'+a.id+'/preview?revision='+encodeURIComponent(a.proxyPath?'proxy':'original');
@@ -47,7 +47,6 @@ export class EnginePlayer implements PlayerRef{
  mute(){this.muted=true;if(this.master)this.master.gain.value=0;this.emit('mutechange');}
  unmute(){this.muted=false;if(this.master)this.master.gain.value=1;this.emit('mutechange');}
  isMuted(){return this.muted;}
- requestFullscreen(){void (this.canvas.parentElement??this.canvas).requestFullscreen();}
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void){this.events.addEventListener(event,listener as EventListener);}
  removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void){this.events.removeEventListener(event,listener as EventListener);}
  private ensureAudio(){if(this.audio)return;this.audio=new AudioContext({latencyHint:'interactive'});this.master=this.audio.createGain();this.master.gain.value=this.muted?0:1;this.master.connect(this.audio.destination);}
@@ -122,7 +121,7 @@ export class EnginePlayer implements PlayerRef{
   const first=frame.layers.findIndex(l=>l.kind==='media'&&l.media==='scene'),scenes=media.filter(l=>l.media==='scene');
   if(first<0||!this.scenes||!this.layers){this.compositor.draw(frame,l=>this.picture(l));if(this.layers)this.layers.overlay.style.visibility='hidden';this.scenes?.update([],this.prepared.assets,1);return;}
   this.compositor.draw({...frame,layers:frame.layers.slice(0,first)},l=>this.picture(l));
-  this.scenes.update(scenes,this.prepared.assets,this.canvas.getBoundingClientRect().width/frame.width);
+  this.scenes.update(scenes,this.prepared.assets,this.canvas.getBoundingClientRect().width/frame.width,this.playing);
   const above=frame.layers.slice(first).filter(l=>!(l.kind==='media'&&l.media==='scene')),overlay=this.layers.overlay;
   if(overlay.width!==this.canvas.width||overlay.height!==this.canvas.height){overlay.width=this.canvas.width;overlay.height=this.canvas.height;}
   this.over??=new Compositor(overlay,{transparent:true});this.over.draw({...frame,background:'transparent',layers:above},l=>this.picture(l));overlay.style.visibility='visible';

@@ -1,6 +1,7 @@
 import {setFrameTime,realNow} from './determinism';
 import {pendingCount,currentEpoch,settled} from './pending';
 import type {Registry} from './registry';
+import {live,setLive} from './live';
 
 // Animation frames stop in hidden documents (a background tab, an off-screen preview); a timer keeps frames moving.
 const raf=()=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,100);requestAnimationFrame(()=>{clearTimeout(timer);resolve();});});
@@ -13,7 +14,8 @@ async function externalWork(){
  while((w.remotion_delayRenderHandles?.length??0)>0)await new Promise(resolve=>setTimeout(resolve,4));
  await document.fonts.ready;
  await Promise.all(Array.from(document.images).map(img=>img.complete&&img.naturalWidth?undefined:img.decode().catch(()=>undefined)));
- await Promise.all(Array.from(document.querySelectorAll('video')).map(video=>video.seeking?new Promise(resolve=>video.addEventListener('seeked',resolve,{once:true})):undefined));
+ // Playing live, videos run on their own and a frame does not wait on them.
+ if(!live.playing)await Promise.all(Array.from(document.querySelectorAll('video')).map(video=>video.seeking?new Promise(resolve=>video.addEventListener('seeked',resolve,{once:true})):undefined));
 }
 
 /** Draws one requested frame completely: React commits the frame, CSS/Web animations are seeked, 3D roots advance to
@@ -23,6 +25,9 @@ export function installBridge(registry:Registry,setFrame:(frame:number)=>void){
  const draw=async(frame:number,fps:number)=>{
   const seconds=frame/fps;setFrameTime(seconds);setFrame(frame);
   for(const animation of document.getAnimations()){try{animation.pause();animation.currentTime=seconds*1000;}catch{}}
+  // Playing live, a frame is shown, not captured: it is drawn and painted once, without waiting for loads to settle
+  // (three animation frames and the settling passes held a scene to about ten frames a second).
+  if(live.playing){for(const hook of registry.frameHooks)hook(seconds);await raf();return;}
   const deadline=realNow()+FRAME_TIMEOUT_MS;
   for(let pass=0;pass<40;pass++){
    const epoch=currentEpoch();
@@ -42,5 +47,5 @@ export function installBridge(registry:Registry,setFrame:(frame:number)=>void){
   }
   running=false;
  };
- addEventListener('message',event=>{if(event.source!==parent||!event.data?.dreamScene||event.data.type!=='frame')return;pending=event.data;void drain();});
+ addEventListener('message',event=>{if(event.source!==parent||!event.data?.dreamScene||event.data.type!=='frame')return;setLive(event.data.playing===true);pending=event.data;void drain();});
 }

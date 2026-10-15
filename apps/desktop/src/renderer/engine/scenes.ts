@@ -7,7 +7,7 @@ import {liveSceneDocument} from '../../../../../packages/composition/src/live-sc
  * which of its frames to draw. Export captures the same documents frame by frame. */
 export const sceneUrl=(a:Asset)=>`dream-engine://app/scene/${encodeURIComponent(a.id)}/index.html?r=${a.scene!.revisionId.slice(0,16)}`;
 export const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
-type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;request:number;lastUsed:number;error?:string};
+type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;playing:boolean;request:number;lastUsed:number;error?:string};
 
 export class SceneLayers{
  private live=new Map<string,Live>();private alert=document.createElement('div');
@@ -26,17 +26,18 @@ export class SceneLayers{
    this.showError();}
  };
  private showError(){const failed=[...this.live.values()].find(s=>s.error&&s.wrap.style.display!=='none');this.alert.style.display=failed?'block':'none';if(failed)this.alert.textContent=`Scene ${failed.asset.filename}: ${failed.error}`;}
- private send(scene:Live){if(scene.ready&&scene.frame>=0)scene.iframe.contentWindow?.postMessage({dreamScene:true,type:'frame',requestId:++scene.request,frame:scene.frame,fps:scene.asset.fps||30},'*');}
+ private send(scene:Live){if(scene.ready&&scene.frame>=0)scene.iframe.contentWindow?.postMessage({dreamScene:true,type:'frame',requestId:++scene.request,frame:scene.frame,fps:scene.asset.fps||30,playing:scene.playing},'*');}
  private open(key:string,asset:Asset){
   const wrap=document.createElement('div'),iframe=document.createElement('iframe');
   wrap.style.cssText='position:absolute;left:0;top:0;overflow:hidden;transform-origin:0 0;pointer-events:none';
   iframe.title=asset.filename;iframe.setAttribute('sandbox','allow-scripts');iframe.style.cssText=`position:absolute;border:0;background:transparent;pointer-events:none;transform-origin:0 0;width:${asset.width}px;height:${asset.height}px`;
   if(asset.scene?.format==='engine')iframe.src=sceneUrl(asset);
   else void legacyDocument(asset).then(html=>{iframe.srcdoc=html;});
-  wrap.appendChild(iframe);const scene:Live={wrap,iframe,asset,ready:false,frame:-1,request:0,lastUsed:0};this.live.set(key,scene);return scene;
+  wrap.appendChild(iframe);const scene:Live={wrap,iframe,asset,ready:false,frame:-1,playing:false,request:0,lastUsed:0};this.live.set(key,scene);return scene;
  }
- /** Shows the scene layers of a frame, in order, at the display's scale (CSS pixels per frame pixel). */
- update(layers:MediaLayer[],assets:Map<string,Asset>,scale:number){
+ /** Shows the scene layers of a frame, in order, at the display's scale (CSS pixels per frame pixel). Each scene is told
+  * whether the preview is playing, so the videos in it play live (and are put on the exact frame once it pauses). */
+ update(layers:MediaLayer[],assets:Map<string,Asset>,scale:number,playing=false){
   const now=performance.now();
   layers.forEach((layer,order)=>{const asset=assets.get(layer.assetId);if(!asset?.scene)return;
    let scene=this.live.get(layer.key);if(scene&&scene.asset.scene?.revisionId!==asset.scene.revisionId){scene.wrap.remove();this.live.delete(layer.key);scene=undefined;}
@@ -45,7 +46,7 @@ export class SceneLayers{
    const m=layer.transform,k=scale,cw=layer.rect.w/Math.max(1e-9,layer.uv.w),ch=layer.rect.h/Math.max(1e-9,layer.uv.h);
    Object.assign(scene.wrap.style,{display:'block',width:layer.rect.w+'px',height:layer.rect.h+'px',opacity:String(layer.opacity),transform:`matrix(${m[0]*k},${m[1]*k},${m[2]*k},${m[3]*k},${m[4]*k},${m[5]*k}) translate(${layer.rect.x}px,${layer.rect.y}px)`});
    Object.assign(scene.iframe.style,{left:-layer.uv.x*cw+'px',top:-layer.uv.y*ch+'px',transform:`scale(${cw/asset.width},${ch/asset.height})`});
-   const frame=layer.frameIndex??0;if(frame!==scene.frame){scene.frame=frame;this.send(scene);}
+   const frame=layer.frameIndex??0;if(frame!==scene.frame||playing!==scene.playing){scene.frame=frame;scene.playing=playing;this.send(scene);}
   });
   // A scene not shown for a few seconds is closed; one just off screen is hidden but kept, so it returns at once.
   for(const [key,scene] of this.live){if(scene.lastUsed===now)continue;scene.wrap.style.display='none';if(now-scene.lastUsed>4000){scene.wrap.remove();this.live.delete(key);}}

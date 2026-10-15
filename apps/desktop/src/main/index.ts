@@ -56,6 +56,10 @@ if(!installerLaunch)app.whenReady().then(async()=>{
  ipcMain.handle('dream:sceneFrame',(event,r:any)=>{trusted(event);const size=(n:unknown)=>Math.max(16,Math.min(4096,Math.round(Number(n)||0)));return sceneFrame(String(r.key),typeof r.source?.html==='string'?{html:r.source.html}:{url:String(r.source?.url)},size(r.width),size(r.height),Number(r.frame)||0,Number(r.fps)||30);});
  ipcMain.handle('dream:framesResult',(event,id:string,result:unknown)=>{trusted(event);playerFrames.settle(id,result);});
  ipcMain.handle('dream:closeScenes',event=>{trusted(event);closeScenes();});
+ // The preview's fullscreen is the window's own: the page's Fullscreen API never completed in this window (Electron 44,
+ // hidden title bar), so the button asked and nothing happened. Leaving it any other way (F11) tells the page.
+ ipcMain.handle('dream:fullScreen',(event,on:unknown)=>{trusted(event);window.setFullScreen(on===true);});
+ window.on('leave-full-screen',()=>window.webContents.send('dream:event',{type:'window.fullscreen',payload:{on:false}}));
  ipcMain.handle('dream:sceneStill',(event,r:any)=>{trusted(event);const size=(n:unknown)=>Math.max(16,Math.min(4096,Math.round(Number(n)||0)));return sceneStill(typeof r.source?.html==='string'?{html:r.source.html}:{url:String(r.source?.url)},size(r.width),size(r.height),Number(r.frame)||0,Number(r.fps)||30);});
  ipcMain.handle('dream:finishExport',async(event,id:string)=>{trusted(event);const result=await finishExport(id);if(result.path)lastExport={path:result.path,projectId:exportProject_};return result;});ipcMain.handle('dream:pickExportFolder',async(event,current?:string)=>{trusted(event);const picked=await dialog.showOpenDialog(window,{title:'Export to',defaultPath:typeof current==='string'?current:undefined,properties:['openDirectory','createDirectory']});return picked.canceled?null:picked.filePaths[0]??null;});ipcMain.handle('dream:cancelExport',event=>{trusted(event);cancelEngineExport();cancelTimelineExport();closeScenes();});
  ipcMain.handle('dream:reveal',async(event,path)=>{trusted(event);const state=await service.command({type:'state'});access.assert(path);shell.showItemInFolder(path);});

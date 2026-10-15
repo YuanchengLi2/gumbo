@@ -3,7 +3,7 @@ import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {EngineView,type PlayerRef} from '../../engine/EngineView';
 import {resolve,canvasPresets,canvasRatio,type TimelineDocument} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
-import {Play,Pause,Maximize,Film,Volume2,VolumeX} from 'lucide-react';
+import {Play,Pause,Maximize,Minimize,Film,Volume2,VolumeX} from 'lucide-react';
 import {useEditor} from '../../store/editor';
 import {DreamMark} from '../home/HomeScreen';
 import type {CommandFn} from '../../hooks/useProjectSession';
@@ -12,7 +12,12 @@ type Props={project:ProjectState;timeline?:TimelineDocument;player:React.RefObje
 export function ProjectPlayer(p:Props){
  const t=p.timeline??p.project.timeline,r=useMemo(()=>resolve(t,p.project.footage),[t,p.project.footage]);
  const [engine,setEngine]=useState<PlayerRef|null>(null);
- const viewport=useRef<HTMLDivElement>(null),[size,setSize]=useState({width:0,height:0}),[muted,setMuted]=useState(false);
+ const viewport=useRef<HTMLDivElement>(null),[size,setSize]=useState({width:0,height:0}),[muted,setMuted]=useState(false),[full,setFull]=useState(false);
+ // Fullscreen fills the window with the picture at its own shape, and puts the window itself in fullscreen. Esc, the
+ // button or leaving the window's fullscreen (F11) ends it.
+ const fullscreen=(on:boolean)=>{setFull(on);void window.dream.setFullScreen(on);};
+ useEffect(()=>{if(!full)return;const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();fullscreen(false);}};window.addEventListener('keydown',key);
+  const off=window.dream.onEvent(event=>{if(event.type==='window.fullscreen'&&!(event.payload as {on?:boolean})?.on)setFull(false);});return()=>{window.removeEventListener('keydown',key);off();};},[full]);
  const duration=Math.max(1,r.durationInFrames),seek=(n:number)=>{const frame=Math.max(0,Math.min(duration-1,n));p.player.current?.seekTo(frame);p.onFrame(frame);};
  useLayoutEffect(()=>{
   const node=viewport.current;if(!node)return;
@@ -31,12 +36,13 @@ export function ProjectPlayer(p:Props){
 
  const clock=(frames:number)=>{const sec=Math.floor(frames/t.settings.fps);return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
  const currentStep=p.project.experience?.steps?.findLast(step=>step.status==='running'),currentAction=p.project.experience?.activity?.events?.findLast(event=>event.kind==='action'&&event.status==='running');
- return <section className={'project-player '+(p.manual?'manual-player':'')}>
+ return <section className={'project-player '+(p.manual?'manual-player':'')+(full?' preview-fullscreen':'')}>
   <div className="preview-viewport" ref={viewport}>
    <div className="preview-frame" style={{width:size.width||'100%',height:size.height||'100%',aspectRatio:t.settings.width+'/'+t.settings.height}}>
     {r.durationInFrames>0?<EngineView ref={p.player} timeline={t} footage={p.project.footage} clickToPlay onReady={setEngine}/>:<div className="preview-empty"><Film size={30}/><h3>Your canvas is ready</h3><p>Add media or describe the video you want to make.</p></div>}
     {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Figjam is editing"><div className="editing-animation"><div className="editing-orbit"/><DreamMark/></div><strong>Figjam is editing</strong><span className="editing-status">{currentAction?editingActivity(currentAction):currentStep?editingTask(currentStep.label):'Putting your ideas in motion'}</span><div className="editing-pulse"><i/><i/><i/></div></div>}
    </div>
+   {full&&<button className="icon-button fullscreen-exit" title="Exit fullscreen (Esc)" aria-label="Exit fullscreen" onClick={()=>fullscreen(false)}><Minimize size={18}/></button>}
   </div>
   <div className="transport">
    <button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button>
@@ -46,7 +52,7 @@ export function ProjectPlayer(p:Props){
    <select className="ratio-picker" aria-label="Canvas ratio" disabled={p.working} value={canvasRatio(t.settings.width,t.settings.height)} onChange={e=>{const preset=canvasPresets.find(i=>i.ratio===e.target.value)!;void p.command({type:'apply',requestId:crypto.randomUUID(),expectedVersionId:p.project.versionId,label:'Change canvas ratio',ops:[{type:'set_project_settings',settings:{width:preset.width,height:preset.height},reason:'Change canvas ratio'}]});}}>
     {!canvasPresets.some(i=>i.ratio===canvasRatio(t.settings.width,t.settings.height))&&<option>{canvasRatio(t.settings.width,t.settings.height)}</option>}{canvasPresets.map(i=><option key={i.ratio}>{i.ratio}</option>)}
    </select>
-   <button className="icon-button" title="Fullscreen preview" onClick={()=>p.player.current?.requestFullscreen()}><Maximize size={18}/></button>
+   <button className="icon-button" title="Fullscreen preview" onClick={()=>fullscreen(true)}><Maximize size={18}/></button>
   </div>
  </section>;
 }
