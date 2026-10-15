@@ -96,10 +96,10 @@ it('Auto runs the model Haiku chose from every model with a key, shown what each
    return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
   const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
   score={model:'gemini-argon'};await director.message('go through all my clips and pick the best scenery',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe('gemini-4-argon');
-  // Haiku saw the models that can run (no DeepSeek key here), each with what it is best at.
-  expect(asked().models.map((m:any)=>m.id)).toEqual(['opus','sonnet','haiku','gpt-astra','gpt-sol','gpt-luna','gemini-argon','gemini-flash']);expect(asked().models[0].bestAt).toMatch(/footage/);
-  // A pick without a key falls back to the table; the next message is told which model made the result it reacts to.
-  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);expect(asked().previousResultBy).toBe('gemini-argon');
+  // Haiku saw the models that can run (no DeepSeek key here), in a rotating order, each with what it is best at.
+  expect(asked().models.map((m:any)=>m.id).sort()).toEqual(['gemini-argon','gemini-flash','gpt-astra','gpt-luna','gpt-sol','haiku','opus','sonnet']);expect(asked().models.find((m:any)=>m.id==='gpt-sol').bestAt).toMatch(/footage/);
+  // A pick without a key falls back to the table (any strong model: footage at difficulty 3); the next message is told which model made the result it reacts to.
+  score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect([agentModels.sonnet,'gpt-6.1-sol','gemini-4-argon']).toContain(ran());expect(asked().previousResultBy).toBe('gemini-argon');
   const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({picked:'deepseek-flash',pickedBy:'table',work:'footage'});
  }finally{db.close();}
 });
