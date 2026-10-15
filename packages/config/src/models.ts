@@ -45,9 +45,8 @@ export type Work='talk'|'look'|'write'|'fix'|'footage'|'graphics'|'sound'|'restr
 export const works:Work[]=['talk','look','write','fix','footage','graphics','sound','restructure'];
 type Choice=Exclude<ModelChoice,'auto'>;
 /** The fallback when the router's own pick cannot run: for each kind of work and difficulty, the tier of model it needs
- * (light for one setting on one thing and small talk, strong for real editing, frontier for whole-video work). Every
- * provider's model in that tier is an equal candidate: none is preferred, and which one runs rotates from request to
- * request (fairOrder). */
+ * (light for one setting on one thing and small talk, strong for real editing, frontier for whole-video work), run on
+ * Auto's model for that tier (autoModels). */
 export const bestFor:Record<Work,{upTo:number;tier:Tier}[]>={
  talk:[{upTo:5,tier:'light'}],
  look:[{upTo:1,tier:'light'},{upTo:5,tier:'strong'}],
@@ -58,35 +57,31 @@ export const bestFor:Record<Work,{upTo:number;tier:Tier}[]>={
  sound:[{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
  restructure:[{upTo:3,tier:'strong'},{upTo:5,tier:'frontier'}],
 };
-/** A list in an order that rotates with the request (seed), the same for one request: so no provider is always listed,
- * or chosen, first. */
-export function fairOrder<T>(list:T[],seed=''):T[]{
- let h=2166136261;for(const c of seed)h=Math.imul(h^c.charCodeAt(0),16777619);const start=list.length?(h>>>0)%list.length:0;
- return[...list.slice(start),...list.slice(0,start)];
-}
 /** The work a score stands for when the triage did not name it (the word rules, an older gateway). */
 export function workOf(score:RequestScore):Work{
  if(score.work)return score.work;const d=Math.round(score.difficulty)||3;
  if(score.kind==='answer')return d<=2?'talk':'look';if(score.kind==='plan')return d>=4?'restructure':'write';return d>=5?'restructure':'fix';
 }
-/** Auto: the model Haiku chose for the request from every model that can run, weighing how hard it is against what each
- * costs (model), or else a model of the tier its kind of work needs at its difficulty (bestFor), the candidates in the
- * request's rotating order (seed). A plan of the whole edit is frontier from difficulty 4. A model the user picks always
- * wins over Auto. */
-export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>,seed=''):string{
+/** Auto: the tier Haiku chose for the request, weighing how hard it is against what each tier costs (model), or else the
+ * tier its kind of work needs at its difficulty (bestFor), run on Auto's model for that tier (autoModels). A plan of the
+ * whole edit is frontier from difficulty 4. A model the user picks always wins over Auto. */
+export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>):string{
  const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3)),can=(m:ModelInfo)=>(m.provider==='anthropic'||!!providers?.[m.provider])&&(!score.vision||m.vision);
  // The router names a tier (it is shown tiers, not providers); a model id is still honoured.
- const named=isTier(score.model)?score.model:undefined,tier:Tier=named??(score.kind==='plan'?(d>=4?'frontier':'strong'):(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier);
- const chosen=!named&&score.model?modelInfo(score.model):undefined,runnable=modelCatalog.filter(can);
- const picked=chosen&&can(chosen)?chosen:fairOrder(runnable.filter(m=>m.tier===tier),seed)[0]??fairOrder(runnable,seed)[0];
- return picked?.id??agentModels.sonnet;
+ // A model id it returns counts as that model's tier: Auto only ever runs its own model for a tier (autoModels).
+ const named=isTier(score.model)?score.model:modelInfo(score.model??'')?.tier,tier:Tier=named??(score.kind==='plan'?(d>=4?'frontier':'strong'):(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier);
+ const pick=(t:Tier)=>autoModels[t].map(choice=>modelInfo(choice)!).find(can);
+ return(pick(tier)??tiers.map(pick).find(Boolean))?.id??agentModels.sonnet;
 }
 export const tiers:Tier[]=['light','strong','frontier'];
+/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work, GPT-6.1 Sol for real edits (Sonnet's price,
+ * half its cache-read rate), Claude Opus 5.5 for the hardest work. The rest run only when the user picks them. When Sol
+ * cannot run (no OpenAI key on the gateway), Claude Sonnet 5.5 stands in for it. */
+export const autoModels:Record<Tier,Choice[]>={light:['haiku'],strong:['gpt-sol','sonnet'],frontier:['opus']};
 export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
 /** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
  * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */
 export function routerChoices(providers?:Partial<Record<Provider,boolean>>,at=new Date()){
- return tiers.flatMap(tier=>{const runnable=modelCatalog.filter(m=>m.tier===tier&&(m.provider==='anthropic'||!!providers?.[m.provider]));if(!runnable.length)return[];
-  const costs=runnable.map(m=>typicalCost(m,at)),low=Math.min(...costs),high=Math.max(...costs);
-  return[{id:tier,name:tier[0].toUpperCase()+tier.slice(1)+' model',bestAt:runnable[0].guide,costPerRequest:low===high?`about $${low.toFixed(2)}`:`about $${low.toFixed(2)}-${high.toFixed(2)}`}];});
+ return tiers.flatMap(tier=>{const model=autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>m.provider==='anthropic'||!!providers?.[m.provider]);if(!model)return[];
+  return[{id:tier,name:tier[0].toUpperCase()+tier.slice(1)+' model',bestAt:model.guide,costPerRequest:`about $${typicalCost(model,at).toFixed(2)}`}];});
 }
