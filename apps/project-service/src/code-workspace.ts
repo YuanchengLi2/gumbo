@@ -17,7 +17,7 @@ import {digest,workspacePath,authoredFiles,replaceFileSync} from '../../../packa
 import {contentHash} from '../../../packages/project-db/src/blob-store';
 import {withinScopes,normalizeScope} from '../../../packages/orchestrator/src/code-tools';
 import {WorkspaceIndex} from '../../../packages/project-db/src/workspace-index';
-import {ProjectContext} from '../../../packages/orchestrator/src/context';
+import {ProjectContext,type FootageKnowledge} from '../../../packages/orchestrator/src/context';
 import {timelineOutline} from '../../../packages/orchestrator/src/timeline-outline';
 import type {Asset} from '@dream/footage';
 import {FileApprovalRequired} from '../../../packages/orchestrator/src/file-tools';
@@ -38,9 +38,9 @@ import {sfxCatalog,describeScore,SoundDesignSchema,describeIssues} from '@dream/
 import {ENGINE_VERSION,MODULES} from '../../../packages/scene-engine/src/index';
 import type {TimelineDocument} from '@dream/timeline';
 import {prepareProjectPackages} from './project-packages';
-import {viewEdit} from './edit-view';
+import {viewEdit,type SourceFacts} from './edit-view';
 import {downloadMedia,type OnlineMedia} from './media-download';
-import {ShotIndexer,searchShots,shotLine,usedRanges,type ShotIndex} from './shot-index';
+import {ShotIndexer,searchShots,shotLine,usedRanges,rangeFacts,type ShotIndex} from './shot-index';
 import {extractAudio,mixEditRange,measureClip,MAX_LISTEN_SEC} from './edit-audio';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
@@ -50,7 +50,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
  readonly root:string;readonly index:WorkspaceIndex;
  // Re-sent to the agent only when it changes, so it excludes volatile counters and the agent's own task list.
  currentContext(){const {indexRevision:_revision,...overview}=new ProjectContext(this.db).overview() as any;let turnId:string|undefined;try{turnId=JSON.parse(this.db.getMeta('pending_request')??'null')?.turnId;}catch{}const sceneErrors=this.sceneErrors(turnId,{changedOnly:false});return{...overview,media:this.mediaContext(),decisions:activeDecisions(this.db),...(sceneErrors.length?{sceneErrors}:{})};}
- snapshot(){const {indexRevision:_revision,recentDirection:_direction,...overview}=new ProjectContext(this.db).overview() as any;return{overview,timeline:timelineOutline(this.db.timeline(),this.db.footage()),projectNotes:(this.db.getMeta('preferences')??'').slice(0,1600)||undefined,media:this.mediaContext(),capabilities:engineCapabilities(),computer:this.computerContext(),decisions:activeDecisions(this.db),projectDocument:'project.json'};}
+ snapshot(){const {indexRevision:_revision,recentDirection:_direction,...overview}=new ProjectContext(this.db).overview() as any;return{overview,timeline:timelineOutline(this.db.timeline(),this.db.footage(),40,this.sourceFacts()),projectNotes:(this.db.getMeta('preferences')??'').slice(0,1600)||undefined,media:this.mediaContext(),capabilities:engineCapabilities(),computer:this.computerContext(),decisions:activeDecisions(this.db),projectDocument:'project.json'};}
  readContext(paths:string[],maxCharacters:number){
   const files:{path:string;text:string;truncated:boolean}[]=[];let left=maxCharacters;
   for(const path of paths){if(left<=0)break;try{const text=readFileSync(workspacePath(this.root,path),'utf8');files.push({path,text:text.slice(0,left),truncated:text.length>left});left-=Math.min(text.length,left);}catch{files.push({path,text:'(not found)',truncated:false});}}
@@ -146,8 +146,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
  // The authored files by name, without excerpts: search and read_file open the code a request actually needs.
  context(query:string){const found=this.index.search(query,6),selected={files:found.files.slice(0,40).map(f=>`${f.path} (${f.characters} chars)`),...(found.files.length>40?{moreFiles:found.files.length-40}:{}),note:'Authored files; search finds code by content and read_file opens it (with its hash).'};this.db.event('workspace.context',{availableCharacters:found.availableCharacters,files:found.files.length});
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
-  let pending:{selection?:string[];assetIds?:string[]}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
-  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[]),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
+  let pending:{selection?:string[];assetIds?:string[];turnId?:string}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
+  let lookFor:string|undefined;try{lookFor=pending.turnId?JSON.parse(this.db.getMeta('routing:'+pending.turnId)??'{}').lookFor:undefined;}catch{}
+  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[],this.footageKnowledge(lookFor)),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json'};}
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.footage().assets){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;
@@ -290,7 +291,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Media is read where it is; copies into Sources/ are only made for commands that need the files.
    // The edit itself is looked at as the player draws it (frames drawn by the editor's engine, with what is on screen at
    // each moment); only Export renders video.
-   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:3,width:1536},s):undefined);
+   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:3,width:1536},s):undefined,this.sourceFacts());
    const scene=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId&&a.scene):undefined;
    if(scene)return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',instruction:'Scene source only, not rendered visual evidence. Only Export renders video.'};
    const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});
@@ -312,9 +313,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
   }
   if(name==='publish_project')return this.exclusive(async()=>{
    const now=new Date().toISOString(),result:ProcessResult={id:callId,status:'complete',exitCode:0,startedAt:now,finishedAt:now,output:'',logPath:'',isolation:'windows-appcontainer',commandHash:digest(callId)};
-   const publication=await this.publish(result,turnId,callId),document=join(this.root,'project.json'),checks=this.editChecks(turnId);
+   const before=this.db.timeline(),publication=await this.publish(result,turnId,callId),document=join(this.root,'project.json'),checks=this.editChecks(turnId),placed=this.placedFacts(before);
    // Publication rewrites project.json (new baseVersionId, resolved IDs); hand back its hash so the next edit is not stale.
-   return{publication,...(checks&&(checks.mustFix.length||checks.notes.length)?{checks:{...checks,instruction:'Fix mustFix items and publish again, or keep one by listing its id with a reason in finish.kept. Notes are for your judgement.'}}:{}),projectJson:existsSync(document)?{hash:digest(readFileSync(document,'utf8')),baseVersionId:this.db.head(),note:'project.json now holds the published timeline with outputs emptied. Re-read it before further timeline edits.'}:undefined};
+   return{publication,...(placed.length?{footageInPlacedClips:{clips:placed,note:'What the footage index measured in the source range of each main-track clip this publish added or re-trimmed: camera (steady, handheld, shaky, pans), light, soft = out of focus, and camera cuts inside the clip.'}}:{}),...(checks&&(checks.mustFix.length||checks.notes.length)?{checks:{...checks,instruction:'Fix mustFix items and publish again, or keep one by listing its id with a reason in finish.kept. Notes are for your judgement.'}}:{}),projectJson:existsSync(document)?{hash:digest(readFileSync(document,'utf8')),baseVersionId:this.db.head(),note:'project.json now holds the published timeline with outputs emptied. Re-read it before further timeline edits.'}:undefined};
   });
   if(name==='run_command')return input.processId?this.awaitCommand(input,signal):this.exclusive(()=>this.scoped(scope,()=>this.command(input,callId,turnId,signal)));
   throw new Error('Unknown workspace capability.');
@@ -407,6 +408,25 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.db.setMeta('turn-drafts:'+turnId,JSON.stringify(recorded));
   if(drafts.length){const event=this.db.activityEvent(turnId,{id:'draft:'+callId,kind:'action',tool:'check_outputs',text:drafts.length>1?'Previewing the scenes':'Previewing the scene',status:'complete',drafts,...(scope?.parent?{parent:scope.parent}:{})});this.publishEvent('ai.activity',{turnId,event});}
   return{checked:results,note:'Compiled without running anything. The user sees a live preview; if it fails while playing, the error arrives in your next step.'};
+ }
+ /** The footage index's facts for a source range, for the sources it has indexed. */
+ private sourceFacts():SourceFacts{const indexes=new Map<string,ShotIndex|undefined>();return(assetId,srcIn,srcOut,speed)=>{if(!indexes.has(assetId))indexes.set(assetId,this.options.shots?.saved(assetId));const index=indexes.get(assetId);return index?rangeFacts(index,srcIn,srcOut,speed):undefined;};}
+ /** The footage index as the agent's standing knowledge of its material: facts on every clip it reads about, and shots found
+  * for each request's words. */
+ footageKnowledge(lookFor?:string):FootageKnowledge|undefined{
+  const indexer=this.options.shots;if(!indexer)return undefined;
+  return{facts:this.sourceFacts(),...(lookFor?{lookFor}:{}),shots:(query,limit)=>{
+   const assets=this.db.footage().assets.filter(a=>ShotIndexer.indexable(a)),indexes=assets.map(a=>indexer.saved(a.id)).filter(Boolean) as ShotIndex[];if(!indexes.length||!query.trim())return[];
+   const names=new Map(assets.map(a=>[a.id,a.filename])),words=new Map<string,{start:number;end:number;text:string}[]>();for(const w of this.db.footage().words)if(names.has(w.assetId))(words.get(w.assetId)??words.set(w.assetId,[]).get(w.assetId)!).push(w);
+   let used:ReturnType<typeof usedRanges>=[];try{used=usedRanges(resolveTimeline(this.db.timeline(),this.db.footage()));}catch{}
+   return searchShots(indexes.flatMap(i=>i.shots),{query},s=>(words.get(s.assetId)??[]).filter(w=>w.start<s.end&&w.end>s.start).map(w=>w.text).join(' ').trim(),used).slice(0,limit).map((h,n)=>shotLine(h,n+1,names.get(h.shot.assetId)));
+  }};
+ }
+ /** Main-track clips that are new or have a new source range since before, each with what the index knows about it. */
+ private placedFacts(before:TimelineDocument){
+  try{const old=new Map(before.spine.map(c=>[c.id,c])),facts=this.sourceFacts(),resolved=resolveTimeline(this.db.timeline(),this.db.footage()),lines:string[]=[];
+   for(const c of resolved.clips){const was=old.get(c.id);if(was&&was.assetId===c.assetId&&Math.abs(was.srcIn-c.srcIn)<.01&&Math.abs(was.srcOut-c.srcOut)<.01)continue;const known=facts(c.assetId,c.srcIn,c.srcOut,c.speed);if(known)lines.push(`${c.id} at ${Math.round(c.start*100)/100}s (source ${Math.round(c.srcIn*100)/100}-${Math.round(c.srcOut*100)/100}s): ${known}`);}
+   return lines.length>24?[...lines.slice(0,24),`and ${lines.length-24} more`]:lines;}catch{return[];}
  }
  /** Checks of what this request changed (from the timeline when it started to now), kept with the request. */
  editChecks(turnId:string):EditChecks|undefined{const saved=this.db.getMeta('edit-checks:'+turnId);return saved?JSON.parse(saved):undefined;}

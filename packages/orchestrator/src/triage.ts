@@ -10,7 +10,7 @@ export type TriageKind='edit'|'answer'|'plan'|'continue';
 /** How a message reacts to the result before it: negative when it says that result is wrong, still broken or not what was
  * meant ("its still there", "no revert that"), positive when it approves or builds on it. */
 export type Feedback='positive'|'negative'|'none';
-export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;model?:string};
+export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;model?:string;lookFor?:string};
 export type TriageInput={message:string;mode:RequestIntent;recent:{role:string;text:string}[];stopped?:string;planWaiting?:boolean;models?:{id:string;name:string;bestAt:string;costPerRequest:string}[];previousModel?:string;project:{clips:number;overlays:number;audio:number;minutes:number;footageFiles:number};attachments:number};
 
 export const triagePrompt=`You read one message a user sent to Figjam, a video editor where an AI agent makes every edit by writing code, and decide how it is handled. Reply with JSON only.
@@ -35,21 +35,22 @@ model: the id (from models) of the model to use, weighing how hard the request i
 vision: true when doing it well needs looking at the footage or the edit's frames.
 carriesStopped: true when a request was stopped and this new message still wants what that request asked ("aside from that…", adds to it); false when it replaces or drops it, or nothing was stopped.
 parts: every separate thing the message asks for, each one short instruction in the user's words (fix spelling only), including small asks mentioned in passing; one item for a single ask. When carriesStopped, also list the stopped request's asks.
+lookFor: when doing this needs footage from the user's own imported videos (choosing shots, b-roll, a montage, a summary of the trip, replacing a clip, finding a moment), what to look for in it, as words a person describing those shots would use: places, subjects, actions, light, camera ("rice fields, mountain road, street food, market, wide scenic, steady"). Empty when it needs no footage chosen from their videos.
 reason: a short phrase.`;
 
 /** The JSON schema the gateway enforces for purpose 'triage'. */
-export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','reason'],additionalProperties:false} as const;
+export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},lookFor:{type:'string'},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','reason'],additionalProperties:false} as const;
 
 export const triageMessage=(input:TriageInput)=>JSON.stringify({message:input.message.slice(0,6000),composerMode:input.mode==='plan'?'plan first':input.mode==='ask'?'answer only':'normal',
  ...(input.stopped?{stopped:input.stopped.slice(0,3000)}:{}),...(input.planWaiting?{planAwaitingApproval:true}:{}),
  recentConversation:input.recent.map(m=>({role:m.role,text:m.text.slice(0,m.role==='user'?800:600)})),project:input.project,attachedFiles:input.attachments,
  ...(input.models?.length?{models:input.models}:{}),...(input.previousModel?{previousResultBy:input.previousModel}:{})});
 
-const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),model:z.string().optional().transform(m=>m?.trim()||undefined),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),reason:z.coerce.string().default('')});
+const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),model:z.string().optional().transform(m=>m?.trim()||undefined),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),lookFor:z.coerce.string().default(''),reason:z.coerce.string().default('')});
 /** Haiku's triage, or undefined when its reply is not one. */
 export function parseTriage(text:string):Omit<Triage,'source'>|undefined{
  try{const json=JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));const r=Reply.parse(json);
-  return{...r,difficulty:Math.min(5,Math.max(1,Math.round(r.difficulty)||3)),parts:r.parts.map(p=>p.trim()).filter(Boolean).slice(0,20).map(p=>p.slice(0,300)),reason:r.reason.slice(0,200)};}
+  return{...r,difficulty:Math.min(5,Math.max(1,Math.round(r.difficulty)||3)),parts:r.parts.map(p=>p.trim()).filter(Boolean).slice(0,20).map(p=>p.slice(0,300)),lookFor:r.lookFor.trim().slice(0,300),reason:r.reason.slice(0,200)};}
  catch{return undefined;}
 }
 
@@ -73,4 +74,4 @@ export function withMode(triage:Triage,intent:RequestIntent,interrupted:boolean)
  return{...triage,kind,carriesStopped:interrupted&&kind!=='continue'&&triage.carriesStopped};
 }
 /** The route record the rest of the engine reads (routing:<turn>): route, complexity and reason, plus the score. */
-export const routeRecord=(t:Triage)=>({route:t.kind==='edit'?'local':t.kind==='answer'?'question':t.kind,intelligence:'haiku' as const,complexity:t.difficulty<=1?'simple':t.difficulty>=4?'difficult':'normal',difficulty:t.difficulty,vision:t.vision,carriesStopped:t.carriesStopped,reason:t.reason||'Scored by triage.',source:t.source,requestedChanges:[] as string[]});
+export const routeRecord=(t:Triage)=>({route:t.kind==='edit'?'local':t.kind==='answer'?'question':t.kind,intelligence:'haiku' as const,complexity:t.difficulty<=1?'simple':t.difficulty>=4?'difficult':'normal',difficulty:t.difficulty,vision:t.vision,carriesStopped:t.carriesStopped,reason:t.reason||'Scored by triage.',source:t.source,...(t.lookFor?{lookFor:t.lookFor}:{}),requestedChanges:[] as string[]});

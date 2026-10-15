@@ -2,7 +2,9 @@ import {syncContext} from '../../project-db/src/context-index';
 import {activeDecisions} from './project-memory';
 import {z} from 'zod';
 import {resolve} from '@dream/timeline';
-import {timelineOutline} from './timeline-outline';
+import {timelineOutline,type SourceFacts} from './timeline-outline';
+/** The footage index, when the project has one: facts for a source range, and shots matching a request's words. */
+export type FootageKnowledge={facts:SourceFacts;shots:(query:string,limit:number)=>string[];lookFor?:string};
 import type {ProjectDB} from '@dream/project-db';
 
 type Chunk={id:string;kind:string;owner:string;text:string;hash:string};
@@ -37,7 +39,7 @@ export class ProjectContext {
    out.push([v.id,String(v.at).slice(0,16).replace('T',' '),...(out.length?[]:['current']),request?'asked: '+line(request,110):line(v.summary,80),...(reply?['reply: '+line(reply,100)]:[])].join(' | '));id=v.parent??undefined;}
   return out;
  }
- initial(query='',selection:string[]=[],assetIds:string[]=[]){
+ initial(query='',selection:string[]=[],assetIds:string[]=[],knowledge?:FootageKnowledge){
   this.sync();const p=this.project,t=p.timeline(),wanted=new Set(selection),picked=new Map<string,unknown>();
   const add=(id:string)=>{const row=p.db.prepare('SELECT id,kind,owner,text,hash AS revision FROM context_chunks WHERE id=?').get(id);if(row)picked.set(id,row);};
   for(const id of assetIds.slice(0,20))add(`asset:${id}:0`);
@@ -49,11 +51,14 @@ export class ProjectContext {
   const relevant:unknown[]=[];let remaining=3000;for(const row of [...picked.values()].sort((a:any,b:any)=>(b.kind==='conversation'?1:0)-(a.kind==='conversation'?1:0))){const size=JSON.stringify(row).length;if(size<=remaining){relevant.push(row);remaining-=size;}}
   // Spoken words only: what footage shows is for the agent to look at, not an earlier description of it.
   const footage=p.search(terms(query).join(' ')).filter(hit=>hit.kind==='words').slice(0,4).map(hit=>({id:hit.id,assetId:hit.asset_id,kind:hit.kind,text:hit.text.slice(0,600)}));
+  // When the request needs footage chosen from the user's videos, the shots the index finds for what triage says to look
+  // for (in the words shots are described with), as code search finds files: where to look first; the frames are the truth.
+  let shots:string[]=[];try{if(knowledge?.lookFor)shots=knowledge.shots(knowledge.lookFor,10);}catch{}
   // Follow-ups ("do that", "make it bluer", "generate captions for this") depend on the preceding exchange, so the latest
   // reply comes in full (a script or an answer the user is building on) and earlier ones nearly so; a longer one says where
   // the rest is.
   const previous=(p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 8").all() as {id:string;role:string;text:string}[]).map((m,n,all)=>{const limit=m.role==='assistant'&&all.findIndex(x=>x.role==='assistant')===n?8000:m.role==='assistant'?2500:1500;return m.text.length>limit?{...m,text:m.text.slice(0,limit),rest:`read_file scope project id conversation:${m.id}:0 (follow nextChunk)`}:m;});
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage()),relevant,footageHits:footage,projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),history:this.history(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json. read_file and list_files with version (an id from history) show your files as they were then: write one back to bring that version of it back.'};
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage(),40,knowledge?.facts),relevant,footageHits:footage,...(shots.length?{footageForRequest:{lookingFor:knowledge!.lookFor,shots}}:{}),projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),history:this.history(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json. read_file and list_files with version (an id from history) show your files as they were then: write one back to bring that version of it back.'};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();

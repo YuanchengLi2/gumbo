@@ -202,6 +202,17 @@ export function searchShots(shots:Shot[],q:ShotQuery,spoken:(s:Shot)=>string,use
   return{shot:d.shot,score,words:d.words,usedAt:d.usedAt};})
   .filter(h=>!include.length||h.score>0).sort((a,b)=>include.length?b.score-a.score:a.shot.assetId===b.shot.assetId?a.shot.start-b.shot.start:0);
 }
+/** What the index knows about a source range used in the edit, as one line: what its main shot shows, the labels of the shots that make up a fair share
+ * of it, its worst shake, and any camera cut inside it (seconds into the clip, at its speed). Undefined when the range has no
+ * indexed shots. */
+export function rangeFacts(index:ShotIndex,srcIn:number,srcOut:number,speed=1){
+ const shots=index.shots.filter(s=>s.end>srcIn&&s.start<srcOut);if(!shots.length)return undefined;
+ const share=Math.min(.5,(srcOut-srcIn)*.4),main=shots.filter(s=>Math.min(s.end,srcOut)-Math.max(s.start,srcIn)>=share||shots.length===1);
+ const labels=[...new Set((main.length?main:shots).flatMap(s=>s.labels))],shake=Math.max(...shots.map(s=>s.facts.shake));
+ const cuts=shots.filter(s=>s.cutIn&&s.start>srcIn+.1&&s.start<srcOut-.1).map(s=>r2((s.start-srcIn)/(speed||1)));
+ const longest=[...shots].sort((a,b)=>(Math.min(b.end,srcOut)-Math.max(b.start,srcIn))-(Math.min(a.end,srcOut)-Math.max(a.start,srcIn)))[0];
+ return[...(longest.what?[`"${longest.what}"`]:[]),labels.join(', ')||'no notable facts',`shake ${r2(shake)}`,...(cuts.length?[`camera cut inside, ${cuts.join('s and ')}s in`]:[])].join('; ');
+}
 /** One result as one line: where it is, what is visible, the measured facts, what is said, and where the edit uses it. */
 export function shotLine(hit:ShotHit,n:number,filename?:string){
  const s=hit.shot,length=s.end>s.start?` (${r2(s.end-s.start)}s)`:'';
