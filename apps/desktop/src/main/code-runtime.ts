@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import {existsSync,readFileSync,mkdirSync,appendFileSync,writeFileSync,readdirSync,renameSync} from 'node:fs';
 import {join,resolve,dirname,relative} from 'node:path';
 import {createHash} from 'node:crypto';
+import {totalmem} from 'node:os';
 import {ProcessRequestSchema,type ProcessRequest,type ProcessResult} from '@dream/contracts';
 import {workspacePath} from '../../../../packages/project-db/src/workspace-store';
 
@@ -13,6 +14,14 @@ export const unixTools=['awk','basename','cat','cut','diff','dirname','du','env'
 export function unixToolShims(folder:string,busybox:string){
  const marker=join(folder,'.busybox');if(existsSync(marker)&&readFileSync(marker,'utf8')===busybox)return folder;
  mkdirSync(folder,{recursive:true});for(const tool of unixTools)writeFileSync(join(folder,tool+'.cmd'),`@"${busybox}" ${tool} %*\r\n`);writeFileSync(marker,busybox);return folder;
+}
+/** The most memory one command (with every program it starts) may use: 60% of the computer's memory, leaving at least 3 GB
+ * for the app and everything else, and never under 2 GB. A command that needs more fails with a note saying so, instead of
+ * using up the computer's memory and taking the app down with it (a filter graph over a 21-minute 1080p source did, October
+ * 14). DREAM_COMMAND_MEMORY_GB overrides it. */
+export function commandMemoryLimit(total=totalmem()){
+ const gb=1024**3,set=Number(process.env.DREAM_COMMAND_MEMORY_GB);if(set>0)return Math.round(set*gb);
+ return Math.round(Math.max(2*gb,Math.min(total*.6,total-3*gb)));
 }
 // The app's own secrets never reach a command run on the user's computer.
 const secret=/^(?:DREAM_|SUPABASE|ANTHROPIC|OPENAI|GROQ|ELECTRON_|NODE_OPTIONS$)|(?:TOKEN|SECRET|PASSWORD|API_?KEY)/i;
@@ -58,41 +67,26 @@ export class CodeRuntime {
   const renderTimer=setInterval(()=>{if(controller.signal.aborted)return;for(const file of readdirSync(renderRequests)){if(!/^[a-f0-9-]+\.json$/.test(file)||handled.has(file))continue;handled.add(file);const response=workspacePath(root,'.cache/render-requests/'+file.replace('.json','.result.json'));writeFileSync(response+'.tmp',JSON.stringify({error:'Chat does not render frames. Publish a live scene and use Export to render a video.'}));renameSync(response+'.tmp',response);}},100);
 
   writeFileSync(intentPath,JSON.stringify({id:request.id,commandHash,startedAt:new Date().toISOString()}));
-  if(local){clearInterval(renderTimer);try{return await this.runLocal(request,shell,script,cwd,environment,controller.signal,receiptPath,logPath,commandHash,onOutput);}finally{signal.removeEventListener('abort',stop);this.owned.delete(controller);}}
+  if(local)clearInterval(renderTimer);
+  // Every command runs through the host, in a job object with a memory cap: on the user's computer as the user (their
+  // programs and files, the workspace's tools first on PATH), otherwise in the AppContainer.
+  const hostRequest=local?{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[],environment:localEnvironment(environment),memoryLimitBytes:commandMemoryLimit(),local:true}:{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment,memoryLimitBytes:commandMemoryLimit()};
   return await new Promise<ProcessResult>((ok,fail)=>{
    const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});let pending='',result:ProcessResult|undefined,error:Error|undefined;
    const cancel=()=>{if(child.stdin.writable)child.stdin.write('cancel\n');};controller.signal.addEventListener('abort',cancel,{once:true});
-   child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify({...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment})+'\n');if(signal.aborted)cancel();
+   child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify(hostRequest)+'\n');if(signal.aborted)cancel();
    child.stdout.on('data',chunk=>{pending+=chunk.toString();let newline:number;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);try{const data=JSON.parse(line);if(data.type==='output'){appendFileSync(logPath,data.text);onOutput(data.text);}if(data.type==='result')result={...data.result,logPath};if(data.type==='error')error=new Error(data.message);}catch(e){error=e as Error;cancel();}}});
    child.stderr.on('data',b=>appendFileSync(logPath,b));child.on('error',e=>{error=e;});
    child.on('close',()=>{clearInterval(renderTimer);controller.abort();signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',cancel);this.owned.delete(controller);child.stdin.end();if(result)ok(result);else fail(error??new Error('Creation host ended without a process receipt. The last published video is unchanged.'));});
   });
  }
- /** A command on the user's computer through the bundled sh, with the workspace's tools first on PATH and the user's own after them. */
- private runLocal(request:ProcessRequest,shell:string,script:string,cwd:string,sandbox:Record<string,string>,signal:AbortSignal,receiptPath:string,logPath:string,commandHash:string,onOutput:(text:string)=>void){
-  const user=Object.fromEntries(Object.entries(process.env).filter(([key,value])=>value!==undefined&&!secret.test(key))) as Record<string,string>;
-  const {HOME:_home,USERPROFILE:_profile,APPDATA:_appData,LOCALAPPDATA:_localAppData,TEMP:_temp,TMP:_tmp,SystemRoot:_root,WINDIR:_windir,ComSpec:_comspec,...tools}=sandbox;
-  // The Unix tool shims go last, after the user's own PATH.
-  const [shims]=sandbox.PATH.split(';').slice(-1),own=sandbox.PATH.split(';').slice(0,-1).join(';');
-  const env:Record<string,string>={...user,...tools,PATH:[own,user.PATH??user.Path??'',shims].filter(Boolean).join(';')};delete env.Path;
-  const startedAt=new Date().toISOString();let output='';
-  return new Promise<ProcessResult>((ok,fail)=>{
-   const child=spawn(shell,['sh','-c',script],{cwd,env:env as NodeJS.ProcessEnv,windowsHide:true,stdio:['ignore','pipe','pipe']});
-   const kill=()=>{if(child.pid)spawn('taskkill',['/pid',String(child.pid),'/t','/f'],{windowsHide:true});};
-   let reason:'cancelled'|'interrupted'|undefined;const timer=setTimeout(()=>{reason='interrupted';kill();},request.timeoutMs);
-   const abort=()=>{reason='cancelled';kill();};signal.addEventListener('abort',abort,{once:true});
-   const take=(chunk:Buffer)=>{const text=chunk.toString();output=(output+text).slice(-12000);appendFileSync(logPath,text);onOutput(text);};
-   child.stdout.on('data',take);child.stderr.on('data',take);child.on('error',error=>{clearTimeout(timer);signal.removeEventListener('abort',abort);fail(error);});
-   // A command is over when its shell exits. Waiting for its output pipes to close as well hung until the timeout whenever
-   // the command left a program running in the background (it keeps the pipes open), so after the shell exits the pipes
-   // get a moment to drain and are then let go.
-   let done=false,drain:ReturnType<typeof setTimeout>|undefined;
-   const finish=(code:number|null,detached=false)=>{if(done)return;done=true;clearTimeout(timer);if(drain)clearTimeout(drain);signal.removeEventListener('abort',abort);
-    const result:ProcessResult={id:request.id,status:reason??(code===0?'complete':'failed'),exitCode:code,startedAt,finishedAt:new Date().toISOString(),output:(reason==='interrupted'?output+`\nStopped after ${Math.round(request.timeoutMs/1000)} seconds.`:output)+(detached&&!reason?'\n(A program this command started is still running in the background; its later output is not captured.)':''),logPath:request.id+'.log',isolation:'local',commandHash};
-    writeFileSync(receiptPath,JSON.stringify(result));ok({...result,logPath});};
-   child.on('exit',code=>{drain=setTimeout(()=>{child.stdout?.destroy();child.stderr?.destroy();finish(code,true);},1500);});
-   child.on('close',code=>finish(code));
-  });
- }
  stop(){for(const controller of this.owned)controller.abort();}
+}
+/** The environment of a command on the user's computer: theirs without the app's secrets, with the workspace's tools first
+ * on PATH, the user's own after them and the Unix tool shims last; home and temp folders stay the user's. */
+function localEnvironment(sandbox:Record<string,string>){
+ const user=Object.fromEntries(Object.entries(process.env).filter(([key,value])=>value!==undefined&&!secret.test(key))) as Record<string,string>;
+ const {HOME:_home,USERPROFILE:_profile,APPDATA:_appData,LOCALAPPDATA:_localAppData,TEMP:_temp,TMP:_tmp,SystemRoot:_root,WINDIR:_windir,ComSpec:_comspec,...tools}=sandbox;
+ const [shims]=sandbox.PATH.split(';').slice(-1),own=sandbox.PATH.split(';').slice(0,-1).join(';');
+ const env:Record<string,string>={...user,...tools,PATH:[own,user.PATH??user.Path??'',shims].filter(Boolean).join(';')};delete env.Path;return env;
 }

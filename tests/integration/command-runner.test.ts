@@ -3,12 +3,12 @@ import {mkdtempSync,mkdirSync,copyFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {CodeRuntime} from '../../apps/desktop/src/main/code-runtime';
+import {CodeRuntime,commandMemoryLimit} from '../../apps/desktop/src/main/code-runtime';
 import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
 
 const localRuntime=()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-runner-')),workspace=join(project,'Workspace');mkdirSync(workspace);
- mkdirSync(join(project,'runtime','shell'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/shell/busybox.exe'),join(project,'runtime','shell','busybox.exe'));
+ mkdirSync(join(project,'runtime','shell'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/shell/busybox.exe'),join(project,'runtime','shell','busybox.exe'));mkdirSync(join(project,'runtime','host'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/host/creation-host.exe'),join(project,'runtime','host','creation-host.exe'));
  const runtime=new CodeRuntime({creation:join(project,'runtime'),ffmpeg:join(project,'bin','ffmpeg.exe'),ffprobe:'',browser:''});runtime.local=()=>true;return{runtime,workspace};
 };
 
@@ -41,4 +41,19 @@ it('returns a long command\'s output so far and lets it run on, then waits for i
   finish();const done=await ws.execute('run_command',{processId:'long1'},'wait2','turn',signal);
   expect(done.process).toMatchObject({status:'complete',output:'frame 900 of 900\n'});expect(ws.runningCommands()).toEqual([]);
  }finally{delete process.env.DREAM_COMMAND_WAIT_MS;db.close();}
+});
+
+// October 14: one agent command (a filter graph over a 21-minute source) used up the computer's memory and the app died.
+it('stops a command that uses more memory than a command may, and says why, without touching the app',async()=>{
+ const {runtime,workspace}=localRuntime(),before=process.env.DREAM_COMMAND_MEMORY_GB;process.env.DREAM_COMMAND_MEMORY_GB='0.5';
+ try{
+  const result=await runtime.run({id:'hog',projectId:'p',workspace,command:`node -e "const a=[];for(let i=0;i<40;i++)a.push(Buffer.alloc(64*1024*1024,1));console.log('allocated all')"`,cwd:'.',timeoutMs:60000},new AbortController().signal,()=>{});
+  expect(result.status).toBe('failed');expect(result.output).not.toContain('allocated all');expect(result.output).toContain('used all 0.5 GB of memory a command may use');
+  // The next command runs normally.
+  const next=await runtime.run({id:'after',projectId:'p',workspace,command:'echo fine',cwd:'.',timeoutMs:60000},new AbortController().signal,()=>{});expect(next.output).toContain('fine');
+ }finally{if(before===undefined)delete process.env.DREAM_COMMAND_MEMORY_GB;else process.env.DREAM_COMMAND_MEMORY_GB=before;}
+},90_000);
+
+it('lets a command use most of the computer\'s memory, keeping some for everything else',()=>{
+ const gb=1024**3;expect(commandMemoryLimit(16*gb)/gb).toBeCloseTo(9.6,1);expect(commandMemoryLimit(4*gb)/gb).toBe(2);expect(commandMemoryLimit(64*gb)/gb).toBeCloseTo(38.4,1);
 });

@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Win32.SafeHandles;
 
-record Request(string Id,string Workspace,string Cwd,string Command,string CommandHash,string ReceiptPath,string[] ReadRoots,Dictionary<string,string> Environment,int TimeoutMs,string? Shell=null);
+record Request(string Id,string Workspace,string Cwd,string Command,string CommandHash,string ReceiptPath,string[] ReadRoots,Dictionary<string,string> Environment,int TimeoutMs,string? Shell=null,long MemoryLimitBytes=0,bool Local=false);
 static class Program {
  static readonly JsonSerializerOptions Json=new(){PropertyNameCaseInsensitive=true,PropertyNamingPolicy=JsonNamingPolicy.CamelCase};
  static void Check(bool ok){if(!ok)throw new Win32Exception(Marshal.GetLastWin32Error());}
@@ -28,19 +28,25 @@ static class Program {
    req=JsonSerializer.Deserialize<Request>((await Console.In.ReadLineAsync())??throw new IOException("No process request"),Json)??throw new IOException("Invalid process request");
    var root=Path.GetFullPath(req.Workspace);var cwd=Path.GetFullPath(req.Cwd);if(cwd!=root&&!cwd.StartsWith(root+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new IOException("Working directory escaped workspace");
    if(File.Exists(req.ReceiptPath)){Emit(new{type="result",result=JsonSerializer.Deserialize<JsonElement>(File.ReadAllText(req.ReceiptPath))});return 0;}
+   // A local command runs as the user (their programs, files and network); every other command runs in the AppContainer.
+   // Both run in a job object whose memory cap stops a runaway program before it takes the computer's memory.
+   if(!req.Local){
    string profile="Dream.Creation."+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(root.ToLowerInvariant())))[..24];
    int hr=CreateAppContainerProfile(profile,profile,"Dream project creation environment",IntPtr.Zero,0,out sid);if(hr<0){if(hr!=unchecked((int)0x800700B7))Marshal.ThrowExceptionForHR(hr);Marshal.ThrowExceptionForHR(DeriveAppContainerSidFromAppContainerName(profile,out sid));}
    var identity=new SecurityIdentifier(sid);Grant(root,identity,true);foreach(var path in req.ReadRoots)Grant(Path.GetFullPath(path),identity,false);
    Check(ConvertStringSidToSid("S-1-15-3-1",out cap)); // internetClient; no private-network capability
    capArray=Marshal.AllocHGlobal(Marshal.SizeOf<SID_AND_ATTRIBUTES>());Marshal.StructureToPtr(new SID_AND_ATTRIBUTES{Sid=cap,Attributes=4},capArray,false);
    var capabilities=new SECURITY_CAPABILITIES{AppContainerSid=sid,Capabilities=capArray,CapabilityCount=1};capsPtr=Marshal.AllocHGlobal(Marshal.SizeOf<SECURITY_CAPABILITIES>());Marshal.StructureToPtr(capabilities,capsPtr,false);
+   }
    var sa=new SECURITY_ATTRIBUTES{nLength=Marshal.SizeOf<SECURITY_ATTRIBUTES>(),bInheritHandle=true};Check(CreatePipe(out read,out write,ref sa,0));Check(SetHandleInformation(read,1,0));
    input=CreateFile("NUL",0x80000000,3,ref sa,3,0,IntPtr.Zero);if(input==new IntPtr(-1))throw new Win32Exception();
-   IntPtr size=IntPtr.Zero;InitializeProcThreadAttributeList(IntPtr.Zero,2,0,ref size);attrs=Marshal.AllocHGlobal(size);Check(InitializeProcThreadAttributeList(attrs,2,0,ref size));
-   Check(UpdateProcThreadAttribute(attrs,0,new IntPtr(0x20009),capsPtr,new IntPtr(Marshal.SizeOf<SECURITY_CAPABILITIES>()),IntPtr.Zero,IntPtr.Zero));
+   IntPtr size=IntPtr.Zero;int attributes=req.Local?1:2;InitializeProcThreadAttributeList(IntPtr.Zero,attributes,0,ref size);attrs=Marshal.AllocHGlobal(size);Check(InitializeProcThreadAttributeList(attrs,attributes,0,ref size));
+   if(!req.Local)Check(UpdateProcThreadAttribute(attrs,0,new IntPtr(0x20009),capsPtr,new IntPtr(Marshal.SizeOf<SECURITY_CAPABILITIES>()),IntPtr.Zero,IntPtr.Zero));
    handleArray=Marshal.AllocHGlobal(IntPtr.Size*2);Marshal.WriteIntPtr(handleArray,write);Marshal.WriteIntPtr(handleArray,IntPtr.Size,input);Check(UpdateProcThreadAttribute(attrs,0,new IntPtr(0x20002),handleArray,new IntPtr(IntPtr.Size*2),IntPtr.Zero,IntPtr.Zero));
    var si=new STARTUPINFOEX{StartupInfo=new STARTUPINFO{cb=Marshal.SizeOf<STARTUPINFOEX>(),dwFlags=0x100,hStdInput=input,hStdOutput=write,hStdError=write},lpAttributeList=attrs};
-   job=CreateJobObject(IntPtr.Zero,null);Check(job!=IntPtr.Zero);var limits=new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();limits.BasicLimitInformation.LimitFlags=0x2000;Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()));
+   job=CreateJobObject(IntPtr.Zero,null);Check(job!=IntPtr.Zero);var limits=new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+   // 0x2000 kills what is left when the host lets go (a local command's background programs may go on); 0x200 caps the memory of the whole job.
+   limits.BasicLimitInformation.LimitFlags=(req.Local?0u:0x2000u)|(req.MemoryLimitBytes>0?0x200u:0u);if(req.MemoryLimitBytes>0)limits.JobMemoryLimit=(UIntPtr)(ulong)req.MemoryLimitBytes;Check(SetInformationJobObject(job,9,ref limits,(uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()));
    var environment=string.Join('\0',req.Environment.OrderBy(k=>k.Key,StringComparer.OrdinalIgnoreCase).Select(k=>$"{k.Key}={k.Value}"))+"\0\0";env=Marshal.StringToHGlobalUni(environment);
    // The bundled sh takes the command as one argument, quoted for the C runtime's argument parser; cmd.exe is the fallback.
    string cmd=req.Shell??Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.System),"cmd.exe");var command=new StringBuilder(req.Shell!=null?$"\"{cmd}\" sh -c {Quote(req.Command)}":$"\"{cmd}\" /d /s /c \"{req.Command}\"");
@@ -50,8 +56,14 @@ static class Program {
    using var stream=new FileStream(new SafeFileHandle(read,true),FileAccess.Read,4096,false);read=IntPtr.Zero;
    var drain=Task.Run(async()=>{using var reader=new StreamReader(stream,Encoding.UTF8);var buffer=new char[4096];int n;while((n=await reader.ReadAsync(buffer))>0){var text=new string(buffer,0,n);output=(output+text);if(output.Length>12000)output=output[^12000..];Emit(new{type="output",text});}});
    uint wait=await Task.Run(()=>WaitForSingleObject(pi.hProcess,(uint)req.TimeoutMs));if(wait==258){cancelled=true;Check(TerminateJobObject(job,1460));WaitForSingleObject(pi.hProcess,5000);}else if(wait!=0)throw new Win32Exception();
-   Check(GetExitCodeProcess(pi.hProcess,out uint exit));Check(TerminateJobObject(job,exit));await drain;
-   var result=new{id=req.Id,status=cancelled?"cancelled":exit==0?"complete":"failed",exitCode=(int)exit,startedAt=started,finishedAt=DateTime.UtcNow.ToString("O"),output,logPath=req.Id+".log",isolation="windows-appcontainer",commandHash=req.CommandHash};
+   Check(GetExitCodeProcess(pi.hProcess,out uint exit));
+   // A local command's shell is done when it exits; programs it left in the background keep running (still under the cap)
+   // and keep the output pipe open, so its output is read for a moment more and then let go.
+   if(req.Local)await Task.WhenAny(drain,Task.Delay(1500));else{Check(TerminateJobObject(job,exit));await drain;}
+   // Hitting the memory cap makes the program's allocations fail; say so plainly, with what to do instead.
+   var used=new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();bool overMemory=req.MemoryLimitBytes>0&&QueryInformationJobObject(job,9,ref used,(uint)Marshal.SizeOf<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>(),IntPtr.Zero)&&(ulong)used.PeakJobMemoryUsed>=(ulong)(req.MemoryLimitBytes*0.97);
+   if(overMemory){var note=$"\nStopped: this command used all {Math.Round(req.MemoryLimitBytes/1073741824.0,1)} GB of memory a command may use, so its memory requests failed. Process media in smaller pieces (for example seek with -ss to each range and cut one range per ffmpeg run instead of one filter graph over a whole long file).";output=(output+note);if(output.Length>12000)output=output[^12000..];Emit(new{type="output",text=note});}
+   var result=new{id=req.Id,status=cancelled?"cancelled":exit==0&&!overMemory?"complete":"failed",exitCode=(int)exit,startedAt=started,finishedAt=DateTime.UtcNow.ToString("O"),output,logPath=req.Id+".log",isolation=req.Local?"local":"windows-appcontainer",commandHash=req.CommandHash};
    Directory.CreateDirectory(Path.GetDirectoryName(req.ReceiptPath)!);File.WriteAllText(req.ReceiptPath+".tmp",JsonSerializer.Serialize(result,Json));File.Move(req.ReceiptPath+".tmp",req.ReceiptPath,true);Emit(new{type="result",result});return 0;
   }catch(Exception e){Emit(new{type="error",message=e.Message,code="creation_host_failed"});return 1;}
   finally{
@@ -83,6 +95,7 @@ static class Program {
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcess(string app,StringBuilder command,IntPtr processAttributes,IntPtr threadAttributes,bool inherit,uint flags,IntPtr environment,string cwd,ref STARTUPINFOEX startup,out PROCESS_INFORMATION info);
  [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern IntPtr CreateJobObject(IntPtr attributes,string? name);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool SetInformationJobObject(IntPtr job,int type,ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info,uint size);
+ [DllImport("kernel32.dll",SetLastError=true)] static extern bool QueryInformationJobObject(IntPtr job,int type,ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION info,uint size,IntPtr returned);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool AssignProcessToJobObject(IntPtr job,IntPtr process);
  [DllImport("kernel32.dll",SetLastError=true)] static extern bool TerminateJobObject(IntPtr job,uint exit);
  [DllImport("kernel32.dll",SetLastError=true)] static extern uint ResumeThread(IntPtr thread);

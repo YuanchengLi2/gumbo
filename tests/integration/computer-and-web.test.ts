@@ -14,8 +14,8 @@ import {withoutUnansweredServerCalls,repairSavedExchanges} from '../../packages/
 
 it('runs a command on the user\'s computer when computer access is allowed, without the app\'s secrets',async()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-local-')),workspace=join(project,'Workspace');mkdirSync(workspace);
- // A command on the user's computer needs only the bundled shell, not the container.
- mkdirSync(join(project,'runtime','shell'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/shell/busybox.exe'),join(project,'runtime','shell','busybox.exe'));
+ // A command on the user's computer needs the bundled shell and the host (for its memory cap), not the container.
+ mkdirSync(join(project,'runtime','shell'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/shell/busybox.exe'),join(project,'runtime','shell','busybox.exe'));mkdirSync(join(project,'runtime','host'),{recursive:true});copyFileSync(resolve('apps/desktop/resources/staged/creation/host/creation-host.exe'),join(project,'runtime','host','creation-host.exe'));
  const runtime=new CodeRuntime({creation:join(project,'runtime'),ffmpeg:join(project,'bin','ffmpeg.exe'),ffprobe:'',browser:''});runtime.local=()=>true;
  process.env.DREAM_TEST_SECRET='hidden';process.env.SUPABASE_SERVICE_KEY='hidden';
  try{
