@@ -23,11 +23,11 @@ export class EnginePlayer implements PlayerRef{
  private videos=new Map<string,Video>();private images=new Map<string,HTMLImageElement>();private sounds=new Map<string,Sound>();
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
- private scenes?:SceneLayers;private over?:Compositor;
+ private scenes?:SceneLayers;private over?:Compositor;private starts=new Map<string,number>();
  constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=new Compositor(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);}
  /** A new revision of the edit: the frames and sound follow it without interrupting playback. */
  setProject(timeline:TimelineDocument,footage:FootageIndex){
-  this.prepared=prepare({timeline,footage});this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
+  this.prepared=prepare({timeline,footage});this.starts.clear();this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
   this.segments=audioManifest(timeline,footage).filter(s=>s.enabled!==false);
   for(const [id,sound] of this.sounds)if(!this.segments.some(s=>s.id===id&&s.assetId===sound.segment.assetId)){sound.el.pause();sound.gain.disconnect();this.sounds.delete(id);}
   for(const sound of this.sounds.values())sound.segment=this.segments.find(s=>s.id===sound.segment.id)!;
@@ -56,12 +56,25 @@ export class EnginePlayer implements PlayerRef{
    v={el,assetId:layer.assetId,lastUsed:0,seeking:false};const video=v;el.addEventListener('seeked',()=>{video.seeking=false;this.dirty=true;});el.addEventListener('loadeddata',()=>{this.dirty=true;});this.videos.set(layer.key,v);}
   v.lastUsed=performance.now();return v;
  }
- /** Keeps a clip's video on the moment the timeline asks for: playing along at the clip's speed, re-synced when it drifts,
-  * or seeked to the exact frame while paused. */
+ /** Keeps a clip's video on the moment the timeline asks for: playing along at the clip's speed, or seeked to the exact
+  * frame while paused. A playing video that drifts is eased back by running a little faster or slower, since every seek
+  * while playing shows as a hitch; only a video half a second off is seeked. */
  private steer(v:Video,layer:MediaLayer,playing:boolean){
   const el=v.el,frame=1/this.fps;if(el.readyState<1)return;
-  if(playing&&layer.rate>0){el.playbackRate=layer.rate;if(Math.abs(el.currentTime-layer.time)>.25&&!v.seeking){v.seeking=true;el.currentTime=layer.time;}if(el.paused)void el.play().catch(()=>{});}
+  if(playing&&layer.rate>0){const drift=layer.time-el.currentTime;
+   if(Math.abs(drift)>.5&&!v.seeking){v.seeking=true;el.currentTime=layer.time;}
+   const rate=layer.rate*(Math.abs(drift)>frame?1+Math.max(-.1,Math.min(.1,drift)):1);if(Math.abs(el.playbackRate-rate)>.005)el.playbackRate=rate;
+   if(el.paused)void el.play().catch(()=>{});}
   else{if(!el.paused)el.pause();if(Math.abs(el.currentTime-layer.time)>frame/2&&!v.seeking){v.seeking=true;el.currentTime=layer.time;}}
+ }
+ /** The source moment a clip that is about to start shows first, so its video waits there for the cut (found once per
+  * clip, at frame accuracy, between now and the time it is known to be showing). */
+ private firstMoment(layer:MediaLayer,now:number,ahead:number){
+  const known=this.starts.get(layer.key);if(known!==undefined)return known;
+  const at=(n:number)=>frameAt(this.prepared,n/this.fps).layers.find((l):l is MediaLayer=>l.kind==='media'&&l.key===layer.key);
+  let lo=Math.round(now*this.fps),hi=Math.round(ahead*this.fps);if(at(lo))return layer.time;
+  while(hi-lo>1){const mid=(lo+hi)>>1;if(at(mid))hi=mid;else lo=mid;}
+  const time=at(hi)?.time??layer.time;this.starts.set(layer.key,time);return time;
  }
  private picture(layer:MediaLayer){
   if(layer.media==='video'){const v=this.videos.get(layer.key);return v&&v.el.readyState>=2?v.el:undefined;}
@@ -87,12 +100,15 @@ export class EnginePlayer implements PlayerRef{
   const t=this.now();if(this.playing&&t>=this.duration){this.time=Math.max(0,this.duration-1/this.fps);this.playing=false;for(const v of this.videos.values())v.el.pause();for(const s of this.sounds.values())s.el.pause();this.emit('pause');this.emit('ended');this.dirty=true;}
   const time=this.playing?t:this.time,frame=frameAt(this.prepared,time),media=frame.layers.filter((l):l is MediaLayer=>l.kind==='media');
   const pictured=media.filter(l=>l.media!=='scene');
+  const tick=performance.now();
   for(const layer of media)if(layer.media==='video')this.steer(this.video(layer),layer,this.playing);
   // The next clip is loaded and parked on its first frame half a second early, so a cut shows it at once.
-  for(const layer of frameAt(this.prepared,Math.min(this.duration-1e-3,time+.5)).layers)if(layer.kind==='media'&&layer.media==='video'&&!media.some(m=>m.key===layer.key))this.steer(this.video(layer),layer,false);
+  const ahead=Math.min(this.duration-1e-3,time+.5);
+  for(const layer of frameAt(this.prepared,ahead).layers)if(layer.kind==='media'&&layer.media==='video'&&!media.some(m=>m.key===layer.key))this.steer(this.video(layer),{...layer,time:this.firstMoment(layer,time,ahead)},false);
   else if(layer.kind==='media'&&(layer.media==='image'||layer.media==='sequence'))this.picture(layer);
   this.sound(time);
-  const now=performance.now();for(const [key,v] of this.videos)if(now-v.lastUsed>4000){v.el.pause();v.el.removeAttribute('src');v.el.load();this.videos.delete(key);}
+  // A clip that has left the frame stops playing at once (it would go on decoding unseen), and is let go after a while.
+  const now=performance.now();for(const [key,v] of this.videos){if(v.lastUsed<tick&&!v.el.paused)v.el.pause();if(now-v.lastUsed>4000){v.el.pause();v.el.removeAttribute('src');v.el.load();this.videos.delete(key);}}
   if(this.playing){const n=this.getCurrentFrame();if(n!==this.lastFrame){this.lastFrame=n;this.emit('frameupdate',{frame:n});}this.dirty=true;}
   if(!this.dirty)return;
   // Wait for every picture the frame needs (up to a moment), so a seek or cut never flashes an empty frame.
