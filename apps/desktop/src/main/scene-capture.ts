@@ -30,7 +30,9 @@ export async function sceneFrame(key:string,source:SceneSource,width:number,heig
  const answer=await entry.window.webContents.executeJavaScript(`new Promise(resolve=>{
   const state=window.__dreamCapture??=(addEventListener('message',e=>{if(e.data?.dreamScene&&(e.data.ready||e.data.requestId))window.__dreamCapture.ready=true;}),{ready:false});
   const post=()=>postMessage({dreamScene:true,type:'frame',requestId:${id},frame:${Math.max(0,Math.floor(frame))},fps:${Number(fps)||30}},'*');
-  const finish=value=>{removeEventListener('message',receive);clearInterval(retry);clearTimeout(limit);resolve(value);};
+  // The scene has drawn the frame into its page, but the window paints it on its next frame: answering at once captured
+  // the frame before (blank for a scene's first frame, so the agent and Export missed graphics that were there).
+  const finish=value=>{removeEventListener('message',receive);clearInterval(retry);clearTimeout(limit);requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(value)));};
   const receive=e=>{const d=e.data;if(!d?.dreamScene)return;if(d.ready&&!state.ready){state.ready=true;post();return;}
    if(d.error&&(d.fatal||d.requestId===${id}||d.requestId===undefined))finish({error:String(d.error)});else if(d.requestId===${id})finish({});};
   addEventListener('message',receive);

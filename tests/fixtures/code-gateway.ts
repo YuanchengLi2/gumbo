@@ -8,11 +8,11 @@ import {gunzipSync} from 'node:zlib';
 /** A request body as the desktop sends it: AI requests are gzip-compressed, the rest plain JSON. */
 export const requestJSON=(req:{headers:Record<string,unknown>},chunks:Buffer[])=>JSON.parse((req.headers['content-type']==='application/x-dream-json-gzip'?gunzipSync(Buffer.concat(chunks)):Buffer.concat(chunks)).toString());
 export type Script=(body:any,step:number)=>any[];
-export async function codeGateway(options:{script:Script;route?:(body:any)=>Record<string,unknown>;delayMs?:number;shortSession?:boolean;transientOnce?:boolean}){
+export async function codeGateway(options:{script:Script;route?:(body:any)=>Record<string,unknown>;delayMs?:number;shortSession?:boolean;transientOnce?:boolean;words?:{word:string;start:number;end:number}[]}){
  let refreshes=0,streams=0,failures=0,responses=0;const usedTokens=new Set<string>(),calls:{purpose?:string;model?:string;tools:string[];step:number}[]=[];
  const server=createServer(async(req,res)=>{try{
   const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
-  if(req.url?.endsWith('/transcribe')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({words:[],segments:[]}));return;}
+  if(req.url?.split('?')[0].endsWith('/transcribe')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({words:options.words??[],segments:[]}));return;}
   const body=chunks.length?requestJSON(req,chunks):{},json=(status:number,data:unknown)=>res.writeHead(status,{'Content-Type':'application/json'}).end(JSON.stringify(data));
   if(req.url?.startsWith('/auth/v1/'))return json(200,{access_token:`code-fixture-${++refreshes}`,refresh_token:'code-fixture-refresh',expires_in:options.shortSession?1:3600,user:{id:'fixture-account',email:'local-fixture@example.invalid',is_anonymous:true}});
   if(req.url?.endsWith('/account'))return json(200,{status:'active',is_guest:true,invited:true});
