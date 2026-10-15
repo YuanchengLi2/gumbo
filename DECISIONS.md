@@ -636,3 +636,4 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - After each publish, every main-track clip it added or re-trimmed comes back with the same facts (footageInPlacedClips), and watching a stretch of the edit gives each cut its facts.
 - Cost: about 7,000 characters more in the vlog's first message (40 outline lines and ten shots), in the part re-read from cache within the request.
 - The gateway's triage schema gained lookFor; until it is deployed, triage replies have none and requests simply get no footage list.
+- Deployed the same evening (gateway version 40), so triage replies carry lookFor.
