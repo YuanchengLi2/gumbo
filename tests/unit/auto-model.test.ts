@@ -40,5 +40,5 @@ it('lists every model once with its price, without DeepSeek V4 Pro, and bills ot
  expect(new Set(modelCatalog.map(m=>m.id)).size).toBe(modelCatalog.length);
  expect(modelCatalog.some(m=>/deepseek-v4-pro/.test(m.id))).toBe(false);
  expect(modelCatalog.some(m=>/cheapest/i.test(m.detail))).toBe(false);
- expect(usageCost('deepseek-flash',{input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000})).toBeCloseTo(.3+.006+1.2,9);
+ expect(usageCost('deepseek-flash',{input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000},undefined,new Date('2026-10-14T02:00:00Z'))).toBeCloseTo(.3+.006+1.2,9);
 });

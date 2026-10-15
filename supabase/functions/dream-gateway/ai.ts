@@ -1,7 +1,7 @@
 import {requestStatus,type RequestStore} from './inference-requests.ts';
 import {streamProvider} from './streaming.ts';
 import {readMessageStream} from '../_shared/stream.ts';
-import {providerModels,providerSecrets,providerNames,providerEndpoints,chatRequest,responsesRequest,anthropicStream,anthropicMessages,type ProviderId} from './providers.ts';
+import {providerModels,providerRates,providerSecrets,providerNames,providerEndpoints,chatRequest,responsesRequest,anthropicStream,anthropicMessages,type ProviderId} from './providers.ts';
 import {inferencePolicy,cachedPrompt,usageCost,validProfile,validTaskBudget,providerHeaders,pricingVersion,promptEstimate,refusalFallback,gatewayFeatures,FALLBACK_BETA,TASK_BUDGET_BETA} from './inference-policy.ts';
 
 // Disabled for this instance if the provider rejects requests carrying fallbacks while accepting them without it.
@@ -24,7 +24,7 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
  const requested=Number(body.max_tokens??4096);if(!Number.isFinite(requested))return failed('Invalid output limit',400,'invalid_request');
  const maxTokens=Math.min(64000,Math.max(128,Math.floor(requested)));
  if(requests){try{const claimed=await requests.claim(body,userId,timeoutMs);if(!claimed.owner)return requestStatus(await requests.read(userId,body.requestId));}catch(error){return failed((error as Error).message,409,'request_conflict');}}
- const estimatedInput=promptEstimate({system:body.system,messages:body.messages,tools:body.tools}),reservationPrice=body.model==='claude-haiku-5-5'&&estimatedInput>100000?[.5,2.5]:prices[body.model];
+ const estimatedInput=promptEstimate({system:body.system,messages:body.messages,tools:body.tools}),reservationPrice=other?providerRates(other,{input_tokens:estimatedInput}).price:body.model==='claude-haiku-5-5'&&estimatedInput>100000?[.5,2.5]:prices[body.model];
  const estimate=(estimatedInput*reservationPrice[0]+maxTokens*reservationPrice[1])/1e6;
  const {data:usageId,error:limit}=await db.rpc('dream_reserve_usage',{p_user:userId,p_request:body.requestId,p_turn:body.turnId??body.requestId,p_model:body.model,p_reserved:estimate});
  if(limit){const result=failed(limit.message,limit.code==='D0001'?403:limit.code==='D0002'?409:limit.code==='D0003'?429:503,limit.code??'reservation_error');await requests?.finish(userId,body.requestId,'failed',result.body,limit.message);return result;}

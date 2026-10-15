@@ -1,4 +1,4 @@
-import {it,expect} from 'vitest';
+import {it,expect,vi} from 'vitest';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
 import {chatRequest,responsesRequest,providerModels} from '../../supabase/functions/dream-gateway/providers';
 import {usageCost} from '../../supabase/functions/dream-gateway/inference-policy';
@@ -50,6 +50,7 @@ it('streams a GPT tool call back as Anthropic events and bills it at GPT\'s own 
 });
 
 it('answers a non-streaming request from a Gemini stream, and says which key is missing',async()=>{
+ vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));// Before Gemini 4 Argon's December price.
  const fetcher:typeof fetch=async()=>sse([
   {choices:[{index:0,delta:{role:'assistant',content:'Done'}}]},
   {choices:[{index:0,delta:{tool_calls:[{index:0,id:'g1',function:{name:'look',arguments:'{"at":1}'}}]}}]},
@@ -59,6 +60,7 @@ it('answers a non-streaming request from a Gemini stream, and says which key is 
  expect(result.body.dream_request.costUsd).toBeCloseTo((900*2+40*10)/1e6,9);
  const missing=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-1',max_tokens:2048},'user',{db,key:'anthropic',fetcher});
  expect(missing.status).toBe(503);expect(missing.body.error.message).toContain('DEEPSEEK_API_KEY');expect(missing.body.error.type).toBe('provider_not_configured');
+ vi.useRealTimers();
 });
 
 it('sends Gemini\'s signature on a function call back with it, so a second step is not refused, and never sends it to Claude',async()=>{
@@ -86,4 +88,34 @@ it('finds Gemini\'s signature wherever the stream puts it, and gives a call with
  // A call saved before signatures were kept (the vlog's read_file) goes back with the placeholder instead of being refused.
  const old={model:'gemini-3.8-flash',system:'x',messages:[{role:'user',content:'q'},{role:'assistant',content:[{type:'tool_use',id:'old',name:'read_file',input:{path:'project.json'}}]},{role:'user',content:[{type:'tool_result',tool_use_id:'old',content:'{}'}]}]};
  expect(chatRequest(old,providerModels['gemini-3.8-flash'],1000).messages[2].tool_calls[0].extra_content).toEqual({google:{thought_signature:'skip_thought_signature_validator'}});
+});
+
+// Gemini's thinking is billed as output but left out of completion_tokens (only total_tokens has it): it went uncounted.
+it('counts Gemini\'s thinking as output, from total_tokens',async()=>{
+ vi.setSystemTime(new Date('2026-10-14T12:00:00Z'));
+ const fetcher:typeof fetch=async()=>sse([{choices:[{index:0,delta:{role:'assistant',content:'Done'}}]},
+  {choices:[{index:0,delta:{},finish_reason:'stop'}],usage:{prompt_tokens:900,completion_tokens:40,total_tokens:1940,prompt_tokens_details:{cached_tokens:0}}}]);
+ const result=await handleAI({...conversation,model:'gemini-4-argon',requestId:'gem-think',max_tokens:2048},'user',{db,key:'anthropic',providerKeys:{google:'g-test'},fetcher});
+ expect(result.body.usage.output_tokens).toBe(1040);expect(result.body.dream_request.costUsd).toBeCloseTo((900*2+1040*10)/1e6,9);
+ vi.useRealTimers();
+});
+
+// Every other provider's model is billed the same by the gateway and the app: Gemini's announced increases from their
+// dates, GPT-6 above 272K prompt tokens at its long-context rate, DeepSeek at half price off-peak.
+it('bills other providers at the rate of the moment and the prompt size, the same in the gateway and the app',()=>{
+ const small={input_tokens:100_000,cache_read_input_tokens:50_000,output_tokens:2_000},large={input_tokens:200_000,cache_read_input_tokens:100_000,output_tokens:2_000};
+ const moments=[new Date('2026-10-14T02:00:00Z'),new Date('2026-10-14T12:00:00Z'),new Date('2026-10-17T02:00:00Z'),new Date('2026-12-02T12:00:00Z'),new Date('2027-01-02T12:00:00Z')];
+ for(const model of Object.keys(providerModels))for(const at of moments)for(const usage of [small,large])expect(appCost(model,usage,undefined,at)).toBeCloseTo(usageCost(model,usage,[0,0],at),12);
+ const million={input_tokens:1_000_000,cache_read_input_tokens:1_000_000,output_tokens:1_000_000};
+ // DeepSeek: peak on a Wednesday at 02:00 UTC, half off at noon and on a Saturday.
+ expect(usageCost('deepseek-flash',million,[0,0],new Date('2026-10-14T02:00:00Z'))).toBeCloseTo(.3+.006+1.2,9);
+ expect(usageCost('deepseek-flash',million,[0,0],new Date('2026-10-14T12:00:00Z'))).toBeCloseTo((.3+.006+1.2)/2,9);
+ expect(usageCost('deepseek-flash',million,[0,0],new Date('2026-10-17T02:00:00Z'))).toBeCloseTo((.3+.006+1.2)/2,9);
+ // Gemini 4 Argon doubles on December 1; Gemini 3.8 Flash on January 1.
+ expect(usageCost('gemini-4-argon',million,[0,0],new Date('2026-11-30T12:00:00Z'))).toBeCloseTo(2+.1+10,9);
+ expect(usageCost('gemini-4-argon',million,[0,0],new Date('2026-12-01T12:00:00Z'))).toBeCloseTo(4+.2+20,9);
+ expect(usageCost('gemini-3.8-flash',million,[0,0],new Date('2027-01-01T12:00:00Z'))).toBeCloseTo(1.5+.15+7.5,9);
+ // GPT-6.1 Sol: 300K prompt tokens (uncached and cached) is past 272K.
+ expect(usageCost('gpt-6.1-sol',large,[0,0])).toBeCloseTo((200_000*4+100_000*.2+2_000*15)/1e6,9);
+ expect(usageCost('gpt-6.1-sol',small,[0,0])).toBeCloseTo((100_000*2+50_000*.1+2_000*10)/1e6,9);
 });

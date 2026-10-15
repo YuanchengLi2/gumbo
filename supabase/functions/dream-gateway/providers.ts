@@ -1,24 +1,38 @@
 /** Models from other providers behind the same gateway. The app and the agent speak one format (Anthropic Messages, with
  * its streaming events); requests for these models are translated to OpenAI's Responses API or the Chat Completions API
  * (Gemini's OpenAI-compatible endpoint and DeepSeek), and their streams are translated back into the same events, so
- * accounting, receipts, recovery and the app work unchanged. Prices are per million tokens (official pages, October 13,
- * 2026; DeepSeek at its peak rate, Gemini 4 Argon before its December 1 increase). */
+ * accounting, receipts, recovery and the app work unchanged. Prices are per million tokens (official pages, October 15,
+ * 2026): GPT-6 above 272K prompt tokens at its long-context rate, Gemini's announced increases from their dates, DeepSeek
+ * at half its peak rate off-peak. */
 export type ProviderId='openai'|'google'|'deepseek';
-export type ProviderModel={provider:ProviderId;api:'responses'|'chat';price:[number,number];cachedRead:number;vision:boolean;reasoning:boolean};
+type Rates={price:[number,number];cachedRead:number};
+export type ProviderModel=Rates&{provider:ProviderId;api:'responses'|'chat';vision:boolean;reasoning:boolean;
+ /** A price change announced for a date. */ change?:Rates&{from:string};
+ /** The rate for prompts (uncached and cached) above this many tokens. */ longContext?:Rates&{above:number};
+ /** The share of the price charged outside the provider's peak hours. */ offPeak?:number};
 export const providerModels:Record<string,ProviderModel>={
- 'gpt-6-astra':{provider:'openai',api:'responses',price:[10,50],cachedRead:1,vision:true,reasoning:true},
- 'gpt-6.1-sol':{provider:'openai',api:'responses',price:[2,10],cachedRead:.1,vision:true,reasoning:true},
- 'gpt-6-luna':{provider:'openai',api:'responses',price:[.1,.5],cachedRead:.01,vision:true,reasoning:true},
- 'gemini-4-argon':{provider:'google',api:'chat',price:[2,10],cachedRead:.1,vision:true,reasoning:true},
- 'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,vision:true,reasoning:true},
- 'deepseek-flash':{provider:'deepseek',api:'chat',price:[.3,1.2],cachedRead:.006,vision:true,reasoning:false}
+ 'gpt-6-astra':{provider:'openai',api:'responses',price:[10,50],cachedRead:1,longContext:{above:272_000,price:[20,75],cachedRead:2},vision:true,reasoning:true},
+ 'gpt-6.1-sol':{provider:'openai',api:'responses',price:[2,10],cachedRead:.1,longContext:{above:272_000,price:[4,15],cachedRead:.2},vision:true,reasoning:true},
+ 'gpt-6-luna':{provider:'openai',api:'responses',price:[.1,.5],cachedRead:.01,longContext:{above:272_000,price:[.2,.75],cachedRead:.02},vision:true,reasoning:true},
+ 'gemini-4-argon':{provider:'google',api:'chat',price:[2,10],cachedRead:.1,change:{from:'2026-12-01T00:00:00Z',price:[4,20],cachedRead:.2},vision:true,reasoning:true},
+ 'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,change:{from:'2027-01-01T00:00:00Z',price:[1.5,7.5],cachedRead:.15},vision:true,reasoning:true},
+ 'deepseek-flash':{provider:'deepseek',api:'chat',price:[.3,1.2],cachedRead:.006,offPeak:.5,vision:true,reasoning:false}
 };
+/** DeepSeek's peak hours: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday (its public holidays are not known here). */
+const peak=(at:Date)=>{const day=at.getUTCDay(),hour=at.getUTCHours();return day>=1&&day<=5&&(hour>=1&&hour<4||hour>=6&&hour<10);};
+/** What a call to one of these models is billed at, at a moment and for a prompt of a size. */
+export function providerRates(model:ProviderModel,usage:Record<string,any>,at=new Date()):Rates{
+ let rates:Rates=model.change&&at>=new Date(model.change.from)?model.change:model;
+ if(model.longContext&&(usage.input_tokens??0)+(usage.cache_read_input_tokens??0)>model.longContext.above)rates=model.longContext;
+ if(model.offPeak&&!peak(at))rates={price:[rates.price[0]*model.offPeak,rates.price[1]*model.offPeak],cachedRead:rates.cachedRead*model.offPeak};
+ return rates;
+}
 export const providerSecrets:Record<ProviderId,string>={openai:'OPENAI_API_KEY',google:'GEMINI_API_KEY',deepseek:'DEEPSEEK_API_KEY'};
 export const providerNames:Record<ProviderId,string>={openai:'OpenAI',google:'Google Gemini',deepseek:'DeepSeek'};
 export const providerEndpoints:Record<ProviderId,string>={openai:'https://api.openai.com/v1/responses',google:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
 
 /** Cost of a call to one of these models, from usage already in Anthropic's shape (uncached input, cache reads, output). */
-export function providerCost(model:ProviderModel,usage:Record<string,any>){return((usage.input_tokens??0)*model.price[0]+(usage.cache_read_input_tokens??0)*model.cachedRead+(usage.output_tokens??0)*model.price[1])/1e6;}
+export function providerCost(model:ProviderModel,usage:Record<string,any>,at=new Date()){const {price,cachedRead}=providerRates(model,usage,at);return((usage.input_tokens??0)*price[0]+(usage.cache_read_input_tokens??0)*cachedRead+(usage.output_tokens??0)*price[1])/1e6;}
 
 const systemText=(system:unknown)=>typeof system==='string'?system:Array.isArray(system)?system.filter((b:any)=>b?.type==='text').map((b:any)=>b.text).join('\n\n'):'';
 const dataUrl=(b:any)=>b?.source?.type==='base64'?`data:${b.source.media_type};base64,${b.source.data}`:b?.source?.type==='url'?b.source.url:undefined;
@@ -151,7 +165,9 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
       out.args(toolIds.get(n)!,call.function?.arguments??'');const own=thoughtSignature(call)??pending;if(own){out.signature(toolIds.get(n)!,own);pending=undefined;}lastTool=toolIds.get(n);}
      if(pending&&lastTool&&!(delta.tool_calls??[]).length){out.signature(lastTool,pending);pending=undefined;}
      if(choice?.finish_reason)stop=choice.finish_reason==='length'?'max_tokens':choice.finish_reason==='content_filter'?'refusal':'end_turn';
-     if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:u.completion_tokens??0};}
+     // Gemini leaves its thinking out of completion_tokens (only total_tokens has it) but bills it as output, so output
+     // is whichever is larger: the completion, or everything after the prompt.
+     if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:Math.max(u.completion_tokens??0,(u.total_tokens??0)-(u.prompt_tokens??0))};}
     }
     out.finish(stop,usage);
    }else{
