@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,readFileSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {codeGateway} from '../fixtures/code-gateway';
+import {codeGateway,signIn} from '../fixtures/code-gateway';
 
 /** Settings as a page with a sidebar: every section opens, the profile and switched-off providers are saved for the next
  * start (settings.json), the AI and export choices are the ones the chat box and Export window use, and Esc closes it.
@@ -15,7 +15,7 @@ test('Settings opens every section and keeps what is changed',async()=>{
  const out=resolve('test-results/settings');mkdirSync(out,{recursive:true});
  let app=await launch();
  try{
-  const page=await app.firstWindow(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await app.firstWindow(),errors:string[]=[];await signIn(page);page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].showInactive());
   const settings=page.getByRole('dialog',{name:'Settings'}),nav=page.getByRole('navigation',{name:'Settings sections'});
   await page.getByRole('button',{name:'Settings'}).first().click();await expect(settings).toBeVisible();
@@ -47,7 +47,7 @@ test('Settings opens every section and keeps what is changed',async()=>{
   await page.keyboard.press('Escape');await expect(settings).toHaveCount(0);
   expect(errors).toEqual([]);
   // The profile is there after the app starts again.
-  await app.close();app=await launch();const again=await app.firstWindow();
+  await app.close();app=await launch();const again=await app.firstWindow();await signIn(again);
   await again.getByRole('button',{name:'Settings'}).first().click();await expect(again.getByRole('dialog',{name:'Settings'}).getByLabel('Name')).toHaveValue('Yuan');
  }finally{await app.close();await gateway.close();}
 });

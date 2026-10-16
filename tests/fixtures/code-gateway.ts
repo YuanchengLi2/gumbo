@@ -14,7 +14,7 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
   if(req.url?.split('?')[0].endsWith('/transcribe')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({words:options.words??[],segments:[]}));return;}
   const body=chunks.length?requestJSON(req,chunks):{},json=(status:number,data:unknown)=>res.writeHead(status,{'Content-Type':'application/json'}).end(JSON.stringify(data));
-  if(req.url?.startsWith('/auth/v1/'))return json(200,{access_token:`code-fixture-${++refreshes}`,refresh_token:'code-fixture-refresh',expires_in:options.shortSession?1:3600,user:{id:'fixture-account',email:'local-fixture@example.invalid',is_anonymous:true}});
+  if(req.url?.startsWith('/auth/v1/'))return json(200,{access_token:`code-fixture-${++refreshes}`,refresh_token:'code-fixture-refresh',expires_in:options.shortSession?1:3600,user:{id:'fixture-account',email:'local-fixture@example.invalid',is_anonymous:false}});
   if(req.url?.endsWith('/account'))return json(200,{status:'active',is_guest:true,invited:true});
   if(req.url?.endsWith('/ai-status')||req.url?.endsWith('/ai-cancel'))return json(404,{dream_request:{status:'missing',retryable:false}});
   if(!req.url?.endsWith('/ai'))return json(404,{});
@@ -79,3 +79,6 @@ export function planningScript(blockOnce=false):Script{
 /** Finishes, keeping with a reason every must-fix check the latest publication reported (an edit that means to repeat
  * footage or cut where the fixture's words fall). */
 export const finishKeeping=(body:any,id:string,summary:string,reason:string)=>[use(id,'finish',{status:'complete',summary,kept:(resultOf(body,'publish_project')?.checks?.mustFix??[]).map((c:any)=>({check:c.id,reason}))})];
+
+/** Signs the app in through the fixture's auth (an account is needed for Figjam AI; there are no guests). */
+export const signIn=(page:{evaluate:(fn:()=>Promise<unknown>)=>Promise<unknown>})=>page.evaluate(()=>window.dream.command({type:'account',action:'verify_code',email:'local-fixture@example.invalid',code:'12345678'}));

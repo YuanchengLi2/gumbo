@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,copyFileSync,mkdirSync,utimesSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway,resultOf,scriptedEdit,finish,type Script} from '../fixtures/code-gateway';
+import {codeGateway,resultOf,scriptedEdit,finish,type Script,signIn} from '../fixtures/code-gateway';
 
 test('finds what was shot today on the computer, imports it in capture order and cuts it together',async()=>{
  const profile=mkdtempSync(join(tmpdir(),'dream-today-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-today-project-')),camera=join(profile,'Camera Roll');mkdirSync(camera);
@@ -20,7 +20,7 @@ test('finds what was shot today on the computer, imports it in capture order and
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});
  try{
-  const page=await app.firstWindow();
+  const page=await app.firstWindow();await signIn(page);
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Today acceptance'});await window.dream.command({type:'account',action:'signin',email:'local-fixture@example.invalid',password:'local-fixture'});},folder);
   await page.evaluate(()=>window.dream.grantComputer());await page.reload();

@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,readFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway} from '../fixtures/code-gateway';
+import {codeGateway,signIn} from '../fixtures/code-gateway';
 
 const use=(id:string,name:string,input:unknown)=>({type:'tool_use',id,name,input});
 const card=(broken:boolean)=>`import {AbsoluteFill,useCurrentFrame} from 'remotion';
@@ -30,7 +30,7 @@ test('the agent writes an engine scene, the user sees its draft, the player runs
  writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'local-fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});
  try{
-  const page=await app.firstWindow(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await app.firstWindow(),errors:string[]=[];await signIn(page);page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Engine agent'});},folder);await page.reload();
   const run=async(text:string)=>{await page.evaluate(text=>window.dream.command({type:'message',text}),text);await expect.poll(async()=>(await page.evaluate(()=>window.dream.command({type:'state'}))).aiStatus,{timeout:120000}).toBe('complete');};

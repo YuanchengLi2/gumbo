@@ -6,6 +6,7 @@ import {useTheme,setThemeChoice,type ThemeChoice} from '../../theme';
 import {shortcutHints} from '../../shortcuts';
 import {useEditor} from '../../store/editor';
 import {choices,shortLabel,available,useProviders,refreshProviders,modelName} from '../../models';
+import {useAccount,requireSignIn,signedOut} from '../../account';
 
 /** Settings as a page of its own, laid out as Claude's: sections in a sidebar on the left, the chosen one on the right, as
  * plain rows (a label, what it does, its control). Most rows change what already exists (the theme, the composer's model,
@@ -42,18 +43,16 @@ function Profile(p:{settings:AppSettings;save:(patch:Partial<AppSettings>)=>void
 }
 
 function Account(){
- const [info,setInfo]=useState<any>(null),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false);
- const load=()=>window.dream.command<any>({type:'account',action:'get'}).then(setInfo,(e:Error)=>setError(e.message));
- useEffect(()=>{void load();const off=window.dream.onEvent(event=>{if(event.type==='account.signed_in')void load();if(event.type==='account.error')setError(String((event.payload as {message?:string})?.message??'Sign-in failed.'));});return off;},[]);
- const signIn=async()=>{setBusy(true);setError(null);try{await window.dream.command({type:'login_browser'});}catch(e){setError((e as Error).message);}finally{setBusy(false);void load();}};
- const signOut=async()=>{if(!window.confirm('Sign out of Figjam on this computer?'))return;setBusy(true);try{await window.dream.command({type:'account',action:'signout'});await load();}finally{setBusy(false);}};
- const signedIn=!!info?.signedIn,guest=!!info?.guest;
+ const account=useAccount(),[busy,setBusy]=useState(false);
+ // No system confirm: signing out loses nothing (projects stay here, signing in again is a code away), and the native
+ // dialog could leave the window without the keyboard afterwards.
+ const signOut=async()=>{setBusy(true);try{await window.dream.command({type:'account',action:'signout'});signedOut();}finally{setBusy(false);}};
+ const signedIn=!!account?.signedIn;
  return <>
-  {error&&<p className="settings-error" role="alert">{error}</p>}
-  <Row label="Signed in as" help={!info?'Checking…':!signedIn?'Not signed in. Sign in to use Figjam AI.':guest?'A guest session on this computer. Sign in to keep your account across computers.':undefined}>{signedIn&&!guest&&<span className="settings-value">{info.email}</span>}</Row>
-  {signedIn&&info?.status&&<Row label="Account" help="Your account's access."><span className="settings-value">{String(info.status).replace(/^\w/,(c:string)=>c.toUpperCase())}</span></Row>}
-  <Row label={signedIn&&!guest?'Sign out':'Sign in'} help={signedIn&&!guest?'Projects stay on this computer; Figjam AI needs you to sign in again.':'Opens your browser to sign in.'}>
-   {signedIn&&!guest?<button type="button" className="settings-button-secondary" disabled={busy} onClick={()=>void signOut()}>Sign out</button>:<button type="button" className="settings-button-primary" disabled={busy} onClick={()=>void signIn()}>Sign in</button>}
+  <Row label={signedIn?'Signed in as':'Not signed in'} help={!account?'Checking…':signedIn?undefined:'Sign in with Google or your email to use Figjam AI. Your projects stay on this computer either way.'}>{signedIn&&<span className="settings-value">{account!.email}</span>}</Row>
+  {signedIn&&account?.dailyBudgetUsd!==undefined&&<Row label="Daily AI allowance" help="How much Figjam AI you can use each day during the beta."><span className="settings-value">{money(account.dailyBudgetUsd)}</span></Row>}
+  <Row label={signedIn?'Sign out':'Sign in'} help={signedIn?'Your projects stay on this computer; Figjam AI needs you to sign in again.':'New here? Signing in creates your account.'}>
+   {signedIn?<button type="button" className="settings-button-secondary" disabled={busy} onClick={()=>void signOut()}>Sign out</button>:<button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button>}
   </Row>
  </>;
 }
@@ -145,7 +144,9 @@ function About(p:{runtime:RuntimeStatus|null}){
 export function SettingsPage(p:{onClose:()=>void;initial?:SettingsSection}){
  const [section,setSection]=useState<SettingsSection>(p.initial??'profile'),[settings,setSettings]=useState<AppSettings|null>(null),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[error,setError]=useState<string|null>(null),choice=useTheme(),panel=useRef<HTMLDivElement>(null);
  useEffect(()=>{void window.dream.settings().then(setSettings,(e:Error)=>setError(e.message));void window.dream.runtime().then(setRuntime,()=>{});},[]);
- useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key==='Escape'&&!(e.target as HTMLElement).closest('select')){e.preventDefault();p.onClose();}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[p.onClose]);
+ // Esc closes Settings before anything under it hears it (the chat box's menus catch Esc early and stopped it reaching
+ // Settings); an open dropdown in Settings keeps its own Esc.
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key!=='Escape'||e.target instanceof Element&&e.target.closest('select'))return;e.preventDefault();e.stopPropagation();p.onClose();};window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);},[p.onClose]);
  useEffect(()=>{panel.current?.scrollTo({top:0});},[section]);
  const save=async(patch:Partial<AppSettings>)=>{try{setSettings(await window.dream.saveSettings(patch));if(patch.disabledProviders)await refreshProviders();}catch(e){setError((e as Error).message);}};
  const title=sections.find(([id])=>id===section)![1];

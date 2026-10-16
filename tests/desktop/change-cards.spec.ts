@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,copyFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
-import {codeGateway} from '../fixtures/code-gateway';
+import {codeGateway,signIn} from '../fixtures/code-gateway';
 
 const use=(id:string,name:string,input:unknown)=>({type:'tool_use',id,name,input});
 
@@ -17,7 +17,7 @@ test('a reply lists its changes as cards that light up, select and undo each one
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});
  try{
-  const page=await app.firstWindow(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await app.firstWindow(),errors:string[]=[];await signIn(page);page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Cards'});},folder);await page.reload();
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},source);

@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,existsSync,readFileSync,copyFileSync,renameSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway,scriptedEdit,finish,assetIds,type Script} from '../fixtures/code-gateway';
+import {codeGateway,scriptedEdit,finish,assetIds,type Script,signIn} from '../fixtures/code-gateway';
 
 test('home creates a copied-media draft without login, then exposes the responsive AI workspace',async()=>{
  const notes=join(mkdtempSync(join(tmpdir(),'dream-home-files-')),'notes.txt');writeFileSync(notes,'Original notes');const profile=mkdtempSync(join(tmpdir(),'dream-home-profile-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
@@ -16,7 +16,7 @@ test('home creates a copied-media draft without login, then exposes the responsi
  };
  const gateway=await codeGateway({script,delayMs:600}),url=gateway.url;writeFileSync(join(profile,'cloud.json'),JSON.stringify({url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});
- try{const page=await app.firstWindow(),errors:string[]=[];await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));page.on('pageerror',e=>errors.push(e.message));await expect(page.getByRole('heading',{name:'What do you want to create?'})).toBeVisible();
+ try{const page=await app.firstWindow(),errors:string[]=[];await signIn(page);await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.setBackgroundThrottling(false));page.on('pageerror',e=>errors.push(e.message));await expect(page.getByRole('heading',{name:'What do you want to create?'})).toBeVisible();
   const capture=async(name:string)=>{await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))));return writeFileSync(resolve('artifacts/'+name),Buffer.from(await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG().toString('base64')),'base64'));};
   await capture('dream-home.png');await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},source);
   await page.getByRole('button',{name:'Add media',exact:true}).click();await page.getByRole('button',{name:'Upload media',exact:true}).click();await expect(page.locator('.attachment-list .media-tile.video')).toContainText('source.mp4');await page.getByLabel('Ask Figjam to edit').fill('Create a three-second edit from my clip');await page.getByRole('button',{name:'Send prompt'}).click();

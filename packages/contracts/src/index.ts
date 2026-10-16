@@ -24,10 +24,9 @@ export const CommandSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('library_list')}),z.object({type:z.literal('library_get'),revisionId:z.string()}),
  z.object({type:z.literal('generation_cancel'),requestId:z.string()}),z.object({type:z.literal('generation_resume'),requestId:z.string()}),
  z.object({type:z.literal('relink'),assetId:z.string(),path:z.string()}),z.object({type:z.literal('collect'),folder:z.string()}),
- z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage']),email:z.string().optional(),password:z.string().optional()}),
+ z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage','send_code','verify_code','google']),email:z.string().max(320).optional(),password:z.string().optional(),code:z.string().max(20).optional()}),
  z.object({type:z.literal('config'),supabaseUrl:z.string().url(),anonKey:z.string()}),
- z.object({type:z.literal('models'),action:z.enum(['install','cancel']),id:z.string()}),
- z.object({type:z.literal('login_browser')})
+ z.object({type:z.literal('models'),action:z.enum(['install','cancel']),id:z.string()})
 ]);
 export type Command=z.input<typeof CommandSchema>;
 /** The app's own settings (Settings), kept on this computer: the creator's profile, which every request's agent reads, and

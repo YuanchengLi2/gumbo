@@ -2,7 +2,7 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,mkdirSync,writeFileSync,copyFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway,finish} from '../fixtures/code-gateway';
+import {codeGateway,finish,signIn} from '../fixtures/code-gateway';
 
 const use=(id:string,name:string,input:any)=>({type:'tool_use',id,name,input});
 // The agent's script cuts three clips, warms one with its own grade, and adds a punch zoom and a grade over a stretch.
@@ -22,7 +22,7 @@ test('shows the agent\'s edit on the timeline as it writes it, as effect, filter
  const out=resolve('artifacts/ui');mkdirSync(out,{recursive:true});
  const shot=async(name:string)=>{const png=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString('base64'));writeFileSync(join(out,name),Buffer.from(png,'base64'));};
  try{
-  const page=await app.firstWindow();await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1600,960));
+  const page=await app.firstWindow();await signIn(page);await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1600,960));
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Live draft'});},folder);await page.reload();
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},source);

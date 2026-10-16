@@ -2,14 +2,14 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,copyFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway,finish} from '../fixtures/code-gateway';
+import {codeGateway,finish,signIn} from '../fixtures/code-gateway';
 
 test('drags project media onto the timeline at the drop point and shows selections and attachments as media tiles',async()=>{
  const profile=mkdtempSync(join(tmpdir(),'dream-drop-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-drop-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script:()=>finish('done','Done.')});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});
  try{
-  const page=await app.firstWindow();
+  const page=await app.firstWindow();await signIn(page);
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Drop acceptance'});},folder);await page.reload();
   // Import through the picker (which grants the file), then wait until it is ready to place.

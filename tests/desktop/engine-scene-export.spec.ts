@@ -3,7 +3,7 @@ import {mkdtempSync,writeFileSync,existsSync,readdirSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {codeGateway} from '../fixtures/code-gateway';
+import {codeGateway,signIn} from '../fixtures/code-gateway';
 
 const ffmpeg=resolve('apps/desktop/resources/staged/media-runtime/ffmpeg.exe');
 /** One pixel of a video frame, decoded by the shipped ffmpeg. */
@@ -30,7 +30,7 @@ test('a coded scene plays live in the engine preview, under a lower third, and E
  writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'local-fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});
  try{
-  const page=await app.firstWindow(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  const page=await app.firstWindow(),errors:string[]=[];await signIn(page);page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);await page.evaluate(()=>window.dream.pickProject(true));
   await page.evaluate(async folder=>{await window.dream.command({type:'create',folder,name:'Scene export'});},folder);await page.reload();
   await page.evaluate(text=>window.dream.command({type:'message',text}),'Make an intro card');

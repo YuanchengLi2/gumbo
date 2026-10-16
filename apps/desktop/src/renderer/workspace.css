@@ -678,3 +678,25 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .settings-error{margin:12px 0;font-size:12.5px;color:var(--n100);padding:10px 12px;border-radius:8px;background:var(--n5)}
 .settings-body .settings-shortcuts{margin-top:14px;font-size:13px;gap:12px 24px}
 @media(max-width:760px){.settings-page{grid-template-columns:1fr;grid-template-rows:auto 1fr}.settings-nav{flex-direction:row;flex-wrap:wrap;padding:40px 12px 10px;border-right:0;border-bottom:1px solid var(--n7)}.settings-nav h2{width:100%}.settings-panel{padding:24px 20px 48px}.settings-row{flex-direction:column;align-items:stretch}.settings-input{width:100%}}
+/* Sign in: one small card over the app. Google, or an email code; black and white like the rest. */
+.dialog.sign-in{position:relative;width:min(400px,calc(100vw - 32px));padding:34px 32px 30px;border-radius:16px;background:var(--chrome);color:var(--n87)}
+.sign-in h2{margin:0 0 8px;font-size:21px;font-weight:600;color:var(--n100)}
+.sign-in-lead{margin:0 0 22px;font-size:13px;line-height:1.55;color:var(--n56)}.sign-in-lead strong{color:var(--n100);font-weight:600}
+.sign-in-close{position:absolute;top:14px;right:14px;width:32px;height:32px;display:grid;place-items:center;border-radius:8px;color:var(--n56)}
+.sign-in-close:hover{background:var(--n5);color:var(--n100)}
+.sign-in-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:42px;border:1px solid var(--n12);border-radius:10px;font-size:14px;font-weight:600;color:var(--n100)}
+.sign-in-google:hover:not(:disabled){background:var(--n4)}
+.sign-in-or{display:flex;align-items:center;gap:12px;margin:18px 0;font-size:12px;color:var(--n46)}
+.sign-in-or::before,.sign-in-or::after{content:'';flex:1;height:1px;background:var(--n10)}
+.sign-in-label{display:block;margin-bottom:6px;font-size:12.5px;font-weight:600;color:var(--n80)}
+.sign-in-input{width:100%;height:42px;padding:0 13px;border:1px solid var(--n12);border-radius:10px;background:var(--chrome);font-size:14px;color:var(--n100);outline:none}
+.sign-in-input:focus{border-color:var(--n46)}
+.sign-in-code{font-size:20px;letter-spacing:6px;text-align:center;font-variant-numeric:tabular-nums}
+.sign-in-primary{width:100%;height:42px;margin-top:12px;border-radius:10px;background:var(--n100);color:var(--chrome);font-size:14px;font-weight:600}
+.sign-in-primary:hover:not(:disabled){opacity:.86}
+.sign-in-links{display:flex;justify-content:space-between;gap:12px;margin-top:14px}
+.sign-in-links button{font-size:12.5px;color:var(--n56);text-decoration:underline;text-underline-offset:3px}
+.sign-in-links button:hover:not(:disabled){color:var(--n100)}
+.sign-in-error{margin:0 0 16px;padding:10px 12px;border-radius:9px;background:var(--n5);font-size:12.5px;line-height:1.45;color:var(--n100)}
+
+.dialog-backdrop:has(.sign-in){z-index:2100}
