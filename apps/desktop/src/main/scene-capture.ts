@@ -21,24 +21,33 @@ function open(source:SceneSource,width:number,height:number):Entry{
  return{window,loaded,sequence:0};
 }
 
-/** Draws one frame of a scene and returns its pixels (BGRA, premultiplied, as Chromium paints them). */
-export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number):Promise<ScenePixels>{
- let entry=windows.get(key);if(!entry||entry.window.isDestroyed()){entry=open(source,width,height);windows.set(key,entry);}
- await entry.loaded;const id=++entry.sequence;
- // The request is repeated until the scene says it is ready (its ready message may have gone before this listened);
- // the first answer to this request settles it.
- const answer=await entry.window.webContents.executeJavaScript(`new Promise(resolve=>{
-  const state=window.__dreamCapture??=(addEventListener('message',e=>{if(e.data?.dreamScene&&(e.data.ready||e.data.requestId))window.__dreamCapture.ready=true;}),{ready:false});
+/** The page script that asks a scene for one frame and settles when the scene has drawn it. The scene is the window's own
+ * page, so this script hears its own frame requests too: they carry the request id, and counting one as the scene's
+ * answer captured the page before the scene had drawn (a title's first frame, or nothing on a scene still loading), so
+ * requests are never answers. The request is repeated until the scene says it is ready (its ready message may have gone
+ * before this listened), and sent again on every ready message: a scene that mounts after the first request missed it,
+ * and the window-wide listener below has already marked it ready by the time this request hears the message. The first
+ * answer to this request settles it. */
+export function frameRequestScript(id:number,frame:number,fps:number,timeoutMs=FRAME_TIMEOUT_MS){
+ return `new Promise(resolve=>{
+  const state=window.__dreamCapture??=(addEventListener('message',e=>{if(e.data?.dreamScene&&e.data.type!=='frame'&&(e.data.ready||e.data.requestId))window.__dreamCapture.ready=true;}),{ready:false});
   const post=()=>postMessage({dreamScene:true,type:'frame',requestId:${id},frame:${Math.max(0,Math.floor(frame))},fps:${Number(fps)||30}},'*');
   // The scene has drawn the frame into its page, but the window paints it on its next frame: answering at once captured
   // the frame before (blank for a scene's first frame, so the agent and Export missed graphics that were there).
   const finish=value=>{removeEventListener('message',receive);clearInterval(retry);clearTimeout(limit);requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(value)));};
-  const receive=e=>{const d=e.data;if(!d?.dreamScene)return;if(d.ready&&!state.ready){state.ready=true;post();return;}
+  const receive=e=>{const d=e.data;if(!d?.dreamScene||d.type==='frame')return;if(d.ready){state.ready=true;post();return;}
    if(d.error&&(d.fatal||d.requestId===${id}||d.requestId===undefined))finish({error:String(d.error)});else if(d.requestId===${id})finish({});};
   addEventListener('message',receive);
-  const retry=setInterval(()=>{if(!state.ready)post();},250),limit=setTimeout(()=>finish({error:'Frame ${frame} took longer than ${FRAME_TIMEOUT_MS/1000}s to draw.'}),${FRAME_TIMEOUT_MS});
+  const retry=setInterval(()=>{if(!state.ready)post();},250),limit=setTimeout(()=>finish({error:'Frame ${frame} took longer than ${timeoutMs/1000}s to draw.'}),${timeoutMs});
   post();
- })`) as {error?:string};
+ })`;
+}
+
+/** Draws one frame of a scene and returns its pixels (BGRA, premultiplied, as Chromium paints them). */
+export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number):Promise<ScenePixels>{
+ let entry=windows.get(key);if(!entry||entry.window.isDestroyed()){entry=open(source,width,height);windows.set(key,entry);}
+ await entry.loaded;const id=++entry.sequence;
+ const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string};
  if(answer?.error)throw new Error(answer.error);
  const image=await entry.window.webContents.capturePage(),size=image.getSize();
  return{width:size.width,height:size.height,data:image.toBitmap()};
