@@ -12,7 +12,7 @@ test('the home screen and editor in light and dark',async()=>{
  try{
   const page=await app.firstWindow(),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setContentSize(1536,960));
   const shot=async(name:string)=>{await page.waitForTimeout(250);const png=await app.evaluate(async({BrowserWindow})=>(await BrowserWindow.getAllWindows()[0].webContents.capturePage(undefined,{stayHidden:true,stayAwake:true})).toPNG().toString('base64'));writeFileSync(join(out!,name),Buffer.from(png,'base64'));};
-  const theme=async(choice:'light'|'dark')=>{await page.getByRole('button',{name:'Settings'}).first().click();await page.getByRole('radio',{name:choice==='light'?'Light':'Dark'}).click();await expect(page.locator('html')).toHaveAttribute('data-theme',choice);};
+  const theme=async(choice:'light'|'dark')=>{await page.getByRole('button',{name:'Settings'}).first().click();await page.getByRole('navigation',{name:'Settings sections'}).getByRole('button',{name:'Appearance'}).click();await page.getByRole('radio',{name:choice==='light'?'Light':'Dark'}).click();await expect(page.locator('html')).toHaveAttribute('data-theme',choice);await page.getByRole('button',{name:'Close settings'}).click();};
   await expect(page.getByRole('heading',{name:'What do you want to create?'})).toBeVisible();
   await theme('light');await shot('home-light-settings.png');await page.keyboard.press('Escape');await shot('home-light.png');
   await theme('dark');await page.keyboard.press('Escape');await shot('home-dark.png');

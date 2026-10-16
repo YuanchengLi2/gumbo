@@ -12,7 +12,7 @@ import {applyDocumentDelta} from '../../../../packages/timeline/src/document-del
 import {renderVisual} from '../sandbox/manager';
 import {PlayerFrames} from './player-frames';
 import {handleInstallerEvent} from './lifecycle';
-import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme} from 'electron';import {join} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';import {exportProject,cancelExport} from './rendering';
+import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme} from 'electron';import {join} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';import {exportProject,cancelExport} from './rendering';
 import {Models} from './models';
 import {startCrashLog,logCrash} from './crash-log';
 import {beginLogin} from './auth';
@@ -58,6 +58,8 @@ if(!installerLaunch)app.whenReady().then(async()=>{
  ipcMain.handle('dream:framesResult',(event,id:string,result:unknown)=>{trusted(event);playerFrames.settle(id,result);});
  ipcMain.handle('dream:closeScenes',event=>{trusted(event);closeScenes();});
  ipcMain.handle('dream:settings',event=>{trusted(event);return loadSettings();});
+ // Only the app's own two folders, never a path the page names.
+ ipcMain.handle('dream:openFolder',async(event,kind:unknown)=>{trusted(event);const folder=kind==='projects'?join(process.env.DREAM_DOCUMENTS_DIRECTORY??app.getPath('documents'),'Dream','Projects'):kind==='logs'?join(app.getPath('userData'),'logs'):undefined;if(!folder)throw new Error('Unknown folder.');mkdirSync(folder,{recursive:true});const error=await shell.openPath(folder);if(error)throw new Error(error);});
  ipcMain.handle('dream:saveSettings',(event,patch:unknown)=>{trusted(event);const next=saveSettings(patch);service.config({settings:settingsEnv(next)});return next;});
  // The preview's fullscreen is the window's own: the page's Fullscreen API never completed in this window (Electron 44,
  // hidden title bar), so the button asked and nothing happened. Leaving it any other way (F11) tells the page.

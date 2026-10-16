@@ -66,6 +66,7 @@ export interface DreamDesktop {
  runtime():Promise<RuntimeStatus>;
  settings():Promise<AppSettings>;
  saveSettings(patch:Partial<AppSettings>):Promise<AppSettings>;
+ /** Opens one of the app's own folders (Settings): where projects are saved, or the crash logs. */ openFolder(kind:'projects'|'logs'):Promise<void>;
  catalog():Promise<{scores:Record<string,unknown>[];sfx:Record<string,unknown>[]}>;
  /** Answers a frames.request event: frames the editor's engine drew for the agent, or the error that stopped it. */
  framesResult(id:string,result:unknown):Promise<void>;

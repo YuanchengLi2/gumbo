@@ -501,10 +501,7 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .settings-anchor{position:relative;-webkit-app-region:no-drag;flex:none}
 .settings-button{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--n56)}
 .settings-button:hover,.settings-button[aria-expanded=true]{background:var(--n5);color:var(--n100)}
-.settings-menu{position:absolute;top:calc(100% + 8px);right:0;z-index:300;width:300px;padding:6px;border:1px solid var(--n10);border-radius:14px;background:var(--chrome);box-shadow:0 18px 50px rgb(0 0 0 / .16),0 2px 6px rgb(0 0 0 / .06);color:var(--n87)}
-.settings-menu section{padding:10px 10px 12px}.settings-menu section+section{border-top:1px solid var(--n7)}
-.settings-menu h3{margin:0 0 9px;font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--n46)}
-.settings-segments{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px;border-radius:10px;background:var(--n5)}
+.settings-segments{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(64px,1fr);gap:3px;padding:3px;border-radius:10px;background:var(--n5)}
 .settings-segments button{display:flex;align-items:center;justify-content:center;gap:6px;height:30px;border-radius:8px;font-size:12px;color:var(--n56)}
 .settings-segments button:hover{color:var(--n100)}
 .settings-segments button.selected{background:var(--chrome);color:var(--n100);box-shadow:0 1px 3px rgb(0 0 0 / .12)}
@@ -631,3 +628,53 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .project-player.preview-fullscreen .preview-frame{border-radius:0;box-shadow:none}
 .fullscreen-exit{position:fixed;top:14px;right:14px;z-index:1001;color:#fff;background:rgb(0 0 0 / .45);opacity:.6}
 .fullscreen-exit:hover{opacity:1;background:rgb(0 0 0 / .7)}
+
+/* Settings: a page over the app, as Claude's. The sections in a quiet sidebar, the chosen one as rows divided by
+   hairlines (a label and what it does, its control on the right); black and white, no boxed panels. The top strip leaves
+   room for the window controls and drags the window. */
+.settings-page{position:fixed;inset:0;z-index:2000;display:grid;grid-template-columns:232px minmax(0,1fr);background:var(--chrome);color:var(--n87);-webkit-app-region:no-drag}
+.settings-page::before{content:'';position:fixed;top:0;left:0;right:0;height:32px;-webkit-app-region:drag;z-index:0}
+.settings-nav{display:flex;flex-direction:column;gap:1px;padding:48px 12px 16px;background:var(--n2);border-right:1px solid var(--n7);overflow-y:auto}
+.settings-nav h2{margin:0 0 14px;padding:0 10px;font-size:15px;font-weight:600;color:var(--n100)}
+.settings-nav button{display:flex;align-items:center;gap:10px;height:34px;padding:0 10px;border-radius:8px;font-size:13px;color:var(--n56);text-align:left;-webkit-app-region:no-drag}
+.settings-nav button:hover{color:var(--n100);background:var(--n5)}
+.settings-nav button.selected{color:var(--n100);background:var(--n7);font-weight:600}
+.settings-panel{overflow-y:auto;padding:44px 48px 64px;position:relative}
+.settings-panel-head{display:flex;align-items:center;justify-content:space-between;max-width:680px;margin-bottom:6px}
+.settings-panel-head h1{margin:0;font-size:22px;font-weight:600;color:var(--n100)}
+.settings-close{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--n56);position:relative;z-index:1;-webkit-app-region:no-drag}
+.settings-close:hover{background:var(--n5);color:var(--n100)}
+.settings-body{max-width:680px}
+.settings-lead{margin:6px 0 10px;font-size:13px;line-height:1.55;color:var(--n56)}
+.settings-note{margin:14px 0 0;font-size:12px;color:var(--n46)}
+.settings-subhead{margin:30px 0 2px;font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;color:var(--n46)}
+.settings-row{display:flex;align-items:center;justify-content:space-between;gap:28px;padding:16px 0;border-bottom:1px solid var(--n7)}
+.settings-row.stacked{flex-direction:column;align-items:stretch;gap:10px}
+.settings-row-text{min-width:0;flex:1}
+.settings-row-label{font-size:13.5px;font-weight:600;color:var(--n100);overflow-wrap:anywhere}
+.settings-row-help{margin-top:4px;font-size:12.5px;line-height:1.5;color:var(--n56);overflow-wrap:anywhere}
+.settings-row-control{flex:none;display:flex;align-items:center;gap:8px}
+.settings-row.stacked .settings-row-control{display:block}
+.settings-value{font-size:13px;color:var(--n80)}
+.settings-input,.settings-select{height:34px;padding:0 11px;border:1px solid var(--n12);border-radius:8px;background:var(--chrome);font-size:13px;color:var(--n100);outline:none}
+.settings-input{width:280px}.settings-row.stacked .settings-input{width:100%}
+.settings-textarea{height:auto;padding:10px 11px;line-height:1.5;resize:vertical;min-height:96px}
+.settings-input:focus,.settings-select:focus{border-color:var(--n46)}
+.settings-select{min-width:180px;cursor:pointer}
+.settings-button-primary,.settings-button-secondary{height:32px;padding:0 14px;border-radius:8px;font-size:13px;font-weight:600;white-space:nowrap}
+.settings-button-primary{background:var(--n100);color:var(--chrome)}
+.settings-button-primary:hover{opacity:.86}
+.settings-button-secondary{border:1px solid var(--n12);color:var(--n87)}
+.settings-button-secondary:hover:not(:disabled){background:var(--n5)}
+.settings-badge{font-size:11px;font-weight:600;letter-spacing:.2px;padding:4px 9px;border-radius:999px;border:1px solid var(--n12);color:var(--n56)}
+.settings-switch{width:38px;height:22px;border-radius:999px;background:var(--n20);position:relative;flex:none;transition:background .15s}
+.settings-switch span{position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgb(0 0 0 / .25);transition:transform .15s}
+.settings-switch.on{background:var(--n100)}.settings-switch.on span{transform:translateX(16px);background:var(--chrome)}
+.settings-meter{height:4px;margin:-6px 0 2px;border-radius:2px;background:var(--n7);overflow:hidden}
+.settings-meter span{display:block;height:100%;background:var(--n100)}
+.settings-table{display:grid;margin-top:6px}
+.settings-table [role=row]{display:grid;grid-template-columns:1fr auto 80px;gap:16px;padding:9px 0;border-bottom:1px solid var(--n7);font-size:12.5px;color:var(--n65)}
+.settings-table [role=cell]:last-child{text-align:right;color:var(--n100)}
+.settings-error{margin:12px 0;font-size:12.5px;color:var(--n100);padding:10px 12px;border-radius:8px;background:var(--n5)}
+.settings-body .settings-shortcuts{margin-top:14px;font-size:13px;gap:12px 24px}
+@media(max-width:760px){.settings-page{grid-template-columns:1fr;grid-template-rows:auto 1fr}.settings-nav{flex-direction:row;flex-wrap:wrap;padding:40px 12px 10px;border-right:0;border-bottom:1px solid var(--n7)}.settings-nav h2{width:100%}.settings-panel{padding:24px 20px 48px}.settings-row{flex-direction:column;align-items:stretch}.settings-input{width:100%}}
