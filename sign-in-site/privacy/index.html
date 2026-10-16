@@ -4,27 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gumbo Privacy Policy</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='26' fill='%23111'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFFBEF'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFFBEF'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%231F1A17' stroke-width='3.2' stroke-linecap='round'/></svg>">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* Gumbo's privacy policy, linked from Google's sign-in screen. Same black and white as the sign-in page. */
-:root{--ink:#111;--muted:#666;--line:#e3e3e3;--bg:#fafafa}
-@media (prefers-color-scheme:dark){:root{--ink:#f2f2f2;--muted:#9a9a9a;--line:#2c2c2c;--bg:#0c0c0c}}
-body{margin:0;padding:48px 16px 64px;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+:root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--hot:#E2552A}
+@media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--hot:#FF8A5C}}
+body{margin:0;padding:48px 16px 64px;font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
 main{max-width:680px;margin:0 auto}
-.brand{display:flex;align-items:center;gap:9px;margin-bottom:32px;font-weight:700;font-size:17px;text-decoration:none;color:var(--ink)}
-.brand i{width:22px;height:22px;border-radius:50%;background:var(--ink)}
-h1{margin:0 0 6px;font-size:28px;letter-spacing:-.4px}
-h2{margin:32px 0 8px;font-size:17px}
+.brand{display:flex;align-items:center;gap:8px;margin-bottom:40px;font-weight:700;font-size:20px;letter-spacing:-.03em;text-decoration:none;color:var(--ink)}
+.brand svg{width:28px;height:28px}
+h1{margin:0 0 8px;font-family:'EB Garamond',Georgia,serif;font-weight:400;font-size:56px;letter-spacing:-.02em;line-height:1}
+h2{margin:36px 0 8px;font-family:'EB Garamond',Georgia,serif;font-weight:400;font-size:28px;letter-spacing:-.01em}
 p,li{font-size:15px;line-height:1.65;color:var(--ink)}
 ul{padding-left:20px}
 .muted{color:var(--muted);font-size:14px}
-a{color:var(--ink);text-underline-offset:3px}
+a{color:var(--ink);text-underline-offset:3px;text-decoration-color:var(--hot);text-decoration-thickness:2px}
 footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
-<a class="brand" href="/"><i></i>gumbo</a>
+<a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFFBEF"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>Gumbo</a>
 <h1>Privacy Policy</h1>
 <p class="muted">Last updated October 15, 2026</p>
 
@@ -35,7 +36,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);font-si
 
 <h2>Information we collect</h2>
 <ul>
-<li><strong>Account information.</strong> If you sign in, we receive your email address. If you sign in with Google, we also receive your name and profile picture from Google. If you use Gumbo without signing in, we create an anonymous account that has no email address.</li>
+<li><strong>Account information.</strong> If you sign in, we receive your email address. If you sign in with Google, we also receive your name and profile picture from Google. Editing on your computer works without an account; the AI assistant needs one.</li>
 <li><strong>AI requests.</strong> When you ask the assistant to do something, we send what it needs to our servers and on to an AI provider: your message, relevant project text such as transcripts and timeline details, and still frames rendered from your project for the assistant to look at.</li>
 <li><strong>Usage records.</strong> We record how much AI you use (requests, tokens and cost) to apply usage limits and prevent abuse. Responses from AI providers are kept for up to 24 hours so an interrupted request can resume.</li>
 <li><strong>Shared videos.</strong> When you choose Share, the finished video you picked is uploaded so others can view it through the link.</li>

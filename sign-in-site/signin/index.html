@@ -4,45 +4,47 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Sign in to Figjam</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='26' fill='%23111'/></svg>">
+<title>Sign in to Gumbo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFFBEF'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFFBEF'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%231F1A17' stroke-width='3.2' stroke-linecap='round'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;1,400&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* Figjam's sign-in page. The desktop app opens it with the address of a one-time sign-in callback on this computer and
+/* Gumbo's sign-in page. The desktop app opens it with the address of a one-time sign-in callback on this computer and
    a PKCE challenge; Google or the emailed link signs in through Supabase and returns there, so the app is signed in.
-   Nothing is stored on this page. Black and white, as the app. */
-:root{--ink:#111;--muted:#666;--line:#e3e3e3;--bg:#fafafa;--card:#fff}
-@media (prefers-color-scheme:dark){:root{--ink:#f2f2f2;--muted:#9a9a9a;--line:#2c2c2c;--bg:#0c0c0c;--card:#151515}}
+   Nothing is stored on this page. Styled like usegumbo.app: cream, ink, Garamond headings and a peach button. */
+:root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--card:#FFFDF7;--peach:#FFD8C2;--peach2:#FFC7A8}
+@media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--card:#1D1916;--peach:#FFD8C2;--peach2:#FFC7A8}}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
-main{width:min(400px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:36px 32px 30px}
-.brand{display:flex;align-items:center;gap:9px;margin-bottom:26px;font-weight:700;font-size:17px;letter-spacing:-.2px}
-.brand i{width:22px;height:22px;border-radius:50%;background:var(--ink)}
-h1{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:-.3px}
-p{margin:0 0 22px;font-size:14px;line-height:1.55;color:var(--muted)}p strong{color:var(--ink);font-weight:600}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+main{width:min(420px,100%);background:var(--card);border:1.5px solid var(--line);border-radius:24px;padding:34px 30px 30px;box-shadow:0 30px 70px -40px rgba(31,26,23,.35)}
+.brand{display:flex;align-items:center;gap:8px;margin-bottom:28px;font-weight:700;font-size:20px;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
+.brand svg{width:28px;height:28px}
+h1{margin:0 0 8px;font-family:'EB Garamond',Georgia,serif;font-size:40px;font-weight:400;letter-spacing:-.02em;line-height:1.02}
+p{margin:0 0 22px;font-size:15px;line-height:1.55;color:var(--muted)}p strong{color:var(--ink);font-weight:600}
 button,input{font:inherit}
-.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:44px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
-.google:hover{background:var(--bg)}
-.or{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:12px;color:var(--muted)}.or::before,.or::after{content:'';flex:1;height:1px;background:var(--line)}
-label{display:block;margin-bottom:6px;font-size:13px;font-weight:600}
-input{width:100%;height:44px;padding:0 13px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font-size:14px;outline:none}
-input:focus{border-color:var(--muted)}
-.primary{width:100%;height:44px;margin-top:12px;border:0;border-radius:11px;background:var(--ink);color:var(--card);font-size:14px;font-weight:600;cursor:pointer}
-.primary:disabled,.google:disabled{opacity:.5;cursor:default}
-.error{margin:0 0 16px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:13px}
-.small{margin:18px 0 0;font-size:12px}.small a{color:var(--muted)}
-.link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:13px}
+.google,.primary{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:50px;border:1.5px solid var(--ink);border-radius:12px;font-size:15.5px;font-weight:600;cursor:pointer;transition:background .15s}
+.google{background:var(--card);color:var(--ink)}
+.google:hover:not(:disabled){background:var(--bg)}
+.primary{margin-top:12px;background:var(--peach);color:#1F1A17}
+.primary:hover:not(:disabled){background:var(--peach2)}
+.or{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:13px;color:var(--muted)}.or::before,.or::after{content:'';flex:1;height:1px;background:var(--line)}
+label{display:block;margin-bottom:6px;font-size:13.5px;font-weight:600}
+input{width:100%;height:50px;padding:0 15px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font-size:15px;outline:none}
+input:focus{border-color:var(--ink)}
+.primary:disabled,.google:disabled{opacity:.55;cursor:default}
+.error{margin:0 0 16px;padding:10px 12px;border-radius:12px;background:var(--peach);color:#1F1A17;font-size:13.5px}
+.small{margin:18px 0 0;font-size:12.5px}.small a{color:var(--muted)}
+.link{background:none;border:0;padding:0;color:var(--ink);font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:14px}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
 <main>
- <div class="brand"><i></i>figjam</div>
+ <a class="brand" href="/"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFFBEF"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>Gumbo</a>
  <section id="start" hidden>
-  <h1>Sign in to Figjam</h1>
-  <p>Sign in to use Figjam AI. New here? This creates your account.</p>
+  <h1>Sign in to Gumbo</h1>
+  <p>Sign in to use Gumbo AI. New here? This creates your account.</p>
   <p class="error" id="error" role="alert" hidden></p>
   <button class="google" id="google" type="button"><svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 7.2-9.6 7.2-16.5z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.1-5.5c-2 1.4-4.6 2.2-8.8 2.2-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Continue with Google</button>
   <div class="or">or</div>
@@ -55,16 +57,16 @@ input:focus{border-color:var(--muted)}
  </section>
  <section id="sent" hidden>
   <h1>Check your email</h1>
-  <p>We sent a sign-in link to <strong id="sent-to"></strong>. Open it on this computer, where Figjam is open, and the app signs in.</p>
+  <p>We sent a sign-in link to <strong id="sent-to"></strong>. Open it on this computer, where Gumbo is open, and the app signs in.</p>
   <button class="link" id="again" type="button">Use a different email</button>
  </section>
  <section id="no-app" hidden>
-  <h1>Sign in from Figjam</h1>
-  <p>Open the Figjam app on your computer and choose Sign in. It opens this page ready to sign you in.</p>
+  <h1>Sign in from Gumbo</h1>
+  <p>Open the Gumbo app on your computer and choose Sign in. It opens this page ready to sign you in.</p>
  </section>
 </main>
 <script>
-// Supabase project for Figjam, with its public (anon) key: made for web pages, it can only start a sign-in.
+// Supabase project for Gumbo, with its public (anon) key: made for web pages, it can only start a sign-in.
 const SUPABASE='https://qewguvfkkwvdoqptiljd.supabase.co';
 const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFld2d1dmZra3d2ZG9xcHRpbGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNTY0NTEsImV4cCI6MjEwNjgzMjQ1MX0.clOcsG8wKKXvQb2Ozl3zFsx6p2pXRlCLBgc3KGGvAtU';
 const query=new URLSearchParams(location.search),desktop=query.get('desktop'),challenge=query.get('challenge');

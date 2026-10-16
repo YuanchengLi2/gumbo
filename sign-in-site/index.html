@@ -3,23 +3,561 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Figjam sign-in</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='26' fill='%23111'/></svg>">
+<title>Gumbo — your footage, cooked to order</title>
+<meta name="description" content="Gumbo is the AI video editor that turns raw clips into a finished video. Toss in your footage, say what you want, and watch it cook on a real timeline.">
+<meta property="og:title" content="Gumbo — your footage, cooked to order">
+<meta property="og:description" content="Toss in your clips, say what you want, and Gumbo cooks up the video.">
+<meta property="og:image" content="https://usegumbo.app/media/vietnam-short-poster.jpg">
+<meta name="theme-color" content="#9A3412">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFF8EE'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFF8EE'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%232A1A12' stroke-width='3.2' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-/* usegumbo.app is only Figjam's sign-in: its home says where to start and links to the product's own site. */
-:root{--ink:#111;--muted:#666;--bg:#fafafa}
-@media (prefers-color-scheme:dark){:root{--ink:#f2f2f2;--muted:#9a9a9a;--bg:#0c0c0c}}
-body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);text-align:center}
-h1{margin:0 0 8px;font-size:22px}p{margin:0;color:var(--muted);line-height:1.55}a{color:var(--ink)}
-.legal{margin-top:20px;font-size:13px}
+/* Gumbo's homepage. Warm kitchen colours (cream, paprika, roux brown, butter), an EB Garamond serif with one italic
+   phrase per headline, and a prompt bar where a visitor says what they want to make. Raw clips tumble into a steaming
+   bowl and come out as the finished Short; the Short itself plays on the phone at the end (footage from Pexels).
+   The app's own interface is left as a blank window until its redesign lands. */
+:root{
+ --cream:#FFF8EE;--card:#F6E9D8;--white:#FFFCF6;--ink:#2A1A12;--muted:#6B5446;--faint:#9A8576;--line:rgba(42,26,18,.15);
+ --paprika:#9A3412;--paprika2:#B5441C;--roux:#2A1A12;--chili:#E2552A;--peach:#FFD5BC;--peach2:#FFC3A2;--butter:#FCE3A2;--blush:#F9D2C6;
+ --serif:'EB Garamond',Georgia,serif;--sans:Figtree,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;overflow-x:clip}
+body{margin:0;background:var(--cream);color:var(--ink);font:400 17px/1.6 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:clip}
+a{color:inherit}
+img,video,svg{display:block}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.02em;line-height:1;margin:0}
+em{font-style:italic}
+.eyebrow{display:block;font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0 24px;border-radius:12px;border:1.5px solid var(--ink);background:var(--peach);color:var(--ink);font:600 16px var(--sans);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background .15s,transform .15s}
+.btn:hover{background:var(--peach2)}
+.btn:active{transform:translateY(1px)}
+
+/* Announcement and nav */
+.announce{background:var(--paprika);color:var(--cream);text-align:center;font-size:15px;font-weight:600;padding:13px 16px}
+.announce a{margin-left:14px;text-decoration:none;white-space:nowrap}.announce a:hover{text-decoration:underline}
+.nav{position:sticky;top:12px;z-index:40;max-width:940px;margin:22px auto 0;display:flex;align-items:center;gap:6px;padding:9px 9px 9px 18px;border:1.5px solid var(--line);border-radius:16px;background:rgba(255,248,238,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:8px;font:700 21px var(--sans);letter-spacing:-.03em;text-decoration:none;margin-right:auto}
+.logo svg{width:30px;height:30px}
+.nav a.link{font-size:15px;font-weight:500;color:var(--muted);text-decoration:none;padding:8px 11px;border-radius:9px}
+.nav a.link:hover{color:var(--ink);background:rgba(42,26,18,.05)}
+.nav .btn{height:44px;padding:0 18px;font-size:15px;margin-left:8px}
+@media (max-width:760px){.nav{margin:14px 12px 0}.nav a.link{display:none}}
+
+/* The prompt bar: say what you want to make */
+.ask{width:min(640px,100%);margin:0 auto;text-align:left}
+.bar{display:flex;align-items:flex-end;gap:10px;padding:12px 12px 12px 18px;border:1.5px solid var(--ink);border-radius:20px;background:var(--white);box-shadow:0 24px 50px -32px rgba(42,26,18,.45);transition:box-shadow .2s}
+.bar:focus-within{box-shadow:0 0 0 5px rgba(255,213,188,.75),0 24px 50px -32px rgba(42,26,18,.45)}
+.bar .plus{flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--card);color:var(--ink)}
+.bar .plus svg{width:18px;height:18px}
+.bar textarea{flex:1;min-width:0;border:0;outline:none;resize:none;background:none;font:400 17px/1.45 var(--sans);color:var(--ink);padding:7px 0;height:40px;max-height:140px}
+.bar textarea::placeholder{color:var(--faint)}
+.bar textarea:placeholder-shown{white-space:nowrap;overflow:hidden}
+.send{flex:none;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--ink);background:var(--peach);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:background .15s,transform .15s}
+.send:hover{background:var(--peach2)}.send:active{transform:scale(.95)}
+.send svg{width:18px;height:18px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+.chips button{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer}
+.chips button:hover{border-color:var(--ink);color:var(--ink)}
+.reply{display:none;margin-top:16px;padding:18px 18px 16px;border-radius:18px 18px 18px 6px;background:var(--card);animation:rise .4s cubic-bezier(.2,.8,.2,1)}
+.reply.on{display:block}
+.reply p{margin:0 0 12px;font-size:16px}
+.reply p strong{font-weight:600}
+.reply form{display:flex;gap:8px}
+.reply input{flex:1;min-width:0;height:46px;padding:0 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--white);font:400 16px var(--sans);color:var(--ink);outline:none}
+.reply input:focus{border-color:var(--ink)}
+.reply .btn{height:46px;padding:0 18px;font-size:15px}
+.reply small{display:block;margin-top:10px;font-size:13px;color:var(--muted)}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
+@media (max-width:520px){.reply form{flex-direction:column}}
+
+/* Hero */
+.hero{text-align:center;padding:70px 0 0}
+.hero h1{font-size:clamp(56px,8vw,108px);margin-top:20px}
+.hero h1 em{display:block}
+.hero .ask{margin-top:38px}
+.hero .avail{font-size:14px;color:var(--muted);margin-top:16px}
+.kitchen{position:relative;height:270px;margin-top:4px}
+.kitchen svg{position:absolute;inset:0;width:100%;height:100%}
+.raw image{filter:grayscale(1) contrast(.9);opacity:.85}
+@media (max-width:700px){.kitchen{height:200px}}
+
+/* Paprika panel: the app, blank until its new look lands */
+.panel{border-radius:48px 48px 0 0;margin-top:-6px;position:relative}
+.panel.paprika{background:var(--paprika);color:var(--cream);padding:110px 0 130px}
+.panel.roux{background:var(--roux);color:var(--cream);padding:110px 0 130px}
+.center{text-align:center}
+.panel h2,.h2{font-size:clamp(46px,6.6vw,92px)}
+.lead{font-size:19px;line-height:1.5;max-width:560px;margin:24px auto 0}
+.panel .lead{color:rgba(255,248,238,.84)}
+.compare{display:grid;grid-template-columns:minmax(0,.34fr) minmax(0,1fr);gap:18px;margin-top:64px;align-items:stretch}
+.by-hand{border:1.5px solid rgba(255,248,238,.28);border-radius:26px;padding:28px 24px;display:flex;flex-direction:column;text-align:center}
+.by-hand small,.with-gumbo small{font-size:15px;font-weight:600;color:rgba(255,248,238,.88)}
+.by-hand strong,.with-gumbo strong{display:block;font:400 44px/1 var(--serif);margin-top:8px}
+.by-hand .scrub{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;margin-top:22px;opacity:.6}
+.by-hand .scrub i{display:block;height:12px;border-radius:4px;background:rgba(255,248,238,.28)}
+.by-hand .scrub i:nth-child(2n){width:72%}.by-hand .scrub i:nth-child(3n){width:88%;margin-left:auto}
+.by-hand p{margin:18px 0 0;font-size:14.5px;color:rgba(255,248,238,.66)}
+.with-gumbo{border-radius:26px;overflow:hidden;background:rgba(42,26,18,.28);border:1.5px solid rgba(255,248,238,.28)}
+.with-gumbo .label{padding:22px 0 20px;text-align:center}
+.window{margin:0 22px 22px;border-radius:16px;background:var(--cream);aspect-ratio:16/9;overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.45)}
+.window .top{display:flex;gap:7px;padding:13px 15px;border-bottom:1px solid var(--line)}
+.window .top i{width:11px;height:11px;border-radius:50%;background:rgba(42,26,18,.16)}
+@media (max-width:860px){.compare{grid-template-columns:1fr}.by-hand{display:none}.with-gumbo .label strong{font-size:32px}.window{margin:0 14px 14px}}
+
+/* What goes in the pot: an illustrated bento, no footage */
+.how{padding:150px 0 0}
+.how .center h2{font-size:clamp(42px,5.6vw,76px)}
+.how .center h2 em{background:linear-gradient(transparent 68%,var(--peach) 68%);padding:0 .06em}
+.bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-top:72px}
+.cell{position:relative;border-radius:30px;padding:30px 30px 28px;overflow:hidden;display:flex;flex-direction:column;min-height:330px}
+.cell h3{font-size:36px}
+.cell p{margin:10px 0 0;font-size:16px;line-height:1.5;max-width:400px;color:var(--muted)}
+.cell .art{flex:1;display:grid;place-items:center;margin-top:22px;min-height:150px}
+.c-cuts{grid-column:span 4;background:var(--card)}
+.c-titles{grid-column:span 2;background:var(--paprika);color:var(--cream)}
+.c-titles p{color:rgba(255,248,238,.78)}
+.c-flavour{grid-column:span 2;background:var(--butter)}
+.c-score{grid-column:span 2;background:var(--roux);color:var(--cream)}
+.c-score p{color:rgba(255,248,238,.72)}
+.c-yours{grid-column:span 2;background:var(--blush)}
+@media (max-width:980px){.bento{grid-template-columns:repeat(2,minmax(0,1fr))}.c-cuts{grid-column:span 2}.c-titles,.c-flavour,.c-score,.c-yours{grid-column:span 1}}
+@media (max-width:640px){.bento{grid-template-columns:1fr}.c-cuts,.c-titles,.c-flavour,.c-score,.c-yours{grid-column:span 1}.cell{min-height:0}.cell h3{font-size:30px}}
+
+/* Cuts on the beat: clips fall away, the keepers snap to the beat */
+.cuts{width:100%;max-width:640px}
+.beats{position:relative;height:118px}
+.beats i{position:absolute;top:0;bottom:0;width:1.5px;background:repeating-linear-gradient(transparent 0 5px,rgba(42,26,18,.28) 5px 10px)}
+.strip{position:absolute;left:0;right:0;top:16px;height:52px}
+.strip b{position:absolute;top:0;height:52px;border-radius:12px;animation:cutloop 6s cubic-bezier(.6,0,.2,1) infinite}
+.strip b.k{background:var(--chili)}
+.strip b.x{background:rgba(42,26,18,.16);animation-name:dropout}
+.wave{position:absolute;left:0;right:0;bottom:0;height:34px}
+@keyframes cutloop{0%,30%{left:var(--l)}55%,88%{left:var(--t)}100%{left:var(--l)}}
+@keyframes dropout{0%,18%{opacity:1;transform:none}32%,90%{opacity:0;transform:translateY(26px) rotate(-6deg)}100%{opacity:1;transform:none}}
+
+/* Titles made for it: a title wipes onto a blank card */
+.titlecard{width:150px;aspect-ratio:9/16;border-radius:18px;background:linear-gradient(160deg,#4A2216,#1E120C);display:grid;place-items:center;align-content:center;gap:8px;box-shadow:0 24px 50px -24px rgba(0,0,0,.6);overflow:hidden}
+.titlecard small{font:700 9px var(--sans);letter-spacing:.14em;padding:4px 7px;border-radius:4px;background:var(--butter);color:var(--ink);animation:tag 4.8s ease infinite}
+.titlecard strong{font:400 30px/1 var(--serif);font-style:italic;color:var(--cream);clip-path:inset(0 100% 0 0);animation:wipe 4.8s cubic-bezier(.6,0,.2,1) infinite}
+.titlecard i{width:44px;height:3px;border-radius:2px;background:var(--butter);transform:scaleX(0);animation:line 4.8s ease infinite}
+@keyframes wipe{0%,12%{clip-path:inset(0 100% 0 0)}32%,82%{clip-path:inset(0 0 0 0)}96%,100%{clip-path:inset(0 0 0 100%)}}
+@keyframes tag{0%,8%{opacity:0;transform:translateY(6px)}20%,84%{opacity:1;transform:none}96%,100%{opacity:0}}
+@keyframes line{0%,30%{transform:scaleX(0)}44%,84%{transform:scaleX(1)}96%,100%{transform:scaleX(0)}}
+
+/* One consistent flavour: mismatched swatches settle into one palette */
+.swatches{display:grid;grid-template-columns:repeat(4,52px);gap:10px}
+.swatches i{height:86px;border-radius:14px;animation:settle 5s ease-in-out infinite}
+.swatches i:nth-child(1){--a:#7FA7C9;--b:#E2552A}.swatches i:nth-child(2){--a:#9BC48F;--b:#F2B33D}.swatches i:nth-child(3){--a:#B9B4D8;--b:#C2703D}.swatches i:nth-child(4){--a:#D9D9D9;--b:#9A3412}
+.swatches i:nth-child(2){animation-delay:.12s}.swatches i:nth-child(3){animation-delay:.24s}.swatches i:nth-child(4){animation-delay:.36s}
+@keyframes settle{0%,20%{background:var(--a);transform:translateY(0) rotate(-3deg)}45%,85%{background:var(--b);transform:translateY(-6px) rotate(0)}100%{background:var(--a);transform:translateY(0) rotate(-3deg)}}
+
+/* A score of its own: an equalizer that breathes */
+.eq{display:flex;align-items:flex-end;gap:7px;height:120px}
+.eq i{width:12px;border-radius:6px;background:var(--peach);animation:eq 1.6s ease-in-out infinite;height:30%}
+.eq i:nth-child(3n){background:var(--butter)}.eq i:nth-child(4n){background:var(--chili)}
+@keyframes eq{50%{height:var(--h)}}
+
+/* Still your timeline: a cursor drags a block */
+.lanes{width:100%;max-width:300px;display:grid;gap:9px;position:relative}
+.lanes div{height:30px;border-radius:9px;background:rgba(42,26,18,.08);position:relative}
+.lanes b{position:absolute;top:4px;bottom:4px;border-radius:6px}
+.lanes .drag{background:var(--ink);animation:drag 4.4s cubic-bezier(.6,0,.2,1) infinite}
+.lanes svg{position:absolute;left:calc(6% + 11%);top:11px;width:22px;height:22px;animation:drag 4.4s cubic-bezier(.6,0,.2,1) infinite;z-index:2}
+@keyframes drag{0%,22%{transform:translateX(0)}52%,80%{transform:translateX(96px)}100%{transform:translateX(0)}}
+
+/* Stays yours */
+.yours{margin-top:150px;border-radius:32px;background:var(--card);padding:46px 48px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) auto;gap:40px;align-items:center}
+.yours h2{font-size:clamp(38px,4vw,54px)}
+.yours p{margin:0;font-size:15.5px;color:var(--muted)}
+.yours p a{display:inline-block;margin-top:14px;font-weight:600;color:var(--ink);text-decoration:none}
+.seals{display:flex;gap:12px}
+.seal{width:104px;height:104px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;text-align:center;font:600 12.5px/1.25 var(--sans);padding:12px;box-shadow:inset 0 0 0 5px var(--card),inset 0 0 0 6.5px rgba(42,26,18,.4)}
+@media (max-width:980px){.yours{grid-template-columns:1fr;padding:36px 28px}.seals{flex-wrap:wrap}}
+
+/* Place your order: drifting order tickets on roux */
+.tickets{margin-top:70px;display:grid;gap:22px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.ticket-row{display:flex;gap:22px;width:max-content;animation:drift 70s linear infinite;padding:10px 0}
+.ticket-row.r2{animation-direction:reverse;animation-duration:84s}
+.tickets:hover .ticket-row{animation-play-state:paused}
+@keyframes drift{to{transform:translateX(-50%)}}
+.ticket{width:300px;padding:22px 24px 20px;border-radius:22px;color:var(--ink);font:400 24px/1.25 var(--serif);flex:none}
+.ticket small{display:block;margin-top:18px;font:600 12.5px var(--sans);letter-spacing:.1em;text-transform:uppercase;opacity:.6}
+.ticket:nth-child(4n+1){background:var(--peach);transform:rotate(-1.5deg)}
+.ticket:nth-child(4n+2){background:var(--butter);transform:rotate(1deg)}
+.ticket:nth-child(4n+3){background:var(--cream);transform:rotate(-.5deg)}
+.ticket:nth-child(4n+4){background:var(--blush);transform:rotate(1.5deg)}
+
+/* Get your evening back: the deal-sealer */
+.seal-deal{padding:150px 0 0}
+.evenings{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:64px}
+.evening{border-radius:30px;padding:34px 34px 30px}
+.evening.slow{background:var(--card)}
+.evening.fast{background:var(--paprika);color:var(--cream)}
+.evening header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:22px}
+.evening header h3{font-size:34px}
+.evening header span{font:600 14px var(--sans);opacity:.75;white-space:nowrap}
+.evening ol{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.evening li{display:grid;grid-template-columns:76px 1fr;gap:14px;padding:13px 0;border-top:1px solid var(--line);font-size:16px;line-height:1.45}
+.evening.fast li{border-top-color:rgba(255,248,238,.18)}
+.evening li time{font:400 22px/1.1 var(--serif);font-variant-numeric:tabular-nums}
+.evening.slow li{color:var(--muted)}
+.evening.slow li time{color:var(--ink)}
+.evening.fast li:last-child{font-weight:600}
+.evening .verdict{margin:18px 0 0;font:400 italic 26px/1.2 var(--serif)}
+.perks{margin-top:16px;border-radius:30px;background:var(--roux);color:var(--cream);padding:40px 44px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:36px;align-items:center}
+.perks h3{font-size:clamp(34px,3.6vw,48px)}
+.perks ul{list-style:none;margin:0;padding:0;display:grid;gap:14px}
+.perks li{display:grid;grid-template-columns:28px 1fr;gap:10px;font-size:16px;line-height:1.45;color:rgba(255,248,238,.86)}
+.perks li strong{color:var(--cream);font-weight:600}
+.perks li svg{width:22px;height:22px;margin-top:1px}
+.perks .btn{border-color:var(--cream)}
+.evening-note{margin-top:14px;font-size:13.5px;color:var(--faint);text-align:center}
+@media (max-width:980px){.evenings{grid-template-columns:1fr}.perks{grid-template-columns:1fr;padding:34px 28px}}
+@media (max-width:520px){.evening{padding:28px 22px 24px}.evening li{grid-template-columns:62px 1fr}}
+
+/* FAQ */
+.faq{padding:140px 0 0}
+.faq-box{max-width:980px;margin:56px auto 0;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:10px;padding:10px;border-radius:30px;background:var(--card)}
+.qs{background:var(--paprika);color:var(--cream);border-radius:22px;padding:22px 14px 14px}
+.qs h3,.as h3{font-size:22px;padding:0 10px 14px}
+.q{display:block;width:100%;appearance:none;border:0;background:none;color:inherit;text-align:left;font:500 15.5px/1.4 var(--sans);padding:13px 12px;border-radius:12px;cursor:pointer;opacity:.86}
+.q:hover{background:rgba(255,248,238,.08);opacity:1}
+.q.on{background:rgba(255,248,238,.16);opacity:1}
+.as{padding:22px 18px}
+.as .asked{margin:0 0 0 auto;max-width:82%;text-align:right;font-size:14.5px;color:var(--muted);padding:6px 4px}
+.as .answer{margin:10px 0 0;max-width:92%;padding:16px 18px;border-radius:18px 18px 18px 6px;background:var(--cream);font-size:15.5px;line-height:1.55}
+@media (max-width:820px){.faq-box{grid-template-columns:1fr}}
+
+/* The bottom: the finished Short on a phone, and what are you going to make? */
+.make{margin-top:150px;border-radius:48px 48px 0 0;background:var(--roux);color:var(--cream);padding:110px 0 120px;position:relative;overflow:hidden}
+.make::before{content:'';position:absolute;width:760px;height:760px;right:-180px;top:-120px;border-radius:50%;background:radial-gradient(closest-side,rgba(226,85,42,.35),transparent);pointer-events:none}
+.make-grid{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:90px;align-items:center}
+.phone{position:relative;width:min(320px,78vw);aspect-ratio:9/19.3;border-radius:46px;padding:11px;background:#120A06;box-shadow:inset 0 0 0 1.5px rgba(255,248,238,.14),0 40px 90px -30px #000;justify-self:center}
+.phone video{width:100%;height:100%;object-fit:cover;border-radius:36px;background:#000}
+.phone .notch{position:absolute;top:21px;left:50%;transform:translateX(-50%);width:88px;height:25px;border-radius:20px;background:#120A06;z-index:2}
+.sound{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:3;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:999px;border:1.5px solid var(--ink);background:var(--cream);color:var(--ink);font:600 14px var(--sans);cursor:pointer;white-space:nowrap}
+.sound svg{width:17px;height:17px}
+.make h2{font-size:clamp(50px,6.8vw,96px)}
+.make .lead{margin:22px 0 34px;max-width:470px;color:rgba(255,248,238,.8)}
+.make .ask{margin:0}
+.make .bar{border-color:var(--cream)}
+.make .chips{justify-content:flex-start}
+.make .chips button{border-color:rgba(255,248,238,.25);color:rgba(255,248,238,.8)}
+.make .chips button:hover{border-color:var(--cream);color:var(--cream)}
+.make .reply{background:rgba(255,248,238,.1);color:var(--cream)}
+.make .reply small{color:rgba(255,248,238,.65)}
+.made-from{margin-top:30px;font-size:14px;color:rgba(255,248,238,.6);max-width:470px}
+@media (max-width:960px){.make-grid{grid-template-columns:1fr;gap:56px}.make .center-sm{text-align:center}.make .lead{margin-left:auto;margin-right:auto}.make .chips{justify-content:center}.made-from{margin:24px auto 0;text-align:center}}
+footer{background:var(--roux);color:rgba(255,248,238,.72);font-size:14.5px;padding:0 0 34px}
+footer .wrap{display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;border-top:1px solid rgba(255,248,238,.14);padding-top:28px}
+footer .wrap>span:first-child{margin-right:auto}
+footer a{text-decoration:none}footer a:hover{color:var(--cream)}
+
+/* Reveal (content is visible without scripts) */
+.js .reveal:not(.in){opacity:0;transform:translateY(22px)}
+.reveal{transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal:not(.in){opacity:1;transform:none}}
 </style>
+<script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
-<main>
- <h1>Figjam sign-in</h1>
- <p>To sign in, open the Figjam app and choose Sign in.<br>Learn about Figjam at <a href="https://usefigjam.com">usefigjam.com</a>.</p>
- <p class="legal"><a href="/privacy/">Privacy Policy</a> · <a href="/terms/">Terms of Service</a></p>
+
+<div class="announce">Gumbo is in early access for Windows.<a href="#make">Get on the list ›</a></div>
+
+<nav class="nav" aria-label="Main">
+ <a class="logo" href="#top" aria-label="Gumbo home">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="#2A1A12" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>
+  Gumbo
+ </a>
+ <a class="link" href="#kitchen-section">The kitchen</a>
+ <a class="link" href="#pot">What goes in</a>
+ <a class="link" href="#evening">Your evening</a>
+ <a class="link" href="#faq">Questions</a>
+ <a class="btn" href="#make">Get early access</a>
+</nav>
+
+<main id="top">
+ <header class="hero">
+  <div class="wrap">
+   <span class="eyebrow">Gumbo · AI video editor</span>
+   <h1>Your footage,<em>cooked to order.</em></h1>
+   <div class="ask" data-ask>
+    <form class="bar">
+     <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+     <textarea rows="1" aria-label="Describe the video you want to make" placeholder="Describe your video…"></textarea>
+     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    </form>
+    <div class="chips"><button type="button">A 60-second YouTube Short</button><button type="button">Cut the silences</button><button type="button">A travel recap</button><button type="button">Add captions</button></div>
+    <div class="reply" role="status"></div>
+   </div>
+   <p class="avail">For Windows. Mac is on the stove.</p>
+  </div>
+  <div class="kitchen" aria-hidden="true">
+   <svg id="kitchen" viewBox="0 -40 1440 270" preserveAspectRatio="xMidYMid slice">
+    <defs>
+     <path id="rawPath" d="M -140 -20 C 60 -40, 250 -20, 300 70 C 350 160, 190 220, 150 140 C 110 60, 290 25, 420 100 S 610 186, 690 175"/>
+     <path id="cookedPath" d="M 760 175 C 960 171, 1160 95, 1600 -45"/>
+     <clipPath id="rr"><rect x="-38" y="-28" width="76" height="56" rx="8"/></clipPath>
+     <clipPath id="rt"><rect x="-17" y="-30" width="34" height="60" rx="5"/></clipPath>
+    </defs>
+    <use href="#rawPath" fill="none" stroke="rgba(42,26,18,.14)" stroke-width="1.5" stroke-dasharray="3 7"/>
+    <g class="raw" id="raw"></g>
+    <use href="#cookedPath" fill="none" stroke="#2A1A12" stroke-width="78"/>
+    <g id="cooked"></g>
+    <g transform="translate(724 175)">
+     <rect x="-62" y="-34" width="124" height="68" rx="34" fill="#FFF8EE" stroke="#2A1A12" stroke-width="2.5"/>
+     <path d="M-22 -4h44c0 13-9.8 22-22 22s-22-9-22-22z" fill="#E2552A"/>
+     <path d="M-4 2l9 5-9 5z" fill="#FFF8EE"/>
+     <g fill="none" stroke="#2A1A12" stroke-width="2.6" stroke-linecap="round">
+      <path d="M-10 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" repeatCount="indefinite"/></path>
+      <path d="M0 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" begin=".4s" repeatCount="indefinite"/></path>
+      <path d="M10 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" begin=".8s" repeatCount="indefinite"/></path>
+     </g>
+    </g>
+   </svg>
+  </div>
+ </header>
+
+ <section class="panel paprika" id="kitchen-section"><div class="wrap center">
+  <span class="eyebrow" style="color:rgba(255,248,238,.72)">The kitchen</span>
+  <h2 style="margin-top:18px"><em>One sentence,</em> not an evening.</h2>
+  <p class="lead">Say what you want. Gumbo cuts, titles, grades and scores it on a real timeline, and you can still grab any piece of it.</p>
+  <div class="compare reveal">
+   <div class="by-hand"><small>By hand</small><strong>An evening</strong><div class="scrub"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><p>Scrubbing, trimming, titling, hunting for music.</p></div>
+   <div class="with-gumbo">
+    <div class="label"><small>With Gumbo</small><strong>One sentence</strong></div>
+    <div class="window" aria-hidden="true"><div class="top"><i></i><i></i><i></i></div></div>
+   </div>
+  </div>
+ </div></section>
+
+ <div class="wrap">
+  <section class="how" id="pot">
+   <div class="center reveal">
+    <span class="eyebrow">What goes in the pot</span>
+    <h2 style="margin-top:18px">Built around <em>how you create,</em><br>not how editors think you should.</h2>
+   </div>
+   <div class="bento">
+    <article class="cell c-cuts reveal">
+     <h3>Cuts on the beat</h3>
+     <p>It watches every clip, keeps the moments that fit your order, and cuts them to the music. The rest stays on the cutting board.</p>
+     <div class="art" aria-hidden="true"><div class="cuts">
+      <div class="beats">
+       <i style="left:0"></i><i style="left:20%"></i><i style="left:40%"></i><i style="left:60%"></i><i style="left:80%"></i><i style="left:100%"></i>
+       <div class="strip">
+        <b class="k" style="left:0%;width:15%;--l:0%;--t:0%"></b>
+        <b class="x" style="left:16%;width:9%"></b>
+        <b class="k" style="left:26%;width:13%;--l:26%;--t:20%"></b>
+        <b class="x" style="left:40%;width:11%"></b>
+        <b class="k" style="left:52%;width:18%;--l:52%;--t:40%"></b>
+        <b class="x" style="left:71%;width:7%"></b>
+        <b class="k" style="left:79%;width:20%;--l:79%;--t:60%"></b>
+       </div>
+       <svg class="wave" id="cutwave" viewBox="0 0 640 34" preserveAspectRatio="none"></svg>
+      </div>
+     </div></div>
+    </article>
+    <article class="cell c-titles reveal">
+     <h3>Titles made for it</h3>
+     <p>Animated titles and lower thirds designed around your footage, not dropped in from a template.</p>
+     <div class="art" aria-hidden="true"><div class="titlecard"><small>CHAPTER ONE</small><strong>The arrival</strong><i></i></div></div>
+    </article>
+    <article class="cell c-flavour reveal">
+     <h3>One consistent flavour</h3>
+     <p>A colour grade across every clip, so phone footage and drone shots taste like one video.</p>
+     <div class="art" aria-hidden="true"><div class="swatches"><i></i><i></i><i></i><i></i></div></div>
+    </article>
+    <article class="cell c-score reveal">
+     <h3>A score of its own</h3>
+     <p>Original music composed for your cut, or free-to-use tracks it finds, sitting under your voice.</p>
+     <div class="art" aria-hidden="true"><div class="eq" id="eq"></div></div>
+    </article>
+    <article class="cell c-yours reveal">
+     <h3>Still your timeline</h3>
+     <p>Every change lands as a block you can drag, trim or undo. Ask for seconds, or take the knife yourself.</p>
+     <div class="art" aria-hidden="true"><div class="lanes">
+      <div><b style="left:2%;width:30%;background:var(--chili)"></b><b style="left:36%;width:22%;background:var(--chili)"></b><b style="left:62%;width:34%;background:var(--chili)"></b></div>
+      <div><b class="drag" style="left:6%;width:26%"></b><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z" fill="#FFF8EE" stroke="#2A1A12" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+      <div><b style="left:2%;width:94%;background:var(--paprika)"></b></div>
+     </div></div>
+    </article>
+   </div>
+  </section>
+
+  <section class="yours reveal">
+   <h2>Your footage <em>stays yours.</em></h2>
+   <p>Your projects and original files stay on your computer. Gumbo sends the AI only what it needs, like transcripts and still frames, and never sells your data.<br><a href="/privacy/">Read the privacy policy ›</a></p>
+   <div class="seals"><span class="seal">Edits on your PC</span><span class="seal">Originals never uploaded</span><span class="seal">Delete any time</span></div>
+  </section>
+ </div>
+
+ <section class="panel roux" style="margin-top:150px"><div class="wrap center">
+  <span class="eyebrow" style="color:rgba(255,248,238,.6)">Place your order</span>
+  <h2 style="margin-top:18px">Ask it like you'd <em>ask a person.</em></h2>
+  <p class="lead">No timeline wrangling, no keyframe hunting. Say what you want, then keep talking until it's right.</p>
+ </div>
+ <div class="tickets" aria-label="Example requests">
+  <div class="ticket-row">
+   <div class="ticket">"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket">"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket">"Make the intro snappier and open on my best line."<small>YouTube</small></div><div class="ticket">"Captions that follow my voice, word by word."<small>Vlogs</small></div><div class="ticket">"Punch in on the punchline."<small>Comedy</small></div><div class="ticket">"Make it exactly 60 seconds."<small>Ads</small></div>
+   <div class="ticket">"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket">"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket">"Make the intro snappier and open on my best line."<small>YouTube</small></div><div class="ticket">"Captions that follow my voice, word by word."<small>Vlogs</small></div><div class="ticket">"Punch in on the punchline."<small>Comedy</small></div><div class="ticket">"Make it exactly 60 seconds."<small>Ads</small></div>
+  </div>
+  <div class="ticket-row r2">
+   <div class="ticket">"Warmer colours, less zoom."<small>Travel</small></div><div class="ticket">"Add a lower third whenever Sam talks."<small>Interviews</small></div><div class="ticket">"Music that builds to the ending."<small>Recaps</small></div><div class="ticket">"Chapter titles for each topic."<small>Tutorials</small></div><div class="ticket">"Lose the part where the dog barks."<small>Family</small></div><div class="ticket">"Use what I shot today."<small>Daily vlogs</small></div>
+   <div class="ticket">"Warmer colours, less zoom."<small>Travel</small></div><div class="ticket">"Add a lower third whenever Sam talks."<small>Interviews</small></div><div class="ticket">"Music that builds to the ending."<small>Recaps</small></div><div class="ticket">"Chapter titles for each topic."<small>Tutorials</small></div><div class="ticket">"Lose the part where the dog barks."<small>Family</small></div><div class="ticket">"Use what I shot today."<small>Daily vlogs</small></div>
+  </div>
+ </div></section>
+
+ <section class="seal-deal" id="evening"><div class="wrap">
+  <div class="center reveal"><span class="eyebrow">Do the math</span><h2 class="h2" style="margin-top:18px">Get your <em>evening back.</em></h2></div>
+  <div class="evenings">
+   <div class="evening slow reveal">
+    <header><h3>Editing by hand</h3><span>A typical evening</span></header>
+    <ol>
+     <li><time>6:30</time><span>Import everything and scrub through it, twice.</span></li>
+     <li><time>7:45</time><span>A rough cut. It's too long.</span></li>
+     <li><time>8:40</time><span>Still hunting for music that doesn't clash.</span></li>
+     <li><time>9:55</time><span>Typing titles and captions, one by one.</span></li>
+     <li><time>11:20</time><span>Export. Notice a typo. Export again.</span></li>
+    </ol>
+    <p class="verdict">Five hours. Dinner went cold.</p>
+   </div>
+   <div class="evening fast reveal">
+    <header><h3>With Gumbo</h3><span>Same evening</span></header>
+    <ol>
+     <li><time>7:00</time><span>Toss in your clips. Type one sentence.</span></li>
+     <li><time>7:13</time><span>The cut is ready: titles, grade and an original score.</span></li>
+     <li><time>7:15</time><span>"Make the intro snappier." Done.</span></li>
+     <li><time>7:18</time><span>Export.</span></li>
+     <li><time>7:19</time><span>Posted. Dinner's still hot.</span></li>
+    </ol>
+    <p class="verdict">Nineteen minutes, most of it watching.</p>
+   </div>
+  </div>
+  <p class="evening-note">The 13-minute edit is from a real Gumbo session: 17 clips of Vietnam into a 40-second Short.</p>
+  <div class="perks reveal">
+   <h3>Be one of the <em>first cooks.</em></h3>
+   <ul>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg><span><strong>A direct line to the kitchen.</strong> Talk to the people building Gumbo, not a help desk.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span><strong>Your orders shape the menu.</strong> What early cooks ask for decides what we build next.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><strong>First in line.</strong> New features, and Mac when it's ready, reach you first.</span></li>
+   </ul>
+   <a class="btn" href="#make" id="seat">Save my seat</a>
+  </div>
+ </div></section>
+
+ <section class="faq" id="faq"><div class="wrap">
+  <div class="center reveal"><span class="eyebrow">FAQs</span><h2 class="h2" style="margin-top:18px">Good <em>questions.</em></h2></div>
+  <div class="faq-box reveal">
+   <div class="qs"><h3>Questions</h3><div id="qs"></div></div>
+   <div class="as"><h3>Answer</h3><p class="asked" id="asked"></p><p class="answer" id="answer"></p>
+   </div>
+  </div>
+ </div></section>
+
+ <section class="make" id="make"><div class="wrap make-grid">
+  <div class="phone reveal">
+   <span class="notch"></span>
+   <video id="short" muted playsinline loop preload="none" poster="media/vietnam-short-poster.jpg" aria-label="A 40-second Vietnam travel Short made with Gumbo">
+    <source src="media/vietnam-short.mp4" type="video/mp4">
+   </video>
+   <button class="sound" id="sound" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/></svg><span>Sound off</span></button>
+  </div>
+  <div class="reveal center-sm">
+   <h2>What are you <em>going to make?</em></h2>
+   <p class="lead">Tell us, and we'll save you a seat at the table when Gumbo opens up.</p>
+   <div class="ask" data-ask>
+    <form class="bar">
+     <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+     <textarea rows="1" aria-label="What are you going to make?" placeholder="I want to make…"></textarea>
+     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    </form>
+    <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A trip recap like this one</button><button type="button">Product demos</button></div>
+    <div class="reply" role="status"></div>
+   </div>
+   <p class="made-from">The Short on the phone came from one sentence and 17 clips of Vietnam. Sound on for the score Gumbo wrote for it.</p>
+  </div>
+ </div></section>
 </main>
+
+<footer><div class="wrap">
+ <span>© 2026 Gumbo · Demo footage from <a href="https://www.pexels.com" rel="noopener">Pexels</a></span>
+ <a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:yuanchengli612@gmail.com">Contact</a>
+</div></footer>
+
+<script>
+const calm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const NS='http://www.w3.org/2000/svg';
+const el=(name,attrs)=>{const n=document.createElementNS(NS,name);for(const k in attrs)n.setAttribute(k,attrs[k]);return n;};
+
+// The kitchen: raw clips tumble along the left path into the bowl; the finished Short's frames ride out on the ribbon.
+(function kitchen(){
+ const svg=document.getElementById('kitchen'),raw=document.getElementById('raw'),cooked=document.getElementById('cooked');
+ const rawThumbs=['00','03','11','22','05','13','15','24','07','19','01','21'];
+ rawThumbs.forEach((n,i)=>{const begin=`-${(i*18/rawThumbs.length).toFixed(2)}s`,g=el('g',{});
+  g.appendChild(el('image',{href:`media/clips/${n}.jpg`,x:-38,y:-28,width:76,height:56,preserveAspectRatio:'xMidYMid slice','clip-path':'url(#rr)'}));
+  const m=el('animateMotion',{dur:'18s',repeatCount:'indefinite',rotate:'auto',begin});m.appendChild(el('mpath',{href:'#rawPath'}));g.appendChild(m);
+  g.appendChild(el('animateTransform',{attributeName:'transform',type:'scale',additive:'sum',values:'1;1;.25',keyTimes:'0;.88;1',dur:'18s',repeatCount:'indefinite',begin}));
+  raw.appendChild(g);});
+ for(let i=0;i<13;i++){const g=el('g',{});
+  g.appendChild(el('image',{href:`media/frames/f${String(i).padStart(2,'0')}.jpg`,x:-17,y:-30,width:34,height:60,preserveAspectRatio:'xMidYMid slice','clip-path':'url(#rt)'}));
+  const m=el('animateMotion',{dur:'16s',repeatCount:'indefinite',rotate:'auto',begin:`-${(i*16/13).toFixed(2)}s`});m.appendChild(el('mpath',{href:'#cookedPath'}));g.appendChild(m);cooked.appendChild(g);}
+ if(calm)svg.pauseAnimations();
+})();
+
+// The prompt bars: type what you want to make; Gumbo answers by asking where to send your invite.
+// No server: the invite request opens an email with the idea and address filled in.
+const ideas=['A Short of my trip to Vietnam…','My podcast as three Shorts…','My talk, minus the silences…','A product demo with music…','A wedding highlight reel…'];
+document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
+ const form=ask.querySelector('form'),box=ask.querySelector('textarea'),reply=ask.querySelector('.reply');
+ const grow=()=>{box.style.height='40px';box.style.height=Math.min(box.scrollHeight,140)+'px';};
+ box.addEventListener('input',grow);
+ box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
+ ask.querySelectorAll('.chips button').forEach(b=>b.addEventListener('click',()=>{box.value=b.textContent;grow();box.focus();}));
+ if(n===0&&!calm){let i=0;setInterval(()=>{if(document.activeElement!==box&&!box.value){i=(i+1)%ideas.length;box.placeholder=ideas[i];}},3200);box.placeholder=ideas[0];}
+ form.addEventListener('submit',e=>{e.preventDefault();const idea=box.value.trim();if(!idea){box.focus();return;}
+  reply.innerHTML='';const p=document.createElement('p');p.innerHTML='Sounds delicious. Gumbo is in early access, so leave your email and we\'ll send your invite to make <strong></strong>.';const what=idea.replace(/[.…\s]+$/,'');p.querySelector('strong').textContent=/^[A-Z][a-z]* /.test(what)&&!/^I /.test(what)?what[0].toLowerCase()+what.slice(1):what;
+  const f=document.createElement('form');f.innerHTML='<input type="email" required placeholder="you@example.com" aria-label="Your email"><button class="btn" type="submit">Get my invite</button>';
+  const note=document.createElement('small');note.textContent='Opens an email to the Gumbo team with your idea filled in.';
+  f.addEventListener('submit',ev=>{ev.preventDefault();const email=f.querySelector('input').value.trim();
+   location.href='mailto:yuanchengli612@gmail.com?subject='+encodeURIComponent('Gumbo early access')+'&body='+encodeURIComponent(`I want to make: ${idea}\nMy email: ${email}`);
+   note.textContent='Thanks! Send the email that just opened and you\'re on the list.';});
+  reply.append(p,f,note);reply.classList.add('on');f.querySelector('input').focus();});
+});
+
+// Reveal on scroll.
+const seen=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){e.target.classList.add('in');seen.unobserve(e.target);}},{threshold:.15});
+document.querySelectorAll('.reveal').forEach(n=>seen.observe(n));
+
+// The Short plays only while on screen.
+const short=document.getElementById('short');
+new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!calm){short.preload='auto';short.play().catch(()=>{});}else short.pause();}},{threshold:.35}).observe(short);
+const sound=document.getElementById('sound');
+sound.addEventListener('click',()=>{short.muted=!short.muted;if(!short.muted){short.preload='auto';short.play().catch(()=>{});}sound.setAttribute('aria-pressed',String(!short.muted));sound.querySelector('span').textContent=short.muted?'Sound off':'Sound on';
+ sound.querySelector('svg').innerHTML=short.muted?'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/>':'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>';});
+
+// What goes in the pot: the waveform under the cuts, and the score's equalizer.
+const cutwave=document.getElementById('cutwave');let wd='';for(let x=0;x<=640;x+=6){const h=Math.max(2,Math.abs(Math.sin(x*.9)+Math.sin(x*.23))*6+2);wd+=`M${x} ${17-h} V${17+h}`;}
+cutwave.innerHTML=`<path d="${wd}" stroke="rgba(42,26,18,.3)" stroke-width="2.4" stroke-linecap="round"/>`;
+const eq=document.getElementById('eq');for(let i=0;i<14;i++){const b=document.createElement('i');b.style.setProperty('--h',(45+Math.round(Math.abs(Math.sin(i*1.7))*55))+'%');b.style.animationDelay=(-(i*.13)).toFixed(2)+'s';b.style.animationDuration=(1.2+(i%4)*.18).toFixed(2)+'s';eq.appendChild(b);}
+
+// Save my seat: jump to the prompt at the bottom and put the cursor in it.
+document.getElementById('seat').addEventListener('click',e=>{e.preventDefault();document.getElementById('make').scrollIntoView({behavior:calm?'auto':'smooth'});setTimeout(()=>document.querySelector('#make textarea').focus({preventScroll:true}),calm?0:700);});
+
+// FAQ.
+const faqs=[
+ ['Does Gumbo upload my videos?','No. Your projects and original files stay on your computer. To edit, Gumbo sends the AI the text it needs, like transcripts and timeline details, plus still frames from your project. A finished video is only uploaded if you choose Share.'],
+ ['What kind of videos can it make?','Shorts, vlogs, travel recaps, talks, podcasts, tutorials and product demos. If you can describe it, Gumbo can cut it, with titles, captions, colour, music and motion graphics included.'],
+ ['Can I still edit by hand?','Always. Every change lands on a real timeline you can drag, trim and undo, and there is a full manual editor when you want to take the knife yourself.'],
+ ['Where does the music come from?','Gumbo composes an original score for your cut, or finds free-to-use tracks from libraries like Freesound and Jamendo.'],
+ ['Does it work on Mac?','Gumbo runs on Windows today. Mac is on the stove.'],
+ ['How do I get in?','Gumbo is in early access. Tell us what you want to make at the bottom of this page and we will send you an invite.']];
+const qs=document.getElementById('qs'),asked=document.getElementById('asked'),answer=document.getElementById('answer');
+const pick=i=>{[...qs.children].forEach((b,j)=>b.classList.toggle('on',j===i));asked.textContent=faqs[i][0];answer.textContent=faqs[i][1];};
+faqs.forEach(([q],i)=>{const b=document.createElement('button');b.className='q';b.type='button';b.textContent=q;b.addEventListener('click',()=>pick(i));qs.appendChild(b);});pick(0);
+</script>
 </body>
 </html>
