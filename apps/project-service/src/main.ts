@@ -52,7 +52,9 @@ port.on('message',({data}:{data:any})=>{
  if(data.visualResult){visualRendering.receive(data.visualResult);return;}
  if(data.visualProgress){visualRendering.progress(data.visualProgress);return;}
  if(data.reviewResult){const response=data.reviewResult,pending=reviewRequests.get(response.id);if(pending)response.error?pending.reject(new Error(response.error)):pending.resolve(response.result);return;}
- if(data.config){if(data.config.whisperModel)process.env.DREAM_WHISPER_MODEL=data.config.whisperModel;ingest?.modelsChanged();return;}
+ if(data.config){if(data.config.whisperModel)process.env.DREAM_WHISPER_MODEL=data.config.whisperModel;
+ // Settings changed: the creator profile and switched-off providers, read again by the next request.
+ if(data.config.settings){Object.assign(process.env,data.config.settings);return;}ingest?.modelsChanged();return;}
  if(data.close){closing=true;director?.cancel('shutdown');void ingest?.cancel();commands=commands.then(async()=>{await close();process.exit(0);});return;}
  if(closing){port.postMessage({id:data.id,error:'Figjam is closing this project.'});return;}
  commands=commands.then(async()=>{try{const result=await command(data.command);if(result&&typeof result==='object'&&'timeline' in result){if(data.command.type!=='state')publish('state',result);Object.assign(result,{stateSequence});}port.postMessage({id:data.id,result});}catch(error){port.postMessage({id:data.id,error:(error as Error).message});}});

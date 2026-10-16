@@ -24,15 +24,25 @@ export const CommandSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('library_list')}),z.object({type:z.literal('library_get'),revisionId:z.string()}),
  z.object({type:z.literal('generation_cancel'),requestId:z.string()}),z.object({type:z.literal('generation_resume'),requestId:z.string()}),
  z.object({type:z.literal('relink'),assetId:z.string(),path:z.string()}),z.object({type:z.literal('collect'),folder:z.string()}),
- z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout']),email:z.string().optional(),password:z.string().optional()}),
+ z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage']),email:z.string().optional(),password:z.string().optional()}),
  z.object({type:z.literal('config'),supabaseUrl:z.string().url(),anonKey:z.string()}),
  z.object({type:z.literal('models'),action:z.enum(['install','cancel']),id:z.string()}),
  z.object({type:z.literal('login_browser')})
 ]);
 export type Command=z.input<typeof CommandSchema>;
+/** The app's own settings (Settings), kept on this computer: the creator's profile, which every request's agent reads, and
+ * the providers the user switched off, whose models neither Auto nor the model menu offers. Claude cannot be switched off:
+ * it routes every request. */
+export const AppSettingsSchema=z.object({
+ profile:z.object({name:z.string().max(80).default(''),makes:z.string().max(300).default(''),style:z.string().max(2000).default('')}).default({name:'',makes:'',style:''}),
+ disabledProviders:z.array(z.enum(['openai','google','deepseek'])).default([])
+});
+export type AppSettings=z.infer<typeof AppSettingsSchema>;
+/** What Usage shows: spend from the gateway's records, across every computer the account uses. */
+export type UsageSummary={todayUsd:number;monthUsd:number;dailyBudgetUsd:number;requests:number;byModel:{model:string;calls:number;costUsd:number}[]};
 export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:string;turnId?:string};
 export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;paths?:string[];error?:string;phase?:string;warnings?:string[]};
-export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number};
+export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number;version?:string;projectsFolder?:string;logsFolder?:string};
 export interface DreamDesktop {
  setTheme(theme:'light'|'dark',color?:string):Promise<void>;
  projects():Promise<ProjectSummary[]>;
@@ -54,6 +64,8 @@ export interface DreamDesktop {
  reveal(path:string):Promise<void>;
  shareExport():Promise<{url:string;id:string}|null>;
  runtime():Promise<RuntimeStatus>;
+ settings():Promise<AppSettings>;
+ saveSettings(patch:Partial<AppSettings>):Promise<AppSettings>;
  catalog():Promise<{scores:Record<string,unknown>[];sfx:Record<string,unknown>[]}>;
  /** Answers a frames.request event: frames the editor's engine drew for the agent, or the error that stopped it. */
  framesResult(id:string,result:unknown):Promise<void>;

@@ -6,6 +6,7 @@ import {handleAI} from './ai.ts';
 import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
+import {usageSummary} from './usage-summary.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
@@ -26,6 +27,10 @@ Deno.serve(async(req)=>{
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,daily_budget_usd,is_guest').eq('id',user.id).single();return json(data);}
+ // Settings > Usage: spend today (the day the daily allowance counts, from midnight UTC), over the last 30 days and by model.
+ if(action==='usage'){const today=new Date();today.setUTCHours(0,0,0,0);const since=new Date(Date.now()-30*86_400_000);
+  const [{data:rows},{data:account}]=await Promise.all([db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000),db.from('dream_accounts').select('daily_budget_usd').eq('id',user.id).single()]);
+  return json(usageSummary(rows??[],today,Number(account?.daily_budget_usd??0)));}
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
  try{
   if(action==='transcribe'){const result=await handleTranscription(req,user.id,{db,key:Deno.env.get('GROQ_API_KEY')});return json(result.body,result.status);}

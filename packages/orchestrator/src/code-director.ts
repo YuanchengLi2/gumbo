@@ -108,7 +108,7 @@ export class Director {
   * keeps one prompt cache. */
  private async routeModel(turnId:string){
   if(this.db.getMeta('model-choice:'+turnId)!=='auto'||process.env.DREAM_AGENT_MODEL||this.db.getMeta('agent-model:'+turnId))return;
-  await this.refreshProviders();const score=this.score(turnId),model=autoModel(score,this.providers?.value??{});
+  await this.refreshProviders();const score=this.score(turnId),model=autoModel(score,this.enabledProviders());
   const route=this.db.loadState<any>('routing:'+turnId);this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,'auto');this.db.event('ai.model_chosen',{turnId,choice:'auto',model,auto:true,kind:score.kind,work:workOf(score),...(score.model?{picked:score.model,pickedBy:(isTier(score.model)?modelInfo(model)?.tier===score.model:modelInfo(score.model)?.id===model)?'haiku':'table'}:{}),difficulty:score.difficulty,reason:route?.reason});
  }
  /** The score Auto picks by: the triage of this request; an approved plan is doing the work it planned, at the plan's score. */
@@ -140,7 +140,7 @@ export class Director {
   const recent=(this.db.db.prepare("SELECT role,text FROM messages WHERE text<>'' AND (turn_id IS NULL OR turn_id<>?) ORDER BY rowid DESC LIMIT 6").all(turnId) as {role:string;text:string}[]).reverse();
   // The tiers of model that can run (never providers or model names, so the router judges only how much model the request
   // needs), and the tier that made the result this message may be reacting to.
-  const available=routerChoices(this.providers?.value??{});
+  const available=routerChoices(this.enabledProviders());
   const previousModel=this.previousModel(turnId);
   return{models:available,...(previousModel?{previousModel}:{}),message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments};
  }
@@ -165,7 +165,9 @@ export class Director {
   try{const config=await this.config(this.controller?.signal),response=await fetch(config.url+'/providers',{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(5000)});
    const value=response.ok?await response.json() as Partial<Record<Provider,boolean>>:{};this.providers={at:Date.now(),value};}catch{this.providers={at:Date.now()-540_000,value:{}};}
  }
- async availableProviders(){await this.refreshProviders();return{anthropic:true,...this.providers?.value};}
+ async availableProviders(){await this.refreshProviders();return{anthropic:true,...this.enabledProviders()};}
+ /** The providers with a key on the gateway, without those the user switched off in Settings (Claude always runs). */
+ private enabledProviders():Partial<Record<Provider,boolean>>{const off=new Set((process.env.DREAM_DISABLED_PROVIDERS??'').split(',').filter(Boolean));return Object.fromEntries(Object.entries(this.providers?.value??{}).map(([id,on])=>[id,!!on&&!off.has(id)]));}
  /** The model this request runs on, decided once and pinned: every conversation of the request (the agent, its helpers,
   * resumes) stays on it, so its prompt cache stays valid. DREAM_AGENT_MODEL still forces one model for a measured run. */
  agentModel(turnId:string,text='',route?:any):string{
@@ -173,7 +175,7 @@ export class Director {
   const choice=this.db.getMeta('model-choice:'+turnId) as ModelChoice|undefined;route??=this.db.loadState<any>('routing:'+turnId);
   // A request without a choice (tests, the command line) or a measured run (DREAM_AGENT_MODEL) uses the default model.
   const approved=this.db.getMeta('route:'+turnId)==='workflow',auto=choice==='auto'&&!process.env.DREAM_AGENT_MODEL;
-  const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel(this.score(turnId),this.providers?.value):models.agent;
+  const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel(this.score(turnId),this.enabledProviders()):models.agent;
   this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,auto?'auto':'user');this.db.event('ai.model_chosen',{turnId,choice,model,auto,complexity:route?.complexity});return model;
  }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}

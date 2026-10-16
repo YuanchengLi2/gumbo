@@ -28,6 +28,8 @@ export class Account {
  }
 
  async info(){if(!this.session)return {signedIn:false,email:'',configured:!!this.anonKey};const response=await fetch(`${this.url}/functions/v1/dream-gateway/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Figjam AI is currently unavailable.');return {signedIn:true,email:this.session.user.email??'',guest:!!this.session.user.is_anonymous,...body};}
+ /** Spend from the gateway's usage records (Settings > Usage): today, the last 30 days and by model. */
+ async usage(){if(!this.session)return null;const response=await fetch(`${this.url}/functions/v1/dream-gateway/usage`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Usage is unavailable.');return body;}
  signout(){this.generation++;this.session=null;if(existsSync(this.file))unlinkSync(this.file);return {signedIn:false};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }

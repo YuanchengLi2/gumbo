@@ -119,3 +119,19 @@ it('runs an approved plan, and a continued request, on the model picked when app
   expect(work().length).toBeGreaterThan(0);expect(new Set(work().map(c=>c.model))).toEqual(new Set([agentModels.sonnet]));
  }finally{db.close();}
 });
+
+// Settings > Privacy switches a provider off: neither Auto nor the model menu offers its models, so Sonnet does Sol's work.
+it('leaves out the providers switched off in Settings, for Auto and for the model menu',async()=>{
+ const before=process.env.DREAM_DISABLED_PROVIDERS;const db=fixture();try{withClip(db);
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace(db));const calls:{purpose:string;model:string}[]=[];
+  (director as any).providers={at:Date.now(),value:{openai:true,google:true}};
+  director.inference=async(model,_s,messages:any,_tools:any=[],_turn,_f,purpose='execution')=>{calls.push({purpose,model});
+   if(purpose==='triage')return text(JSON.stringify({kind:'edit',difficulty:3,work:'fix',feedback:'none',model:'strong',vision:false,carriesStopped:false,parts:['x'],reason:'fixture'}));
+   return JSON.stringify(messages).includes('"pub"')?toolUse('done','finish',{status:'complete',summary:'Done.'}):toolUse('pub','publish_project',{});};
+  const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model;
+  await director.message('tighten the intro',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe('gpt-6.1-sol');
+  process.env.DREAM_DISABLED_PROVIDERS='openai';
+  await director.message('tighten the outro',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
+  expect(await director.availableProviders()).toEqual({anthropic:true,openai:false,google:true});
+ }finally{if(before===undefined)delete process.env.DREAM_DISABLED_PROVIDERS;else process.env.DREAM_DISABLED_PROVIDERS=before;db.close();}
+});

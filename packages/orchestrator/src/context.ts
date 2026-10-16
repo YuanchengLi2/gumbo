@@ -11,6 +11,12 @@ type Chunk={id:string;kind:string;owner:string;text:string;hash:string};
 const searchCaches=new WeakMap<ProjectDB,Map<string,any[]>>();
 const terms=(text:string)=>[...new Set((text.toLowerCase().match(/[\p{L}\p{N}_-]+/gu)??[]).filter(t=>t.length>2&&!['the','and','with','this','that','please','make','video','edit'].includes(t)))].slice(0,24);
 const safe=(_key:string,value:unknown)=>/path|directory|fingerprint|waveform|framePaths|samples/i.test(_key)?undefined:value;
+/** The creator's profile from Settings (who they are, what they make, the style they want in every video), set by the
+ * desktop app for the whole computer: it rides with every request, beside the project's own notes. */
+export function creatorProfile():{creatorProfile?:{name?:string;makes?:string;style?:string}}{
+ try{const p=JSON.parse(process.env.DREAM_CREATOR_PROFILE??'{}')??{},profile=Object.fromEntries(Object.entries({name:p.name,makes:p.makes,style:p.style}).filter(([,v])=>typeof v==='string'&&v.trim()).map(([k,v])=>[k,(v as string).trim().slice(0,k==='style'?2000:300)]));
+  return Object.keys(profile).length?{creatorProfile:profile}:{};}catch{return{};}
+}
 export class ProjectContext {
  constructor(private project:ProjectDB){}
  private sync(){syncContext(this.project);}
@@ -58,7 +64,7 @@ export class ProjectContext {
   // reply comes in full (a script or an answer the user is building on) and earlier ones nearly so; a longer one says where
   // the rest is.
   const previous=(p.db.prepare("SELECT id,role,text FROM messages WHERE text<>'' ORDER BY rowid DESC LIMIT 8").all() as {id:string;role:string;text:string}[]).map((m,n,all)=>{const limit=m.role==='assistant'&&all.findIndex(x=>x.role==='assistant')===n?8000:m.role==='assistant'?2500:1500;return m.text.length>limit?{...m,text:m.text.slice(0,limit),rest:`read_file scope project id conversation:${m.id}:0 (follow nextChunk)`}:m;});
-  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage(),40,knowledge?.facts),relevant,footageHits:footage,...(shots.length?{footageForRequest:{lookingFor:knowledge!.lookFor,shots}}:{}),projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,recentDirection:previous.reverse(),history:this.history(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json. read_file and list_files with version (an id from history) show your files as they were then: write one back to bring that version of it back.'};
+  return{...this.overview(),selection:selection.slice(0,20),attachedAssetIds:assetIds,decisions:activeDecisions(p),timeline:timelineOutline(t,p.footage(),40,knowledge?.facts),relevant,footageHits:footage,...(shots.length?{footageForRequest:{lookingFor:knowledge!.lookFor,shots}}:{}),projectNotes:(p.getMeta('preferences')??'').slice(0,1600)||undefined,...creatorProfile(),recentDirection:previous.reverse(),history:this.history(),retrieval:'search (scope project) finds earlier records; read_file with scope project and a chunk id reads one; the timeline is project.json. read_file and list_files with version (an id from history) show your files as they were then: write one back to bring that version of it back.'};
  }
  page(input:unknown){
   const a=ProjectReadSchema.parse(input),p=this.project,t=p.timeline();
