@@ -700,3 +700,8 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .sign-in-error{margin:0 0 16px;padding:10px 12px;border-radius:9px;background:var(--n5);font-size:12.5px;line-height:1.45;color:var(--n100)}
 
 .dialog-backdrop:has(.sign-in){z-index:2100}
+.sign-in .sign-in-primary{display:flex;align-items:center;justify-content:center;gap:8px}
+.sign-in-waiting{display:flex;align-items:center;justify-content:center;gap:10px;height:44px;border:1px solid var(--n12);border-radius:10px;font-size:13.5px;color:var(--n80)}
+.sign-in-spinner{width:14px;height:14px;border-radius:50%;border:2px solid var(--n14);border-top-color:var(--n100);animation:sign-in-spin .8s linear infinite}
+@keyframes sign-in-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.sign-in-spinner{animation:none}}

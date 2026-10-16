@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Sign in to Figjam</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='26' fill='%23111'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Figjam's sign-in page. The desktop app opens it with the address of a one-time sign-in callback on this computer and
+   a PKCE challenge; Google or the emailed link signs in through Supabase and returns there, so the app is signed in.
+   Nothing is stored on this page. Black and white, as the app. */
+:root{--ink:#111;--muted:#666;--line:#e3e3e3;--bg:#fafafa;--card:#fff}
+@media (prefers-color-scheme:dark){:root{--ink:#f2f2f2;--muted:#9a9a9a;--line:#2c2c2c;--bg:#0c0c0c;--card:#151515}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+main{width:min(400px,100%);background:var(--card);border:1px solid var(--line);border-radius:18px;padding:36px 32px 30px}
+.brand{display:flex;align-items:center;gap:9px;margin-bottom:26px;font-weight:700;font-size:17px;letter-spacing:-.2px}
+.brand i{width:22px;height:22px;border-radius:50%;background:var(--ink)}
+h1{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:-.3px}
+p{margin:0 0 22px;font-size:14px;line-height:1.55;color:var(--muted)}p strong{color:var(--ink);font-weight:600}
+button,input{font:inherit}
+.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;height:44px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
+.google:hover{background:var(--bg)}
+.or{display:flex;align-items:center;gap:12px;margin:20px 0;font-size:12px;color:var(--muted)}.or::before,.or::after{content:'';flex:1;height:1px;background:var(--line)}
+label{display:block;margin-bottom:6px;font-size:13px;font-weight:600}
+input{width:100%;height:44px;padding:0 13px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink);font-size:14px;outline:none}
+input:focus{border-color:var(--muted)}
+.primary{width:100%;height:44px;margin-top:12px;border:0;border-radius:11px;background:var(--ink);color:var(--card);font-size:14px;font-weight:600;cursor:pointer}
+.primary:disabled,.google:disabled{opacity:.5;cursor:default}
+.error{margin:0 0 16px;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line);color:var(--ink);font-size:13px}
+.small{margin:18px 0 0;font-size:12px}
+.link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer;font-size:13px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+ <div class="brand"><i></i>figjam</div>
+ <section id="start" hidden>
+  <h1>Sign in to Figjam</h1>
+  <p>Sign in to use Figjam AI. New here? This creates your account.</p>
+  <p class="error" id="error" role="alert" hidden></p>
+  <button class="google" id="google" type="button"><svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.4c-.5 2.9-2.1 5.3-4.6 7l7.1 5.5c4.2-3.9 7.2-9.6 7.2-16.5z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.1-5.5c-2 1.4-4.6 2.2-8.8 2.2-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>Continue with Google</button>
+  <div class="or">or</div>
+  <form id="email-form">
+   <label for="email">Email</label>
+   <input id="email" type="email" autocomplete="email" required placeholder="you@example.com">
+   <button class="primary" id="send" type="submit">Email me a sign-in link</button>
+  </form>
+ </section>
+ <section id="sent" hidden>
+  <h1>Check your email</h1>
+  <p>We sent a sign-in link to <strong id="sent-to"></strong>. Open it on this computer, where Figjam is open, and the app signs in.</p>
+  <button class="link" id="again" type="button">Use a different email</button>
+ </section>
+ <section id="no-app" hidden>
+  <h1>Sign in from Figjam</h1>
+  <p>Open the Figjam app on your computer and choose Sign in. It opens this page ready to sign you in.</p>
+ </section>
+</main>
+<script>
+// Supabase project for Figjam, with its public (anon) key: made for web pages, it can only start a sign-in.
+const SUPABASE='https://qewguvfkkwvdoqptiljd.supabase.co';
+const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFld2d1dmZra3d2ZG9xcHRpbGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNTY0NTEsImV4cCI6MjEwNjgzMjQ1MX0.clOcsG8wKKXvQb2Ozl3zFsx6p2pXRlCLBgc3KGGvAtU';
+const query=new URLSearchParams(location.search),desktop=query.get('desktop'),challenge=query.get('challenge');
+const $=id=>document.getElementById(id);
+// Only a sign-in the app started on this computer: its callback must be 127.0.0.1 and it must bring a PKCE challenge.
+function validDesktop(){try{const url=new URL(desktop);return url.protocol==='http:'&&url.hostname==='127.0.0.1'&&url.pathname==='/callback'&&!!url.searchParams.get('state')&&/^[A-Za-z0-9_-]{43}$/.test(challenge??'');}catch{return false;}}
+const show=id=>{for(const s of ['start','sent','no-app'])$(s).hidden=s!==id;};
+const fail=message=>{$('error').textContent=message;$('error').hidden=false;};
+if(!validDesktop())show('no-app');else{
+ show('start');
+ $('google').onclick=()=>{const url=new URL(SUPABASE+'/auth/v1/authorize');url.searchParams.set('provider','google');url.searchParams.set('redirect_to',desktop);url.searchParams.set('code_challenge',challenge);url.searchParams.set('code_challenge_method','s256');location.href=url.toString();};
+ $('email-form').onsubmit=async event=>{event.preventDefault();$('error').hidden=true;const email=$('email').value.trim().toLowerCase();$('send').disabled=true;$('send').textContent='Sending…';
+  try{const response=await fetch(SUPABASE+'/auth/v1/otp?redirect_to='+encodeURIComponent(desktop),{method:'POST',headers:{apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify({email,create_user:true,code_challenge:challenge,code_challenge_method:'s256'})});
+   if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(response.status===429?'Too many emails were sent. Wait a minute, then try again.':body.msg||body.error_description||'The sign-in email could not be sent.');}
+   $('sent-to').textContent=email;show('sent');}
+  catch(error){fail(error.message);}
+  finally{$('send').disabled=false;$('send').textContent='Email me a sign-in link';}};
+ $('again').onclick=()=>show('start');
+}
+</script>
+</body>
+</html>

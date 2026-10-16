@@ -13,24 +13,6 @@ export class Account {
  /** Guests are gone: an account is needed for Figjam AI. A guest session saved by an older version is dropped. */
  private signedIn(){if(this.session?.user.is_anonymous)this.clear();return this.session;}
  private clear(){this.session=null;if(existsSync(this.file))unlinkSync(this.file);}
- /** Sends the sign-in email: the 8-digit code to type into Figjam, and a link that returns to this app (PKCE). */
- async sendEmail(email:string,redirect:string,challenge:string){
-  if(!this.anonKey)throw new Error('Figjam AI is not configured. Your local projects remain available.');
-  const response=await fetch(`${this.url}/auth/v1/otp?redirect_to=${encodeURIComponent(redirect)}`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email,create_user:true,code_challenge:challenge,code_challenge_method:'s256'}),signal:AbortSignal.timeout(20000)});
-  if(!response.ok){const body=await response.json().catch(()=>({})) as any;throw new Error(response.status===429?'Too many emails were sent. Wait a minute, then try again.':body.msg??body.error_description??'The sign-in email could not be sent.');}
- }
- /** The code from the email, typed into Figjam. */
- async verifyCode(email:string,code:string){
-  const generation=++this.generation,token=code.replace(/\D/g,'');if(token.length<6)throw new Error('Enter the code from the email.');
-  const response=await fetch(`${this.url}/auth/v1/verify`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({type:'email',email:email.trim().toLowerCase(),token}),signal:AbortSignal.timeout(20000)});
-  const body=await response.json().catch(()=>({})) as any;if(!response.ok||!body.access_token)throw new Error(/expired|invalid/i.test(body.msg??body.error_description??'')?'That code is wrong or has expired. Check the email, or send a new code.':body.msg??body.error_description??'Sign-in failed.');
-  if(generation!==this.generation)throw new Error('Sign-in was canceled.');
-  this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});return this.info();
- }
- /** Where the browser goes to sign in with a provider (Google), returning to this app's callback with a PKCE code. */
- authorizeUrl(provider:'google',redirect:string,challenge:string){
-  const url=new URL(`${this.url}/auth/v1/authorize`);url.searchParams.set('provider',provider);url.searchParams.set('redirect_to',redirect);url.searchParams.set('code_challenge',challenge);url.searchParams.set('code_challenge_method','s256');return url.toString();
- }
  async token(){
   const current=this.signedIn();if(!current)throw new SignInRequired();
   if(current.expires_at<Date.now()/1000+60){

@@ -80,5 +80,11 @@ export function planningScript(blockOnce=false):Script{
  * footage or cut where the fixture's words fall). */
 export const finishKeeping=(body:any,id:string,summary:string,reason:string)=>[use(id,'finish',{status:'complete',summary,kept:(resultOf(body,'publish_project')?.checks?.mustFix??[]).map((c:any)=>({check:c.id,reason}))})];
 
-/** Signs the app in through the fixture's auth (an account is needed for Figjam AI; there are no guests). */
-export const signIn=(page:{evaluate:(fn:()=>Promise<unknown>)=>Promise<unknown>})=>page.evaluate(()=>window.dream.command({type:'account',action:'verify_code',email:'local-fixture@example.invalid',code:'12345678'}));
+/** Signs the app in as a person would in the browser: starts the browser sign-in (headless, no browser opens), then
+ * answers the app's one-time callback with a code, which the app exchanges with the fixture's auth (an account is needed
+ * for Figjam AI; there are no guests). */
+export async function signIn(page:{evaluate:<T>(fn:()=>Promise<T>)=>Promise<T>}){
+ const {url}=await page.evaluate(()=>window.dream.command<{url:string}>({type:'account',action:'browser'}));
+ const desktop=new URL(url).searchParams.get('desktop')!,back=new URL(desktop);back.searchParams.set('code','fixture-code');
+ const response=await fetch(back);if(!response.ok)throw new Error('Sign-in callback failed: '+await response.text());
+}
