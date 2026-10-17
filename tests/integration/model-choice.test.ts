@@ -59,7 +59,8 @@ it('Auto runs each request on the model its triage score calls for, and keeps a 
   const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!;
   score={difficulty:1};await director.message('make the caption white',[],'auto',[],undefined,undefined,'auto');expect(ran().model).toBe(agentModels.haiku);
   score={difficulty:4};await director.message('add b-roll and a motion graphic where I describe plans',[],'auto',[],undefined,undefined,'auto');expect(ran().model).toBe(agentModels.sonnet);
-  score={difficulty:5};await director.message('condense the vlog to 10 minutes',[],'auto',[],undefined,undefined,'auto');expect(ran().model).toBe(agentModels.opus);
+  // The hardest work runs on the strong model too: Auto never runs Opus (here Sonnet, standing in for Sol without an OpenAI key).
+  score={difficulty:5};await director.message('condense the vlog to 10 minutes',[],'auto',[],undefined,undefined,'auto');expect(ran().model).toBe(agentModels.sonnet);
   // The triage's parts are what finishing reports on.
   score={difficulty:3,parts:['make the drawings black','add music that fits each section']};await director.message('make the drawings black and add music',[],'auto',[],undefined,undefined,'auto');
   expect(ran().first).toContain('p2: add music that fits each section');
@@ -81,8 +82,9 @@ it('Auto tells Haiku which model made a rejected result and runs what it then pi
   await director.message('theres a weird green tint at 13 seconds',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
   // "its still there": Haiku hears which tier made it and the cost of each, and keeps a strong model; nothing forces a frontier one.
   score={feedback:'negative',model:'strong'};await director.message('its still there',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
-  expect(asked().previousResultBy).toBe('strong');expect(asked().models.find((m:any)=>m.id==='frontier').costPerRequest).toBe('about $0.55');
-  score={feedback:'negative',model:'frontier'};await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.opus);
+  expect(asked().previousResultBy).toBe('strong');expect(asked().models.map((m:any)=>m.id)).toEqual(['light','strong']);
+  // A frontier pick the router still makes runs on the strong model: Auto never climbs to Opus.
+  score={feedback:'negative',model:'frontier'};await director.message('still not fixed',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.sonnet);
   expect(db.loadState('auto-escalation')).toBeUndefined();
  }finally{db.close();}
 });
@@ -97,7 +99,7 @@ it('Auto runs its own model for the tier Haiku chose, shown tiers and never mode
   const ran=()=>calls.filter(c=>c.purpose==='execution').at(-1)!.model,asked=()=>JSON.parse(JSON.parse(calls.filter(c=>c.purpose==='triage').at(-1)!.first).content);
   score={model:'strong'};await director.message('go through all my clips and pick the best scenery',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe('gpt-6.1-sol');
   // Haiku saw the tiers of model that can run, each with what it is for and its cost, and no provider or model name.
-  expect(asked().models.map((m:any)=>m.id)).toEqual(['light','strong','frontier']);expect(asked().models[1].bestAt).toMatch(/footage/);expect(JSON.stringify(asked().models)).not.toMatch(/claude|sonnet|opus|haiku|gpt|gemini|deepseek/i);
+  expect(asked().models.map((m:any)=>m.id)).toEqual(['light','strong']);expect(asked().models[1].bestAt).toMatch(/footage/);expect(JSON.stringify(asked().models)).not.toMatch(/claude|sonnet|opus|haiku|gpt|gemini|deepseek/i);
   // A model that is not Auto's counts as its tier (DeepSeek: light, so Haiku); the next message is told which tier made the result it reacts to.
   score={model:'deepseek-flash'};await director.message('find more food shots',[],'auto',[],undefined,undefined,'auto');expect(ran()).toBe(agentModels.haiku);expect(asked().previousResultBy).toBe('strong');
   const chosen=db.db.prepare("SELECT json FROM events WHERE type='ai.model_chosen' ORDER BY seq DESC LIMIT 1").get() as any;expect(JSON.parse(chosen.json)).toMatchObject({picked:'deepseek-flash',pickedBy:'table',work:'footage'});

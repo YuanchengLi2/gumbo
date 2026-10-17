@@ -77,9 +77,9 @@ function Usage(){
 
 function AI(){
  const s=useEditor(),providers=useProviders();
- const autoNames=(['light','strong','frontier'] as const).map(tier=>autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>available(m.choice,providers)));
+ const autoNames=(['light','strong'] as const).map(tier=>autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>available(m.choice,providers)));
  return <>
-  <Row label="Model" help={<>The model new requests use. Auto picks for each request: {autoNames[0]?.label} for small changes, {autoNames[1]?.label} for real edits, {autoNames[2]?.label} for the hardest work.</>}>
+  <Row label="Model" help={<>The model new requests use. Auto picks for each request: {autoNames[0]?.label} for small changes, {autoNames[1]?.label} for everything else. Other models run only when you pick them.</>}>
    <select className="settings-select" aria-label="Model" value={s.model} onChange={e=>s.setModel(e.target.value as typeof s.model)}>{choices.map(choice=><option key={choice} value={choice} disabled={!available(choice,providers)}>{shortLabel(choice)}{available(choice,providers)?'':' (not available)'}</option>)}</select>
   </Row>
   <Row label="Mode" help="Edit makes changes; Plan proposes a plan to approve first; Ask only answers."><Segments label="Mode" value={s.permission} options={[['auto','Edit'],['plan','Plan'],['ask','Ask']] as const} onChange={s.setPermission}/></Row>

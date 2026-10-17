@@ -682,3 +682,7 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - Web search is the plain web_search function for every model (about 100 tokens), answered by the Haiku search that other providers' models already used. Anthropic's search tool was 2,440 tokens on every call of every request.
 - The prefix is 9,003 tokens (system 2,383, tools 6,519, search 101). The same first call costs about 6¢ instead of 13.6¢. The tool list stays whole: each tool is a few hundred tokens and the rarely used ones (file changes and export on the computer, decisions, resources) are needed when they are asked for.
 - Gateway change (requires deployment): `cachedPrompt` gives system and tools the conversation's TTL.
+
+## October 17, 2026 — Auto runs only Claude Haiku 5.5 and GPT-6.1 Sol
+
+- Auto now chooses between two models: Claude Haiku 5.5 for light work and GPT-6.1 Sol for everything else, the hardest whole-video work and big plans included. Opus, like every other model, runs only when the user picks it. The router is shown only the light and strong tiers; a frontier tier or model it still names (an older prompt, a "still not fixed" climb) runs on Sol. Claude Sonnet 5.5 still stands in for Sol only when Sol cannot run (no OpenAI key on the gateway). Settings > AI says the same.

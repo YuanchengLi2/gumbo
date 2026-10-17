@@ -45,17 +45,17 @@ export type Work='talk'|'look'|'write'|'fix'|'footage'|'graphics'|'sound'|'restr
 export const works:Work[]=['talk','look','write','fix','footage','graphics','sound','restructure'];
 type Choice=Exclude<ModelChoice,'auto'>;
 /** The fallback when the router's own pick cannot run: for each kind of work and difficulty, the tier of model it needs
- * (light for one setting on one thing and small talk, strong for real editing, frontier for whole-video work), run on
- * Auto's model for that tier (autoModels). */
-export const bestFor:Record<Work,{upTo:number;tier:Tier}[]>={
+ * (light for one setting on one thing and small talk, strong for everything else), run on Auto's model for that tier
+ * (autoModels). Auto has no frontier tier: the hardest work runs on the strong model too. */
+export const bestFor:Record<Work,{upTo:number;tier:AutoTier}[]>={
  talk:[{upTo:5,tier:'light'}],
  look:[{upTo:1,tier:'light'},{upTo:5,tier:'strong'}],
- write:[{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
- fix:[{upTo:1,tier:'light'},{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
- footage:[{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
- graphics:[{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
- sound:[{upTo:4,tier:'strong'},{upTo:5,tier:'frontier'}],
- restructure:[{upTo:3,tier:'strong'},{upTo:5,tier:'frontier'}],
+ write:[{upTo:5,tier:'strong'}],
+ fix:[{upTo:1,tier:'light'},{upTo:5,tier:'strong'}],
+ footage:[{upTo:5,tier:'strong'}],
+ graphics:[{upTo:5,tier:'strong'}],
+ sound:[{upTo:5,tier:'strong'}],
+ restructure:[{upTo:5,tier:'strong'}],
 };
 /** The work a score stands for when the triage did not name it (the word rules, an older gateway). */
 export function workOf(score:RequestScore):Work{
@@ -63,25 +63,30 @@ export function workOf(score:RequestScore):Work{
  if(score.kind==='answer')return d<=2?'talk':'look';if(score.kind==='plan')return d>=4?'restructure':'write';return d>=5?'restructure':'fix';
 }
 /** Auto: the tier Haiku chose for the request, weighing how hard it is against what each tier costs (model), or else the
- * tier its kind of work needs at its difficulty (bestFor), run on Auto's model for that tier (autoModels). A plan of the
- * whole edit is frontier from difficulty 4. A model the user picks always wins over Auto. */
+ * tier its kind of work needs at its difficulty (bestFor), run on Auto's model for that tier (autoModels). Auto runs
+ * only Claude Haiku 5.5 and GPT-6.1 Sol: a frontier tier or model the router still names runs on the strong model.
+ * A model the user picks always wins over Auto (Opus and the other frontier models run only when picked). */
 export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>):string{
  const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3)),can=(m:ModelInfo)=>(m.provider==='anthropic'||!!providers?.[m.provider])&&(!score.vision||m.vision);
  // The router names a tier (it is shown tiers, not providers); a model id is still honoured.
  // A model id it returns counts as that model's tier: Auto only ever runs its own model for a tier (autoModels).
- const named=isTier(score.model)?score.model:modelInfo(score.model??'')?.tier,tier:Tier=named??(score.kind==='plan'?(d>=4?'frontier':'strong'):(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier);
- const pick=(t:Tier)=>autoModels[t].map(choice=>modelInfo(choice)!).find(can);
- return(pick(tier)??tiers.map(pick).find(Boolean))?.id??agentModels.sonnet;
+ const named=isTier(score.model)?score.model:modelInfo(score.model??'')?.tier,tier:AutoTier=autoTier(named??(score.kind==='plan'?'strong':(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier));
+ const pick=(t:AutoTier)=>autoModels[t].map(choice=>modelInfo(choice)!).find(can);
+ return(pick(tier)??autoTiers.map(pick).find(Boolean))?.id??agentModels.sonnet;
 }
 export const tiers:Tier[]=['light','strong','frontier'];
-/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work, GPT-6.1 Sol for real edits (Sonnet's price,
- * half its cache-read rate), Claude Opus 5.5 for the hardest work. The rest run only when the user picks them. When Sol
- * cannot run (no OpenAI key on the gateway), Claude Sonnet 5.5 stands in for it. */
-export const autoModels:Record<Tier,Choice[]>={light:['haiku'],strong:['gpt-sol','sonnet'],frontier:['opus']};
+/** The tiers Auto chooses between. The frontier tier is for models the user picks, never for Auto. */
+export type AutoTier=Exclude<Tier,'frontier'>;
+export const autoTiers:AutoTier[]=['light','strong'];
+export const autoTier=(tier:Tier):AutoTier=>tier==='frontier'?'strong':tier;
+/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work and GPT-6.1 Sol for everything else, the
+ * hardest work included (Sonnet's price, half its cache-read rate). Opus and every other model run only when the user
+ * picks them. When Sol cannot run (no OpenAI key on the gateway), Claude Sonnet 5.5 stands in for it. */
+export const autoModels:Record<AutoTier,Choice[]>={light:['haiku'],strong:['gpt-sol','sonnet']};
 export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
 /** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
  * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */
 export function routerChoices(providers?:Partial<Record<Provider,boolean>>,at=new Date()){
- return tiers.flatMap(tier=>{const model=autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>m.provider==='anthropic'||!!providers?.[m.provider]);if(!model)return[];
+ return autoTiers.flatMap(tier=>{const model=autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>m.provider==='anthropic'||!!providers?.[m.provider]);if(!model)return[];
   return[{id:tier,name:tier[0].toUpperCase()+tier.slice(1)+' model',bestAt:model.guide,costPerRequest:`about $${typicalCost(model,at).toFixed(2)}`}];});
 }
