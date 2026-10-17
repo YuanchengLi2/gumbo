@@ -31,7 +31,7 @@ test('the preview shows the same whole frame, graphics included, at every height
   const [path]=await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async path=>window.dream.command({type:'import',paths:[path],copy:true}),path);
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
   assetId=await page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0].id);
-  await page.getByLabel('Ask Figjam to edit').fill('Place my clip');await page.getByRole('button',{name:'Send prompt'}).click();
+  await page.getByLabel('Ask Gumbo to edit').fill('Place my clip');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).aiStatus,{timeout:60000}).toBe('complete');
   await page.locator('.scrubber').fill('30');await page.waitForTimeout(1500);
   const out=resolve('test-results/preview-resize');mkdirSync(out,{recursive:true});

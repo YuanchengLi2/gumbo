@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 
-/** Who is signed in, for the parts of the app that need Figjam AI. The app opens and edits by hand without an account;
+/** Who is signed in, for the parts of the app that need Gumbo AI. The app opens and edits by hand without an account;
  * anything that asks the AI first asks for sign-in (requireSignIn), which shows the sign-in dialog and carries on once
  * the user is signed in. */
 export type AccountStatus={signedIn:boolean;email:string;dailyBudgetUsd?:number;status?:string};

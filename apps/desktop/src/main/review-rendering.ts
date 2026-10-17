@@ -10,7 +10,7 @@ export type ReviewRuntime={renderBundle:string;browser:string;binariesDirectory:
 export async function renderReview(raw:ReviewRenderRequest,runtime:ReviewRuntime,signal:AbortSignal):Promise<ReviewImages>{
  const request=ReviewRenderRequestSchema.parse(raw),resolved=resolve(request.timeline,request.footage);
  if(request.frames.some(f=>f.frame>=resolved.durationInFrames))throw new Error('Review frames are outside this version.');
- if(!existsSync(runtime.browser)||!existsSync(join(runtime.renderBundle,'index.html')))throw new Error('The local review renderer is missing. Install a complete Figjam build.');
+ if(!existsSync(runtime.browser)||!existsSync(join(runtime.renderBundle,'index.html')))throw new Error('The local review renderer is missing. Install a complete Gumbo build.');
  signal.throwIfAborted();
  // Bundle content, index revision and frame plan all participate in immutable artifact identity.
  const hash=createHash('sha256').update(JSON.stringify(request));

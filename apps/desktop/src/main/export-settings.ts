@@ -12,7 +12,7 @@ export const ExportSettingsSchema=z.object({
 }).refine(s=>s.video||s.audio,'Choose video, audio or both to export.');
 export type ExportSettings=z.infer<typeof ExportSettingsSchema>;
 
-export const safeName=(name:string)=>name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').trim().slice(0,100)||'Figjam video';
+export const safeName=(name:string)=>name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').trim().slice(0,100)||'Gumbo video';
 /** name.ext in the folder, or "name (2).ext" and so on when that file exists, so an export never overwrites another. */
 export function exportPath(folder:string,name:string,extension:string,exists=existsSync){
  const base=safeName(name);for(let n=1;;n++){const path=join(folder,`${base}${n>1?` (${n})`:''}.${extension}`);if(!exists(path))return path;}

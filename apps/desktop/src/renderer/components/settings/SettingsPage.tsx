@@ -35,10 +35,10 @@ function Profile(p:{settings:AppSettings;save:(patch:Partial<AppSettings>)=>void
  const [draft,setDraft]=useState(p.settings.profile);
  const commit=(key:keyof AppSettings['profile'])=>{if(draft[key]!==p.settings.profile[key])p.save({profile:{[key]:draft[key]}} as Partial<AppSettings>);};
  return <>
-  <p className="settings-lead">Figjam's AI reads this with every request, in every project, so each edit starts from your own style.</p>
-  <Row label="Name" help="What Figjam calls you."><input className="settings-input" aria-label="Name" value={draft.name} maxLength={80} placeholder="Your name" onChange={e=>setDraft({...draft,name:e.target.value})} onBlur={()=>commit('name')}/></Row>
+  <p className="settings-lead">Gumbo's AI reads this with every request, in every project, so each edit starts from your own style.</p>
+  <Row label="Name" help="What Gumbo calls you."><input className="settings-input" aria-label="Name" value={draft.name} maxLength={80} placeholder="Your name" onChange={e=>setDraft({...draft,name:e.target.value})} onBlur={()=>commit('name')}/></Row>
   <Row label="What you make" help="The kind of videos you make."><input className="settings-input" aria-label="What you make" value={draft.makes} maxLength={300} placeholder="Travel vlogs, anime edits, explainer shorts" onChange={e=>setDraft({...draft,makes:e.target.value})} onBlur={()=>commit('makes')}/></Row>
-  <Row label="Your style" help="How you like your videos: Figjam follows it unless a request says otherwise." stacked><textarea className="settings-input settings-textarea" aria-label="Your style" value={draft.style} maxLength={2000} rows={5} placeholder="Plain white captions, fast cuts on the beat, no zoom effects, music quiet under speech" onChange={e=>setDraft({...draft,style:e.target.value})} onBlur={()=>commit('style')}/></Row>
+  <Row label="Your style" help="How you like your videos: Gumbo follows it unless a request says otherwise." stacked><textarea className="settings-input settings-textarea" aria-label="Your style" value={draft.style} maxLength={2000} rows={5} placeholder="Plain white captions, fast cuts on the beat, no zoom effects, music quiet under speech" onChange={e=>setDraft({...draft,style:e.target.value})} onBlur={()=>commit('style')}/></Row>
  </>;
 }
 
@@ -49,9 +49,9 @@ function Account(){
  const signOut=async()=>{setBusy(true);try{await window.dream.command({type:'account',action:'signout'});signedOut();}finally{setBusy(false);}};
  const signedIn=!!account?.signedIn;
  return <>
-  <Row label={signedIn?'Signed in as':'Not signed in'} help={!account?'Checking…':signedIn?undefined:'Sign in with Google or your email to use Figjam AI. Your projects stay on this computer either way.'}>{signedIn&&<span className="settings-value">{account!.email}</span>}</Row>
-  {signedIn&&account?.dailyBudgetUsd!==undefined&&<Row label="Daily AI allowance" help="How much Figjam AI you can use each day during the beta."><span className="settings-value">{money(account.dailyBudgetUsd)}</span></Row>}
-  <Row label={signedIn?'Sign out':'Sign in'} help={signedIn?'Your projects stay on this computer; Figjam AI needs you to sign in again.':'New here? Signing in creates your account.'}>
+  <Row label={signedIn?'Signed in as':'Not signed in'} help={!account?'Checking…':signedIn?undefined:'Sign in with Google or your email to use Gumbo AI. Your projects stay on this computer either way.'}>{signedIn&&<span className="settings-value">{account!.email}</span>}</Row>
+  {signedIn&&account?.dailyBudgetUsd!==undefined&&<Row label="Daily AI allowance" help="How much Gumbo AI you can use each day during the beta."><span className="settings-value">{money(account.dailyBudgetUsd)}</span></Row>}
+  <Row label={signedIn?'Sign out':'Sign in'} help={signedIn?'Your projects stay on this computer; Gumbo AI needs you to sign in again.':'New here? Signing in creates your account.'}>
    {signedIn?<button type="button" className="settings-button-secondary" disabled={busy} onClick={()=>void signOut()}>Sign out</button>:<button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button>}
   </Row>
  </>;
@@ -63,14 +63,14 @@ function Usage(){
  const summary=usage&&!('unavailable' in usage)?usage:null,share=summary&&summary.dailyBudgetUsd>0?Math.min(1,summary.todayUsd/summary.dailyBudgetUsd):0;
  return <>
   <h3 className="settings-subhead">Usage</h3>
-  {error?<p className="settings-error" role="alert">{error}</p>:usage===undefined?<Row label="Loading usage…"/>:usage===null?<Row label="Sign in to see your usage."/>:'unavailable' in usage?<Row label="Usage is not available yet" help="Your Figjam service needs its latest update to report usage here."/>:summary&&<>
+  {error?<p className="settings-error" role="alert">{error}</p>:usage===undefined?<Row label="Loading usage…"/>:usage===null?<Row label="Sign in to see your usage."/>:'unavailable' in usage?<Row label="Usage is not available yet" help="Your Gumbo service needs its latest update to report usage here."/>:summary&&<>
    <Row label="Today" help={summary.dailyBudgetUsd>0?`Of your ${money(summary.dailyBudgetUsd)} daily allowance, which starts again at midnight UTC.`:undefined}><span className="settings-value">{money(summary.todayUsd)}</span></Row>
    {summary.dailyBudgetUsd>0&&<div className="settings-meter" role="meter" aria-label="Today's AI use" aria-valuemin={0} aria-valuemax={summary.dailyBudgetUsd} aria-valuenow={summary.todayUsd}><span style={{width:`${Math.round(share*100)}%`}}/></div>}
    <Row label="Last 30 days" help={`${summary.requests} AI calls`}><span className="settings-value">{money(summary.monthUsd)}</span></Row>
    {summary.byModel.length>0&&<div className="settings-table" role="table" aria-label="Last 30 days by model">{summary.byModel.map(m=><div role="row" key={m.model}><span role="cell">{modelName(m.model)}</span><span role="cell">{m.calls} calls</span><span role="cell">{money(m.costUsd)}</span></div>)}</div>}
   </>}
   <h3 className="settings-subhead">Billing</h3>
-  <Row label="Plan and credits" help="Paid plans and credits are coming. During the beta, Figjam AI is free up to your daily allowance."><span className="settings-badge">Coming soon</span></Row>
+  <Row label="Plan and credits" help="Paid plans and credits are coming. During the beta, Gumbo AI is free up to your daily allowance."><span className="settings-badge">Coming soon</span></Row>
   <Row label="Buy credits" help="Add credits to keep editing past your allowance."><button type="button" className="settings-button-secondary" disabled>Buy credits</button></Row>
  </>;
 }
@@ -93,7 +93,7 @@ function Files(p:{runtime:RuntimeStatus|null;onError:(e:string)=>void}){
  const load=()=>window.dream.fileGrants().then(setGrants,(e:Error)=>p.onError(e.message));useEffect(()=>{void load();},[]);
  const active=(grants??[]).filter(g=>!g.revokedAt),computer=active.find(g=>g.scope==='computer'),folders=active.filter(g=>g.scope!=='computer'&&g.scope!=='project');
  return <>
-  <Row label="Computer access" help={computer?'Figjam can search this computer for the files a request needs, and asks before changing or moving any of them.':'Let Figjam find files on this computer itself, so you don\'t have to attach them.'}>
+  <Row label="Computer access" help={computer?'Gumbo can search this computer for the files a request needs, and asks before changing or moving any of them.':'Let Gumbo find files on this computer itself, so you don\'t have to attach them.'}>
    {computer?<button type="button" className="settings-button-secondary" onClick={async()=>{try{await window.dream.revokeFileGrant(computer.id);await load();}catch(e){p.onError((e as Error).message);}}}>Turn off</button>
     :<button type="button" className="settings-button-primary" onClick={async()=>{try{await window.dream.grantComputer();await load();}catch(e){p.onError((e as Error).message);}}}>Allow</button>}
   </Row>
@@ -123,13 +123,13 @@ const providerData:[Provider,string][]=[['anthropic','Claude routes every reques
 function Privacy(p:{settings:AppSettings;save:(patch:Partial<AppSettings>)=>void;onError:(e:string)=>void}){
  const providers=useProviders(),off=new Set<string>(p.settings.disabledProviders);
  return <>
-  <p className="settings-lead">To edit, Figjam sends the AI provider your messages, what is in the project and frames and words from your footage. Turn off the providers you don't want to receive them.</p>
-  {providerData.map(([id,help])=>{const fixed=id==='anthropic',unset=!fixed&&!off.has(id)&&providers[id]===false;return <Row key={id} label={providerLabels[id]} help={unset?help+' Not set up on your Figjam service yet.':help}>
+  <p className="settings-lead">To edit, Gumbo sends the AI provider your messages, what is in the project and frames and words from your footage. Turn off the providers you don't want to receive them.</p>
+  {providerData.map(([id,help])=>{const fixed=id==='anthropic',unset=!fixed&&!off.has(id)&&providers[id]===false;return <Row key={id} label={providerLabels[id]} help={unset?help+' Not set up on your Gumbo service yet.':help}>
    <Switch label={providerLabels[id]} checked={fixed||!off.has(id)} disabled={fixed} onChange={on=>{const next=new Set(off);if(on)next.delete(id);else next.add(id);p.save({disabledProviders:[...next] as AppSettings['disabledProviders']});}}/>
   </Row>;})}
   <h3 className="settings-subhead">On this computer</h3>
   <Row label="Projects and footage" help="Your projects and media stay on this computer; only what a request needs is sent."/>
-  <Row label="Crash reports" help="When Figjam crashes, the report is saved on this computer and not sent anywhere."><button type="button" className="settings-button-secondary" onClick={()=>window.dream.openFolder('logs').catch((e:Error)=>p.onError(e.message))}>Open logs</button></Row>
+  <Row label="Crash reports" help="When Gumbo crashes, the report is saved on this computer and not sent anywhere."><button type="button" className="settings-button-secondary" onClick={()=>window.dream.openFolder('logs').catch((e:Error)=>p.onError(e.message))}>Open logs</button></Row>
  </>;
 }
 

@@ -32,7 +32,7 @@ test('a scene with video in it plays smoothly, and fullscreen shows the picture'
   const [path]=await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async path=>window.dream.command({type:'import',paths:[path],copy:true}),path);
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
   assetId=await page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0].id);
-  await page.getByLabel('Ask Figjam to edit').fill('Build the layout');await page.getByRole('button',{name:'Send prompt'}).click();
+  await page.getByLabel('Ask Gumbo to edit').fill('Build the layout');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).aiStatus,{timeout:90000}).toBe('complete');
   await page.locator('.scrubber').fill('0');await page.waitForTimeout(2500);
   // Count the frames the preview asks the scene for and the frames the scene finishes, while it plays for four seconds.

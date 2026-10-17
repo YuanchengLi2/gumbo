@@ -22,7 +22,7 @@ export function beginExport(state:ProjectState,settings:ExportSettings,publish:J
  const job:Job={id:randomUUID(),state,settings,workDir:'',abort:new AbortController(),publish};
  if(settings.video){job.videoPath=exportPath(folder,settings.name||state.meta.name,settings.format);authorize?.(job.videoPath);job.temp=`${job.videoPath}.${job.id}.video.${settings.format}`;job.fd=openSync(job.temp,'w');}
  if(settings.audio){job.audioPath=exportPath(folder,settings.name||state.meta.name,audioExtension(settings));authorize?.(job.audioPath);}
- job.workDir=join(folder,`.figjam-export-${job.id}`);mkdirSync(job.workDir,{recursive:true});
+ job.workDir=join(folder,`.gumbo-export-${job.id}`);mkdirSync(job.workDir,{recursive:true});
  const ffmpeg=runtimePaths().ffmpeg,input={ffmpeg,timeline:state.timeline,footage:state.footage,signal:job.abort.signal};
  // The sound is mixed while the picture renders; it needs little of what the picture uses.
  if(job.videoPath)job.sound=exportAudio({...input,workDir:join(job.workDir,'mix')},join(job.workDir,'sound.m4a'),'aac');

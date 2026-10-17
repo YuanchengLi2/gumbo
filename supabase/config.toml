@@ -8,10 +8,10 @@ enable_confirmations = true
 max_frequency = "1m"
 otp_length = 8
 [auth.email.template.magic_link]
-subject = "Sign in to Figjam"
+subject = "Sign in to Gumbo"
 content_path = "./supabase/templates/sign-in.html"
 [auth.email.template.confirmation]
-subject = "Sign in to Figjam"
+subject = "Sign in to Gumbo"
 content_path = "./supabase/templates/sign-in.html"
 [auth.external.google]
 enabled = true

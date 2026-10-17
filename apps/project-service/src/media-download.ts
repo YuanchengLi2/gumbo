@@ -15,7 +15,7 @@ export async function downloadMedia(item:OnlineMedia,folder:string,signal:AbortS
  mkdirSync(folder,{recursive:true});
  const base=(item.title.replace(/[^\p{L}\p{N} _-]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60)||'media')+' - '+createHash('sha256').update(item.id).digest('hex').slice(0,8);
  const done=readdirSync(folder).find(name=>name.startsWith(base+'.')&&!name.endsWith('.partial'));if(done)return join(folder,done);
- const response=await fetcher(item.download,{redirect:'follow',headers:{'User-Agent':'Figjam/1.0 (video editor)'},signal:AbortSignal.any([signal,AbortSignal.timeout(600_000)])});
+ const response=await fetcher(item.download,{redirect:'follow',headers:{'User-Agent':'Gumbo/1.0 (video editor)'},signal:AbortSignal.any([signal,AbortSignal.timeout(600_000)])});
  if(!response.ok||!response.body)throw new Error(`The download failed (${response.status}).`);
  const type=(response.headers.get('content-type')??'').split(';')[0].trim().toLowerCase(),path=new URL(response.url||item.download).pathname;
  if(!/^(audio|video|image)\//.test(type)&&!media.test(path))throw new Error(`That link is not a media file (${type||'unknown type'}).`);

@@ -25,13 +25,13 @@ test('a later request in a project shows its steps, the editing overlay and Stop
   const [path]=await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async path=>window.dream.command({type:'import',paths:[path],copy:true}),path);
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
   assetId=await page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0].id);
-  const send=async(text:string)=>{await page.getByLabel('Ask Figjam to edit').fill(text);await page.getByRole('button',{name:'Send prompt'}).click();};
+  const send=async(text:string)=>{await page.getByLabel('Ask Gumbo to edit').fill(text);await page.getByRole('button',{name:'Send prompt'}).click();};
   await send('Place my clip');await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).aiStatus,{timeout:60000}).toBe('complete');
   // The second request: while its long command runs, the window must show it.
   await send('Normalise the narration');
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).experience?.activity?.events?.some((e:any)=>e.tool==='run_command'&&e.status==='running')??false,{timeout:30000}).toBe(true);
   await page.waitForTimeout(1500);
-  const seen=await page.evaluate(()=>({bar:!!document.querySelector('.agent-bar'),glow:!!document.querySelector('.agent-glow'),stream:[...document.querySelectorAll('[aria-label="Figjam activity"],[aria-label="What Figjam is doing"]')].map(e=>e.textContent).join(' | '),stop:[...document.querySelectorAll('button')].filter(b=>/stop/i.test(b.getAttribute('aria-label')??b.textContent??'')).length}));
+  const seen=await page.evaluate(()=>({bar:!!document.querySelector('.agent-bar'),glow:!!document.querySelector('.agent-glow'),stream:[...document.querySelectorAll('[aria-label="Gumbo activity"],[aria-label="What Gumbo is doing"]')].map(e=>e.textContent).join(' | '),stop:[...document.querySelectorAll('button')].filter(b=>/stop/i.test(b.getAttribute('aria-label')??b.textContent??'')).length}));
   console.log('SEEN',JSON.stringify(seen));
   expect(seen.stream).toContain('Normalising the narration');expect(seen.bar).toBe(true);expect(seen.glow).toBe(true);expect(seen.stop).toBeGreaterThan(0);
   // Stop ends it.

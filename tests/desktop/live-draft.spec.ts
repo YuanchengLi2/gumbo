@@ -28,7 +28,7 @@ test('shows the agent\'s edit on the timeline as it writes it, as effect, filter
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},source);
   const [path]=await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async path=>window.dream.command({type:'import',paths:[path],copy:true}),path);
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
-  await page.getByLabel('Ask Figjam to edit').fill('Cut this into three clips with a zoom and a warmer look');await page.getByRole('button',{name:'Send prompt'}).click();
+  await page.getByLabel('Ask Gumbo to edit').fill('Cut this into three clips with a zoom and a warmer look');await page.getByRole('button',{name:'Send prompt'}).click();
   // Before the publish: the blocks are on the timeline and it says so, while the published edit is still empty.
   const clips=page.locator('.assistant-timeline .track.video .timeline-item');
   await expect(clips).toHaveCount(3,{timeout:60000});await expect(page.locator('.live-editing')).toBeVisible();

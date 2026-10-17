@@ -5,7 +5,7 @@ import {ChatComposer,type Attachment} from '../chat/ChatComposer';
 import {useEditor} from '../../store/editor';
 import {SettingsMenu} from '../settings/SettingsMenu';
 
-/** The Figjam mark: a fig with a leaf, as on usefigjam.com. */
+/** The Gumbo mark: a fig with a leaf, as on usegumbo.app. */
 export function DreamMark(){return <svg className="dream-mark" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="36" r="22" fill="currentColor"/><circle cx="25" cy="31" r="3" fill="var(--chrome,#fff)" opacity=".9"/><path d="M32 14c2-6 8-9 13-8-1 6-6 10-13 8z" fill="currentColor" opacity=".55"/></svg>;}
 const time=(seconds:number)=>`${Math.floor(seconds/60)}:${Math.floor(seconds%60).toString().padStart(2,'0')}`;
 const updated=(project:ProjectSummary)=>{
@@ -25,7 +25,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
  const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model);
  const hour=new Date().getHours(),greeting=hour<5?'Up late?':hour<12?'Good morning.':hour<18?'Good afternoon.':'Good evening.';
  return <div className="home-screen fig-home">
-  <header className="fig-home-top"><div className="fig-brand"><DreamMark/><span>figjam</span></div><span className="spacer"/><button className="fig-ghost" onClick={()=>p.onOpen()}><FolderOpen size={15}/>Open project</button><SettingsMenu/></header>
+  <header className="fig-home-top"><div className="fig-brand"><DreamMark/><span>gumbo</span></div><span className="spacer"/><button className="fig-ghost" onClick={()=>p.onOpen()}><FolderOpen size={15}/>Open project</button><SettingsMenu/></header>
   <main className="fig-home-main">
    <section className="fig-hero">
     <p className="fig-greeting">{greeting}</p>
@@ -38,7 +38,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
     {p.projects.length?<div className="fig-project-grid">{p.projects.map(project=><button className={'project-card'+(project.missing?' missing':'')} key={project.id} onClick={()=>p.onOpen(project.folder)}>
      <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={26}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
      <strong>{project.name}</strong><small>{updated(project)}</small>
-    </button>)}</div>:<div className="fig-empty"><DreamMark/><div><strong>Your first edit starts above.</strong><p>Add your clips, say what you want, and Figjam cuts it on a real timeline. Projects are saved here automatically.</p></div></div>}
+    </button>)}</div>:<div className="fig-empty"><DreamMark/><div><strong>Your first edit starts above.</strong><p>Add your clips, say what you want, and Gumbo cuts it on a real timeline. Projects are saved here automatically.</p></div></div>}
    </section>
   </main>
  </div>;

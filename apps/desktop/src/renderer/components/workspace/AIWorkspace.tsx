@@ -29,7 +29,7 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  const locked=active||p.busy,t=p.project.timeline,f=p.project.footage,draft=useEditor(s=>s.draft);
  const shownDraft=draft?.timeline&&(active||draft.basedOn===p.project.versionId)?draft:null,playableDraft=shownDraft&&!shownDraft.assets?.length?shownDraft.timeline:undefined;
  const applyOps=(ops:Op[],label:string,version?:string)=>ops.length?p.command({type:'apply',ops,label,expectedVersionId:version??useEditor.getState().project?.versionId??p.project.versionId,requestId:crypto.randomUUID(),snapToSpeech:false}):Promise.resolve();
- const lockedReason='Figjam is editing. Stop it to change the timeline yourself.';
+ const lockedReason='Gumbo is editing. Stop it to change the timeline yourself.';
  // Change cards and the elements list pick things on the timeline (selected, playhead on them, lit up) and apply undoable changes.
  const editorActions=useMemo<EditorActions>(()=>({locked,
   // Showing a change does not select it: selecting would put it in the chat box as context for the next message.
@@ -39,9 +39,9 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  // While the agent edits, the editor shows it working there (AgentCursor), as an agent using a computer would.
  // The run's phase can reach the window after its first change, so an edit request counts from the start (a plan or an
  // answer never does).
- // From the moment a message is sent (before the service confirms the run) the editor shows Figjam at work and Stop.
+ // From the moment a message is sent (before the service confirms the run) the editor shows Gumbo at work and Stop.
  const working=active||!!pending,phase=p.project.experience?.activity?.phase,stage=useRef<HTMLElement>(null),driving=working;
- const liveStep=[...(p.project.experience?.activity?.events??[])].sort((a,b)=>b.sequence-a.sequence).find(e=>e.kind==='action'&&['running','drafting'].includes(e.status)),drivingLabel=liveStep?editingActivity(liveStep):pending&&!active?'Starting':phase==='planning'?'Planning':phase==='answering'?'Working on an answer':'Figjam is thinking';
+ const liveStep=[...(p.project.experience?.activity?.events??[])].sort((a,b)=>b.sequence-a.sequence).find(e=>e.kind==='action'&&['running','drafting'].includes(e.status)),drivingLabel=liveStep?editingActivity(liveStep):pending&&!active?'Starting':phase==='planning'?'Planning':phase==='answering'?'Working on an answer':'Gumbo is thinking';
  const recentSteps=[...(p.project.experience?.activity?.events??[])].filter(e=>e.kind==='action'&&e.tool!=='finish').sort((a,b)=>a.sequence-b.sequence).slice(-4);
  const run=(make:()=>Op[],label:string)=>{if(locked){p.onError(lockedReason);return;}try{void applyOps(make(),label);}catch(error){p.onError((error as Error).message);}};
  const remove=()=>run(()=>removeItems(t,f,p.selected),'Delete selection');

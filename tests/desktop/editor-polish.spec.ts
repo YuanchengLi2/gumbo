@@ -25,9 +25,9 @@ test('the agent edits visibly, clips show their frames, and selection, clip acti
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0]?.playback?.ready??false),{timeout:60000}).toBe(true);
   assetId=(await page.evaluate(async()=>(await window.dream.command({type:'state'})).footage.assets[0].id));
 
-  // While the agent edits: a blue glow, a status bar with Stop, and Figjam's cursor visiting the block it adds.
+  // While the agent edits: a blue glow, a status bar with Stop, and Gumbo's cursor visiting the block it adds.
   await page.evaluate(()=>{(window as any).__touched=false;new MutationObserver(list=>{if(list.some(m=>m.attributeName==='data-ai-touched'))(window as any).__touched=true;}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['data-ai-touched']});});
-  const sentAt=Date.now();await page.getByLabel('Ask Figjam to edit').fill('Put my clip on the timeline');await page.getByRole('button',{name:'Send prompt'}).click();
+  const sentAt=Date.now();await page.getByLabel('Ask Gumbo to edit').fill('Put my clip on the timeline');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect(page.locator('.agent-bar')).toBeVisible({timeout:30000});await expect(page.locator('.agent-glow')).toBeVisible();await expect(page.locator('.agent-bar').getByRole('button',{name:'Stop'})).toBeVisible();
   // The run's clock starts with the run.
   const started=await page.evaluate(async()=>(await window.dream.command({type:'state'})).experience?.runStartedAt);expect(Math.abs(Date.parse(started!)-sentAt)).toBeLessThan(30000);
@@ -49,7 +49,7 @@ test('the agent edits visibly, clips show their frames, and selection, clip acti
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).timeline.spine.length,{timeout:15000}).toBe(2);
 
   // Shortcuts: Ctrl+L types in the chat, Shift+Tab and Ctrl+1/2/3 pick the mode, Ctrl+Shift+M steps through models.
-  await page.locator('.preview-viewport').click({position:{x:5,y:5}});await page.keyboard.press('Control+L');await expect(page.getByLabel('Ask Figjam to edit')).toBeFocused();
+  await page.locator('.preview-viewport').click({position:{x:5,y:5}});await page.keyboard.press('Control+L');await expect(page.getByLabel('Ask Gumbo to edit')).toBeFocused();
   await page.keyboard.press('Shift+Tab');await expect(page.getByRole('button',{name:'Permissions: Plan first'})).toBeVisible();
   await page.keyboard.press('Control+3');await expect(page.getByRole('button',{name:'Permissions: Ask only'})).toBeVisible();
   await page.keyboard.press('Control+1');await expect(page.getByRole('button',{name:'Permissions: Edit automatically'})).toBeVisible();

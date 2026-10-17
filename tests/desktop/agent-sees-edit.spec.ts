@@ -45,7 +45,7 @@ test('the agent sees the captions and graphics of its published edit',async()=>{
   }
   // Transcription and analysis finish before the edit, so the narration has its words.
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command({type:'state'})).jobs.filter((j:any)=>j.status==='running'||j.status==='queued').length),{timeout:120000}).toBe(0);
-  await page.getByLabel('Ask Figjam to edit').fill('Add a definition card and captions');await page.getByRole('button',{name:'Send prompt'}).click();
+  await page.getByLabel('Ask Gumbo to edit').fill('Add a definition card and captions');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).aiStatus,{timeout:120000}).toBe('complete');
   if(!seen)console.log(log.join('\n'));
   expect(seen,'view_media result reached the model').toBeTruthy();

@@ -82,7 +82,7 @@ export const finishKeeping=(body:any,id:string,summary:string,reason:string)=>[u
 
 /** Signs the app in as a person would in the browser: starts the browser sign-in (headless, no browser opens), then
  * answers the app's one-time callback with a code, which the app exchanges with the fixture's auth (an account is needed
- * for Figjam AI; there are no guests). */
+ * for Gumbo AI; there are no guests). */
 export async function signIn(page:{evaluate:<T>(fn:()=>Promise<T>)=>Promise<T>}){
  const {url}=await page.evaluate(()=>window.dream.command<{url:string}>({type:'account',action:'browser'}));
  const desktop=new URL(url).searchParams.get('desktop')!,back=new URL(desktop);back.searchParams.set('code','fixture-code');

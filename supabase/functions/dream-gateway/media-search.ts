@@ -9,7 +9,7 @@ export type MediaKind='music'|'sound'|'footage'|'image';
 export type Found={id:string;source:string;kind:'audio'|'video'|'image';title:string;creator:string;license:string;licenseUrl?:string;attribution?:string;page:string;download:string;durationSec?:number;width?:number;height?:number;sizeBytes?:number};
 export const mediaKeys={pexels:'PEXELS_API_KEY',pixabay:'PIXABAY_API_KEY',freesound:'FREESOUND_API_KEY',jamendo:'JAMENDO_CLIENT_ID',openverse:'OPENVERSE_CREDENTIALS'} as const;
 type Keys=Partial<Record<keyof typeof mediaKeys,string>>;
-const agent={'User-Agent':'Figjam/1.0 (video editor; media search)'};
+const agent={'User-Agent':'Gumbo/1.0 (video editor; media search)'};
 const entities:Record<string,string>={amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' '};
 const strip=(html:unknown)=>String(html??'').replace(/<[^>]*>/g,'').replace(/&(#\d+|#x[0-9a-f]+|[a-z]+);/gi,(all,code:string)=>code[0]==='#'?String.fromCodePoint(code[1]==='x'||code[1]==='X'?parseInt(code.slice(2),16):Number(code.slice(1))):entities[code.toLowerCase()]??all).replace(/\s+/g,' ').trim().slice(0,200);
 const words=(q:string)=>q.split(/\s+/).filter(Boolean);

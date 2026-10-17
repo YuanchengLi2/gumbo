@@ -5,9 +5,9 @@ import type {ProjectState} from '@dream/project-db';
 import type {CommandFn} from '../../hooks/useProjectSession';
 
 type Filter='all'|'video'|'audio'|'image'|'made';
-// What Figjam made (scenes, music and sounds it wrote) is its own group, apart from what the user brought.
+// What Gumbo made (scenes, music and sounds it wrote) is its own group, apart from what the user brought.
 const groupOf=(a:Asset):Exclude<Filter,'all'>=>a.scene||a.creation||a.generated?'made':a.kind==='audio'?'audio':a.kind==='image'?'image':'video';
-const filters:{id:Filter;label:string}[]=[{id:'all',label:'All'},{id:'video',label:'Video'},{id:'audio',label:'Audio'},{id:'image',label:'Images'},{id:'made',label:'Made by Figjam'}];
+const filters:{id:Filter;label:string}[]=[{id:'all',label:'All'},{id:'video',label:'Video'},{id:'audio',label:'Audio'},{id:'image',label:'Images'},{id:'made',label:'Made by Gumbo'}];
 // A sound shorter than a second reads in tenths, so a 0.2 s click does not show as 0:00.
 const clock=(sec:number)=>{if(sec<1)return sec.toFixed(1)+'s';const s=Math.round(sec);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 
@@ -40,7 +40,7 @@ function AssetCard({asset:a,project,selected,onToggle,command}:{asset:Asset;proj
   <button className="asset-select" aria-pressed={selected} aria-label={a.filename} onClick={onToggle}>
    <div className="asset-image">{visual}{preview&&<video src={`dream-media://${a.id}/preview`} muted autoPlay loop playsInline/>}
     {a.kind!=='image'&&a.durationSec>0&&<span className="asset-length">{clock(a.durationSec)}</span>}
-    {group==='made'&&!a.scene&&<span className="asset-made" title="Made by Figjam"><Sparkles size={10}/></span>}
+    {group==='made'&&!a.scene&&<span className="asset-made" title="Made by Gumbo"><Sparkles size={10}/></span>}
     <i className="asset-check">{selected&&<Check size={11} strokeWidth={3}/>}</i>
    </div>
    <strong>{a.filename}</strong>

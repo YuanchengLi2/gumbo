@@ -13,7 +13,7 @@ export type Feedback='positive'|'negative'|'none';
 export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;model?:string;lookFor?:string};
 export type TriageInput={message:string;mode:RequestIntent;recent:{role:string;text:string}[];stopped?:string;planWaiting?:boolean;models?:{id:string;name:string;bestAt:string;costPerRequest:string}[];previousModel?:string;project:{clips:number;overlays:number;audio:number;minutes:number;footageFiles:number};attachments:number};
 
-export const triagePrompt=`You read one message a user sent to Figjam, a video editor where an AI agent makes every edit by writing code, and decide how it is handled. Reply with JSON only.
+export const triagePrompt=`You read one message a user sent to Gumbo, a video editor where an AI agent makes every edit by writing code, and decide how it is handled. Reply with JSON only.
 
 kind:
 - "edit": they want the video or project made or changed. This includes short follow-ups that act on the conversation ("yeah go ahead", "do it", "go", "no revert that", "its still there" about something they asked to fix).

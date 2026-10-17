@@ -21,7 +21,7 @@ import {run} from '../../../project-service/src/media';
 let controller:AbortController|undefined;
 export const cancelTimelineExport=()=>controller?.abort();
 export const timelineExportRunning=()=>!!controller;
-const safe=(name:string)=>name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||'Figjam';
+const safe=(name:string)=>name.replace(/[<>:"/\\|?*\x00-\x1f]/g,'-').replace(/[. ]+$/g,'').slice(0,100)||'Gumbo';
 
 async function exportEditableTimelineUnlocked(state:ProjectState,window:BrowserWindow,publish:(type:string,payload:unknown)=>void,authorize:(path:string,write?:boolean)=>void){
  if(controller)throw new Error('An editable export is already running.');
@@ -86,7 +86,7 @@ async function exportEditableTimelineUnlocked(state:ProjectState,window:BrowserW
    warnings.add('Captions include a transparent appearance layer and an editable SRT file. Disable the appearance layer when importing the SRT to avoid duplicate captions.');completed++;
   }
   await writeFile(join(staging,'README.txt'),'Import the XML into Premiere Pro or DaVinci Resolve. Keep this media folder with it. If moved to another computer, relink to this folder.\n\n'+[...warnings].join('\n'));
-  await writeFile(join(staging,'Figjam-timeline.json'),JSON.stringify({schemaVersion:1,timeline:state.timeline,clips},null,2));
+  await writeFile(join(staging,'Gumbo-timeline.json'),JSON.stringify({schemaVersion:1,timeline:state.timeline,clips},null,2));
   const sourceRoot=join(state.meta.folder,'Workspace'),sourceManifest:Record<string,string>={};
   for(const file of authoredFiles(sourceRoot)){const input=workspacePath(sourceRoot,file),output=workspacePath(join(staging,'Source'),file);authorize(input);await mkdir(dirname(output),{recursive:true});await copyFile(input,output);sourceManifest[file]=digest(readFileSync(input));}
   await writeFile(join(staging,'Source-manifest.json'),JSON.stringify({versionId:state.versionId,files:sourceManifest,outputs:clips.map(c=>({id:c.id,path:c.path,track:c.track}))},null,2));
