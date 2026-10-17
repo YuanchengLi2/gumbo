@@ -12,7 +12,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFF8EE'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFF8EE'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%232A1A12' stroke-width='3.2' stroke-linecap='round'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&family=Bebas+Neue&family=Montserrat:wght@900&display=swap" rel="stylesheet">
 <style>
 /* Gumbo's homepage. One idea: there is no menu, so you can ask for any edit in your own words. Warm kitchen colours
    (cream, paprika, roux brown, butter), an EB Garamond serif with one italic phrase per headline. Raw clips tumble into
@@ -261,6 +261,174 @@ em{font-style:italic}
 @keyframes up{to{transform:translateY(-50%)}}
 @media (max-width:860px){.compare{grid-template-columns:1fr}.side{min-height:0;padding:24px 18px 20px}.side strong{font-size:30px}.buttons{min-height:240px}.stream{min-height:220px}.nomenu{padding-top:110px}}
 
+/* The making of: every step of the real Vietnam project, played in a workbench */
+.making{padding-top:150px}
+.mk{margin-top:60px;display:grid;grid-template-columns:290px minmax(0,1fr);gap:48px;align-items:center}
+.mk-log{list-style:none;margin:0;padding:0;position:relative}
+.mk-log::before,.mk-log::after{content:'';position:absolute;left:19px;top:24px;width:2px;background:var(--line);bottom:24px}
+.mk-log::after{background:var(--ink);bottom:auto;height:calc((100% - 48px)*var(--prog,0));transition:height .6s cubic-bezier(.3,0,.2,1)}
+.mk-log button{all:unset;box-sizing:border-box;cursor:pointer;position:relative;z-index:1;display:grid;grid-template-columns:40px 1fr auto;column-gap:14px;align-items:center;width:100%;padding:7px 0;color:var(--faint);transition:color .3s}
+.mk-log button:hover{color:var(--ink)}
+.mk-log button:focus-visible{outline:2px solid var(--chili);outline-offset:3px;border-radius:12px}
+.mk-log .dot{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:var(--cream);border:1.5px solid var(--line);transition:background .3s,border-color .3s,color .3s}
+.mk-log .dot svg{width:18px;height:18px}
+.mk-log b{font-weight:600;font-size:16px;line-height:1.25}
+.mk-log time{font:600 12px var(--mono);letter-spacing:.02em}
+.mk-log small{grid-column:2/4;font-size:14px;line-height:1.4;color:var(--muted);max-height:0;opacity:0;overflow:hidden;transition:max-height .45s ease,opacity .35s ease,margin .45s ease}
+.mk-log .done{color:var(--ink)}
+.mk-log .done .dot{background:var(--ink);border-color:var(--ink);color:var(--cream)}
+.mk-log .on{color:var(--ink)}
+.mk-log .on .dot{background:var(--chili);border-color:var(--chili);color:var(--cream);box-shadow:0 0 0 6px rgba(226,85,42,.16);animation:mkPulse 1.6s ease-in-out infinite}
+.mk-log .on time{color:var(--chili)}
+.mk-log .on small{max-height:60px;opacity:1;margin-top:4px}
+@keyframes mkPulse{50%{box-shadow:0 0 0 11px rgba(226,85,42,0)}}
+
+.mk-bench{position:relative;aspect-ratio:16/11;border-radius:26px;background:#1E130D;color:var(--cream);overflow:hidden;box-shadow:0 60px 110px -45px rgba(42,26,18,.75),inset 0 0 0 1px rgba(255,248,238,.08);container-type:inline-size}
+.mk-bench::before{content:'';position:absolute;inset:0;background:radial-gradient(60% 50% at 70% 0%,rgba(226,85,42,.22),transparent 70%);pointer-events:none}
+.mk-top{position:relative;z-index:2;display:flex;align-items:center;gap:7px;height:46px;padding:0 18px;border-bottom:1px solid rgba(255,248,238,.08);font-size:13px;font-weight:600;color:rgba(255,248,238,.6)}
+.mk-top i{width:10px;height:10px;border-radius:50%;background:rgba(255,248,238,.16)}
+.mk-top span{margin-left:10px}
+.mk-top .clock{margin-left:auto;display:flex;align-items:center;gap:8px;font:600 13px var(--mono);color:var(--cream)}
+.mk-top .clock::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--chili);animation:blink 1s steps(1) infinite}
+.mk-sc{position:absolute;inset:46px 0 0;opacity:0;visibility:hidden;transition:opacity .45s ease,visibility 0s .45s}
+.mk-bench[data-s="ask"] .sc-ask,.mk-bench[data-s="import"] .sc-grid,.mk-bench[data-s="watch"] .sc-grid,.mk-bench[data-s="score"] .sc-score,.mk-bench[data-s="titles"] .sc-titles,.mk-bench[data-s="cut"] .sc-cut,.mk-bench[data-s="check"] .sc-check,.mk-bench[data-s="done"] .sc-done{opacity:1;visibility:visible;transition:opacity .45s ease}
+.mk-cap{position:absolute;left:0;right:0;bottom:4.2cqw;text-align:center;font:600 max(11px,1.75cqw) var(--mono);letter-spacing:.06em;text-transform:uppercase;color:rgba(255,248,238,.55)}
+.mk-cap b{color:var(--butter);font-weight:600}
+
+/* 1. ask */
+.sc-ask{display:flex;flex-direction:column;justify-content:flex-end;gap:2.2cqw;padding:0 9cqw 6cqw}
+.mk-msg{max-width:78%;padding:2cqw 2.6cqw;border-radius:2.6cqw;font-size:max(12px,2.05cqw);line-height:1.45;opacity:0;transform:translateY(12px);transition:opacity .4s,transform .5s cubic-bezier(.2,.8,.2,1)}
+.mk-msg.in{opacity:1;transform:none}
+.mk-msg.you{align-self:flex-end;background:var(--cream);color:var(--ink);border-bottom-right-radius:.8cqw}
+.mk-msg.gumbo{align-self:flex-start;background:rgba(255,248,238,.09);border-bottom-left-radius:.8cqw}
+.mk-msg.gumbo b{display:block;font-size:max(10px,1.5cqw);letter-spacing:.1em;text-transform:uppercase;color:var(--butter);margin-bottom:.4cqw}
+.mk-input{display:flex;align-items:flex-end;gap:1.6cqw;padding:1.4cqw 1.4cqw 1.4cqw 2.4cqw;border-radius:2.8cqw;background:var(--white);color:var(--ink);font-size:max(12px,2.05cqw);line-height:1.45;min-height:5.6cqw}
+.mk-input .t{flex:1;padding:.6cqw 0}
+.mk-input .t:empty::before{content:'Ask for anything…';color:var(--faint)}
+.mk-input .send{width:max(28px,4.6cqw);height:max(28px,4.6cqw)}
+.mk-input .send svg{width:45%;height:45%}
+.mk-input .send.press{transform:scale(.86);background:var(--chili)}
+
+/* 2–3. import and watch: the footage as a contact sheet */
+.sc-grid{display:grid;place-items:center}
+.mk-sheet{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:1.1cqw;width:84%;margin-top:-5cqw}
+.mk-sheet img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:1cqw;display:block;opacity:0;transform:translateY(30px) scale(.8) rotate(var(--r));transition:opacity .4s,transform .6s cubic-bezier(.3,1.4,.5,1),filter .4s}
+.mk-bench[data-s="import"] .mk-sheet img,.mk-bench[data-s="watch"] .mk-sheet img{opacity:1;transform:none;transition-delay:calc(var(--k)*.11s)}
+.mk-bench[data-s="watch"] .mk-sheet img{transition-delay:0s;filter:brightness(.45) saturate(.6);animation:mkLit .5s calc(var(--row)*.55s + .15s) ease forwards}
+@keyframes mkLit{to{filter:none}}
+.mk-scan{position:absolute;left:-2%;right:-2%;top:0;height:3px;border-radius:2px;background:var(--butter);box-shadow:0 0 18px 4px rgba(252,227,162,.55);opacity:0}
+.mk-bench[data-s="watch"] .mk-scan{animation:mkScan 1.8s .1s cubic-bezier(.45,0,.55,1) forwards}
+@keyframes mkScan{0%{opacity:1;top:0}90%{opacity:1}100%{opacity:0;top:100%}}
+.mk-tag{position:absolute;padding:.5cqw 1.1cqw;border-radius:99px;background:var(--butter);color:var(--ink);font:700 max(9px,1.45cqw) var(--sans);white-space:nowrap;opacity:0;transform:translate(-50%,-50%) scale(.4)}
+.mk-bench[data-s="watch"] .mk-tag{animation:mkPop .45s calc(1.9s + var(--k)*.18s) cubic-bezier(.3,1.6,.5,1) forwards}
+@keyframes mkPop{to{opacity:1;transform:translate(-50%,-50%) rotate(var(--r,-3deg))}}
+.mk-focus{position:absolute;left:50%;top:44%;width:38%;transform:translate(-50%,-50%) scale(.6);opacity:0;border-radius:1.6cqw;box-shadow:0 0 0 .35cqw var(--butter),0 40px 80px -20px #000}
+.mk-focus img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:1.6cqw}
+.mk-focus span{position:absolute;left:50%;bottom:-1.8cqw;transform:translateX(-50%);padding:.6cqw 1.4cqw;border-radius:99px;background:var(--chili);color:var(--cream);font:700 max(10px,1.6cqw) var(--sans);white-space:nowrap}
+.mk-bench[data-s="watch"] .mk-focus{animation:mkFocus .6s 3.3s cubic-bezier(.3,1.3,.5,1) forwards}
+@keyframes mkFocus{to{opacity:1;transform:translate(-50%,-50%)}}
+.mk-bench[data-s="watch"] .mk-sheet{animation:mkDim .5s 3.2s forwards}
+@keyframes mkDim{to{opacity:.35}}
+
+/* 4. score */
+.sc-score{display:flex;flex-direction:column;justify-content:center;padding:0 6cqw 7cqw;gap:2cqw}
+.mk-chips{display:flex;gap:1cqw;flex-wrap:wrap}
+.mk-chips span{padding:.6cqw 1.4cqw;border-radius:99px;border:1px solid rgba(255,248,238,.18);font:600 max(10px,1.55cqw) var(--mono)}
+.mk-chips span:first-child{background:var(--butter);border-color:var(--butter);color:var(--ink)}
+.mk-secs{display:flex;gap:.6cqw}
+.mk-secs div{flex:var(--bars);padding:.9cqw 1.1cqw;border-radius:1cqw;font:600 max(10px,1.5cqw) var(--sans);background:rgba(255,248,238,.07);color:rgba(255,248,238,.75);transform-origin:left;transform:scaleX(0);opacity:0}
+.mk-secs div small{display:block;font:500 max(9px,1.25cqw) var(--mono);opacity:.6}
+.mk-bench[data-s="score"] .mk-secs div{animation:mkGrow .5s calc(var(--k)*.22s) cubic-bezier(.3,0,.2,1) forwards}
+@keyframes mkGrow{to{transform:none;opacity:1}}
+.mk-wave{position:relative;height:15cqw;display:flex;align-items:center;gap:.25cqw}
+.mk-wave i{flex:1;height:calc(var(--h)*100%);border-radius:.4cqw;background:var(--cream);opacity:.85;transform:scaleY(0)}
+.mk-wave i.hit{background:var(--chili);opacity:1}
+.mk-bench[data-s="score"] .mk-wave i{animation:mkBar .35s calc(.9s + var(--k)*.022s) cubic-bezier(.3,1.5,.5,1) forwards}
+@keyframes mkBar{to{transform:none}}
+.mk-chords{display:flex;justify-content:space-between;font:500 italic max(12px,2.2cqw) var(--serif);color:rgba(255,248,238,.5)}
+.mk-chords span{opacity:0}
+.mk-bench[data-s="score"] .mk-chords span{animation:mkFade .4s calc(1.2s + var(--k)*.12s) forwards}
+@keyframes mkFade{to{opacity:1}}
+
+/* 5. titles */
+.sc-titles{display:grid;grid-template-columns:1.25fr 1fr;gap:4cqw;align-items:center;padding:0 6cqw 3cqw}
+.mk-code{margin:0;padding:2.4cqw 2.6cqw;border-radius:1.8cqw;background:#120B07;font:500 max(9px,1.45cqw)/1.75 var(--mono);color:rgba(255,248,238,.5);white-space:pre;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,248,238,.07)}
+.mk-code .ln{display:block;opacity:0;transform:translateX(-8px)}
+.mk-code .k{color:#F59B74}.mk-code .f{color:var(--butter)}.mk-code .n{color:#9FD3C7}.mk-code .c{color:rgba(255,248,238,.35);font-style:italic}
+.mk-bench[data-s="titles"] .mk-code .ln{animation:mkLine .35s calc(var(--k)*.32s) ease forwards}
+@keyframes mkLine{to{opacity:1;transform:none}}
+.mk-frame{position:relative;width:100%;max-width:24cqw;justify-self:center;aspect-ratio:9/16;border-radius:2cqw;overflow:hidden;background:#000 center/cover;box-shadow:0 30px 60px -20px #000}
+.mk-frame::after{content:'';position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.35))}
+.mk-ttl{position:absolute;left:7%;right:7%;top:22%;z-index:1;display:flex;flex-direction:column;align-items:center;gap:.8cqw}
+.mk-ttl .kick{padding:.35cqw 1.4cqw;background:#FFC93C;color:#14110f;font:900 max(7px,1.25cqw) Montserrat,var(--sans);letter-spacing:.12em;transform:skewX(-8deg);clip-path:inset(0 100% 0 0);box-shadow:0 2px 8px rgba(0,0,0,.5);white-space:nowrap}
+.mk-ttl .big{overflow:hidden;line-height:1;padding-top:.3cqw}
+.mk-ttl .big span{display:block;font:400 max(20px,4.6cqw)/1 'Bebas Neue',Impact,sans-serif;color:#fff;text-shadow:0 .4cqw 1.6cqw rgba(0,0,0,.65);transform:translateY(105%) scale(.9);white-space:nowrap}
+.mk-ttl .line{height:.55cqw;width:0;border-radius:1cqw;background:#FFC93C}
+.mk-bench[data-s="titles"] .mk-ttl .kick{animation:mkKick .45s 1.7s cubic-bezier(.2,.8,.2,1) forwards}
+.mk-bench[data-s="titles"] .mk-ttl .big span{animation:mkRise .8s 1.85s cubic-bezier(.3,1.45,.5,1) forwards}
+.mk-bench[data-s="titles"] .mk-ttl .line{animation:mkLineIn .45s 2.2s cubic-bezier(.2,.8,.2,1) forwards}
+.mk-bench.fixed .sc-check .mk-ttl .kick{animation:mkKick .45s .15s cubic-bezier(.2,.8,.2,1) forwards}
+.mk-bench.fixed .sc-check .mk-ttl .big span{animation:mkRise .8s .3s cubic-bezier(.3,1.45,.5,1) forwards}
+.mk-bench.fixed .sc-check .mk-ttl .line{animation:mkLineIn .45s .65s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes mkKick{to{clip-path:inset(0 0 0 0)}}
+@keyframes mkRise{to{transform:none}}
+@keyframes mkLineIn{to{width:46%}}
+
+/* 6. cut */
+.sc-cut{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:2.4cqw;padding:0 5cqw 4.4cqw}
+.mk-mon{position:relative;height:22cqw;aspect-ratio:9/16;border-radius:1.4cqw;background:#000 center/cover;box-shadow:0 20px 40px -15px #000;transition:background-image 0s}
+.mk-mon b{position:absolute;left:50%;bottom:-1.2cqw;transform:translateX(-50%);padding:.3cqw 1cqw;border-radius:99px;background:var(--cream);color:var(--ink);font:600 max(9px,1.3cqw) var(--mono);white-space:nowrap}
+.mk-tl{position:relative;width:100%}
+.mk-ruler{display:flex;margin-bottom:.8cqw;font:600 max(9px,1.3cqw) var(--sans);color:rgba(255,248,238,.6)}
+.mk-ruler span{border-left:1px solid rgba(255,248,238,.25);padding-left:.7cqw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-track{position:relative;display:flex;height:7.2cqw;padding:.5cqw 0;border-radius:1cqw;background:repeating-linear-gradient(90deg,rgba(255,248,238,.08) 0 1px,transparent 1px 1.25%)}
+.mk-track b{flex:none;height:100%;margin-right:2px;border-radius:.6cqw;background:#333 center/cover;opacity:0;transform:translateY(-140%)}
+.mk-bench[data-s="cut"] .mk-track b{animation:mkDrop .4s calc(var(--k)*.1s) cubic-bezier(.3,1.5,.5,1) forwards}
+@keyframes mkDrop{to{opacity:1;transform:none}}
+.mk-beat{position:relative;display:flex;height:2.4cqw;margin-top:.8cqw;gap:1px;align-items:center}
+.mk-beat i{flex:1;height:30%;border-radius:2px;background:rgba(255,248,238,.18)}
+.mk-beat i.bar{height:70%;background:rgba(255,248,238,.4)}
+.mk-beat i.cutmark{background:var(--butter);height:100%}
+.mk-head{position:absolute;top:-1cqw;bottom:-1cqw;left:0;width:2px;background:var(--chili);opacity:0}
+.mk-head::before{content:'';position:absolute;top:-.8cqw;left:-.7cqw;width:1.6cqw;height:1.6cqw;border-radius:50%;background:var(--chili)}
+
+/* 7. check */
+.sc-check{display:grid;grid-template-columns:1fr 1.25fr;gap:4cqw;align-items:center;padding:0 7cqw 3cqw}
+.sc-check .mk-frame{max-width:24cqw}
+.mk-miss{position:absolute;left:10%;right:10%;top:20%;height:18%;z-index:2;border:.3cqw dashed var(--butter);border-radius:1cqw;display:grid;place-items:center;font:700 max(10px,1.6cqw) var(--sans);color:var(--butter);background:rgba(0,0,0,.25);transition:opacity .4s}
+.mk-bench.fixed .mk-miss{opacity:0}
+.mk-ok{position:absolute;right:6%;top:4%;z-index:3;width:5cqw;height:5cqw;border-radius:50%;display:grid;place-items:center;background:var(--butter);color:var(--ink);transform:scale(0);transition:transform .45s cubic-bezier(.3,1.6,.5,1)}
+.mk-ok svg{width:55%;height:55%}
+.mk-bench.fixed .mk-ok{transform:none;transition-delay:.9s}
+.mk-steps{list-style:none;margin:0;padding:0;display:grid;gap:1.2cqw}
+.mk-steps li{display:flex;gap:1.2cqw;align-items:flex-start;font-size:max(11px,1.85cqw);line-height:1.4;color:rgba(255,248,238,.8);opacity:0;transform:translateY(8px);transition:opacity .35s,transform .45s}
+.mk-steps li.in{opacity:1;transform:none}
+.mk-steps li::before{content:'';flex:none;width:1.2cqw;height:1.2cqw;margin-top:.55cqw;border-radius:50%;border:2px solid rgba(255,248,238,.4)}
+.mk-steps li.found::before{background:var(--butter);border-color:var(--butter)}
+.mk-steps code{display:block;margin-top:.6cqw;padding:.7cqw 1.1cqw;border-radius:.8cqw;background:#120B07;font:500 max(9px,1.45cqw) var(--mono);color:var(--butter);white-space:nowrap}
+
+/* 8. done */
+.sc-done{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4.4cqw;padding-bottom:4cqw}
+.mk-fan{position:relative;height:30cqw;width:70cqw}
+.mk-fan img{position:absolute;left:50%;top:0;height:100%;aspect-ratio:9/16;object-fit:cover;border-radius:1.6cqw;box-shadow:0 24px 50px -16px #000;opacity:0;transform:translateX(-50%) translateY(40%) rotate(0)}
+.mk-bench[data-s="done"] .mk-fan img{animation:mkFan .8s calc(var(--k)*.12s) cubic-bezier(.3,1.25,.5,1) forwards}
+@keyframes mkFan{to{opacity:1;transform:translateX(calc(-50% + var(--x))) translateY(var(--y)) rotate(var(--r))}}
+.mk-stats{display:flex;gap:1.2cqw;flex-wrap:wrap;justify-content:center;padding:0 4cqw}
+.mk-stats span{display:flex;align-items:baseline;gap:.7cqw;padding:1cqw 1.8cqw;border-radius:99px;background:rgba(255,248,238,.08);font-size:max(11px,1.7cqw);color:rgba(255,248,238,.75);opacity:0;transform:translateY(10px)}
+.mk-stats b{font:500 italic max(15px,2.8cqw)/1 var(--serif);color:var(--cream)}
+.mk-bench[data-s="done"] .mk-stats span{animation:mkLine .45s calc(1s + var(--k)*.15s) ease forwards}
+
+@media (max-width:960px){.mk{grid-template-columns:1fr;gap:34px}.mk-bench{order:-1}}
+@media (max-width:640px){.making{padding-top:110px}.mk{margin-top:40px}.mk-bench{aspect-ratio:4/5;border-radius:20px}
+ .mk-top{height:42px;padding:0 14px}.mk-sc{inset:42px 0 0}
+ .mk-sheet{grid-template-columns:repeat(4,1fr);width:90%;gap:1.6cqw}
+ .sc-titles,.sc-check{grid-template-columns:1fr;gap:5cqw;padding:2cqw 6cqw 6cqw;align-content:center}
+ .sc-titles .mk-frame,.sc-check .mk-frame{max-width:none;width:38cqw;order:-1}
+ .mk-code{font-size:10px;padding:3cqw}.mk-steps li{font-size:12px}
+ .mk-wave{height:28cqw}.mk-mon{height:52cqw}.mk-track{height:12cqw}.mk-fan{height:58cqw;width:90cqw}
+ .mk-focus{width:62%}.mk-ttl .big span{font-size:max(20px,9cqw)}.mk-ttl .kick{font-size:max(7px,2.4cqw)}
+ .mk-ok{width:9cqw;height:9cqw}.mk-cap{bottom:5cqw}}
+
 /* What to ask: each card is a request, and the animation is the edit it gets */
 .how{padding:150px 0 0}
 .how .center h2 em{background:linear-gradient(transparent 68%,var(--peach) 68%);padding:0 .06em}
@@ -448,40 +616,17 @@ em{font-style:italic}
 /* The bottom: the finished Short on a phone, and what will you ask for? */
 .make{margin-top:150px;border-radius:48px 48px 0 0;background:var(--roux);color:var(--cream);padding:110px 0 120px;position:relative;overflow:hidden}
 .make::before{content:'';position:absolute;width:760px;height:760px;right:-180px;top:-120px;border-radius:50%;background:radial-gradient(closest-side,rgba(226,85,42,.35),transparent);pointer-events:none}
-.make-grid{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:80px;align-items:center}
-.reel{display:flex;align-items:center;gap:34px;justify-self:center}
-.phone .story{position:absolute;top:54px;left:28px;right:28px;z-index:3;display:flex;gap:4px}
-.phone .story i{flex:var(--w);height:3px;border-radius:2px;background:rgba(255,248,238,.3);overflow:hidden}
-.phone .story i::after{content:'';display:block;height:100%;width:calc(var(--p,0)*100%);background:var(--cream)}
-.chapters{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:230px}
-.chapters button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:42px 1fr;align-items:baseline;gap:4px 10px;padding:12px 14px;border-radius:16px;color:rgba(255,248,238,.42);transition:color .3s,background .3s}
-.chapters button:hover{color:rgba(255,248,238,.8)}
-.chapters button:focus-visible{outline:2px solid var(--butter);outline-offset:2px}
-.chapters .tc{font:600 12px var(--mono);letter-spacing:.02em}
-.chapters b{font:500 italic 22px/1.1 var(--serif)}
-.chapters small{grid-column:2;font-size:13px;line-height:1.35}
-.chapters .k{display:none}
-.chapters .on{color:var(--cream);background:rgba(255,248,238,.08)}
-.chapters .on .tc{color:var(--butter)}
-.chapters .on b::after{content:'';display:inline-block;width:7px;height:7px;margin-left:9px;border-radius:50%;background:var(--chili);vertical-align:.25em;animation:blink 1s steps(1) infinite}
-.phone{position:relative;flex:none;width:min(320px,78vw);aspect-ratio:9/19.3;border-radius:46px;padding:11px;background:#120A06;box-shadow:inset 0 0 0 1.5px rgba(255,248,238,.14),0 40px 90px -30px #000;justify-self:center}
-.phone video{width:100%;height:100%;object-fit:cover;border-radius:36px;background:#000}
-.phone .notch{position:absolute;top:21px;left:50%;transform:translateX(-50%);width:88px;height:25px;border-radius:20px;background:#120A06;z-index:2}
-.sound{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:3;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:999px;border:1.5px solid var(--ink);background:var(--cream);color:var(--ink);font:600 14px var(--sans);cursor:pointer;white-space:nowrap}
-.sound svg{width:17px;height:17px}
+.make-grid{position:relative;max-width:760px;text-align:center}
 .make h2{font-size:clamp(48px,6.8vw,96px)}
-.make .lead{margin:22px 0 34px;max-width:470px;color:rgba(255,248,238,.8)}
-.make .ask{margin:0}
+.make .lead{margin:22px auto 34px;max-width:470px;color:rgba(255,248,238,.8)}
+.make .ask{margin:0 auto}
 .make .bar{border-color:var(--cream)}
 .make .send{background:var(--chili)}.make .send:hover{background:var(--paprika2)}
-.make .chips{justify-content:flex-start}
+.make .chips{justify-content:center}
 .make .chips button{border-color:rgba(255,248,238,.25);color:rgba(255,248,238,.8)}
 .make .chips button:hover{border-color:var(--cream);color:var(--cream)}
 .make .reply{background:rgba(255,248,238,.1);color:var(--cream)}
 .make .reply small{color:rgba(255,248,238,.65)}
-.made-from{margin-top:30px;font-size:14px;color:rgba(255,248,238,.6);max-width:470px}
-@media (max-width:1180px){.reel{flex-direction:column;gap:22px}.chapters{width:min(320px,78vw);grid-template-columns:repeat(5,1fr);gap:4px}.chapters button{display:block;padding:9px 4px;text-align:center;border-radius:12px}.chapters .k{display:block;font:700 11px var(--sans);letter-spacing:.08em;text-transform:uppercase}.chapters b,.chapters small,.chapters .tc,.chapters .on b::after{display:none}}
-@media (max-width:960px){.make-grid{grid-template-columns:1fr;gap:56px}.make .center-sm{text-align:center}.make .lead{margin-left:auto;margin-right:auto}.make .chips{justify-content:center}.made-from{margin:24px auto 0;text-align:center}}
 @media (max-width:520px){.make{border-radius:32px 32px 0 0;padding:80px 0 96px;margin-top:110px}}
 footer{background:var(--roux);color:rgba(255,248,238,.72);font-size:14.5px;padding:0 0 34px}
 footer .wrap{display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;border-top:1px solid rgba(255,248,238,.14);padding-top:28px}
@@ -739,6 +884,63 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  </div></section>
 
  <div class="wrap">
+  <section class="making" id="making">
+   <div class="center reveal">
+    <span class="eyebrow">Behind the Short</span>
+    <h2 class="h2" style="margin-top:18px">One sentence. <em>Thirteen minutes.</em></h2>
+   </div>
+   <div class="mk reveal">
+    <ol class="mk-log" id="mkLog" aria-label="Every step Gumbo took to make a Vietnam travel Short"></ol>
+    <div class="mk-bench" id="mkBench" data-s="ask" aria-hidden="true">
+     <div class="mk-top"><i></i><i></i><i></i><span>Vietnam trip</span><span class="clock" id="mkClock">0:00</span></div>
+     <div class="mk-sc sc-ask">
+      <div class="mk-msg you" id="mkYou"></div>
+      <div class="mk-msg gumbo" id="mkPlan"><b>Gumbo</b>I'll build a 40-second vertical Short: Hội An lanterns first, then fast beat-cut street food and city shots, ending on Hạ Long Bay.</div>
+      <div class="mk-input"><span class="t" id="mkTyped"></span><span class="send" id="mkSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+     </div>
+     <div class="mk-sc sc-grid">
+      <div class="mk-sheet" id="mkSheet"><span class="mk-scan"></span></div>
+      <div class="mk-focus"><img src="media/making/s02.jpg" alt=""><span>The basil lands</span></div>
+      <p class="mk-cap" id="mkCap"></p>
+     </div>
+     <div class="mk-sc sc-score">
+      <div class="mk-chips"><span>Original score</span><span>120 BPM</span><span>A minor</span><span>4/4</span></div>
+      <div class="mk-secs"><div style="--bars:4;--k:0">Intro<small>lanterns · riser</small></div><div style="--bars:5;--k:1">Food<small>the hit at 0:08</small></div><div style="--bars:7;--k:2">City<small>melody comes in</small></div><div style="--bars:4;--k:3">Outro<small>resolves</small></div></div>
+      <div class="mk-wave" id="mkWave"></div>
+      <div class="mk-chords" id="mkChords"></div>
+     </div>
+     <div class="mk-sc sc-titles">
+      <pre class="mk-code"><span class="ln" style="--k:0"><span class="c">// title.tsx, written by Gumbo</span></span><span class="ln" style="--k:1"><span class="k">const</span> kick = <span class="f">interpolate</span>(frame, [<span class="n">0</span>, <span class="n">9</span>], [<span class="n">0</span>, <span class="n">1</span>]);</span><span class="ln" style="--k:2"><span class="k">const</span> rise = <span class="f">spring</span>({frame: frame - <span class="n">4</span>,</span><span class="ln" style="--k:3">  config: {damping: <span class="n">13</span>, stiffness: <span class="n">160</span>}});</span><span class="ln" style="--k:4"><span class="k">const</span> bar = <span class="f">interpolate</span>(frame, [<span class="n">8</span>, <span class="n">20</span>], [<span class="n">0</span>, <span class="n">1</span>]);</span></pre>
+      <div class="mk-frame" style="background-image:url(media/making/k04.jpg)"><div class="mk-ttl"><span class="kick">EAT EVERYTHING</span><span class="big"><span>STREET FOOD</span></span><span class="line"></span></div></div>
+     </div>
+     <div class="mk-sc sc-cut">
+      <div class="mk-mon" id="mkMon"><b id="mkMonT">0:00</b></div>
+      <div class="mk-tl">
+       <div class="mk-ruler"><span style="width:20%">Hội An</span><span style="width:25%">Street food</span><span style="width:35%">City energy</span><span style="width:20%">Hạ Long Bay</span></div>
+       <div class="mk-track" id="mkTrack"></div>
+       <div class="mk-beat" id="mkBeat"></div>
+       <span class="mk-head" id="mkHead"></span>
+      </div>
+     </div>
+     <div class="mk-sc sc-check">
+      <div class="mk-frame" style="background-image:url(media/making/k11.jpg)"><div class="mk-miss">Title missing?</div><span class="mk-ok" data-i="check"></span><div class="mk-ttl"><span class="kick">HANOI · SAIGON</span><span class="big"><span>CITY ENERGY</span></span><span class="line"></span></div></div>
+      <ul class="mk-steps" id="mkSteps">
+       <li>Watches the cut it just made</li>
+       <li>Two titles come up blank</li>
+       <li>Prints the title's live values to see why</li>
+       <li class="found"><span>Found it: the frame was caught before the wipe-in<code>const frame = raw &lt;= 0 ? 30 : raw;</code></span></li>
+      </ul>
+     </div>
+     <div class="mk-sc sc-done">
+      <div class="mk-fan" id="mkFan"></div>
+      <div class="mk-stats"><span style="--k:0"><b>40 s</b>vertical</span><span style="--k:1"><b>25</b>shots on the beat</span><span style="--k:2"><b>1</b>original score</span><span style="--k:3"><b>12:58</b>start to finish</span></div>
+     </div>
+    </div>
+   </div>
+  </section>
+ </div>
+
+ <div class="wrap">
   <section class="yours reveal" id="yours">
    <div>
     <h2>Your footage <em>stays yours.</em></h2>
@@ -781,18 +983,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  </div></section>
 
  <section class="make" id="make"><div class="wrap make-grid">
-  <div class="reel reveal">
-  <div class="phone">
-   <span class="notch"></span>
-   <span class="story" id="story" aria-hidden="true"></span>
-   <video id="short" muted playsinline loop preload="none" poster="media/vietnam-short-poster.jpg" aria-label="A 40-second travel Short of Vietnam in four chapters: the food, the cities, Hạ Long Bay, and the lanterns at night">
-    <source src="media/vietnam-short.mp4" type="video/mp4">
-   </video>
-   <button class="sound" id="sound" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/></svg><span>Sound off</span></button>
-  </div>
-  <ol class="chapters" id="chapters" aria-label="Chapters of the Short"></ol>
-  </div>
-  <div class="reveal center-sm">
+  <div class="reveal">
    <h2>What will you <em>ask for first?</em></h2>
    <p class="lead">Type it here, and we'll send you an invite so you can ask Gumbo for real.</p>
    <div class="ask" data-ask>
@@ -801,10 +992,9 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
      <textarea rows="1" aria-label="What will you ask for first?" placeholder="I'd ask for…"></textarea>
      <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
-    <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A trip recap like this one</button><button type="button">A 90s camcorder look</button></div>
+    <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A recap of my trip</button><button type="button">A 90s camcorder look</button></div>
     <div class="reply" role="status"></div>
    </div>
-   <p class="made-from">The Short on the phone: 17 clips of Vietnam cut to a score Gumbo wrote for them. Sound on for the drop.</p>
   </div>
  </div></section>
 </main>
@@ -821,6 +1011,7 @@ const NS='http://www.w3.org/2000/svg';
 const el=(name,attrs)=>{const n=document.createElementNS(NS,name);for(const k in attrs)n.setAttribute(k,attrs[k]);return n;};
 // Line icons (24×24, stroked in the current colour), placed wherever an element says data-i="name".
 const ICONS={
+ check:'<path d="M5 12.5l4.5 4.5L19 7.5"/>',
  cut:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 7.6 20 18M8.6 16.4 20 6"/>',
  text:'<path d="M5 6h14M12 6v13M9 19h6"/>',
  cc:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2 2 0 1 0 0 3.6M17 10.2a2 2 0 1 0 0 3.6"/>',
@@ -958,6 +1149,87 @@ const orders=[
  whenSeen(stage,()=>{if(!calm){live=true;roll(front);}setTimeout(()=>loop(0),600);},.5);
 })();
 
+// The making of: the real Vietnam project's steps, each played out in the workbench. Times are from the project's log.
+(function making(){
+ const bench=document.getElementById('mkBench'),logEl=document.getElementById('mkLog'),clock=document.getElementById('mkClock');
+ const STEPS=[
+  ['ask',0,'type','You ask once','One sentence, typed in the box.',7600],
+  ['import',2,'film','It brings in the footage','17 clips, 4 min 55 s of it.',4300],
+  ['watch',53,'zoom','It watches every clip','Then finds the moment the basil lands.',5600],
+  ['score',272,'music','It writes the score','120 BPM in A minor, with a hit at 0:08.',5000],
+  ['titles',287,'text','It codes the titles','A tag wipes in, the title springs up.',5000],
+  ['cut',315,'cut','It cuts on the beat','25 shots, each a whole number of beats.',6600],
+  ['check',354,'wand','It checks its own work','Spots blank titles, finds why, fixes them.',7600],
+  ['done',778,'check','Done','A 40-second Short from one sentence.',6400]];
+ const fmt=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+ const items=STEPS.map(([,t,ic,title,note],i)=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';
+  b.innerHTML=`<span class="dot">${icon(ic)}</span><b></b><time>${fmt(t)}</time><small></small>`;b.querySelector('b').textContent=title;b.querySelector('small').textContent=note;
+  b.addEventListener('click',()=>go(i));li.appendChild(b);logEl.appendChild(li);return b;});
+
+ // Footage: the 17 clips as a contact sheet, with what Gumbo noticed in them.
+ const NAMES=['banh-mi-street-vendor','banh-xeo-meal','basil-falling-on-pho','ha-long-bay-aerial','ha-long-bay','hanoi-bustling-street','hanoi-intersection','hanoi-red-lantern-street','hoi-an-lantern-festival-timelapse','hoi-an-lanterns-river','hoi-an-river-nightlife','limestone-island-sunset','motorbike-flag-mountain-road','pho-bo-bowl','pho-street-stall','rural-motorbike-ride','saigon-night-traffic'];
+ const sheet=document.getElementById('mkSheet'),cap=document.getElementById('mkCap'),cols=()=>matchMedia('(max-width:640px)').matches?4:6;
+ const thumbs=NAMES.map((n,k)=>{const im=new Image();im.alt='';im.src=`media/making/s${String(k).padStart(2,'0')}.jpg`;im.style.setProperty('--k',k);im.style.setProperty('--r',((k*37)%11-5)+'deg');sheet.appendChild(im);return im;});
+ const setRows=()=>{const c=cols();thumbs.forEach((im,k)=>im.style.setProperty('--row',Math.floor(k/c)));};
+ const TAGS=[[9,'lanterns'],[13,'street food'],[16,'night traffic'],[3,'aerial'],[11,'sunset']].map(([k,label],j)=>{const t=document.createElement('span');t.className='mk-tag';t.textContent=label;t.style.setProperty('--k',j);t.style.setProperty('--r',(j%2?3:-3)+'deg');t.dataset.at=k;sheet.appendChild(t);return t;});
+ const placeTags=()=>{const c=cols(),gap=100/c;TAGS.forEach(t=>{const k=+t.dataset.at;t.style.left=((k%c)+.5)*gap+'%';t.style.top=((Math.floor(k/c)+.5)/Math.ceil(NAMES.length/c))*100+'%';});};
+ setRows();placeTags();addEventListener('resize',()=>{setRows();placeTags();});
+
+ // Score: 80 beats over four sections, loud from the hit at 0:08.
+ const wave=document.getElementById('mkWave');
+ for(let k=0;k<80;k++){const i=document.createElement('i'),sec=k<16?0:k<36?1:k<64?2:3;const base=[.22,.78,.9,.32][sec],swell=k<16?k/16*.35:k>=64?-(k-64)/16*.18:0;
+  const h=Math.max(.08,Math.min(1,base+swell+(Math.sin(k*1.7)+Math.sin(k*.63))*.09+(k%2?0:.08)));i.style.setProperty('--h',h.toFixed(2));i.style.setProperty('--k',k);if(k===16)i.className='hit';wave.appendChild(i);}
+ const chords=document.getElementById('mkChords');['Am','F','C','G','Am','F','C','G','Am','F'].forEach((c,k)=>{const s=document.createElement('span');s.textContent=c;s.style.setProperty('--k',k);chords.appendChild(s);});
+
+ // The cut: the real 25 shots and their lengths; each lands on a beat.
+ const SHOTS=[3,2.5,2.5,1.5,1,1.5,1,1.5,1,1,1.5,2,1,1.5,1,1.5,1,1,1,1,1,2,3,2.5,2.5];
+ const track=document.getElementById('mkTrack'),beat=document.getElementById('mkBeat'),head=document.getElementById('mkHead'),mon=document.getElementById('mkMon'),monT=document.getElementById('mkMonT');
+ let at=0;const starts=SHOTS.map(d=>{const s=at;at+=d;return s;});
+ SHOTS.forEach((d,k)=>{const b=document.createElement('b');b.style.width=`calc(${d/40*100}% - 2px)`;b.style.backgroundImage=`url(media/making/k${String(k).padStart(2,'0')}.jpg)`;b.style.setProperty('--k',k);track.appendChild(b);});
+ for(let k=0;k<80;k++){const i=document.createElement('i');const t=k/2;if(starts.includes(t))i.className='cutmark';else if(k%4===0)i.className='bar';beat.appendChild(i);}
+ const showAt=t=>{const k=Math.max(0,starts.findLastIndex(s=>s<=t));mon.style.backgroundImage=`url(media/making/k${String(k).padStart(2,'0')}.jpg)`;monT.textContent=fmt(t);};
+ showAt(0);
+
+ // Done: the five title moments of the finished Short, fanned out.
+ const fan=document.getElementById('mkFan');
+ [['f00',-2.3,-6],['f03',-1.15,-3],['f06',0,0],['f10',1.15,3],['f12',2.3,6]].forEach(([f,x,r],k)=>{const im=new Image();im.alt='';im.src=`media/frames/${f}.jpg`;
+  im.style.cssText=`--k:${k};--x:calc(${x} * 13cqw);--y:${Math.abs(x)*1.4}cqw;--r:${r}deg;z-index:${3-Math.abs(k-2)}`;fan.appendChild(im);});
+
+ const REQUEST='Make a 40-second vertical Short of my Vietnam trip. Open on the Hoi An lanterns, then fast cuts of street food and city energy, and end on Ha Long Bay. Cut on the beat, add bold animated titles, and an upbeat score.';
+ const you=document.getElementById('mkYou'),plan=document.getElementById('mkPlan'),typed=document.getElementById('mkTyped'),send=document.getElementById('mkSend'),checks=[...document.querySelectorAll('#mkSteps li')];
+ let run=0,cur=0,tick=0;
+ const alive=id=>id===run;
+ async function play(i,id){
+  const [s,t0]=STEPS[i],t1=i+1<STEPS.length?STEPS[i+1][1]:t0,dur=STEPS[i][5];
+  cur=i;items.forEach((b,j)=>{b.classList.toggle('on',j===i);b.classList.toggle('done',j<i);});
+  logEl.style.setProperty('--prog',(i/(STEPS.length-1)).toFixed(3));
+  bench.classList.remove('fixed');bench.dataset.s='';void bench.offsetWidth;bench.dataset.s=s;
+  // the clock runs through the real minutes this step took
+  cancelAnimationFrame(tick);const begin=performance.now();
+  const run1=now=>{const p=Math.min(1,(now-begin)/(dur*.9));clock.textContent=fmt(t0+(t1-t0)*p);if(p<1&&alive(id))tick=requestAnimationFrame(run1);};
+  tick=requestAnimationFrame(run1);
+  if(s==='ask'){you.classList.remove('in');plan.classList.remove('in');you.textContent='';typed.textContent='';
+   if(calm){you.textContent=REQUEST;you.classList.add('in');plan.classList.add('in');}
+   else{await wait(350);for(const w of REQUEST.split(' ')){if(!alive(id))return;typed.textContent+=(typed.textContent?' ':'')+w;await wait(70);}
+    await wait(300);if(!alive(id))return;send.classList.add('press');setTimeout(()=>send.classList.remove('press'),220);
+    typed.textContent='';you.textContent=REQUEST;you.classList.add('in');await wait(900);if(!alive(id))return;plan.classList.add('in');}}
+  if(s==='import'){for(let k=0;k<NAMES.length;k++){cap.innerHTML=`Importing <b>${k+1} / 17</b> · ${NAMES[k]}.mp4`;await wait(calm?0:105);if(!alive(id))return;}cap.innerHTML='<b>17 clips</b> · 4:55 of footage';}
+  if(s==='watch'){cap.innerHTML='Building a contact sheet of the footage';await wait(3200);if(!alive(id))return;cap.innerHTML='';}
+  if(s==='cut'){head.style.opacity=0;await wait(calm?0:2900);if(!alive(id))return;head.style.opacity=1;const b0=performance.now(),D=3200;
+   const sweep=now=>{if(!alive(id))return;const p=Math.min(1,(now-b0)/D),t=p*40;head.style.left=(p*100)+'%';showAt(Math.min(39.9,t));if(p<1)requestAnimationFrame(sweep);};requestAnimationFrame(sweep);}
+  if(s==='check'){checks.forEach(li=>li.classList.remove('in'));for(const li of checks){await wait(calm?0:1000);if(!alive(id))return;li.classList.add('in');}
+   await wait(calm?0:700);if(!alive(id))return;bench.classList.add('fixed');}
+ }
+ async function go(from){
+  const id=++run;let i=from;
+  while(alive(id)){const start=performance.now();await play(i,id);if(!alive(id)||calm)return;
+   const left=STEPS[i][5]-(performance.now()-start);if(left>0)await wait(left);if(!alive(id))return;i=(i+1)%STEPS.length;}
+ }
+ // Starts once the workbench is on screen; pauses while it's away so the steps aren't missed.
+ let seen=false;
+ new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!seen){seen=true;go(cur);}else if(!e.isIntersecting&&seen){seen=false;run++;}}},{threshold:.35}).observe(bench);
+})();
+
 // No menu: a cursor hunts through the buttons for something that isn't there...
 (function hunt(){
  const box=document.getElementById('buttons'),hunter=document.getElementById('hunter'),huh=document.getElementById('huh'),tip=document.getElementById('tip');
@@ -1030,29 +1302,6 @@ const seen=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){
 document.querySelectorAll('.reveal').forEach(n=>seen.observe(n));
 
 // The Short plays only while on screen.
-const short=document.getElementById('short');
-new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!calm){short.preload='auto';short.play().catch(()=>{});}else short.pause();}},{threshold:.35}).observe(short);
-// Chapters of the Short: the list lights the one playing, the story bar on the screen fills with it, and a tap jumps there.
-(function chapters(){
- const CH=[[0,'Intro','Vietnam','Lanterns on the river at night'],[8.46,'One','Eat everything.','Phở, bánh mì and bánh xèo, cut on the beat'],[16.46,'Two','City energy.','Hà Nội and Sài Gòn at full speed'],[24.46,'Three','Hạ Long Bay.','From the air, then out on the water'],[31.96,'Outro','Until next time.','Sunset, and the lanterns again']];
- const list=document.getElementById('chapters'),story=document.getElementById('story');
- const end=i=>i+1<CH.length?CH[i+1][0]:40;
- const fmt=t=>'0:'+String(Math.floor(t)).padStart(2,'0');
- const items=CH.map(([t,kicker,name,note],i)=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';
-  b.innerHTML=`<span class="tc">${fmt(t)}</span><b></b><small></small><span class="k">${kicker}</span>`;b.querySelector('b').textContent=name;b.querySelector('small').textContent=note;
-  b.setAttribute('aria-label',`Play from ${fmt(t)}: ${name}`);
-  b.addEventListener('click',()=>{short.preload='auto';short.currentTime=t+.05;short.play().catch(()=>{});});li.appendChild(b);list.appendChild(li);return b;});
- const bars=CH.map(([t],i)=>{const bar=document.createElement('i');bar.style.setProperty('--w',(end(i)-t).toFixed(2));story.appendChild(bar);return bar;});
- let last=-1;
- const tick=()=>{const t=short.currentTime||0;const k=CH.reduce((a,[s],i)=>t>=s?i:a,0);
-  bars.forEach((bar,i)=>bar.style.setProperty('--p',i<k?1:i>k?0:((t-CH[i][0])/(end(i)-CH[i][0])).toFixed(3)));
-  if(k!==last){items.forEach((b,i)=>b.classList.toggle('on',i===k));last=k;}};
- const loop=()=>{tick();if(!short.paused)requestAnimationFrame(loop);};
- short.addEventListener('play',loop);short.addEventListener('seeked',tick);tick();
-})();
-const sound=document.getElementById('sound');
-sound.addEventListener('click',()=>{short.muted=!short.muted;if(!short.muted){short.preload='auto';short.play().catch(()=>{});}sound.setAttribute('aria-pressed',String(!short.muted));sound.querySelector('span').textContent=short.muted?'Sound off':'Sound on';
- sound.querySelector('svg').innerHTML=short.muted?'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/>':'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>';});
 
 // The cuts waveform and the score's equalizer.
 const cutwave=document.getElementById('cutwave');let wd='';for(let x=0;x<=640;x+=6){const h=Math.max(2,Math.abs(Math.sin(x*.9)+Math.sin(x*.23))*6+2);wd+=`M${x} ${17-h} V${17+h}`;}
