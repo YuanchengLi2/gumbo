@@ -28,9 +28,9 @@ export async function collectProject(source:ProjectDB,folder:string){
   for(const asset of assets){
    if(!existsSync(asset.originalPath))throw new Error(`Relink ${asset.filename} before collecting.`);
    if(asset.sequence){const target=join(staging,'Media/Generated',asset.sequence.revisionId);await mkdir(target,{recursive:true});for(let n=0;n<asset.sequence.frameCount;n++){const filename=`${String(n).padStart(6,'0')}.png`,input=join(asset.sequence.directory,filename),output=join(target,filename);await copyFile(input,output);if((await stat(input)).size!==(await stat(output)).size)throw new Error(`Sequence copy failed for ${asset.filename}.`);}const manifest=join(asset.sequence.directory,'manifest.json');if(existsSync(manifest))await copyFile(manifest,join(target,'manifest.json'));asset.sequence={...asset.sequence,directory:target};asset.originalPath=join(target,'000000.png');asset.thumbnailPath=asset.originalPath;collected.saveAsset(asset);continue;}
-   for(const field of ['originalPath','proxyPath','thumbnailPath','audioPath'] as const){
+   for(const field of ['originalPath','proxyPath','previewPath','thumbnailPath','audioPath'] as const){
     const path=asset[field];if(!path||!existsSync(path))continue;
-    const target=join(staging,field==='originalPath'?'Media/Originals':field==='proxyPath'?'Media/Proxies':'Media/Analysis',asset.id,basename(path));
+    const target=join(staging,field==='originalPath'?'Media/Originals':field==='proxyPath'||field==='previewPath'?'Media/Proxies':'Media/Analysis',asset.id,basename(path));
     await mkdir(dirname(target),{recursive:true});await copyFile(path,target);
     if((await stat(path)).size!==(await stat(target)).size)throw new Error(`Copy verification failed for ${asset.filename}.`);
     pathMap.set(path,target);asset[field]=target;

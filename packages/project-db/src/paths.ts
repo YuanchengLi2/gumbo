@@ -11,6 +11,6 @@ export function hydratePath(path:string,folder:string){
  if(isAbsolute(rel)||rel==='..'||rel.startsWith(`..${sep}`))throw new Error('Invalid project media reference.');
  return absolute;
 }
-const fields=['originalPath','proxyPath','thumbnailPath','audioPath'] as const;
+const fields=['originalPath','proxyPath','previewPath','thumbnailPath','audioPath'] as const;
 export function persistAsset(asset:Asset,folder:string){const result={...asset};for(const key of fields){const path=result[key];if(path)result[key]=persistPath(path,folder);}if(result.sequence)result.sequence={...result.sequence,directory:persistPath(result.sequence.directory,folder)};return result;}
 export function hydrateAsset(asset:Asset,folder:string){const result={...asset};for(const key of fields){const path=result[key];if(path)result[key]=hydratePath(path,folder);}if(result.sequence)result.sequence={...result.sequence,directory:hydratePath(result.sequence.directory,folder)};return result;}

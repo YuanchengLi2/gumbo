@@ -5,7 +5,9 @@ import {tmpdir} from 'node:os';
 import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import {ProjectDB} from '@dream/project-db';
-import {Ingest} from '../../apps/project-service/src/media';
+import {Ingest,keyframeTimes} from '../../apps/project-service/src/media';
+import {keyframeGap} from '../../apps/project-service/src/media-io';
+import {mediaAssetPath} from '../../apps/desktop/src/main/media-paths';
 
 it('imports real media and retries only the chosen stage while preserving completed artifacts',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-ingest-test-')),db=new ProjectDB(folder,'Ingest');
@@ -16,6 +18,11 @@ it('imports real media and retries only the chosen stage while preserving comple
   await ingest.register(resolve('artifacts/fixtures/source.mp4'));await ingest.drain();
   const asset=db.footage().assets[0];expect(asset.status).toBe('ready');expect(asset.waveform.length).toBeGreaterThan(0);expect(asset.audioPath).toBeTruthy();
   expect(asset.playback).toMatchObject({ready:true,video:'original'});expect(asset.proxyPath).toBeUndefined();
+  // The fixture has one keyframe in six seconds, so the preview gets a copy with one every half second; export and the
+  // agent's frames still read the original.
+  expect(keyframeGap(await keyframeTimes(asset.originalPath,ffprobe.path),6)).toBeGreaterThan(5);
+  expect(asset.previewPath).toBeTruthy();expect(keyframeGap(await keyframeTimes(asset.previewPath!,ffprobe.path),6)).toBeLessThanOrEqual(.51);
+  expect(mediaAssetPath(asset,'play')).toBe(asset.previewPath);expect(mediaAssetPath(asset,'original')).toBe(asset.originalPath);expect(mediaAssetPath(asset,'preview')).toBe(asset.originalPath);
   // Loudness is measured for auto-level; nothing interprets the footage for the agent (no footage map, no shots).
   expect(asset.footageMap).toBeUndefined();expect(db.footage().shots.filter(s=>s.assetId===asset.id)).toHaveLength(0);
   expect(asset.loudnessLufs).toBeLessThan(0);expect(db.state().jobs.filter(j=>['footage_map','loudness'].includes(j.step)).map(j=>j.status)).toEqual(['complete']);

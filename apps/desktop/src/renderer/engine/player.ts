@@ -2,9 +2,12 @@ import {prepare,frameAt,Compositor,audioManifest,envelope,type Prepared,type Med
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {SceneLayers} from './scenes';
+import {upcoming,continues,pickVideo,LOOKAHEAD_SEC} from './lookahead';
 
-/** The preview player: the engine's frames drawn live on a canvas, the way Export draws them. Video comes from one muted
- * video element per clip (decoded on the graphics card), kept on the frame the timeline asks for; sound from one audio
+/** The preview player: the engine's frames drawn live on a canvas, the way Export draws them. Video comes from muted video
+ * elements (decoded on the graphics card), one per clip showing or about to, kept on the frame the timeline asks for; a cut
+ * that continues the same shot keeps the playing element on, and a video plays the source's preview copy (a keyframe
+ * every half second) when it has one, so a cut into the middle of a clip shows at once. Sound comes from one audio
  * element per sound segment through Web Audio, shaped by the same gain, fade and ducking envelope Export mixes with.
  * Coded motion graphics play live in their own sandboxed documents between two canvases: what lies under the first
  * scene is drawn on the canvas below, what lies over it (titles, captions, overlays) on a transparent canvas above. */
@@ -13,9 +16,11 @@ export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void;removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void};
 
 export const previewUrl=(a:Asset)=>'dream-media://'+a.id+'/preview?revision='+encodeURIComponent(a.proxyPath?'proxy':'original');
+/** What the preview's video elements play: the source's preview copy when it has one, else what the preview plays. */
+export const playUrl=(a:Asset)=>'dream-media://'+a.id+'/play?revision='+encodeURIComponent(a.previewPath?'preview':a.proxyPath?'proxy':'original');
 export const audioUrl=(a:Asset)=>'dream-media://'+a.id+'/audio?revision='+encodeURIComponent(a.audioPath?'normalized':a.playback?.audio??'original');
 
-type Video={el:HTMLVideoElement;assetId:string;lastUsed:number;seeking:boolean};
+type Video={el:HTMLVideoElement;key:string;assetId:string;url:string;lastUsed:number;seeking:boolean};
 type Sound={el:HTMLAudioElement;gain:GainNode;segment:AudioSegment};
 
 export class EnginePlayer implements PlayerRef{
@@ -23,14 +28,14 @@ export class EnginePlayer implements PlayerRef{
  private videos=new Map<string,Video>();private images=new Map<string,HTMLImageElement>();private sounds=new Map<string,Sound>();
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
- private scenes?:SceneLayers;private over?:Compositor;private starts=new Map<string,number>();private resized:ResizeObserver;
+ private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;
  constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=new Compositor(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
   // A paused frame is drawn again when the preview changes size: the canvas at its new size, and coded scenes placed at
   // the new scale (they kept the old one, so dragging the timeline divider showed more or less of a graphic).
   this.resized=new ResizeObserver(()=>{this.dirty=true;});this.resized.observe(canvas);}
  /** A new revision of the edit: the frames and sound follow it without interrupting playback. */
  setProject(timeline:TimelineDocument,footage:FootageIndex){
-  this.prepared=prepare({timeline,footage});this.starts.clear();this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
+  this.prepared=prepare({timeline,footage});this.layerCache.clear();this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
   this.segments=audioManifest(timeline,footage).filter(s=>s.enabled!==false);
   for(const [id,sound] of this.sounds)if(!this.segments.some(s=>s.id===id&&s.assetId===sound.segment.assetId)){sound.el.pause();sound.gain.disconnect();this.sounds.delete(id);}
   for(const sound of this.sounds.values())sound.segment=this.segments.find(s=>s.id===sound.segment.id)!;
@@ -51,12 +56,23 @@ export class EnginePlayer implements PlayerRef{
  removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void){this.events.removeEventListener(event,listener as EventListener);}
  private ensureAudio(){if(this.audio)return;this.audio=new AudioContext({latencyHint:'interactive'});this.master=this.audio.createGain();this.master.gain.value=this.muted?0:1;this.master.connect(this.audio.destination);}
 
- private video(layer:MediaLayer){
-  let v=this.videos.get(layer.key);const asset=this.prepared.assets.get(layer.assetId)!;
-  if(v&&v.assetId!==layer.assetId){v.el.removeAttribute('src');v.el.load();this.videos.delete(layer.key);v=undefined;}
-  if(!v){const el=document.createElement('video');el.muted=true;el.playsInline=true;el.preload='auto';el.crossOrigin='anonymous';el.src=previewUrl(asset);
-   v={el,assetId:layer.assetId,lastUsed:0,seeking:false};const video=v;el.addEventListener('seeked',()=>{video.seeking=false;this.dirty=true;});el.addEventListener('loadeddata',()=>{this.dirty=true;});this.videos.set(layer.key,v);}
-  v.lastUsed=performance.now();return v;
+ /** The video element a clip draws from this moment (see pickVideo): its own, one of the same source taken over, or a new one. */
+ private video(layer:MediaLayer,claimed:Set<Video>,needed:Set<string>){
+  const url=playUrl(this.prepared.assets.get(layer.assetId)!);let v=pickVideo(this.videos.values(),layer,claimed,needed);
+  // A video of an older copy of the source (its preview copy has arrived since) is let go for one of the new.
+  if(v&&v.url!==url){this.unload(v);v=undefined;}
+  const stale=this.videos.get(layer.key);if(stale&&stale!==v)this.unload(stale);
+  if(v&&v.key!==layer.key){this.videos.delete(v.key);v.key=layer.key;}
+  if(!v){const el=document.createElement('video');el.muted=true;el.playsInline=true;el.preload='auto';el.crossOrigin='anonymous';el.src=url;
+   v={el,key:layer.key,assetId:layer.assetId,url,lastUsed:0,seeking:false};const video=v;el.addEventListener('seeked',()=>{video.seeking=false;this.dirty=true;});el.addEventListener('loadeddata',()=>{this.dirty=true;});}
+  this.videos.set(layer.key,v);claimed.add(v);v.lastUsed=performance.now();return v;
+ }
+ private unload(v:Video){v.el.pause();v.el.removeAttribute('src');v.el.load();if(this.videos.get(v.key)===v)this.videos.delete(v.key);}
+ /** The media layers (not scenes) a timeline frame shows, worked out once per frame of each revision. */
+ private layersAt(frame:number){
+  let layers=this.layerCache.get(frame);
+  if(!layers){if(this.layerCache.size>4096)this.layerCache.clear();layers=frameAt(this.prepared,frame/this.fps).layers.filter((l):l is MediaLayer=>l.kind==='media'&&l.media!=='scene');this.layerCache.set(frame,layers);}
+  return layers;
  }
  /** Keeps a clip's video on the moment the timeline asks for: playing along at the clip's speed, or seeked to the exact
   * frame while paused. A playing video that drifts is eased back by running a little faster or slower, since every seek
@@ -68,15 +84,6 @@ export class EnginePlayer implements PlayerRef{
    const rate=layer.rate*(Math.abs(drift)>frame?1+Math.max(-.1,Math.min(.1,drift)):1);if(Math.abs(el.playbackRate-rate)>.005)el.playbackRate=rate;
    if(el.paused)void el.play().catch(()=>{});}
   else{if(!el.paused)el.pause();if(Math.abs(el.currentTime-layer.time)>frame/2&&!v.seeking){v.seeking=true;el.currentTime=layer.time;}}
- }
- /** The source moment a clip that is about to start shows first, so its video waits there for the cut (found once per
-  * clip, at frame accuracy, between now and the time it is known to be showing). */
- private firstMoment(layer:MediaLayer,now:number,ahead:number){
-  const known=this.starts.get(layer.key);if(known!==undefined)return known;
-  const at=(n:number)=>frameAt(this.prepared,n/this.fps).layers.find((l):l is MediaLayer=>l.kind==='media'&&l.key===layer.key);
-  let lo=Math.round(now*this.fps),hi=Math.round(ahead*this.fps);if(at(lo))return layer.time;
-  while(hi-lo>1){const mid=(lo+hi)>>1;if(at(mid))hi=mid;else lo=mid;}
-  const time=at(hi)?.time??layer.time;this.starts.set(layer.key,time);return time;
  }
  private picture(layer:MediaLayer){
   if(layer.media==='video'){const v=this.videos.get(layer.key);return v&&v.el.readyState>=2?v.el:undefined;}
@@ -103,14 +110,19 @@ export class EnginePlayer implements PlayerRef{
   const time=this.playing?t:this.time,frame=frameAt(this.prepared,time),media=frame.layers.filter((l):l is MediaLayer=>l.kind==='media');
   const pictured=media.filter(l=>l.media!=='scene');
   const tick=performance.now();
-  for(const layer of media)if(layer.media==='video')this.steer(this.video(layer),layer,this.playing);
-  // The next clip is loaded and parked on its first frame half a second early, so a cut shows it at once.
-  const ahead=Math.min(this.duration-1e-3,time+.5);
-  for(const layer of frameAt(this.prepared,ahead).layers)if(layer.kind==='media'&&layer.media==='video'&&!media.some(m=>m.key===layer.key))this.steer(this.video(layer),{...layer,time:this.firstMoment(layer,time,ahead)},false);
-  else if(layer.kind==='media'&&(layer.media==='image'||layer.media==='sequence'))this.picture(layer);
+  // Every clip that starts within the next second, however short, is loaded and parked on its first frame, so its cut
+  // shows at once; one that continues the shot playing into it needs nothing, as the playing video carries on into it.
+  const videos=media.filter(l=>l.media==='video'),from=Math.round(time*this.fps),to=Math.round(Math.min(this.duration-1e-3,time+LOOKAHEAD_SEC)*this.fps);
+  const arrivals=upcoming(n=>this.layersAt(n),from,to).filter(a=>!media.some(m=>m.key===a.layer.key));
+  const needed=new Set([...videos,...arrivals.map(a=>a.layer)].map(l=>l.key)),claimed=new Set<Video>();
+  for(const layer of videos)this.steer(this.video(layer,claimed,needed),layer,this.playing);
+  for(const arrival of arrivals){const layer=arrival.layer;
+   if(layer.media==='video'){if(!(this.playing&&videos.some(l=>continues(l,arrival,time,this.fps))))this.steer(this.video(layer,claimed,needed),layer,false);}
+   else if(layer.media==='image'||layer.media==='sequence')this.picture(layer);}
+  for(const layer of this.layersAt(to))if(layer.media==='sequence')this.picture(layer);
   this.sound(time);
   // A clip that has left the frame stops playing at once (it would go on decoding unseen), and is let go after a while.
-  const now=performance.now();for(const [key,v] of this.videos){if(v.lastUsed<tick&&!v.el.paused)v.el.pause();if(now-v.lastUsed>4000){v.el.pause();v.el.removeAttribute('src');v.el.load();this.videos.delete(key);}}
+  const now=performance.now();for(const v of [...this.videos.values()]){if(v.lastUsed<tick&&!v.el.paused)v.el.pause();if(now-v.lastUsed>4000)this.unload(v);}
   if(this.playing){const n=this.getCurrentFrame();if(n!==this.lastFrame){this.lastFrame=n;this.emit('frameupdate',{frame:n});}this.dirty=true;}
   if(!this.dirty)return;
   // Wait for every picture the frame needs (up to a moment), so a seek or cut never flashes an empty frame.

@@ -1,5 +1,5 @@
 import {measureLoudness} from './loudness';
-import {copyMedia,canPreviewOriginal,canPreviewAudio,playbackCapabilities} from './media-io';
+import {copyMedia,canPreviewOriginal,canPreviewAudio,playbackCapabilities,keyframeGap,PREVIEW_KEYFRAME_SEC,LONG_GOP_SEC} from './media-io';
 import {setTimeout as wait} from 'node:timers/promises';
 import {transcriptWords} from './transcript';
 import {analyzeStage} from './analysis-client';
@@ -16,6 +16,11 @@ function captureTime(path:string,info:any):{capturedAt?:string;capturedAtSource?
  const created=find('creation_time');if(created){const date=new Date(created);if(Number.isFinite(date.getTime())&&date.getUTCFullYear()>=1995)return{capturedAt:date.toISOString(),capturedAtSource:'mp4'};}
  return facts.capturedAt?{capturedAt:facts.capturedAt,capturedAtSource:facts.capturedAtSource}:{};
 }
+/** The keyframe times in a source's first video stream over its first span seconds, read from packets without decoding. */
+export async function keyframeTimes(path:string,ffprobe:string,span=60,signal?:AbortSignal){
+ const out=await run(ffprobe,['-v','error','-select_streams','v:0','-read_intervals','%+'+span,'-show_entries','packet=pts_time,flags','-of','csv=p=0',path],signal);
+ return out.split(/\r?\n/).map(line=>line.split(',')).filter(([,flags])=>flags?.startsWith('K')).map(([time])=>Number(time)).filter(Number.isFinite);
+}
 export async function probe(path:string,ffprobe:string){const info=JSON.parse(await run(ffprobe,['-v','error','-show_format','-show_streams','-of','json',path]));const video=info.streams.find((s:any)=>s.codec_type==='video'),audio=info.streams.find((s:any)=>s.codec_type==='audio');const image=/\.(png|jpe?g|webp|bmp|heic|heif|avif|tiff?|dng)$/i.test(path);const rate=(video?.avg_frame_rate??'30/1').split('/').map(Number);return {kind:image?'image':video?'video':'audio',durationSec:image?5:Number(video?.duration??info.format.duration??audio?.duration??0),fps:video?rate[0]/(rate[1]||1)||30:0,width:video?.width??0,height:video?.height??0,hasAudio:!!audio,videoCodec:video?.codec_name,audioCodec:audio?.codec_name,rotation:Number(video?.side_data_list?.find((s:any)=>s.rotation)?.rotation??0),...captureTime(path,info)} as const;}
 export class Ingest {
  private queue:{asset:Asset;step?:string}[]=[];
@@ -24,12 +29,14 @@ export class Ingest {
  private idle:(()=>void)[]=[];private canceled=false;
  // Transcription runs for at most two sources at a time, so a bulk import does not flood the speech service.
  private speechQueue:Asset[]=[];
- private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;if(current?.license)asset.license=current.license;this.db.saveAsset(asset);}
+ // Preview copies are made one at a time, in their own queue, so a long encode never holds up another import's steps.
+ private previewQueue:Asset[]=[];private previewing?:{id:string;controller:AbortController};
+ private save(asset:Asset){asset.playback=playbackCapabilities(asset);const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current?.understanding)asset.understanding=current.understanding;if(current?.context)asset.context=current.context;if(current?.license)asset.license=current.license;if(current?.previewPath&&!asset.previewPath)asset.previewPath=current.previewPath;this.db.saveAsset(asset);}
  constructor(private db:ProjectDB,private ffmpeg:string,private ffprobe:string,private publish:(type:string,payload:unknown)=>void,private onReady?:(asset:Asset)=>void,private authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>,private speech?:(asset:Asset,signal:AbortSignal)=>Promise<void>,private indexShots?:(asset:Asset)=>void){}
  recover(){this.canceled=false;const state=this.db.state();for(const asset of state.footage.assets){if(asset.sequence)continue;
   // Speech is transcribed (or a saved transcript fitted to its sound again, from saved chunks) for imports and for media
   // the agent made with code alike.
-  if(!asset.missing&&asset.hasAudio&&!asset.generated&&(!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete')||!this.db.getMeta('speech-fit:v1:'+asset.id)))this.startSpeech(asset);if(asset.creation)continue;if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
+  if(!asset.missing&&asset.hasAudio&&!asset.generated&&(!state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='complete')||!this.db.getMeta('speech-fit:v1:'+asset.id)))this.startSpeech(asset);this.startPreview(asset);if(asset.creation)continue;if(!asset.missing&&(asset.status==='registered'||asset.status==='processing'||!asset.playback||!playbackCapabilities(asset).ready||asset.copyRequested||asset.fingerprint.startsWith('pending:')||state.jobs.some(j=>j.assetId===asset.id&&j.status==='interrupted'&&['proxy','playback_audio','copy','thumbnail','waveform'].includes(j.step))))this.queue.push({asset});}void this.drain();}
  async register(path:string,copy=false,requestKey?:string,signal?:AbortSignal,quiet=false){
   const assetId=requestKey?'a_'+createHash('sha256').update(requestKey).digest('hex').slice(0,24):`a_${randomUUID()}`;
   const existing=this.db.footage().assets.find(a=>a.id===assetId);if(existing){if(existing.status==='failed')this.retry(existing);return existing;}
@@ -57,6 +64,37 @@ export class Ingest {
   const controller=new AbortController();this.speeches.set(asset.id,controller);this.db.job(asset.id,'transcription','running');
   void (async()=>{await this.authorize?.([asset.originalPath],controller.signal);await this.speech!({...asset},controller.signal);controller.signal.throwIfAborted();this.db.job(asset.id,'transcription','complete',100);})().catch(error=>{this.db.job(asset.id,'transcription',controller.signal.aborted?'interrupted':'failed',0,(error as Error).message);}).finally(()=>{this.speeches.delete(asset.id);const queued=this.speechQueue.shift();if(queued)this.startSpeech(queued);this.publish('state',this.db.state({bounded:true}));void this.drain();});
  }
+ /** A preview copy of video whose keyframes lie far apart (phone footage often has one every few seconds): a keyframe
+  * every half second and at most 1080p, so the preview player can show a cut into the middle of a clip at once instead of
+  * decoding seconds of video first. Only the preview plays it; export and the agent's frames decode the original. It is
+  * made after the source is settled (copied and fingerprinted), once per fingerprint, and footage that already seeks
+  * quickly gets none. */
+ private startPreview(asset:Asset){
+  if(asset.kind!=='video'||asset.missing||asset.sequence||asset.scene||asset.copyRequested||asset.fingerprint.startsWith('pending:')||asset.durationSec<=0)return;
+  const key=`stage:${asset.id}:preview_proxy`,identity=`preview-1:${asset.fingerprint}`,folder=join(this.db.folder,'Media/Proxies'),target=join(folder,`${asset.id}-preview-v1.mp4`);
+  // Made already; a save of the asset from an older copy that dropped the field gets it back.
+  if(this.db.getMeta(key)===identity){if(!asset.previewPath&&existsSync(target)){const current=this.db.footage().assets.find(a=>a.id===asset.id);if(current&&!current.previewPath)this.save({...current,previewPath:target});}return;}
+  if(this.previewing){if(this.previewing.id!==asset.id&&!this.previewQueue.some(a=>a.id===asset.id))this.previewQueue.push(asset);return;}
+  const controller=new AbortController(),signal=controller.signal;this.previewing={id:asset.id,controller};
+  void (async()=>{
+   await this.authorize?.([asset.originalPath,...(asset.proxyPath?[asset.proxyPath]:[])],signal);
+   const playing=asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath,span=Math.min(asset.durationSec,60);
+   let previewPath:string|undefined;
+   if(keyframeGap(await keyframeTimes(playing,this.ffprobe,60,signal),span)>LONG_GOP_SEC){
+    this.db.job(asset.id,'preview_proxy','running');
+    const every=PREVIEW_KEYFRAME_SEC,frames=String(Math.max(1,Math.round((asset.fps||30)*every)));
+    mkdirSync(folder,{recursive:true});
+    await atomicArtifact(target,async temporary=>{await run(this.ffmpeg,['-y','-i',asset.originalPath,'-map','0:v:0','-an','-sn','-dn',
+     '-vf',"scale=w='trunc(iw*min(1,1080/min(iw,ih))/2)*2':h='trunc(ih*min(1,1080/min(iw,ih))/2)*2'",
+     '-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-g',frames,'-keyint_min',frames,'-force_key_frames',`expr:gte(t,n_forced*${every})`,
+     '-fps_mode','passthrough','-movflags','+faststart',temporary],signal);},async temporary=>{await probe(temporary,this.ffprobe);});
+    signal.throwIfAborted();previewPath=target;
+   }
+   const current=this.db.footage().assets.find(a=>a.id===asset.id);if(!current)return;
+   if(previewPath)this.save({...current,previewPath});this.db.setMeta(key,identity);this.db.job(asset.id,'preview_proxy','complete',100);
+  })().catch(error=>{if(this.db.footage().assets.some(a=>a.id===asset.id))this.db.job(asset.id,'preview_proxy',signal.aborted?'interrupted':'failed',0,(error as Error).message);})
+   .finally(()=>{this.previewing=undefined;const next=this.previewQueue.shift();if(next&&!this.canceled)this.startPreview(next);this.publish('state',this.db.state({bounded:true}));void this.drain();});
+ }
  async waitUntilUsable(ids:string[],signal:AbortSignal){
   const assets=this.db.db.prepare('SELECT json FROM assets WHERE id=?'),jobs=this.db.db.prepare('SELECT step,status,error FROM jobs WHERE asset_id=?');
   for(;;){signal.throwIfAborted();let ready=true;for(const id of ids){const row=assets.get(id) as {json:string}|undefined;if(!row)throw new Error('Imported media is missing.');const asset=AssetSchema.parse(JSON.parse(row.json));if(asset.playback?.ready)continue;const required=[...(asset.kind==='video'&&asset.playback?.video!=='original'?['proxy']:[]),...(asset.hasAudio?['playback_audio']:[])];const states=jobs.all(id) as {step:string;status:string;error?:string}[];if(asset.status==='failed')throw new Error(states.find(j=>j.step==='analysis')?.error??'Media preparation failed.');for(const step of required){const job=states.find(j=>j.step===step);if(job?.status==='failed')throw new Error(job.error??`Could not prepare ${asset.filename}.`);if(job?.status!=='complete')ready=false;}}if(ready)return;await wait(100,undefined,{signal});}
@@ -74,7 +112,7 @@ export class Ingest {
  }
  modelsChanged(){if(!process.env.DREAM_WHISPER_MODEL)return;const state=this.db.state();for(const asset of state.footage.assets)if(state.jobs.some(j=>j.assetId===asset.id&&j.step==='transcription'&&j.status==='waiting_for_model'))this.retry(asset,'transcription');}
  retry(asset:Asset,step?:string){this.canceled=false;if(this.speech&&step==='transcription'){this.startSpeech(asset);return;}if(this.queue.some(a=>a.asset.id===asset.id)||this.background.some(a=>a.asset.id===asset.id)||this.preparing.has(asset.id)||this.analyzing.has(asset.id))return;asset.status='registered';this.db.saveAsset(asset);this.db.job(asset.id,'analysis','queued');this.queue.push({asset,step:step==='analysis'?undefined:step});void this.drain();}
- async cancel(){this.canceled=true;this.queue=[];this.background=[];for(const controller of [...this.preparing.values(),...this.analyzing.values(),...this.speeches.values()])controller.abort();await this.drain();}
+ async cancel(){this.canceled=true;this.queue=[];this.background=[];this.previewQueue=[];for(const controller of [...this.preparing.values(),...this.analyzing.values(),...this.speeches.values(),...(this.previewing?[this.previewing.controller]:[])])controller.abort();await this.drain();}
  drain():Promise<void>{
   if(!this.canceled){
    while(this.queue.length&&this.preparing.size<2){const task=this.queue.shift()!,controller=new AbortController();this.preparing.set(task.asset.id,controller);
@@ -84,7 +122,7 @@ export class Ingest {
     void this.analyze(task.asset,controller.signal,task.step,true).catch(error=>{this.db.job(task.asset.id,'analysis',controller.signal.aborted?'interrupted':'failed',0,(error as Error).message);}).finally(()=>{this.analyzing.delete(task.asset.id);this.publish('state',this.db.state({bounded:true}));void this.drain();});
    }
   }
-  if(!this.queue.length&&!this.background.length&&!this.preparing.size&&!this.analyzing.size&&!this.speeches.size){this.idle.splice(0).forEach(done=>done());return Promise.resolve();}
+  if(!this.queue.length&&!this.background.length&&!this.preparing.size&&!this.analyzing.size&&!this.speeches.size&&!this.previewing){this.idle.splice(0).forEach(done=>done());return Promise.resolve();}
   return new Promise(done=>this.idle.push(done));
  }
  async analyze(a:Asset,signal:AbortSignal,requested?:string,background=false){
@@ -134,6 +172,7 @@ export class Ingest {
   // Nothing here interprets the footage for the agent: it looks at frames and measures what it needs itself.
   // The footage index (shot-index.ts) is built in its own queue, so a long video's shots never hold up its other steps.
   if(a.kind!=='audio')this.indexShots?.(a);
+  this.startPreview(a);
   if(a.hasAudio&&a.audioPath&&existsSync(a.audioPath))await stage('loudness',async()=>{a.loudnessLufs=await measureLoudness(this.ffmpeg,a.audioPath!,signal);},undefined,':loudness-1');
   const sidecar=process.env.DREAM_INGEST_BINARY;
   for(const name of requested==='audio_features'?['audio_features' as const]:[]){

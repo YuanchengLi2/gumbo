@@ -8,6 +8,9 @@ export const AssetSchema = z.object({
   contentType: z.enum(['talking_head','screen','slides','broll','mixed']).default('mixed'),
   hasAudio: z.boolean().default(false), rotation: z.number().default(0),
   originalPath: z.string(), proxyPath: z.string().optional(), thumbnailPath: z.string().optional(),
+  // A copy of long-GOP video with a keyframe every half second, for the preview player only (it seeks to cuts quickly);
+  // export and the agent's frames decode the original.
+  previewPath: z.string().optional(),
   audioPath: z.string().optional(), fingerprint: z.string(), missing: z.boolean().default(false),
   videoCodec:z.string().optional(),audioCodec:z.string().optional(),
   playback:z.object({video:z.enum(['original','proxy']).optional(),audio:z.enum(['original','proxy','normalized','none']).optional(),audioReady:z.boolean().optional(),ready:z.boolean()}).optional(),
