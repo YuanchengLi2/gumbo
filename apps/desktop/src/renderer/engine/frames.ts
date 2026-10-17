@@ -1,5 +1,5 @@
 import {Input,UrlSource,ALL_FORMATS,VideoSampleSink} from 'mediabunny';
-import {prepare,frameAt,Compositor,type MediaLayer} from '@dream/compositor';
+import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {previewUrl} from './player';
@@ -32,7 +32,7 @@ export async function grabFrames(request:FrameRequest){
  const frames=[];
  try{
   for(const f of request.frames){
-   const frame=frameAt(p,f.frame/fps),pictures=new Map<MediaLayer,TexImageSource>(),opened:{close():void}[]=[],missing:string[]=[];
+   const frame=frameAt(p,f.frame/fps),pictures=new Map<MediaLayer,Picture>(),opened:{close():void}[]=[],missing:string[]=[];
    for(const layer of frame.layers){if(layer.kind!=='media')continue;const asset=p.assets.get(layer.assetId);if(!asset)continue;
     try{
      if(layer.media==='video'){const sample=await (await sinkFor(asset))?.getSample(layer.time);if(sample){opened.push(sample);pictures.set(layer,sample.toCanvasImageSource());}else missing.push(asset.filename);}

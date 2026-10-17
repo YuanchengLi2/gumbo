@@ -1,24 +1,47 @@
-import {BrowserWindow} from 'electron';
+import {BrowserWindow,type NativeImage} from 'electron';
 
 /** Export's half of coded motion graphics: each scene runs alone in a hidden, transparent window that draws off screen,
  * as the player's sandboxed frame does, and is asked for one frame at a time over the same frame protocol. Its pixels
  * come back with their transparency, so the engine composites them like any other picture. An engine scene loads from
- * dream-engine://; a legacy HTML scene arrives as its finished document. */
+ * dream-engine://; a legacy HTML scene arrives as its finished document.
+ *
+ * The pictures are the window's own paints, not screenshots: an off-screen window hands over each frame it paints, and
+ * paints only when something on the page changed. So a frame that looks like the one before (a title holding still,
+ * most of a lower third's life) costs no capture, no copy and no upload: the caller is told it is unchanged and keeps
+ * the picture it has. Before, every frame was captured and sent whole, about 75 ms each, identical or not. */
 export type SceneSource={url:string}|{html:string};
-export type ScenePixels={width:number;height:number;data:Uint8Array};
-type Entry={window:BrowserWindow;loaded:Promise<void>;sequence:number};
+/** paint names the picture; data is left out when it is the picture the caller already has (its since). */
+export type ScenePixels={width:number;height:number;paint:number;data?:Uint8Array};
+type Entry={window:BrowserWindow;loaded:Promise<void>;sequence:number;paints:Paints};
 const windows=new Map<string,Entry>();
 const FRAME_TIMEOUT_MS=60_000;
+// The windows draw at 240 frames a second (the most Chromium allows), so waiting for the next frame is about 4 ms.
+const FRAME_RATE=240;
+// How long a paint may take to arrive after the page has drawn the frame: about five frames. Past that, nothing changed.
+export const SETTLE_MS=20;
+
+let paintNumber=0;
+/** A window's paints: the latest picture and its number. Numbers count across every window, so a picture's number never
+ * names a picture from another window or an earlier one with the same key. */
+export class Paints{
+ latest?:{image:NativeImage;number:number};private waiter?:()=>void;
+ add(image:NativeImage){this.latest={image,number:++paintNumber};this.waiter?.();}
+ get number(){return this.latest?.number??0;}
+ /** Settles at the next paint, or after ms with none. */
+ next(ms:number){return new Promise<void>(resolve=>{const done=()=>{clearTimeout(timer);this.waiter=undefined;resolve();},timer=setTimeout(done,ms);this.waiter=done;});}
+}
 
 function open(source:SceneSource,width:number,height:number):Entry{
  if('url' in source&&!source.url.startsWith('dream-engine://app/scene/'))throw new Error('Only published scenes can be drawn.');
+ // One pixel per scene pixel whatever the display's scaling: a 1920x1080 scene is 1920x1080 pictures, not 2880x1620 at 150%.
  const window=new BrowserWindow({show:false,frame:false,transparent:true,backgroundColor:'#00000000',width,height,useContentSize:true,
-  webPreferences:{offscreen:true,sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,backgroundThrottling:false}});
+  webPreferences:{offscreen:{deviceScaleFactor:1},sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,backgroundThrottling:false}});
  window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',event=>event.preventDefault());
- window.webContents.setFrameRate(60);
+ const paints=new Paints();window.webContents.on('paint',(_event,_dirty,image)=>paints.add(image));
+ window.webContents.setFrameRate(FRAME_RATE);
  const url='url' in source?source.url:'data:text/html;charset=utf-8;base64,'+Buffer.from(source.html,'utf8').toString('base64');
  const loaded=window.loadURL(url).then(()=>undefined);loaded.catch(()=>{});
- return{window,loaded,sequence:0};
+ return{window,loaded,sequence:0,paints};
 }
 
 /** The page script that asks a scene for one frame and settles when the scene has drawn it. The scene is the window's own
@@ -43,14 +66,21 @@ export function frameRequestScript(id:number,frame:number,fps:number,timeoutMs=F
  })`;
 }
 
-/** Draws one frame of a scene and returns its pixels (BGRA, premultiplied, as Chromium paints them). */
-export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number):Promise<ScenePixels>{
+/** Draws one frame of a scene and returns its pixels (BGRA, premultiplied, as Chromium paints them), or only the number of
+ * the picture when it is since, the one the caller already has. */
+export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number,since?:number):Promise<ScenePixels>{
  let entry=windows.get(key);if(!entry||entry.window.isDestroyed()){entry=open(source,width,height);windows.set(key,entry);}
- await entry.loaded;const id=++entry.sequence;
+ await entry.loaded;const id=++entry.sequence,before=entry.paints.number;
  const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string};
  if(answer?.error)throw new Error(answer.error);
- const image=await entry.window.webContents.capturePage(),size=image.getSize();
- return{width:size.width,height:size.height,data:image.toBitmap()};
+ // The page answers once its next frame has begun, so a change it drew has nearly always painted by now; if nothing has
+ // painted since the request, a paint still on its way is given a few frames to land.
+ if(entry.paints.number===before)await entry.paints.next(SETTLE_MS);
+ // A window that has never painted (it should have, on loading) is captured instead, every time.
+ const latest=entry.paints.latest;
+ if(!latest){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:0,data:image.toBitmap()};}
+ const size=latest.image.getSize();
+ return latest.number===since?{width:size.width,height:size.height,paint:latest.number}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap()};
 }
 export function closeScenes(){for(const {window} of windows.values())if(!window.isDestroyed())window.destroy();windows.clear();}
 /** One small still of a scene for the timeline: drawn in its own hidden window, which is closed straight after, and

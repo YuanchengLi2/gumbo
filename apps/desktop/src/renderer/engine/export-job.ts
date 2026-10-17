@@ -12,8 +12,8 @@ const running=new Map<string,AbortController>();
 export async function runExport(job:EngineJob,timeline:TimelineDocument,footage:FootageIndex,onProgress:(progress:ExportProgress)=>void){
  const abort=new AbortController();running.set(job.id,abort);
  try{
-  if(job.video)await renderVideo({timeline,footage,...job.video,write:(data,position)=>window.dream.exportChunk(job.id,position,data),onProgress:(done,total)=>onProgress({status:'rendering',progress:done/total*.98,phase:'Rendering the video'}),signal:abort.signal});
-  return await window.dream.finishExport(job.id);
+  const timing=job.video?await renderVideo({timeline,footage,...job.video,write:(data,position)=>window.dream.exportChunk(job.id,position,data),onProgress:(done,total)=>onProgress({status:'rendering',progress:done/total*.98,phase:'Rendering the video'}),signal:abort.signal}):undefined;
+  return await window.dream.finishExport(job.id,timing);
  }catch(error){if(!abort.signal.aborted)void window.dream.failExport(job.id,(error as Error).message||'The video could not be drawn.').catch(()=>{});throw error;}
  finally{running.delete(job.id);}
 }

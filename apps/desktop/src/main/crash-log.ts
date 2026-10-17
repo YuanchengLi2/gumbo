@@ -8,11 +8,15 @@ import {join} from 'node:path';
 let folder:string|undefined;
 export function startCrashLog(userData:string){folder=join(userData,'logs');mkdirSync(folder,{recursive:true});}
 export function crashLogPath(){return folder?join(folder,'crashes.log'):undefined;}
-export function logCrash(kind:string,details:Record<string,unknown>){
- const file=crashLogPath();if(!file)return;
+export function logCrash(kind:string,details:Record<string,unknown>){append('crashes',{kind,...details});}
+/** Each export's timing, in <userData>/logs/exports.log: how long it took and where the time went (decoding, scenes,
+ * encoding, adding the sound), so a slow export says why. The same 2 MB cap, keeping exports.old.log. */
+export function logExport(details:Record<string,unknown>){append('exports',details);}
+function append(name:string,record:Record<string,unknown>){
+ if(!folder)return;const file=join(folder,name+'.log');
  try{
-  if(existsSync(file)&&statSync(file).size>2_000_000)renameSync(file,join(folder!,'crashes.old.log'));
-  appendFileSync(file,JSON.stringify({at:new Date().toISOString(),kind,...details})+'\n');
+  if(existsSync(file)&&statSync(file).size>2_000_000)renameSync(file,join(folder,name+'.old.log'));
+  appendFileSync(file,JSON.stringify({at:new Date().toISOString(),...record})+'\n');
  }catch{}
 }
 /** The last characters a process wrote, for the record when it ends. */

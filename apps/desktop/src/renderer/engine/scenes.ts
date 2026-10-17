@@ -1,4 +1,4 @@
-import type {MediaLayer} from '@dream/compositor';
+import type {MediaLayer,RawPicture} from '@dream/compositor';
 import type {Asset} from '@dream/footage';
 import {liveSceneDocument} from '../../../../../packages/composition/src/live-scene-document';
 
@@ -55,24 +55,24 @@ export class SceneLayers{
  destroy(){window.removeEventListener('message',this.receive);for(const scene of this.live.values())scene.wrap.remove();this.live.clear();this.alert.remove();}
 }
 
-/** Chromium's BGRA, premultiplied pixels as the RGBA ImageData the compositor uploads (it premultiplies on upload). */
-const imageData=({width,height,data}:{width:number;height:number;data:Uint8Array})=>{
- const out=new Uint8ClampedArray(width*height*4);
- for(let i=0;i<out.length;i+=4){const a=data[i+3],k=a&&a<255?255/a:1;out[i]=data[i+2]*k;out[i+1]=data[i+1]*k;out[i+2]=data[i]*k;out[i+3]=a;}
- return new ImageData(out,width,height);
-};
-
 /** Export's scene pictures: each frame is drawn in a hidden window by the main process and returned with its
- * transparency. A scene holding a frame (or the same frame shown twice) is drawn once. */
+ * transparency, as Chromium painted it (blue first, premultiplied), which the compositor uploads untouched. A scene holding
+ * a frame (the same frame asked twice, or a frame that paints nothing new) keeps the picture it had, so it is neither sent
+ * nor uploaded again. */
 export class SceneCaptures{
- private last=new Map<string,{frame:number;picture:ImageData}>();private documents=new Map<string,Promise<string>>();
+ private last=new Map<string,{frame:number;paint:number;picture:RawPicture}>();private documents=new Map<string,Promise<string>>();
+ /** Frames asked for; drawn and sent; unchanged from the frame before; the same frame asked again. */
+ readonly counts={asked:0,drawn:0,unchanged:0,repeated:0};
  async picture(layer:MediaLayer,asset:Asset){
-  const frame=layer.frameIndex??0,key=asset.id+':'+asset.scene!.revisionId,cached=this.last.get(key);if(cached?.frame===frame)return cached.picture;
+  const frame=layer.frameIndex??0,key=asset.id+':'+asset.scene!.revisionId,cached=this.last.get(key);this.counts.asked++;
+  if(cached?.frame===frame){this.counts.repeated++;return cached.picture;}
   let source:{url:string}|{html:string};
   if(asset.scene!.format==='engine')source={url:sceneUrl(asset)};
   else{let html=this.documents.get(asset.id);if(!html){html=legacyDocument(asset);this.documents.set(asset.id,html);}source={html:await html};}
-  const pixels=await window.dream.sceneFrame({key,source,width:asset.width,height:asset.height,frame,fps:asset.fps||30}).catch((error:Error)=>{throw new Error(`Scene ${asset.filename}: ${error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,'')}`);});
-  const picture=imageData(pixels);this.last.set(key,{frame,picture});return picture;
+  const pixels=await window.dream.sceneFrame({key,source,width:asset.width,height:asset.height,frame,fps:asset.fps||30,since:cached?.paint}).catch((error:Error)=>{throw new Error(`Scene ${asset.filename}: ${error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,'')}`);});
+  if(!pixels.data){if(!cached)throw new Error(`Scene ${asset.filename}: its frame ${frame} came back empty.`);cached.frame=frame;this.counts.unchanged++;return cached.picture;}
+  const picture:RawPicture={width:pixels.width,height:pixels.height,data:pixels.data,format:'bgra-premultiplied'};
+  this.last.set(key,{frame,paint:pixels.paint,picture});this.counts.drawn++;return picture;
  }
  close(){void window.dream.closeScenes();}
 }

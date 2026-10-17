@@ -1,8 +1,13 @@
 import type {Frame,MediaLayer,Matrix,Rect,Grade,TextLayer} from './frame';
 import {paintText} from './paint';
 
-/** Anything a browser can upload as a texture: a playing video element, a decoded VideoFrame, an image or a canvas. */
-export type Picture=TexImageSource;
+/** Pixels as Chromium paints them, blue first and premultiplied: a scene's frame from its window. They are uploaded as
+ * they are and read in the shader's order, so no pass over the pixels on the processor converts them. */
+export type RawPicture={width:number;height:number;data:Uint8Array;format:'bgra-premultiplied'};
+/** Anything a browser can upload as a texture (a playing video element, a decoded VideoFrame, an image or a canvas), or
+ * raw pixels. */
+export type Picture=TexImageSource|RawPicture;
+const isRaw=(picture:Picture):picture is RawPicture=>(picture as RawPicture).format==='bgra-premultiplied';
 /** Supplies the picture for a media layer: the video at layer.time, the image, or the sequence frame. Undefined skips it. */
 export type PictureSource=(layer:MediaLayer)=>Picture|undefined;
 
@@ -13,10 +18,10 @@ void main(){vec2 p=rect.xy+corner*rect.zw;vec3 q=matrix*vec3(p,1.0);vec2 ndc=q.x
  * grey, saturate with its luminance weights, then the white-balance colour matrix. Blur averages a 7x7 grid weighted as a
  * Gaussian whose deviation is the CSS blur radius. */
 const FRAGMENT=`#version 300 es
-precision highp float;in vec2 v_uv;uniform sampler2D picture;uniform float opacity;uniform int grades;uniform vec4 grade[4];uniform float blur;uniform vec2 texel;uniform vec4 fill;uniform bool solid;out vec4 colour;
+precision highp float;in vec2 v_uv;uniform sampler2D picture;uniform float opacity;uniform int grades;uniform vec4 grade[4];uniform float blur;uniform vec2 texel;uniform vec4 fill;uniform bool solid;uniform bool bgra;out vec4 colour;
 vec3 graded(vec3 c,vec4 g){c*=exp2(g.x);c=(c-0.5)*g.y+0.5;float s=g.z;mat3 m=mat3(0.213+0.787*s,0.213-0.213*s,0.213-0.213*s,0.715-0.715*s,0.715+0.285*s,0.715-0.715*s,0.072-0.072*s,0.072-0.072*s,0.072+0.928*s);c=clamp(m*clamp(c,0.0,1.0),0.0,1.0);float k=clamp(g.w,-1.0,1.0);return clamp(c*vec3(1.0+0.25*k,1.0+0.04*k,1.0-0.25*k),0.0,1.0);}
 void main(){if(solid){colour=vec4(fill.rgb*fill.a*opacity,fill.a*opacity);return;}
- vec4 c;if(blur>0.0){vec4 sum=vec4(0.0);float total=0.0;for(int i=-3;i<=3;i++)for(int j=-3;j<=3;j++){vec2 o=vec2(float(i),float(j))*blur/1.5;float w=exp(-dot(o,o)/(2.0*blur*blur));sum+=texture(picture,clamp(v_uv+o*texel,0.0,1.0))*w;total+=w;}c=sum/total;}else c=texture(picture,v_uv);
+ vec4 c;if(blur>0.0){vec4 sum=vec4(0.0);float total=0.0;for(int i=-3;i<=3;i++)for(int j=-3;j<=3;j++){vec2 o=vec2(float(i),float(j))*blur/1.5;float w=exp(-dot(o,o)/(2.0*blur*blur));sum+=texture(picture,clamp(v_uv+o*texel,0.0,1.0))*w;total+=w;}c=sum/total;}else c=texture(picture,v_uv);if(bgra)c=c.bgra;
  vec3 rgb=c.a>0.0?c.rgb/c.a:c.rgb;for(int i=0;i<4;i++){if(i>=grades)break;rgb=graded(rgb,grade[i]);}
  colour=vec4(rgb*c.a*opacity,c.a*opacity);}`;
 
@@ -29,28 +34,30 @@ const parseColour=(css:string):[number,number,number,number]=>{
 /** Draws frames on a canvas with WebGL2: the same layers in the player and in Export, so they show the same picture. The
  * canvas may be any size; the frame is scaled to it. */
 export class Compositor{
- private gl:WebGL2RenderingContext;private program:WebGLProgram;private quad:WebGLVertexArrayObject;private textures=new Map<string,{texture:WebGLTexture;picture?:Picture;width:number;height:number}>();
+ private gl:WebGL2RenderingContext;private program:WebGLProgram;private quad:WebGLVertexArrayObject;private textures=new Map<string,{texture:WebGLTexture;picture?:Picture;width:number;height:number;bgra:boolean}>();
  private text:OffscreenCanvas;private textContext:OffscreenCanvasRenderingContext2D;private u:Record<string,WebGLUniformLocation|null>={};
  constructor(readonly canvas:HTMLCanvasElement|OffscreenCanvas,options:{transparent?:boolean}={}){
   const gl=canvas.getContext('webgl2',{alpha:!!options.transparent,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:true}) as WebGL2RenderingContext|null;if(!gl)throw new Error('This computer cannot draw the video with its graphics card (WebGL2 is unavailable).');this.gl=gl;
   const shader=(type:number,source:string)=>{const s=gl.createShader(type)!;gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error('Shader: '+gl.getShaderInfoLog(s));return s;};
   const program=gl.createProgram()!;gl.attachShader(program,shader(gl.VERTEX_SHADER,VERTEX));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,FRAGMENT));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Program: '+gl.getProgramInfoLog(program));this.program=program;
-  for(const name of ['rect','matrix','view','uv','picture','opacity','grades','grade','blur','texel','fill','solid'])this.u[name]=gl.getUniformLocation(program,name);
+  for(const name of ['rect','matrix','view','uv','picture','opacity','grades','grade','blur','texel','fill','solid','bgra'])this.u[name]=gl.getUniformLocation(program,name);
   this.quad=gl.createVertexArray()!;gl.bindVertexArray(this.quad);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
   const corner=gl.getAttribLocation(program,'corner');gl.enableVertexAttribArray(corner);gl.vertexAttribPointer(corner,2,gl.FLOAT,false,0,0);
   this.text=new OffscreenCanvas(1,1);this.textContext=this.text.getContext('2d')!;
  }
  private texture(key:string,picture:Picture,static_=false){
   const gl=this.gl;let entry=this.textures.get(key);
-  if(!entry){const texture=gl.createTexture()!;gl.bindTexture(gl.TEXTURE_2D,texture);for(const [p,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,p,v);entry={texture,width:0,height:0};this.textures.set(key,entry);}
+  if(!entry){const texture=gl.createTexture()!;gl.bindTexture(gl.TEXTURE_2D,texture);for(const [p,v] of [[gl.TEXTURE_MIN_FILTER,gl.LINEAR],[gl.TEXTURE_MAG_FILTER,gl.LINEAR],[gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE],[gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE]])gl.texParameteri(gl.TEXTURE_2D,p,v);entry={texture,width:0,height:0,bgra:false};this.textures.set(key,entry);}
   gl.bindTexture(gl.TEXTURE_2D,entry.texture);
-  if(!static_||entry.picture!==picture){gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,picture);entry.picture=picture;
+  if(!static_||entry.picture!==picture){entry.picture=picture;entry.bgra=isRaw(picture);
+   if(isRaw(picture)){gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,picture.width,picture.height,0,gl.RGBA,gl.UNSIGNED_BYTE,picture.data);entry.width=picture.width;entry.height=picture.height;return entry;}
+   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,true);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,picture);
    const size=picture as {videoWidth?:number;displayWidth?:number;width?:number;videoHeight?:number;displayHeight?:number;height?:number};entry.width=size.videoWidth||size.displayWidth||size.width||1;entry.height=size.videoHeight||size.displayHeight||size.height||1;}
   return entry;
  }
- private quadDraw(rect:Rect,matrix:Matrix,uv:Rect,opacity:number,frame:Frame,o:{fill?:[number,number,number,number];grades?:Grade[];blur?:number;texel?:[number,number]}={}){
+ private quadDraw(rect:Rect,matrix:Matrix,uv:Rect,opacity:number,frame:Frame,o:{fill?:[number,number,number,number];grades?:Grade[];blur?:number;texel?:[number,number];bgra?:boolean}={}){
   const gl=this.gl,u=this.u;gl.uniform4f(u.rect,rect.x,rect.y,rect.w,rect.h);gl.uniformMatrix3fv(u.matrix,false,[matrix[0],matrix[1],0,matrix[2],matrix[3],0,matrix[4],matrix[5],1]);gl.uniform2f(u.view,frame.width,frame.height);gl.uniform4f(u.uv,uv.x,uv.y,uv.w,uv.h);gl.uniform1f(u.opacity,opacity);
-  gl.uniform1i(u.solid,o.fill?1:0);if(o.fill)gl.uniform4f(u.fill,...o.fill);
+  gl.uniform1i(u.solid,o.fill?1:0);gl.uniform1i(u.bgra,o.bgra?1:0);if(o.fill)gl.uniform4f(u.fill,...o.fill);
   const grades=(o.grades??[]).slice(0,4);gl.uniform1i(u.grades,grades.length);if(grades.length)gl.uniform4fv(u.grade,grades.flatMap(g=>[g.exposure,g.contrast,g.saturation,g.temperature]).concat(Array(16-grades.length*4).fill(0)));
   gl.uniform1f(u.blur,o.blur??0);gl.uniform2f(u.texel,...(o.texel??[0,0]));gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
  }
@@ -63,9 +70,10 @@ export class Compositor{
   for(let n=0;n<frame.layers.length;n++){const layer=frame.layers[n];
    if(layer.kind==='fill'){if(layer.opacity>0)this.quadDraw(layer.rect,layer.transform,{x:0,y:0,w:1,h:1},layer.opacity,frame,{fill:parseColour(layer.color)});continue;}
    if(layer.kind==='media'){if(layer.opacity<=0||!layer.rect.w||!layer.rect.h)continue;const picture=source(layer);if(!picture)continue;
-    // Video and scene pictures change every frame, so each layer keeps one texture; stills are uploaded once.
-    const live=layer.media==='video'||layer.media==='scene';this.texture(live?layer.media+':'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,!live);
-    this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h]});continue;}
+    // Video and scene layers each keep one texture; stills are uploaded once. A video's picture is uploaded every frame (an
+    // element or decoder may reuse the object); a scene's only when it is a new picture (the same one while it holds still).
+    const live=layer.media==='video'||layer.media==='scene',entry=this.texture(live?layer.media+':'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,layer.media!=='video');
+    this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h],bgra:entry.bgra});continue;}
    // Consecutive text layers are painted together on one canvas the size of the output, then drawn over the frame.
    const run:TextLayer[]=[];while(n<frame.layers.length&&frame.layers[n].kind==='text')run.push(frame.layers[n++] as TextLayer);n--;
    if(this.text.width!==width||this.text.height!==height){this.text.width=width;this.text.height=height;}

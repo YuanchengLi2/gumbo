@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import {createContext,runInContext} from 'node:vm';
 vi.mock('electron',()=>({BrowserWindow:class{}}));
-import {frameRequestScript} from '../../apps/desktop/src/main/scene-capture';
+import {frameRequestScript,Paints} from '../../apps/desktop/src/main/scene-capture';
 
 /** A scene window's page: messages reach every listener in the order they were added, a tick after posting, as in a
  * browser, so the capture script hears its own requests. The scene starts listening for frame requests only when it
@@ -34,5 +34,21 @@ describe('scene frame capture',()=>{
  it('gives up with an error when the scene never answers',async()=>{
   const page=scenePage(undefined);
   expect((await page.request(1,42)).error).toMatch(/took longer than 3s/);
+ });
+});
+
+/** A scene window's paints: Export keeps the picture it has when a frame paints nothing new. */
+describe('scene window paints',()=>{
+ const image=(name:string)=>({name}) as never;
+ it('settles at the next paint, or after the wait with none',async()=>{
+  const paints=new Paints();let at=Date.now();
+  setTimeout(()=>paints.add(image('a')),5);await paints.next(1000);
+  expect(Date.now()-at).toBeLessThan(500);expect((paints.latest!.image as unknown as {name:string}).name).toBe('a');
+  at=Date.now();const before=paints.number;await paints.next(30);
+  expect(Date.now()-at).toBeGreaterThanOrEqual(25);expect(paints.number).toBe(before);
+ });
+ it('numbers pictures across windows, so one never names another',()=>{
+  const first=new Paints(),second=new Paints();first.add(image('a'));second.add(image('b'));
+  expect(second.number).toBeGreaterThan(first.number);expect(new Paints().number).toBe(0);
  });
 });

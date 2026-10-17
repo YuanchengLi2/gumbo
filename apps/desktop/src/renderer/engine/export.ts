@@ -1,5 +1,5 @@
 import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample} from 'mediabunny';
-import {prepare,frameAt,Compositor,type MediaLayer} from '@dream/compositor';
+import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {previewUrl} from './player';
@@ -16,6 +16,9 @@ export type VideoJob={timeline:TimelineDocument;footage:FootageIndex;width:numbe
 const BPP={lower:.05,recommended:.1,higher:.16};
 export const videoBitrate=(job:Pick<VideoJob,'width'|'height'|'fps'|'codec'|'quality'>)=>Math.round(BPP[job.quality]*(job.codec==='hevc'?.6:1)*job.width*job.height*job.fps);
 export const originalUrl=(a:Asset)=>'dream-media://'+a.id+'/original';
+/** Where an export's drawing time went, in milliseconds, for the export log: decoding footage, drawing scenes in their
+ * windows, loading stills, compositing, and encoding (which includes waiting for the encoder to take the frame). */
+export type RenderTiming={frames:number;totalMs:number;decodeMs:number;sceneMs:number;stillMs:number;drawMs:number;encodeMs:number;scenes:{asked:number;drawn:number;unchanged:number;repeated:number}};
 
 /** Delivers a clip's source frames in order: the frame showing at each requested source time, decoding forward and only
  * starting over when time goes back. A source that ends early keeps its last frame. */
@@ -34,7 +37,8 @@ class Reader{
  close(){void this.iterator?.return();this.current?.close();this.upcoming?.close();}
 }
 
-export async function renderVideo(job:VideoJob){
+export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
+ const began=performance.now(),spent={decodeMs:0,sceneMs:0,stillMs:0,drawMs:0,encodeMs:0},since=(at:number)=>performance.now()-at;
  const p=prepare({timeline:job.timeline,footage:job.footage}),total=Math.max(1,Math.round(p.resolved.durationSec*job.fps));
  const canvas=new OffscreenCanvas(job.width,job.height),compositor=new Compositor(canvas);
  const output=new Output({format:job.container==='mov'?new MovOutputFormat():new Mp4OutputFormat(),target:new StreamTarget(new WritableStream({write:chunk=>job.write(chunk.data,chunk.position)}),{chunked:true})});
@@ -47,20 +51,22 @@ export async function renderVideo(job:VideoJob){
  const image=async(url:string)=>{let bitmap=images.get(url);if(!bitmap){bitmap=await createImageBitmap(await (await fetch(url)).blob());images.set(url,bitmap);if(images.size>240){const [first,old]=images.entries().next().value!;old.close();images.delete(first);}}return bitmap;};
  try{
   for(let n=0;n<total;n++){
-   job.signal.throwIfAborted();const time=n/job.fps,frame=frameAt(p,time),pictures=new Map<MediaLayer,TexImageSource>();
-   for(const layer of frame.layers){if(layer.kind!=='media')continue;const asset=p.assets.get(layer.assetId);if(!asset)continue;
+   job.signal.throwIfAborted();const time=n/job.fps,frame=frameAt(p,time),pictures=new Map<MediaLayer,Picture>();
+   for(const layer of frame.layers){if(layer.kind!=='media')continue;const asset=p.assets.get(layer.assetId);if(!asset)continue;const at=performance.now();
     if(layer.media==='video'){let entry=readers.get(layer.key);
      if(!entry){const s=await sink(asset)??await playbackSink(asset);if(!s)throw new Error(`${asset.filename} has no video this computer can decode.`);entry={reader:new Reader(s),last:n};readers.set(layer.key,entry);}
-     entry.last=n;const sample=await entry.reader.at(layer.time);if(sample)pictures.set(layer,sample.toCanvasImageSource());}
-    else if(layer.media==='scene')pictures.set(layer,await scenes.picture(layer,asset));
-    else pictures.set(layer,await image(layer.media==='sequence'?previewUrl(asset)+'&frame='+(layer.frameIndex??0):previewUrl(asset)));}
-   compositor.draw(frame,layer=>pictures.get(layer));
-   await source.add(time,1/job.fps);
+     entry.last=n;const sample=await entry.reader.at(layer.time);if(sample)pictures.set(layer,sample.toCanvasImageSource());spent.decodeMs+=since(at);}
+    else if(layer.media==='scene'){pictures.set(layer,await scenes.picture(layer,asset));spent.sceneMs+=since(at);}
+    else{pictures.set(layer,await image(layer.media==='sequence'?previewUrl(asset)+'&frame='+(layer.frameIndex??0):previewUrl(asset)));spent.stillMs+=since(at);}}
+   let at=performance.now();compositor.draw(frame,layer=>pictures.get(layer));spent.drawMs+=since(at);
+   at=performance.now();await source.add(time,1/job.fps);spent.encodeMs+=since(at);
    // A clip that has not been drawn for a second is finished with: its decoder is released.
    for(const [key,entry] of readers)if(n-entry.last>job.fps){entry.reader.close();readers.delete(key);}
    if(n%5===0||n===total-1)job.onProgress(n+1,total);
   }
-  source.close();await output.finalize();
+  const at=performance.now();source.close();await output.finalize();spent.encodeMs+=since(at);
+  const round=(ms:number)=>Math.round(ms);
+  return{frames:total,totalMs:round(since(began)),decodeMs:round(spent.decodeMs),sceneMs:round(spent.sceneMs),stillMs:round(spent.stillMs),drawMs:round(spent.drawMs),encodeMs:round(spent.encodeMs),scenes:{...scenes.counts}};
  }catch(error){await output.cancel().catch(()=>{});throw error;}
  finally{scenes.close();for(const {reader} of readers.values())reader.close();for(const b of images.values())b.close();for(const {input} of inputs.values())input.dispose?.();for(const input of fallback.values())input.dispose?.();compositor.dispose();}
 }
