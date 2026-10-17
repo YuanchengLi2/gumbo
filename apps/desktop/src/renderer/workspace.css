@@ -418,8 +418,13 @@
 .export-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px 22px;border-bottom:1px solid var(--n6)}
 .export-head h2{margin:0;font-size:15px;font-weight:600}
 .export-body{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:26px;padding:20px 22px;min-height:0;overflow:auto}
-.export-stage{display:flex;align-items:center;justify-content:center;height:440px;border-radius:12px;background:var(--n5)}
-.export-cover{position:relative;max-width:100%;max-height:100%;border-radius:8px;overflow:hidden;background:var(--n95);display:grid;place-items:center;color:var(--n44);box-shadow:0 6px 24px #0000001f}
+/* The video takes the export's own shape, as tall as the stage allows and never wider than its column: no panel around it. */
+.export-stage{--export-stage-height:440px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:0}
+.export-cover{position:relative;max-width:100%;border-radius:8px;overflow:hidden;background:var(--n95);display:grid;place-items:center;color:var(--n44);box-shadow:0 6px 24px #0000001f}
+.export-transport{display:flex;align-items:center;gap:10px;max-width:100%}
+.export-transport input{flex:1;min-width:0;accent-color:var(--n87)}
+.export-transport .icon-button:disabled,.export-transport input:disabled{opacity:.4}
+.export-time{font-size:12px;color:var(--n46);font-variant-numeric:tabular-nums;white-space:nowrap}
 .export-cover-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;background:rgb(var(--ink-rgb) / 0.702);color:var(--n0)}
 .export-cover-state strong{font-size:34px;font-weight:600;letter-spacing:-.5px}.export-cover-state small{font-size:12px;opacity:.8}
 .export-cover-state.done strong{font-size:16px}
@@ -443,7 +448,7 @@
 .export-meta i{width:1px;height:11px;background:var(--n14)}
 .export-error{font-size:12px;color:#c4433a;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .export-bar{flex:1;min-width:0}.export-bar progress{width:100%;height:6px;accent-color:var(--accent)}
-@media(max-width:760px){.export-body{grid-template-columns:1fr}.export-stage{height:260px}}
+@media(max-width:760px){.export-body{grid-template-columns:1fr}.export-stage{--export-stage-height:260px}}
 
 /* Task window: tasks with the cost at their top right, latest activity beside them; stacked when narrow. */
 .task-window{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:0 14px;container-type:inline-size}.task-window-side{border-left:1px solid var(--n5);padding-left:14px}.task-window-main header strong small{font-weight:400;color:var(--side-faint);margin-left:4px}.task-window-cost{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:65%;cursor:default}.task-window-empty{font-size:12px;color:var(--side-faint);padding:5px 0}.task-window-usage{margin-top:6px!important;padding-top:6px!important;border-top:1px dashed var(--n5)!important}
