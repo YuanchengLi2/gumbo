@@ -15,9 +15,9 @@
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* Gumbo's homepage. One idea: there is no menu, so you can ask for any edit in your own words. Warm kitchen colours
-   (cream, paprika, roux brown, butter), an EB Garamond serif with one italic phrase per headline. The hero demo types
-   very different requests into a Gumbo window and applies each one to frames of the Vietnam Short (footage from
-   Pexels); the Short itself plays on the phone at the end. */
+   (cream, paprika, roux brown, butter), an EB Garamond serif with one italic phrase per headline. Raw clips tumble into
+   a steaming bowl and ride out as the finished Short; a Gumbo window then takes very different orders one after another
+   and applies each to frames of that Short (footage from Pexels); the Short itself plays on the phone at the end. */
 :root{
  --cream:#FFF8EE;--card:#F6E9D8;--white:#FFFCF6;--ink:#2A1A12;--muted:#6B5446;--faint:#9A8576;--line:rgba(42,26,18,.15);
  --paprika:#9A3412;--paprika2:#B5441C;--roux:#2A1A12;--chili:#E2552A;--peach:#FFD5BC;--peach2:#FFC3A2;--butter:#FCE3A2;--blush:#F9D2C6;
@@ -35,7 +35,14 @@ em{font-style:italic}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;height:52px;padding:0 24px;border-radius:12px;border:1.5px solid var(--ink);background:var(--peach);color:var(--ink);font:600 16px var(--sans);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background .15s,transform .15s}
 .btn:hover{background:var(--peach2)}
 .btn:active{transform:translateY(1px)}
+@keyframes blink{50%{opacity:0}}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}}
 @media (max-width:520px){.wrap{padding:0 16px}}
+
+/* Send: a solid ink circle with a cream arrow, everywhere a message goes out */
+.send{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:var(--cream);display:grid;place-items:center;cursor:pointer;transition:background .15s,transform .15s}
+.send:hover{background:var(--chili)}.send:active,.send.press{transform:scale(.88);background:var(--chili)}
+.send svg{width:18px;height:18px}
 
 /* Announcement and nav */
 .announce{background:var(--paprika);color:var(--cream);text-align:center;font-size:15px;font-weight:600;padding:13px 16px}
@@ -46,20 +53,17 @@ em{font-style:italic}
 .nav a.link{font-size:15px;font-weight:500;color:var(--muted);text-decoration:none;padding:8px 11px;border-radius:9px}
 .nav a.link:hover{color:var(--ink);background:rgba(42,26,18,.05)}
 .nav .btn{height:44px;padding:0 18px;font-size:15px;margin-left:8px}
-@media (max-width:760px){.nav{margin:14px 12px 0}.nav a.link{display:none}}
+@media (max-width:760px){.nav{margin:14px 12px 0;padding:7px 7px 7px 14px}.nav a.link{display:none}.nav .btn{height:40px;padding:0 14px;font-size:14.5px}}
 
 /* The prompt bar: ask for any edit */
 .ask{width:min(640px,100%);margin:0 auto;text-align:left}
-.bar{display:flex;align-items:flex-end;gap:10px;padding:12px 12px 12px 18px;border:1.5px solid var(--ink);border-radius:20px;background:var(--white);box-shadow:0 24px 50px -32px rgba(42,26,18,.45);transition:box-shadow .2s}
+.bar{display:flex;align-items:flex-end;gap:10px;padding:10px 10px 10px 16px;border:1.5px solid var(--ink);border-radius:20px;background:var(--white);box-shadow:0 24px 50px -32px rgba(42,26,18,.45);transition:box-shadow .2s}
 .bar:focus-within{box-shadow:0 0 0 5px rgba(255,213,188,.75),0 24px 50px -32px rgba(42,26,18,.45)}
-.bar .plus{flex:none;width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--card);color:var(--ink)}
+.bar .plus{flex:none;width:36px;height:36px;margin-bottom:2px;border-radius:11px;display:grid;place-items:center;background:var(--card);color:var(--ink)}
 .bar .plus svg{width:18px;height:18px}
 .bar textarea{flex:1;min-width:0;border:0;outline:none;resize:none;background:none;font:400 17px/1.45 var(--sans);color:var(--ink);padding:7px 0;height:40px;max-height:140px}
 .bar textarea::placeholder{color:var(--faint)}
-.bar textarea:placeholder-shown{white-space:nowrap;overflow:hidden}
-.send{flex:none;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--ink);background:var(--peach);color:var(--ink);display:grid;place-items:center;cursor:pointer;transition:background .15s,transform .15s}
-.send:hover{background:var(--peach2)}.send:active{transform:scale(.95)}
-.send svg{width:18px;height:18px}
+.bar textarea:placeholder-shown{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
 .chips button{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
 .chips button:hover{border-color:var(--ink);color:var(--ink)}
@@ -72,29 +76,52 @@ em{font-style:italic}
 .reply input:focus{border-color:var(--ink)}
 .reply .btn{height:46px;padding:0 18px;font-size:15px}
 .reply small{display:block;margin-top:10px;font-size:13px;color:var(--muted)}
-@keyframes rise{from{opacity:0;transform:translateY(8px)}}
-@media (max-width:520px){.reply form{flex-direction:column}}
+@media (max-width:520px){.reply form{flex-direction:column}.bar textarea{font-size:16px}.chips button{font-size:13.5px;padding:6px 11px}}
 
 /* Hero */
 .hero{text-align:center;padding:70px 0 0}
-.hero h1{font-size:clamp(58px,8.4vw,116px);margin-top:20px}
+.hero h1{font-size:clamp(54px,8.4vw,116px);margin-top:20px}
 .hero h1 em{display:block}
-.hero h1 .caret{display:inline-block;width:.06em;height:.78em;margin-left:.06em;vertical-align:-.04em;background:var(--chili);border-radius:2px;animation:blink 1.1s steps(1) infinite}
-@keyframes blink{50%{opacity:0}}
-.hero .sub{font-size:19px;line-height:1.5;max-width:600px;margin:26px auto 0;color:var(--muted)}
-.hero .ask{margin-top:34px}
+.hero h1 .caret{display:inline-block;width:.055em;height:.74em;margin-left:.05em;vertical-align:-.02em;background:var(--chili);border-radius:2px;animation:blink 1.1s steps(1) infinite}
+.hero .wrap{position:relative}
+.hero .ask{margin-top:40px}
+/* Requests stuck around the headline, bobbing like notes on a pass */
+.stickers{display:none}
+@media (min-width:1200px){.stickers{display:block;position:absolute;inset:0;pointer-events:none}}
+.st{position:absolute;display:inline-flex;align-items:center;gap:10px;padding:7px 14px 7px 7px;border:1.5px solid var(--ink);border-radius:14px;background:var(--white);font:600 14px var(--sans);white-space:nowrap;box-shadow:0 18px 30px -20px rgba(42,26,18,.55);animation:bob 5s ease-in-out infinite}
+.st i{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--peach)}
+.st i svg{width:17px;height:17px}
+.st.s1{left:10px;top:70px;rotate:-6deg}
+.st.s2{left:60px;top:250px;rotate:4deg;animation-delay:-1.4s}.st.s2 i{background:var(--butter)}
+.st.s3{right:20px;top:90px;rotate:5deg;animation-delay:-2.6s}.st.s3 i{background:var(--blush)}
+.st.s4{right:70px;top:260px;rotate:-4deg;animation-delay:-3.8s}.st.s4 i{background:var(--chili);color:var(--cream)}
+@keyframes bob{50%{transform:translateY(-9px)}}
 .hero .avail{font-size:14px;color:var(--muted);margin-top:16px}
+.kitchen{position:relative;height:270px;margin-top:4px}
+.kitchen svg{position:absolute;inset:0;width:100%;height:100%}
+.raw image{filter:grayscale(1) contrast(.9);opacity:.85}
+@media (max-width:700px){.hero{padding-top:52px}.hero .ask{margin-top:30px}.kitchen{height:200px}}
 
-/* The demo: a Gumbo window that takes very different orders, one after another */
-.demo{max-width:1060px;margin:70px auto 0;padding:0 24px}
-.app{border:1.5px solid var(--ink);border-radius:24px;background:var(--white);overflow:hidden;box-shadow:0 50px 90px -50px rgba(42,26,18,.55);text-align:left}
+/* Panels */
+.panel{border-radius:48px 48px 0 0;margin-top:-6px;position:relative}
+.panel.paprika{background:var(--paprika);color:var(--cream);padding:110px 0 130px}
+.panel.roux{background:var(--roux);color:var(--cream);padding:110px 0 130px}
+.center{text-align:center}
+.panel h2,.h2{font-size:clamp(44px,6.4vw,88px)}
+.lead{font-size:19px;line-height:1.5;max-width:580px;margin:24px auto 0}
+.panel .lead{color:rgba(255,248,238,.84)}
+@media (max-width:520px){.panel{border-radius:32px 32px 0 0}.panel.paprika,.panel.roux{padding:80px 0 96px}.lead{font-size:17px}}
+
+/* The demo: a Gumbo window on paprika that takes very different orders, one after another */
+.demo{max-width:1060px;margin:60px auto 0}
+.app{border-radius:24px;background:var(--white);color:var(--ink);overflow:hidden;box-shadow:0 50px 100px -40px rgba(0,0,0,.6);text-align:left}
 .app-top{display:flex;align-items:center;gap:7px;padding:13px 16px;border-bottom:1px solid var(--line)}
 .app-top i{width:11px;height:11px;border-radius:50%;background:rgba(42,26,18,.16)}
 .app-top span{margin-left:10px;font-size:13.5px;font-weight:600;color:var(--muted)}
 .app-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);height:500px}
 .chat{display:flex;flex-direction:column;border-right:1px solid var(--line);padding:18px;min-height:0}
 .log{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;overflow:hidden;min-height:0;-webkit-mask-image:linear-gradient(transparent,#000 22%);mask-image:linear-gradient(transparent,#000 22%)}
-.msg{max-width:88%;padding:10px 14px;font-size:15px;line-height:1.45;animation:rise .35s cubic-bezier(.2,.8,.2,1)}
+.msg{max-width:88%;padding:10px 14px;font-size:15px;line-height:1.45;animation:rise .35s cubic-bezier(.2,.8,.2,1);flex:none}
 .msg.you{align-self:flex-end;background:var(--peach);border-radius:16px 16px 6px 16px}
 .msg.gumbo{align-self:flex-start;background:var(--card);border-radius:16px 16px 16px 6px}
 .msg.gumbo b{display:block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--paprika);margin-bottom:2px}
@@ -102,18 +129,17 @@ em{font-style:italic}
 .msg.dots i{width:7px;height:7px;border-radius:50%;background:var(--faint);animation:dot 1s ease-in-out infinite}
 .msg.dots i:nth-child(2){animation-delay:.15s}.msg.dots i:nth-child(3){animation-delay:.3s}
 @keyframes dot{50%{transform:translateY(-4px);opacity:.5}}
-.input{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 10px 10px 16px;border:1.5px solid var(--ink);border-radius:16px;background:var(--white);min-height:52px}
+.input{display:flex;align-items:center;gap:10px;margin-top:14px;padding:8px 8px 8px 16px;border:1.5px solid var(--ink);border-radius:16px;background:var(--white);min-height:52px}
 .input .text{flex:1;min-width:0;font-size:15.5px;line-height:1.35}
-.input .text:empty::before{content:'Ask for any edit…';color:var(--faint)}
+.input .text:has(#typed:empty)::before{content:'Ask for any edit…';color:var(--faint)}
 .input .tcaret{display:inline-block;width:2px;height:1.1em;vertical-align:-.2em;background:var(--ink);margin-left:1px;animation:blink 1s steps(1) infinite}
-.input .send{width:32px;height:32px;pointer-events:none}
-.input .send svg{width:15px;height:15px}
+.input .send{width:34px;height:34px;pointer-events:none}
+.input .send svg{width:16px;height:16px}
 .viewer{display:grid;place-items:center;padding:26px;background:var(--card)}
 .stage{position:relative;width:250px;aspect-ratio:9/16;border-radius:18px;overflow:hidden;background:#000;box-shadow:0 24px 50px -24px rgba(0,0,0,.55);isolation:isolate}
 .stage .shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:opacity .6s ease,filter .9s ease,transform .9s ease}
 .stage .shot.off{opacity:0}
 .stage .layer{position:absolute;inset:0;opacity:0;transition:opacity .5s ease;pointer-events:none}
-/* 90s camcorder */
 .stage.vhs .shot{filter:saturate(1.7) contrast(1.18) blur(.5px) hue-rotate(-8deg) brightness(1.05)}
 .stage.vhs .l-vhs{opacity:1}
 .l-vhs{background:repeating-linear-gradient(rgba(0,0,0,.18) 0 1px,transparent 1px 3px);font:600 13px var(--mono);color:#fff;text-shadow:0 0 6px rgba(255,255,255,.6),1px 0 0 rgba(255,0,60,.6),-1px 0 0 rgba(0,200,255,.6)}
@@ -121,14 +147,12 @@ em{font-style:italic}
 .l-vhs .rec::before{content:'';width:9px;height:9px;border-radius:50%;background:#ff3b30;animation:blink 1s steps(1) infinite}
 .l-vhs .play{position:absolute;top:16px;right:16px}
 .l-vhs .date{position:absolute;bottom:18px;left:16px;line-height:1.3}
-/* Title */
 .stage.title .l-title{opacity:1}
 .l-title{display:grid;align-content:end;justify-items:center;padding:0 16px 70px;background:linear-gradient(transparent 50%,rgba(0,0,0,.55));text-align:center;color:#fff}
 .l-title small{font:600 9.5px var(--sans);letter-spacing:.22em;opacity:.85}
 .l-title strong{font:400 italic 64px/1 var(--serif);margin-top:8px;clip-path:inset(0 100% 0 0)}
-.stage.title .l-title strong{animation:wipe 1.1s .2s cubic-bezier(.6,0,.2,1) forwards}
-@keyframes wipe{to{clip-path:inset(0 0 0 0)}}
-/* Route map */
+.stage.title .l-title strong{animation:wipein 1.1s .2s cubic-bezier(.6,0,.2,1) forwards}
+@keyframes wipein{to{clip-path:inset(0 0 0 0)}}
 .stage.map .l-map{opacity:1}
 .l-map .card{position:absolute;top:14px;right:14px;width:128px;padding:10px;border-radius:14px;background:rgba(255,248,238,.94);box-shadow:0 12px 26px -12px rgba(0,0,0,.6);transform:translateY(-8px) scale(.94);transition:transform .5s cubic-bezier(.2,.8,.2,1)}
 .stage.map .l-map .card{transform:none}
@@ -139,7 +163,6 @@ em{font-style:italic}
 .l-map .rider{offset-path:path('M 22 26 C 50 30, 46 64, 76 70 S 96 92, 104 98');offset-distance:0%}
 .stage.map .l-map .rider{animation:ride 2.4s .3s ease-in-out forwards}
 @keyframes ride{to{offset-distance:100%}}
-/* Freeze and price tag */
 .stage.tag .l-flash{animation:flash .5s ease}
 .l-flash{background:#fff}
 @keyframes flash{0%{opacity:.9}100%{opacity:0}}
@@ -151,23 +174,19 @@ em{font-style:italic}
 @keyframes pop{to{transform:rotate(-4deg) scale(1)}}
 .l-tag .price strong{display:block;font:500 italic 22px/1 var(--serif)}
 .l-tag .price small{font:700 11px var(--sans);letter-spacing:.06em}
-/* Slow push-in */
 .stage.slow .shot{transform:scale(1.3);transition:transform 5s cubic-bezier(.3,0,.2,1),opacity .6s ease,filter .9s ease}
 .stage.slow .l-slow{opacity:1}
 .l-slow span{position:absolute;top:16px;left:16px;padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font:600 11px var(--sans);letter-spacing:.06em}
-/* Warm grade */
 .stage.warm .shot{filter:sepia(.32) saturate(1.45) hue-rotate(-12deg) brightness(1.06) contrast(1.04)}
 .stage.warm .l-warm{opacity:1}
 .l-warm{background:radial-gradient(closest-side,transparent 60%,rgba(70,20,0,.55))}
-/* Make it better */
 .stage.better .shot{filter:brightness(1.08) contrast(1.08) saturate(1.15)}
-/* Timeline */
 .tl{border-top:1px solid var(--line);padding:14px 18px 16px;position:relative}
 .lane{display:grid;grid-template-columns:76px minmax(0,1fr);gap:10px;align-items:center;height:34px}
 .lane+.lane{margin-top:6px}
 .lane>span{font-size:12px;font-weight:600;color:var(--faint)}
 .track{position:relative;height:100%;border-radius:8px;background:rgba(42,26,18,.05)}
-.track b{position:absolute;top:3px;bottom:3px;border-radius:6px;background-size:cover;background-position:center;transition:box-shadow .3s,opacity .3s,left .4s,width .4s}
+.track b{position:absolute;top:3px;bottom:3px;border-radius:6px;background-size:cover;background-position:center;transition:box-shadow .3s,opacity .3s}
 .track b.new{animation:land .5s cubic-bezier(.3,1.5,.5,1)}
 .track b.hot{box-shadow:0 0 0 2.5px var(--chili)}
 .track.gfx b{background:var(--paprika);color:var(--cream);font-size:11px;font-weight:600;padding:0 8px;display:flex;align-items:center;white-space:nowrap;overflow:hidden}
@@ -176,91 +195,200 @@ em{font-style:italic}
 @keyframes land{from{transform:translateY(-10px) scale(.9);opacity:0}}
 .playhead{position:absolute;top:8px;bottom:10px;width:2px;background:var(--chili);border-radius:2px;transition:left .6s cubic-bezier(.6,0,.2,1);z-index:2}
 .playhead::before{content:'';position:absolute;top:-3px;left:-4px;width:10px;height:10px;border-radius:3px;background:var(--chili)}
-.try{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:22px}
-.try span{font-size:14px;font-weight:600;color:var(--muted);padding:8px 4px 0 0}
-.try button{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
-.try button:hover{border-color:var(--ink);color:var(--ink)}
-.try button.on{background:var(--ink);border-color:var(--ink);color:var(--cream)}
+.try{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:26px}
+.try span{font-size:14px;font-weight:600;color:rgba(255,248,238,.72);padding:8px 4px 0 0}
+.try button{appearance:none;border:1.5px solid rgba(255,248,238,.3);background:transparent;color:rgba(255,248,238,.86);font:500 14px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer;transition:border-color .15s,color .15s,background .15s}
+.try button:hover{border-color:var(--cream);color:var(--cream)}
+.try button.on{background:var(--cream);border-color:var(--cream);color:var(--ink)}
 @media (max-width:820px){
- .demo{padding:0 12px;margin-top:56px}
  .app-body{grid-template-columns:1fr;height:auto}
  .viewer{order:-1;padding:20px}
- .stage{width:210px}
- .chat{border-right:0;border-top:1px solid var(--line);height:230px}
- .lane{grid-template-columns:58px minmax(0,1fr)}
- .try{justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;padding:0 4px 6px;scrollbar-width:none}
- .try::-webkit-scrollbar{display:none}
- .try button{flex:none}.try span{flex:none}
+ .stage{width:200px}
+ .chat{border-right:0;border-top:1px solid var(--line);height:250px;padding:14px}
+ .msg{font-size:14.5px}
+ .tl{padding:12px 12px 14px}
+ .lane{grid-template-columns:54px minmax(0,1fr);gap:8px;height:30px}
+ .lane>span{font-size:11px}
+ .track.gfx b{font-size:0;padding:0}
+ .l-title strong{font-size:46px}
+ .l-title{padding-bottom:52px}
+ .try span{width:100%;padding:0;text-align:center}
+ .try button{font-size:13.5px;padding:6px 11px}
 }
 
-/* Panels */
-.panel{border-radius:48px 48px 0 0;position:relative}
-.panel.paprika{background:var(--paprika);color:var(--cream);padding:110px 0 130px}
-.panel.roux{background:var(--roux);color:var(--cream);padding:110px 0 130px}
-.center{text-align:center}
-.panel h2,.h2{font-size:clamp(44px,6.4vw,88px)}
-.lead{font-size:19px;line-height:1.5;max-width:580px;margin:24px auto 0}
-.panel .lead{color:rgba(255,248,238,.84)}
-@media (max-width:520px){.panel{border-radius:32px 32px 0 0}.panel.paprika,.panel.roux{padding:80px 0 96px}}
-
-/* No menu: a wall of buttons against one sentence */
-.compare{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;margin-top:64px;align-items:stretch;text-align:left}
-.side{border-radius:26px;padding:28px 26px 26px;display:flex;flex-direction:column}
-.side small{font-size:15px;font-weight:600;color:rgba(255,248,238,.88)}
+/* No menu: a cursor hunting through a wall of buttons, against one box taking orders */
+.nomenu{padding:150px 0 0}
+.nomenu .center .lead{color:var(--muted)}
+.compare{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:64px;align-items:stretch}
+.side{border-radius:30px;padding:30px;display:flex;flex-direction:column;min-height:480px}
+.side small{font-size:15px;font-weight:600}
 .side strong{display:block;font:400 36px/1.08 var(--serif);margin-top:8px}
-.side p{margin:18px 0 0;font-size:15.5px;line-height:1.5;color:rgba(255,248,238,.72)}
-.side.menu{border:1.5px solid rgba(255,248,238,.28)}
-.buttons{flex:1;display:flex;flex-wrap:wrap;align-content:flex-start;gap:7px;margin-top:24px}
-.buttons i{font-style:normal;font-size:12.5px;font-weight:600;padding:6px 10px;border-radius:7px;background:rgba(255,248,238,.1);color:rgba(255,248,238,.62);white-space:nowrap}
-.side.box{background:var(--cream);color:var(--ink)}
-.side.box small{color:var(--muted)}
-.side.box p{color:var(--muted)}
-.oneline{display:flex;align-items:center;gap:10px;margin-top:24px;padding:12px 12px 12px 16px;border:1.5px solid var(--ink);border-radius:16px;background:var(--white);font-size:15.5px}
-.oneline .t{flex:1;min-width:0}
-.oneline .send{width:32px;height:32px;pointer-events:none}
-.oneline .send svg{width:15px;height:15px}
+.side.menu{background:var(--card)}
+.side.menu small{color:var(--muted)}
+/* A cluttered editor: a menu bar and a wall of icon buttons */
+.cockpit{flex:1;display:flex;flex-direction:column;margin-top:24px;border-radius:18px;background:var(--white);border:1px solid var(--line);overflow:hidden}
+.menubar{display:flex;gap:16px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:500;color:var(--faint);white-space:nowrap;overflow:hidden}
+.buttons{flex:1;position:relative;display:grid;grid-template-columns:repeat(auto-fill,minmax(40px,1fr));grid-auto-rows:40px;gap:6px;padding:12px;align-content:start}
+.buttons i{display:grid;place-items:center;border-radius:10px;background:rgba(42,26,18,.06);color:var(--faint);transition:background .25s,color .25s,transform .25s}
+.buttons i svg{width:19px;height:19px}
+.buttons i.hover{background:var(--ink);color:var(--cream);transform:scale(1.08)}
+.hunter{position:absolute;left:0;top:0;width:24px;height:24px;z-index:3;transition:transform .9s cubic-bezier(.6,0,.2,1);pointer-events:none;filter:drop-shadow(0 3px 4px rgba(0,0,0,.25))}
+.minitl{position:relative;display:grid;gap:5px;padding:10px 12px 12px;border-top:1px solid var(--line)}
+.minitl div{position:relative;height:16px;border-radius:5px;background:rgba(42,26,18,.05)}
+.minitl b{position:absolute;top:2px;bottom:2px;border-radius:4px;background:rgba(42,26,18,.14)}
+.minitl div:last-of-type b{background:rgba(42,26,18,.22)}
+.minitl i{position:absolute;top:6px;bottom:8px;left:30%;width:2px;background:var(--faint);border-radius:2px}
+.tip{position:absolute;left:0;top:0;z-index:2;padding:3px 8px;border-radius:6px;background:var(--ink);color:var(--cream);font:600 11.5px var(--sans);white-space:nowrap;opacity:0;transition:opacity .2s;pointer-events:none}
+.tip.on{opacity:1}
+.huh{position:absolute;left:0;top:0;z-index:4;padding:6px 11px;border-radius:12px 12px 12px 3px;background:var(--butter);font:600 13px var(--sans);color:var(--ink);white-space:nowrap;box-shadow:0 10px 20px -12px rgba(42,26,18,.6);transition:transform .9s cubic-bezier(.6,0,.2,1);pointer-events:none}
+.side.box{background:var(--roux);color:var(--cream);position:relative;overflow:hidden}
+.side.box::before{content:'';position:absolute;width:420px;height:420px;right:-160px;top:-160px;border-radius:50%;background:radial-gradient(closest-side,rgba(226,85,42,.3),transparent);pointer-events:none}
+.side.box small{color:rgba(255,248,238,.7)}
+.side-head{position:relative}
+.oneline{position:relative;display:flex;align-items:center;gap:10px;margin-top:24px;padding:8px 8px 8px 16px;border-radius:16px;background:var(--cream);color:var(--ink);font-size:15.5px;min-height:52px;box-shadow:0 0 0 6px rgba(255,248,238,.08),0 20px 40px -20px rgba(226,85,42,.6)}
+.oneline .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden}
+.oneline .t::after{content:'';display:inline-block;width:2px;height:1.1em;vertical-align:-.2em;background:var(--ink);margin-left:1px;animation:blink 1s steps(1) infinite}
+.oneline .send{width:34px;height:34px;pointer-events:none}
+.oneline .send svg{width:16px;height:16px}
 .stream{flex:1;position:relative;overflow:hidden;margin-top:14px;min-height:200px;-webkit-mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent);mask-image:linear-gradient(transparent,#000 20%,#000 80%,transparent)}
-.stream div{position:absolute;top:0;left:0;right:0;display:flex;flex-direction:column;gap:8px;animation:up 36s linear infinite}
-.stream q{align-self:flex-end;quotes:none;padding:8px 13px;border-radius:14px 14px 5px 14px;background:var(--peach);font-size:14.5px;line-height:1.35;max-width:92%}
+.stream div{position:absolute;top:0;left:0;right:0;display:flex;flex-direction:column;gap:8px;animation:up 40s linear infinite}
+.stream q{align-self:flex-end;quotes:none;display:inline-flex;align-items:center;gap:9px;padding:6px 13px 6px 6px;border-radius:14px 14px 5px 14px;background:var(--peach);color:var(--ink);font-size:14.5px;line-height:1.35;max-width:92%}
+.stream q i{flex:none;display:grid;place-items:center;width:26px;height:26px;border-radius:8px;background:rgba(42,26,18,.1)}
+.stream q i svg{width:15px;height:15px}
 .stream q:nth-child(3n+2){background:var(--butter)}.stream q:nth-child(3n){background:var(--blush)}
 @keyframes up{to{transform:translateY(-50%)}}
-@media (max-width:860px){.compare{grid-template-columns:1fr}.side strong{font-size:34px}}
+@media (max-width:860px){.compare{grid-template-columns:1fr}.side{min-height:0;padding:24px 18px 20px}.side strong{font-size:30px}.buttons{min-height:240px}.stream{min-height:220px}.nomenu{padding-top:110px}}
 
-/* Big, small or vague: the range of things people ask for */
-.range{padding:150px 0 0}
-.range .center h2 em{background:linear-gradient(transparent 68%,var(--peach) 68%);padding:0 .06em}
-.range .center .lead{color:var(--muted)}
+/* What to ask: each card is a request, and the animation is the edit it gets */
+.how{padding:150px 0 0}
+.how .center h2 em{background:linear-gradient(transparent 68%,var(--peach) 68%);padding:0 .06em}
+.how .center .lead{color:var(--muted)}
 .bento{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:16px;margin-top:72px}
-.cell{position:relative;border-radius:30px;padding:30px 30px 28px;overflow:hidden;display:flex;flex-direction:column}
-.cell h3{font-size:34px}
-.cell>p{margin:10px 0 0;font-size:15.5px;line-height:1.5;color:var(--muted);max-width:420px}
-.says{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin-top:22px}
-.says q{quotes:none;padding:9px 14px;border-radius:16px 16px 16px 6px;background:var(--white);font-size:15px;line-height:1.4;box-shadow:0 10px 20px -16px rgba(42,26,18,.5)}
-.says q:nth-child(2){margin-left:18px}.says q:nth-child(3){margin-left:6px}
-.c-tiny{grid-column:span 2;background:var(--card)}
-.c-fix{grid-column:span 2;background:var(--paprika);color:var(--cream)}
-.c-fix>p{color:rgba(255,248,238,.78)}
-.c-fix .says q{background:rgba(255,248,238,.14);color:var(--cream);box-shadow:none}
-.c-look{grid-column:span 2;background:var(--butter)}
-.c-new{grid-column:span 3;background:var(--roux);color:var(--cream)}
-.c-new>p{color:rgba(255,248,238,.72)}
-.c-new .says q{background:var(--peach);color:var(--ink);box-shadow:none}
-.c-whole{grid-column:span 3;background:var(--blush)}
-.c-vague{grid-column:span 6;background:var(--card);display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:36px;align-items:center}
-.c-vague .thread{display:flex;flex-direction:column;gap:10px}
-.c-vague .thread q{quotes:none;align-self:flex-end;padding:10px 15px;border-radius:16px 16px 6px 16px;background:var(--peach);font-size:16px}
-.c-vague .thread div{align-self:flex-start;max-width:92%;padding:12px 16px;border-radius:16px 16px 16px 6px;background:var(--white);font-size:15.5px;line-height:1.5}
-.c-vague .thread div b{display:block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--paprika);margin-bottom:2px}
-@media (max-width:980px){.bento{grid-template-columns:repeat(2,minmax(0,1fr))}.c-tiny,.c-fix,.c-look,.c-new,.c-whole{grid-column:span 1}.c-look{grid-column:span 2}.c-vague{grid-column:span 2;grid-template-columns:1fr;gap:22px}}
-@media (max-width:640px){.bento{grid-template-columns:1fr}.c-tiny,.c-fix,.c-look,.c-new,.c-whole,.c-vague{grid-column:span 1}.cell{padding:26px 22px 24px}.cell h3{font-size:30px}}
+.cell{position:relative;border-radius:30px;padding:30px 30px 28px;overflow:hidden;display:flex;flex-direction:column;min-height:360px}
+.cell .you{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;padding:4px 10px 4px 4px;border-radius:999px;background:rgba(42,26,18,.08);font-size:11.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.cell .you i{display:grid;place-items:center;width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--cream)}
+.cell .you i svg{width:12px;height:12px}
+.c-titles .you,.c-score .you{background:rgba(255,248,238,.12)}.c-titles .you i,.c-score .you i{background:var(--cream);color:var(--ink)}
+.cell h3{font-size:34px;line-height:1.08;margin-top:10px;min-height:1.08em}
+.cell h3 .c{display:inline-block;width:2px;height:.85em;margin-left:2px;vertical-align:-.05em;background:currentColor;animation:blink 1s steps(1) infinite}
+.cell p{margin:10px 0 0;font-size:15.5px;line-height:1.5;max-width:420px;color:var(--muted)}
+.cell .art{flex:1;display:grid;place-items:center;margin-top:22px;min-height:150px}
+.c-cuts{grid-column:span 4;background:var(--card)}
+.c-titles{grid-column:span 2;background:var(--paprika);color:var(--cream)}
+.c-titles p{color:rgba(255,248,238,.78)}
+.c-flavour{grid-column:span 2;background:var(--butter)}
+.c-score{grid-column:span 2;background:var(--roux);color:var(--cream)}
+.c-score p{color:rgba(255,248,238,.72)}
+.c-yours{grid-column:span 2;background:var(--blush)}
+.c-vague{grid-column:span 6;background:var(--card);display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr);gap:40px;align-items:center;min-height:0}
+@media (max-width:980px){.bento{grid-template-columns:repeat(2,minmax(0,1fr))}.c-cuts,.c-vague{grid-column:span 2}.c-titles,.c-flavour,.c-score,.c-yours{grid-column:span 1}.c-vague{grid-template-columns:1fr;gap:24px}}
+@media (max-width:640px){.bento{grid-template-columns:1fr}.c-cuts,.c-titles,.c-flavour,.c-score,.c-yours,.c-vague{grid-column:span 1}.cell{min-height:0;padding:26px 22px 24px}.cell h3{font-size:29px}.how{padding-top:110px}}
+
+/* Cut the dead air, on the beat: clips fall away, the keepers snap to the beat */
+.cuts{width:100%;max-width:640px}
+.beats{position:relative;height:118px}
+.beats i{position:absolute;top:0;bottom:0;width:1.5px;background:repeating-linear-gradient(transparent 0 5px,rgba(42,26,18,.28) 5px 10px)}
+.strip{position:absolute;left:0;right:0;top:16px;height:52px}
+.strip b{position:absolute;top:0;height:52px;border-radius:12px;animation:cutloop 6s cubic-bezier(.6,0,.2,1) infinite}
+.strip b.k{background:var(--chili) center/cover;box-shadow:inset 0 0 0 3px var(--chili)}
+.strip b.k:nth-child(1){background-image:url(media/frames/f01.jpg)}.strip b.k:nth-child(3){background-image:url(media/frames/f05.jpg)}.strip b.k:nth-child(5){background-image:url(media/frames/f08.jpg)}.strip b.k:nth-child(7){background-image:url(media/frames/f11.jpg)}
+.strip b.x{background:rgba(42,26,18,.16);animation-name:dropout}
+.wave{position:absolute;left:0;right:0;bottom:0;height:34px}
+@keyframes cutloop{0%,30%{left:var(--l)}55%,88%{left:var(--t)}100%{left:var(--l)}}
+@keyframes dropout{0%,18%{opacity:1;transform:none}32%,90%{opacity:0;transform:translateY(26px) rotate(-6deg)}100%{opacity:1;transform:none}}
+
+/* Chapter titles: a title wipes onto a blank card */
+.titlecard{width:150px;aspect-ratio:9/16;border-radius:18px;background:linear-gradient(160deg,#4A2216,#1E120C);display:grid;place-items:center;align-content:center;gap:8px;box-shadow:0 24px 50px -24px rgba(0,0,0,.6);overflow:hidden}
+.titlecard small{font:700 9px var(--sans);letter-spacing:.14em;padding:4px 7px;border-radius:4px;background:var(--butter);color:var(--ink);animation:tag 4.8s ease infinite}
+.titlecard strong{font:400 30px/1 var(--serif);font-style:italic;color:var(--cream);clip-path:inset(0 100% 0 0);animation:wipe 4.8s cubic-bezier(.6,0,.2,1) infinite}
+.titlecard i{width:44px;height:3px;border-radius:2px;background:var(--butter);transform:scaleX(0);animation:line 4.8s ease infinite}
+@keyframes wipe{0%,12%{clip-path:inset(0 100% 0 0)}32%,82%{clip-path:inset(0 0 0 0)}96%,100%{clip-path:inset(0 0 0 100%)}}
+@keyframes tag{0%,8%{opacity:0;transform:translateY(6px)}20%,84%{opacity:1;transform:none}96%,100%{opacity:0}}
+@keyframes line{0%,30%{transform:scaleX(0)}44%,84%{transform:scaleX(1)}96%,100%{transform:scaleX(0)}}
+
+/* Match the footage: mismatched swatches settle into one palette */
+.swatches{display:grid;grid-template-columns:repeat(4,52px);gap:10px}
+.swatches i{height:86px;border-radius:14px;animation:settle 5s ease-in-out infinite}
+.swatches i:nth-child(1){--a:#7FA7C9;--b:#E2552A}.swatches i:nth-child(2){--a:#9BC48F;--b:#F2B33D}.swatches i:nth-child(3){--a:#B9B4D8;--b:#C2703D}.swatches i:nth-child(4){--a:#D9D9D9;--b:#9A3412}
+.swatches i:nth-child(2){animation-delay:.12s}.swatches i:nth-child(3){animation-delay:.24s}.swatches i:nth-child(4){animation-delay:.36s}
+@keyframes settle{0%,20%{background:var(--a);transform:translateY(0) rotate(-3deg)}45%,85%{background:var(--b);transform:translateY(-6px) rotate(0)}100%{background:var(--a);transform:translateY(0) rotate(-3deg)}}
+
+/* Music that builds: an equalizer that breathes */
+.eq{display:flex;align-items:flex-end;gap:7px;height:120px}
+.eq i{width:12px;border-radius:6px;background:var(--peach);animation:eq 1.6s ease-in-out infinite;height:30%}
+.eq i:nth-child(3n){background:var(--butter)}.eq i:nth-child(4n){background:var(--chili)}
+@keyframes eq{50%{height:var(--h)}}
+
+/* Nudge it later: a cursor drags a block */
+.lanes{width:100%;max-width:300px;display:grid;gap:9px;position:relative}
+.lanes div{height:30px;border-radius:9px;background:rgba(42,26,18,.08);position:relative}
+.lanes b{position:absolute;top:4px;bottom:4px;border-radius:6px}
+.lanes .drag{background:var(--ink);animation:drag 4.4s cubic-bezier(.6,0,.2,1) infinite}
+.lanes svg{position:absolute;left:calc(6% + 11%);top:11px;width:22px;height:22px;animation:drag 4.4s cubic-bezier(.6,0,.2,1) infinite;z-index:2}
+@keyframes drag{0%,22%{transform:translateX(0)}52%,80%{transform:translateX(96px)}100%{transform:translateX(0)}}
+
+/* Vague is fine: a little conversation that plays itself */
+.thread{display:flex;flex-direction:column;gap:10px;min-height:260px;justify-content:flex-end}
+.thread>*{opacity:0;transform:translateY(8px);transition:opacity .4s,transform .45s cubic-bezier(.2,.8,.2,1)}
+.thread>.on{opacity:1;transform:none}
+.thread q{quotes:none;align-self:flex-end;padding:10px 15px;border-radius:16px 16px 6px 16px;background:var(--peach);font-size:16px}
+.thread div{align-self:flex-start;max-width:92%;padding:12px 16px;border-radius:16px 16px 16px 6px;background:var(--white);font-size:15.5px;line-height:1.5}
+.thread div b{display:block;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--paprika);margin-bottom:2px}
+.thread .chg{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.thread .chg span{font-size:12.5px;font-weight:600;padding:4px 9px;border-radius:999px;background:var(--card);transition:opacity .4s}
+.thread .chg span.undone{text-decoration:line-through;opacity:.45}
 
 /* How it can do anything */
 .why{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:64px;text-align:left}
-.why div{border:1.5px solid rgba(255,248,238,.2);border-radius:26px;padding:28px 26px}
-.why b{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:var(--peach);color:var(--ink);font:500 20px var(--serif)}
-.why h3{font-size:30px;margin-top:22px}
-.why p{margin:12px 0 0;font-size:15.5px;line-height:1.55;color:rgba(255,248,238,.74)}
-@media (max-width:900px){.why{grid-template-columns:1fr}}
+.feat{border-radius:28px;padding:12px 12px 26px;background:rgba(255,248,238,.04);box-shadow:inset 0 0 0 1px rgba(255,248,238,.1)}
+.feat .num{display:inline-block;margin:22px 0 0 14px;font:600 12px var(--mono);letter-spacing:.08em;color:var(--chili)}
+.feat h3{font-size:30px;margin:8px 14px 0}
+.feat p{margin:10px 14px 0;font-size:15.5px;line-height:1.5;color:rgba(255,248,238,.7)}
+.art2{position:relative;height:230px;border-radius:20px;background:#1E120C;overflow:hidden;padding:18px;display:flex;flex-direction:column;justify-content:center;gap:12px}
+@media (max-width:900px){.why{grid-template-columns:1fr;max-width:460px;margin-left:auto;margin-right:auto}}
+/* 01: a scanner lights each shot in turn, and the words heard there light with it */
+.a-watch .frames{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.a-watch img{width:100%;aspect-ratio:9/14;object-fit:cover;border-radius:8px;opacity:.38;filter:grayscale(.6);outline:2px solid transparent;outline-offset:2px;animation:lit 7.5s infinite}
+.a-watch .wv{width:100%;height:24px}
+.a-watch .words{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;text-align:center}
+.a-watch .words span{font:600 10.5px/1.2 var(--sans);color:rgba(255,248,238,.35);padding:4px 2px;border-radius:6px;animation:word 7.5s infinite}
+.a-watch img:nth-child(2),.a-watch .words span:nth-child(2){animation-delay:1.5s}
+.a-watch img:nth-child(3),.a-watch .words span:nth-child(3){animation-delay:3s}
+.a-watch img:nth-child(4),.a-watch .words span:nth-child(4){animation-delay:4.5s}
+.a-watch img:nth-child(5),.a-watch .words span:nth-child(5){animation-delay:6s}
+@keyframes lit{0%,100%{opacity:.38;filter:grayscale(.6);outline-color:transparent}4%,18%{opacity:1;filter:none;outline-color:var(--chili)}22%{opacity:.38;filter:grayscale(.6);outline-color:transparent}}
+@keyframes word{0%,100%{color:rgba(255,248,238,.35);background:transparent}4%,18%{color:var(--ink);background:var(--peach)}22%{color:rgba(255,248,238,.35);background:transparent}}
+/* 02: the code types itself, and the map it describes draws */
+.a-build{justify-content:space-between}
+.code{flex:none;display:grid;gap:5px;padding:12px 14px;border-radius:12px;background:rgba(255,248,238,.06);font:500 12px/1.35 var(--mono);color:rgba(255,248,238,.82);white-space:nowrap;overflow:hidden}
+.code .file{font:600 10.5px var(--sans);letter-spacing:.06em;color:rgba(255,248,238,.42);margin-bottom:2px}
+.code i{font-style:normal}.code .k{color:#F2B33D}.code .f{color:var(--peach)}.code .s{color:#9BC48F}.code .n{color:#B9B4D8}
+.code .ln{clip-path:inset(0 100% 0 0);animation:7s steps(26) infinite}
+.code .l1{animation-name:cl1}.code .l2{animation-name:cl2}.code .l3{animation-name:cl3}
+@keyframes cl1{0%,2%{clip-path:inset(0 100% 0 0)}12%,90%{clip-path:inset(0 0 0 0)}96%,100%{clip-path:inset(0 100% 0 0)}}
+@keyframes cl2{0%,13%{clip-path:inset(0 100% 0 0)}22%,90%{clip-path:inset(0 0 0 0)}96%,100%{clip-path:inset(0 100% 0 0)}}
+@keyframes cl3{0%,23%{clip-path:inset(0 100% 0 0)}30%,90%{clip-path:inset(0 0 0 0)}96%,100%{clip-path:inset(0 100% 0 0)}}
+.render svg{width:100%;height:auto;max-height:64px}
+.render .rt{stroke-dasharray:260;stroke-dashoffset:260;animation:route 7s ease-in-out infinite}
+@keyframes route{0%,24%{stroke-dashoffset:260}52%,88%{stroke-dashoffset:0}100%{stroke-dashoffset:0;opacity:0}}
+.render .pn{transform-origin:206px 22px;transform:scale(0);animation:pinpop 7s infinite}
+@keyframes pinpop{0%,50%{transform:scale(0)}56%,88%{transform:scale(1)}96%,100%{transform:scale(0)}}
+/* 03: a block drops onto the timeline, gets trimmed, and offers an undo */
+.tl2{position:relative;display:grid;gap:8px}
+.ln2{position:relative;height:30px;border-radius:8px;background:rgba(255,248,238,.06)}
+.ln2 b{position:absolute;top:4px;bottom:4px;border-radius:6px;background:rgba(255,248,238,.22)}
+.ln2 b.bed{background:rgba(226,85,42,.35)}
+.ln2 b.drop{left:30%;width:36%;background:var(--chili);color:var(--cream);display:grid;place-items:center;box-shadow:0 0 0 2px var(--cream);animation:dropin 6s cubic-bezier(.3,1.4,.5,1) infinite}
+.ln2 b.drop svg{width:14px;height:14px}
+@keyframes dropin{0%,8%{transform:translateY(-60px);opacity:0}20%{transform:none;opacity:1;width:36%}45%{width:36%}60%,88%{width:24%;transform:none;opacity:1}96%,100%{opacity:0}}
+.tl2 .ph{position:absolute;top:-6px;bottom:-6px;left:2%;width:2px;border-radius:2px;background:var(--cream);animation:sweep 6s linear infinite}
+@keyframes sweep{to{left:98%}}
+.acts{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.acts span{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--sans);padding:6px 10px;border-radius:999px;opacity:0;animation:acts 6s infinite}
+.acts .ok{background:rgba(255,248,238,.1);color:var(--cream)}
+.acts .ok svg{width:13px;height:13px;color:var(--butter)}
+.acts .undo{background:var(--cream);color:var(--ink);animation-delay:.4s}
+@keyframes acts{0%,22%{opacity:0;transform:translateY(6px)}30%,88%{opacity:1;transform:none}96%,100%{opacity:0}}
 
 /* Orders drifting by */
 .tickets{margin-top:70px;display:grid;gap:22px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
@@ -269,20 +397,27 @@ em{font-style:italic}
 .tickets:hover .ticket-row{animation-play-state:paused}
 @keyframes drift{to{transform:translateX(-50%)}}
 .ticket{width:300px;padding:22px 24px 20px;border-radius:22px;color:var(--ink);font:400 24px/1.25 var(--serif);flex:none}
+.ticket>i{display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:rgba(42,26,18,.09);margin-bottom:16px}
+.ticket>i svg{width:19px;height:19px}
 .ticket small{display:block;margin-top:18px;font:600 12.5px var(--sans);letter-spacing:.1em;text-transform:uppercase;opacity:.6}
 .ticket:nth-child(4n+1){background:var(--peach);transform:rotate(-1.5deg)}
 .ticket:nth-child(4n+2){background:var(--butter);transform:rotate(1deg)}
 .ticket:nth-child(4n+3){background:var(--cream);transform:rotate(-.5deg)}
 .ticket:nth-child(4n+4){background:var(--blush);transform:rotate(1.5deg)}
+@media (max-width:520px){.ticket{width:240px;font-size:21px;padding:18px 20px 16px}}
 
 /* Stays yours */
-.yours{margin-top:130px;border-radius:32px;background:var(--card);padding:46px 48px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr) auto;gap:40px;align-items:center}
+.yours{margin-top:130px;border-radius:32px;background:var(--card);padding:40px 48px;display:grid;grid-template-columns:minmax(0,1fr) 260px auto;gap:40px;align-items:center}
 .yours h2{font-size:clamp(38px,4vw,54px)}
-.yours p{margin:0;font-size:15.5px;color:var(--muted)}
-.yours p a{display:inline-block;margin-top:14px;font-weight:600;color:var(--ink);text-decoration:none}
+.yours p{margin:16px 0 0;font-size:15.5px;color:var(--muted);max-width:380px}
+.yours p a{display:inline-block;margin-top:12px;font-weight:600;color:var(--ink);text-decoration:none}
+.vault svg{width:100%;height:auto}
 .seals{display:flex;gap:12px}
-.seal{width:104px;height:104px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;text-align:center;font:600 12.5px/1.25 var(--sans);padding:12px;box-shadow:inset 0 0 0 5px var(--card),inset 0 0 0 6.5px rgba(42,26,18,.4)}
-@media (max-width:980px){.yours{grid-template-columns:1fr;padding:36px 28px}.seals{flex-wrap:wrap}}
+.seal{width:104px;height:104px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;align-content:center;gap:4px;text-align:center;font:600 12px/1.2 var(--sans);padding:12px;box-shadow:inset 0 0 0 5px var(--card),inset 0 0 0 6.5px rgba(42,26,18,.4)}
+.seal i svg{width:20px;height:20px}
+@media (max-width:1100px){.yours{grid-template-columns:minmax(0,1fr) 240px}.seals{grid-column:1/-1}}
+@media (max-width:760px){.yours{grid-template-columns:1fr;padding:32px 24px;gap:24px}.vault{max-width:260px}}
+@media (max-width:520px){.yours{padding:30px 20px;margin-top:100px}.seals{gap:8px}.seal{width:90px;height:90px;font-size:11px;padding:10px}.seal i svg{width:17px;height:17px}}
 
 /* Early access */
 .perks{margin-top:16px;border-radius:30px;background:var(--roux);color:var(--cream);padding:40px 44px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:36px;align-items:center}
@@ -292,7 +427,8 @@ em{font-style:italic}
 .perks li strong{color:var(--cream);font-weight:600}
 .perks li svg{width:22px;height:22px;margin-top:1px}
 .perks .btn{border-color:var(--cream)}
-@media (max-width:980px){.perks{grid-template-columns:1fr;padding:34px 28px}}
+@media (max-width:980px){.perks{grid-template-columns:1fr;padding:34px 28px;gap:26px}}
+@media (max-width:520px){.perks{padding:30px 22px}}
 
 /* FAQ */
 .faq{padding:140px 0 0}
@@ -305,7 +441,7 @@ em{font-style:italic}
 .as{padding:22px 18px}
 .as .asked{margin:0 0 0 auto;max-width:82%;text-align:right;font-size:14.5px;color:var(--muted);padding:6px 4px}
 .as .answer{margin:10px 0 0;max-width:92%;padding:16px 18px;border-radius:18px 18px 18px 6px;background:var(--cream);font-size:15.5px;line-height:1.55}
-@media (max-width:820px){.faq-box{grid-template-columns:1fr}}
+@media (max-width:820px){.faq-box{grid-template-columns:1fr}.faq{padding-top:110px}.as{padding:18px 10px 12px}.as .answer{max-width:100%}}
 
 /* The bottom: the finished Short on a phone, and what will you ask for? */
 .make{margin-top:150px;border-radius:48px 48px 0 0;background:var(--roux);color:var(--cream);padding:110px 0 120px;position:relative;overflow:hidden}
@@ -316,10 +452,11 @@ em{font-style:italic}
 .phone .notch{position:absolute;top:21px;left:50%;transform:translateX(-50%);width:88px;height:25px;border-radius:20px;background:#120A06;z-index:2}
 .sound{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:3;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:999px;border:1.5px solid var(--ink);background:var(--cream);color:var(--ink);font:600 14px var(--sans);cursor:pointer;white-space:nowrap}
 .sound svg{width:17px;height:17px}
-.make h2{font-size:clamp(50px,6.8vw,96px)}
+.make h2{font-size:clamp(48px,6.8vw,96px)}
 .make .lead{margin:22px 0 34px;max-width:470px;color:rgba(255,248,238,.8)}
 .make .ask{margin:0}
 .make .bar{border-color:var(--cream)}
+.make .send{background:var(--chili)}.make .send:hover{background:var(--paprika2)}
 .make .chips{justify-content:flex-start}
 .make .chips button{border-color:rgba(255,248,238,.25);color:rgba(255,248,238,.8)}
 .make .chips button:hover{border-color:var(--cream);color:var(--cream)}
@@ -327,7 +464,7 @@ em{font-style:italic}
 .make .reply small{color:rgba(255,248,238,.65)}
 .made-from{margin-top:30px;font-size:14px;color:rgba(255,248,238,.6);max-width:470px}
 @media (max-width:960px){.make-grid{grid-template-columns:1fr;gap:56px}.make .center-sm{text-align:center}.make .lead{margin-left:auto;margin-right:auto}.make .chips{justify-content:center}.made-from{margin:24px auto 0;text-align:center}}
-@media (max-width:520px){.make{border-radius:32px 32px 0 0;padding:80px 0 96px}}
+@media (max-width:520px){.make{border-radius:32px 32px 0 0;padding:80px 0 96px;margin-top:110px}}
 footer{background:var(--roux);color:rgba(255,248,238,.72);font-size:14.5px;padding:0 0 34px}
 footer .wrap{display:flex;gap:16px 28px;flex-wrap:wrap;align-items:center;border-top:1px solid rgba(255,248,238,.14);padding-top:28px}
 footer .wrap>span:first-child{margin-right:auto}
@@ -336,7 +473,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
 /* Reveal (content is visible without scripts) */
 .js .reveal:not(.in){opacity:0;transform:translateY(22px)}
 .reveal{transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal:not(.in){opacity:1;transform:none}.l-title strong{clip-path:none}.l-map .route{stroke-dashoffset:0}.l-map .rider{offset-distance:100%}.l-tag .price{transform:rotate(-4deg)}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal:not(.in){opacity:1;transform:none}.l-title strong{clip-path:none}.l-map .route{stroke-dashoffset:0}.l-map .rider{offset-distance:100%}.l-tag .price{transform:rotate(-4deg)}.titlecard strong{clip-path:none}.thread>*{opacity:1;transform:none}}
 </style>
 <script>document.documentElement.classList.add('js')</script>
 </head>
@@ -351,7 +488,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  </a>
  <a class="link" href="#demo">See it</a>
  <a class="link" href="#no-menu">No menu</a>
- <a class="link" href="#range">What to ask</a>
+ <a class="link" href="#ask">What to ask</a>
  <a class="link" href="#faq">Questions</a>
  <a class="btn" href="#make">Get early access</a>
 </nav>
@@ -360,26 +497,61 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  <header class="hero">
   <div class="wrap">
    <span class="eyebrow">Gumbo · AI video editor</span>
+   <div class="stickers" aria-hidden="true">
+    <span class="st s1"><i data-i="zoom"></i>Punch in on the punchline</span>
+    <span class="st s2"><i data-i="tag"></i>Freeze and tag the price</span>
+    <span class="st s3"><i data-i="vhs"></i>Like a 90s camcorder</span>
+    <span class="st s4"><i data-i="music"></i>Music that builds</span>
+   </div>
    <h1>Type anything.<span class="caret" aria-hidden="true"></span><em>Get the edit.</em></h1>
-   <p class="sub">No menus, no presets, no features to learn. Ask for any edit in your own words, tiny or huge, exact or vague, and Gumbo makes it on your timeline.</p>
    <div class="ask" data-ask>
     <form class="bar">
      <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
      <textarea rows="1" aria-label="Ask for any edit" placeholder="Ask for any edit…"></textarea>
-     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
+    <div class="chips"><button type="button">Cut every um</button><button type="button">Make it feel like the 90s</button><button type="button">Draw our route on a map</button><button type="button">Make it better</button></div>
     <div class="reply" role="status"></div>
    </div>
    <p class="avail">For Windows. Mac is on the stove.</p>
   </div>
+  <div class="kitchen" aria-hidden="true">
+   <svg id="kitchen" viewBox="0 -40 1440 270" preserveAspectRatio="xMidYMid slice">
+    <defs>
+     <path id="rawPath" d="M -140 -20 C 60 -40, 250 -20, 300 70 C 350 160, 190 220, 150 140 C 110 60, 290 25, 420 100 S 610 186, 690 175"/>
+     <path id="cookedPath" d="M 760 175 C 960 171, 1160 95, 1600 -45"/>
+     <clipPath id="rr"><rect x="-38" y="-28" width="76" height="56" rx="8"/></clipPath>
+     <clipPath id="rt"><rect x="-17" y="-30" width="34" height="60" rx="5"/></clipPath>
+    </defs>
+    <use href="#rawPath" fill="none" stroke="rgba(42,26,18,.14)" stroke-width="1.5" stroke-dasharray="3 7"/>
+    <g class="raw" id="raw"></g>
+    <use href="#cookedPath" fill="none" stroke="#2A1A12" stroke-width="78"/>
+    <g id="cooked"></g>
+    <g transform="translate(724 175)">
+     <rect x="-62" y="-34" width="124" height="68" rx="34" fill="#FFF8EE" stroke="#2A1A12" stroke-width="2.5"/>
+     <path d="M-22 -4h44c0 13-9.8 22-22 22s-22-9-22-22z" fill="#E2552A"/>
+     <path d="M-4 2l9 5-9 5z" fill="#FFF8EE"/>
+     <g fill="none" stroke="#2A1A12" stroke-width="2.6" stroke-linecap="round">
+      <path d="M-10 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" repeatCount="indefinite"/></path>
+      <path d="M0 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" begin=".4s" repeatCount="indefinite"/></path>
+      <path d="M10 -10c-2.4-2.8 2.4-4.8 0-8"><animateTransform attributeName="transform" type="translate" values="0 0;0 -3;0 0" dur="2.4s" begin=".8s" repeatCount="indefinite"/></path>
+     </g>
+    </g>
+   </svg>
+  </div>
+ </header>
 
-  <div class="demo reveal" id="demo">
+ <section class="panel paprika" id="demo"><div class="wrap center">
+  <span class="eyebrow" style="color:rgba(255,248,238,.72)">See it take orders</span>
+  <h2 style="margin-top:18px"><em>Eight requests,</em> one box.</h2>
+  <p class="lead">Same box every time. Each one lands on the timeline.</p>
+  <div class="demo reveal">
    <div class="app" aria-label="Gumbo taking one request after another on a travel video">
     <div class="app-top" aria-hidden="true"><i></i><i></i><i></i><span>Vietnam trip</span></div>
     <div class="app-body">
      <div class="chat">
       <div class="log" id="log" aria-live="polite"></div>
-      <div class="input" aria-hidden="true"><div class="text"><span id="typed"></span><span class="tcaret"></span></div><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+      <div class="input" aria-hidden="true"><div class="text"><span id="typed"></span><span class="tcaret"></span></div><span class="send" id="demoSend"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
      </div>
      <div class="viewer" aria-hidden="true">
       <div class="stage" id="stage">
@@ -404,98 +576,171 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
    </div>
    <div class="try" id="try"><span>Try one:</span></div>
   </div>
- </header>
-
- <section class="panel paprika" id="no-menu" style="margin-top:130px"><div class="wrap center">
-  <span class="eyebrow" style="color:rgba(255,248,238,.72)">No menu</span>
-  <h2 style="margin-top:18px">Other editors hand you <em>a menu.</em></h2>
-  <p class="lead">So you only get what's on it. Gumbo has one box instead, and it takes whatever you type.</p>
-  <div class="compare">
-   <div class="side menu reveal">
-    <small>Every other editor</small>
-    <strong>If it isn't a button, you can't have it.</strong>
-    <div class="buttons" aria-hidden="true"><i>Auto captions</i><i>Templates</i><i>Remove silence</i><i>Filters</i><i>Transitions</i><i>Stickers</i><i>Beat sync</i><i>Auto reframe</i><i>Text presets</i><i>Effects</i><i>Speed ramp</i><i>Color match</i><i>Green screen</i><i>Keyframes</i><i>Masks</i><i>Adjust</i><i>Stock music</i><i>Animations</i><i>Overlays</i><i>Smart cut</i><i>LUTs</i><i>Lower thirds</i><i>Audio ducking</i><i>More…</i></div>
-    <p>Hundreds of features, and you still have to learn where each one lives and how they fit together.</p>
-   </div>
-   <div class="side box reveal">
-    <small>Gumbo</small>
-    <strong>If you can say it, <em>you can ask for it.</em></strong>
-    <div class="oneline" aria-hidden="true"><span class="t">Anything.</span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
-    <div class="stream" aria-hidden="true"><div id="stream"></div></div>
-    <p>One sentence or twenty. Gumbo works out which edits that takes and makes them.</p>
-   </div>
-  </div>
  </div></section>
 
  <div class="wrap">
-  <section class="range" id="range">
+  <section class="nomenu" id="no-menu">
+   <div class="center reveal">
+    <span class="eyebrow">No menu</span>
+    <h2 class="h2" style="margin-top:18px">Other editors hand you <em>a menu.</em></h2>
+   </div>
+   <div class="compare">
+    <div class="side menu reveal">
+     <div class="side-head"><small>Every other editor</small><strong>If it isn't a button, you can't have it.</strong></div>
+     <div class="cockpit" aria-hidden="true">
+      <div class="menubar"><span>File</span><span>Edit</span><span>Clip</span><span>Effects</span><span>Color</span><span>Audio</span><span>Window</span></div>
+      <div class="buttons" id="buttons">
+       <span class="tip" id="tip"></span>
+       <span class="huh" id="huh">Where's the map tool?</span>
+       <svg class="hunter" id="hunter" viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z" fill="#FFF8EE" stroke="#2A1A12" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="minitl"><div><b style="left:0;width:22%"></b><b style="left:23%;width:31%"></b><b style="left:55%;width:18%"></b><b style="left:74%;width:26%"></b></div><div><b style="left:8%;width:14%"></b><b style="left:40%;width:20%"></b></div><div><b style="left:0;width:100%"></b></div><i></i></div>
+     </div>
+    </div>
+    <div class="side box reveal">
+     <div class="side-head"><small>Gumbo</small><strong>If you can say it, <em>you can ask for it.</em></strong></div>
+     <div class="oneline" aria-hidden="true"><span class="t" id="oneline"></span><span class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></span></div>
+     <div class="stream" aria-hidden="true"><div id="stream"></div></div>
+    </div>
+   </div>
+  </section>
+
+  <section class="how" id="ask">
    <div class="center reveal">
     <span class="eyebrow">What to ask</span>
     <h2 class="h2" style="margin-top:18px">Big, small, <em>or vague.</em></h2>
-    <p class="lead">There's no right way to ask. Here's the kind of thing people type.</p>
+    <p class="lead">There's no right way to ask. Type it how you'd say it, and watch it happen.</p>
    </div>
    <div class="bento">
-    <article class="cell c-tiny reveal">
-     <h3>Tiny tweaks</h3>
-     <p>The fiddly stuff that takes ten clicks.</p>
-     <div class="says"><q>Trim two frames off the end.</q><q>Nudge the title up a bit.</q><q>Make the logo smaller. No, smaller.</q></div>
+    <article class="cell c-cuts reveal">
+     <span class="you"><i data-i="type"></i>You type</span>
+     <h3 data-type>“Cut the dead air and land every cut on the beat.”</h3>
+     <div class="art" aria-hidden="true"><div class="cuts">
+      <div class="beats">
+       <i style="left:0"></i><i style="left:20%"></i><i style="left:40%"></i><i style="left:60%"></i><i style="left:80%"></i><i style="left:100%"></i>
+       <div class="strip">
+        <b class="k" style="left:0%;width:15%;--l:0%;--t:0%"></b>
+        <b class="x" style="left:16%;width:9%"></b>
+        <b class="k" style="left:26%;width:13%;--l:26%;--t:20%"></b>
+        <b class="x" style="left:40%;width:11%"></b>
+        <b class="k" style="left:52%;width:18%;--l:52%;--t:40%"></b>
+        <b class="x" style="left:71%;width:7%"></b>
+        <b class="k" style="left:79%;width:20%;--l:79%;--t:60%"></b>
+       </div>
+       <svg class="wave" id="cutwave" viewBox="0 0 640 34" preserveAspectRatio="none"></svg>
+      </div>
+     </div></div>
     </article>
-    <article class="cell c-fix reveal">
-     <h3>Fixes</h3>
-     <p>Point at the problem the way you'd describe it.</p>
-     <div class="says"><q>Cut every um and long pause.</q><q>The audio dips at 0:40.</q><q>Lose the bit where the dog barks.</q></div>
+    <article class="cell c-titles reveal">
+     <span class="you"><i data-i="type"></i>You type</span>
+     <h3 data-type>“A title for each chapter.”</h3>
+     <div class="art" aria-hidden="true"><div class="titlecard"><small>CHAPTER ONE</small><strong>The arrival</strong><i></i></div></div>
     </article>
-    <article class="cell c-look reveal">
-     <h3>Looks</h3>
-     <p>Describe a feeling, not a filter.</p>
-     <div class="says"><q>Like a 90s camcorder.</q><q>Warmer, like the last day of summer.</q><q>Make the drone shots match my phone.</q></div>
+    <article class="cell c-flavour reveal">
+     <span class="you"><i data-i="type"></i>You type</span>
+     <h3 data-type>“Make the drone shots match my phone.”</h3>
+     <div class="art" aria-hidden="true"><div class="swatches"><i></i><i></i><i></i><i></i></div></div>
     </article>
-    <article class="cell c-new reveal">
-     <h3>Things no template has</h3>
-     <p>Graphics, titles and effects are made from scratch for your request.</p>
-     <div class="says"><q>Draw our route from Hanoi to Ha Long.</q><q>A countdown before the drop.</q><q>Price tags that pop up next to each dish.</q></div>
+    <article class="cell c-score reveal">
+     <span class="you"><i data-i="type"></i>You type</span>
+     <h3 data-type>“Music that builds to the ending.”</h3>
+     <div class="art" aria-hidden="true"><div class="eq" id="eq"></div></div>
     </article>
-    <article class="cell c-whole reveal">
-     <h3>The whole thing</h3>
-     <p>Hand over a folder and a sentence.</p>
-     <div class="says"><q>Turn my 40-minute talk into three Shorts.</q><q>A 60-second trailer for our trip.</q><q>Use what I shot today.</q></div>
+    <article class="cell c-yours reveal">
+     <span class="you"><i data-i="type"></i>You type</span>
+     <h3 data-type>“Nudge that clip a bit later.”</h3>
+     <div class="art" aria-hidden="true"><div class="lanes">
+      <div><b style="left:2%;width:30%;background:var(--chili)"></b><b style="left:36%;width:22%;background:var(--chili)"></b><b style="left:62%;width:34%;background:var(--chili)"></b></div>
+      <div><b class="drag" style="left:6%;width:26%"></b><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 1.5L10 19z" fill="#FFF8EE" stroke="#2A1A12" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
+      <div><b style="left:2%;width:94%;background:var(--paprika)"></b></div>
+     </div></div>
     </article>
     <article class="cell c-vague reveal">
      <div>
-      <h3>Vague is fine too</h3>
-      <p style="margin:10px 0 0;font-size:15.5px;line-height:1.5;color:var(--muted)">Don't know what you want yet? Say so. Gumbo makes a call, tells you what it changed, and you can undo any piece of it.</p>
+      <span class="you"><i data-i="type"></i>You type</span>
+      <h3 data-type>“Hmm. Make it better?”</h3>
+      <p>Don't know what you want yet? Say so. Gumbo makes a call, tells you exactly what it changed, and you can undo any piece of it.</p>
      </div>
-     <div class="thread"><q>Hmm. Make it better?</q><div><b>Gumbo</b>Tightened two slow cuts, lifted the shadows on the night shots, and brought the music down under your voice.</div><q>Keep the first two, undo the music.</q><div><b>Gumbo</b>Done. Music is back where it was.</div></div>
+     <div class="thread" id="thread" aria-hidden="true">
+      <q>Hmm. Make it better?</q>
+      <div><b>Gumbo</b>Here's what I changed:<span class="chg"><span>Tightened 2 slow cuts</span><span>Lifted the night shots</span><span class="mus">Music down under your voice</span></span></div>
+      <q>Keep the first two, undo the music.</q>
+      <div><b>Gumbo</b>Done. The music is back where it was.</div>
+     </div>
     </article>
    </div>
   </section>
  </div>
 
- <section class="panel roux" style="margin-top:150px"><div class="wrap center">
+ <section class="panel roux" id="how" style="margin-top:150px"><div class="wrap center">
   <span class="eyebrow" style="color:rgba(255,248,238,.6)">How it can do anything</span>
-  <h2 style="margin-top:18px">It doesn't pick from a menu. <em>It makes the edit.</em></h2>
+  <h2 style="margin-top:18px">It doesn't pick from a menu.<br><em>It makes the edit.</em></h2>
   <div class="why">
-   <div class="reveal"><b>1</b><h3>It watches and listens</h3><p>Gumbo knows every shot and every word in your footage, so you can point at things the way you'd describe them: "the part where she laughs."</p></div>
-   <div class="reveal"><b>2</b><h3>It builds what's missing</h3><p>Titles, maps, graphics and effects are built for your request instead of pulled from a template library. Music is composed for your cut, or found free to use.</p></div>
-   <div class="reveal"><b>3</b><h3>It lands on your timeline</h3><p>Every change is a block you can drag, trim or undo. Keep talking until it's right, or take over by hand.</p></div>
+   <div class="feat reveal">
+    <div class="art2 a-watch" aria-hidden="true">
+     <div class="frames"><img src="media/frames/f01.jpg" alt=""><img src="media/frames/f05.jpg" alt=""><img src="media/frames/f02.jpg" alt=""><img src="media/frames/f08.jpg" alt=""><img src="media/frames/f11.jpg" alt=""></div>
+     <svg class="wv" viewBox="0 0 300 30" preserveAspectRatio="none" id="watchwave"></svg>
+     <div class="words"><span>lanterns</span><span>“so good”</span><span>she laughs</span><span>engine</span><span>wind</span></div>
+    </div>
+    <span class="num">01</span><h3>It watches and listens</h3><p>Every shot and every word, so you can say “the part where she laughs.”</p>
+   </div>
+   <div class="feat reveal">
+    <div class="art2 a-build" aria-hidden="true">
+     <div class="code"><span class="file">route-map.tsx</span>
+      <span class="ln l1"><i class="k">const</i> route = <i class="f">map</i>(<i class="s">"Hà Nội"</i>, <i class="s">"Hạ Long"</i>)</span>
+      <span class="ln l2">route.<i class="f">draw</i>({ seconds: <i class="n">2.4</i> })</span>
+      <span class="ln l3"><i class="f">pin</i>(route.end, <i class="s">"Hạ Long"</i>)</span>
+     </div>
+     <div class="render"><svg viewBox="0 0 220 70"><path d="M14 52 C 60 10, 100 64, 140 30 S 196 18, 206 22" fill="none" stroke="rgba(255,248,238,.18)" stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/><path class="rt" d="M14 52 C 60 10, 100 64, 140 30 S 196 18, 206 22" fill="none" stroke="#E2552A" stroke-width="3.5" stroke-linecap="round"/><circle cx="14" cy="52" r="4.5" fill="#FFF8EE"/><g class="pn"><circle cx="206" cy="22" r="6" fill="#FCE3A2" stroke="#2A1A12" stroke-width="2"/></g></svg></div>
+    </div>
+    <span class="num">02</span><h3>It builds what's missing</h3><p>Titles, maps and effects are written for your request. No template library.</p>
+   </div>
+   <div class="feat reveal">
+    <div class="art2 a-land" aria-hidden="true">
+     <div class="tl2">
+      <div class="ln2"><b style="left:2%;width:28%"></b><b style="left:32%;width:30%"></b><b style="left:64%;width:34%"></b></div>
+      <div class="ln2"><b class="drop"><i data-i="pin"></i></b></div>
+      <div class="ln2"><b class="bed" style="left:2%;width:96%"></b></div>
+      <span class="ph"></span>
+     </div>
+     <div class="acts"><span class="ok"><i data-i="spark"></i>Route map added</span><span class="undo">↶ Undo</span></div>
+    </div>
+    <span class="num">03</span><h3>It lands on your timeline</h3><p>Every change is a block you can drag, trim or undo.</p>
+   </div>
   </div>
  </div>
  <div class="tickets" aria-label="Example requests">
   <div class="ticket-row">
-   <div class="ticket">"Make it feel like a 90s camcorder."<small>Looks</small></div><div class="ticket">"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket">"Draw our route on a map."<small>Travel</small></div><div class="ticket">"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket">"Captions that bounce on every beat."<small>Shorts</small></div><div class="ticket">"Lose the part where the dog barks."<small>Family</small></div>
-   <div class="ticket">"Make it feel like a 90s camcorder."<small>Looks</small></div><div class="ticket">"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket">"Draw our route on a map."<small>Travel</small></div><div class="ticket">"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket">"Captions that bounce on every beat."<small>Shorts</small></div><div class="ticket">"Lose the part where the dog barks."<small>Family</small></div>
+   <div class="ticket"><i data-i="vhs"></i>"Make it feel like a 90s camcorder."<small>Looks</small></div><div class="ticket"><i data-i="mic"></i>"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket"><i data-i="pin"></i>"Draw our route on a map."<small>Travel</small></div><div class="ticket"><i data-i="phone"></i>"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket"><i data-i="cc"></i>"Captions that bounce on every beat."<small>Shorts</small></div><div class="ticket"><i data-i="cut"></i>"Lose the part where the dog barks."<small>Family</small></div>
+   <div class="ticket"><i data-i="vhs"></i>"Make it feel like a 90s camcorder."<small>Looks</small></div><div class="ticket"><i data-i="mic"></i>"Cut every um and every long pause."<small>Podcasts</small></div><div class="ticket"><i data-i="pin"></i>"Draw our route on a map."<small>Travel</small></div><div class="ticket"><i data-i="phone"></i>"Turn my 40-minute talk into three Shorts."<small>Talks</small></div><div class="ticket"><i data-i="cc"></i>"Captions that bounce on every beat."<small>Shorts</small></div><div class="ticket"><i data-i="cut"></i>"Lose the part where the dog barks."<small>Family</small></div>
   </div>
   <div class="ticket-row r2">
-   <div class="ticket">"Make the logo smaller. No, smaller."<small>Brands</small></div><div class="ticket">"A countdown before the drop."<small>Music</small></div><div class="ticket">"Freeze on the dish and tag the price."<small>Food</small></div><div class="ticket">"Punch in on the punchline."<small>Comedy</small></div><div class="ticket">"It feels slow. Fix it."<small>Vague is fine</small></div><div class="ticket">"Make it exactly 60 seconds."<small>Ads</small></div>
-   <div class="ticket">"Make the logo smaller. No, smaller."<small>Brands</small></div><div class="ticket">"A countdown before the drop."<small>Music</small></div><div class="ticket">"Freeze on the dish and tag the price."<small>Food</small></div><div class="ticket">"Punch in on the punchline."<small>Comedy</small></div><div class="ticket">"It feels slow. Fix it."<small>Vague is fine</small></div><div class="ticket">"Make it exactly 60 seconds."<small>Ads</small></div>
+   <div class="ticket"><i data-i="star"></i>"Make the logo smaller. No, smaller."<small>Brands</small></div><div class="ticket"><i data-i="clock"></i>"A countdown before the drop."<small>Music</small></div><div class="ticket"><i data-i="tag"></i>"Freeze on the dish and tag the price."<small>Food</small></div><div class="ticket"><i data-i="zoom"></i>"Punch in on the punchline."<small>Comedy</small></div><div class="ticket"><i data-i="shrug"></i>"It feels slow. Fix it."<small>Vague is fine</small></div><div class="ticket"><i data-i="horn"></i>"Make it exactly 60 seconds."<small>Ads</small></div>
+   <div class="ticket"><i data-i="star"></i>"Make the logo smaller. No, smaller."<small>Brands</small></div><div class="ticket"><i data-i="clock"></i>"A countdown before the drop."<small>Music</small></div><div class="ticket"><i data-i="tag"></i>"Freeze on the dish and tag the price."<small>Food</small></div><div class="ticket"><i data-i="zoom"></i>"Punch in on the punchline."<small>Comedy</small></div><div class="ticket"><i data-i="shrug"></i>"It feels slow. Fix it."<small>Vague is fine</small></div><div class="ticket"><i data-i="horn"></i>"Make it exactly 60 seconds."<small>Ads</small></div>
   </div>
  </div></section>
 
  <div class="wrap">
-  <section class="yours reveal">
-   <h2>Your footage <em>stays yours.</em></h2>
-   <p>Your projects and original files stay on your computer. Gumbo sends the AI only what it needs, like transcripts and still frames, and never sells your data.<br><a href="/privacy/">Read the privacy policy ›</a></p>
-   <div class="seals"><span class="seal">Edits on your PC</span><span class="seal">Originals never uploaded</span><span class="seal">Delete any time</span></div>
+  <section class="yours reveal" id="yours">
+   <div>
+    <h2>Your footage <em>stays yours.</em></h2>
+    <p>Originals stay on your computer. The AI only sees what it needs, like stills and words, and your data is never sold.<br><a href="/privacy/">Read the privacy policy ›</a></p>
+   </div>
+   <div class="vault" aria-hidden="true"><svg viewBox="0 0 260 170">
+    <path id="leak" d="M168 60 C 178 26, 200 16, 228 18" fill="none" stroke="rgba(42,26,18,.25)" stroke-width="1.5" stroke-dasharray="3 5"/>
+    <rect x="44" y="34" width="160" height="104" rx="12" fill="#FFFCF6" stroke="#2A1A12" stroke-width="2"/>
+    <path d="M22 146h204l-14 14H36z" fill="#2A1A12"/>
+    <rect x="98" y="56" width="52" height="64" rx="8" fill="#FFD5BC" stroke="#2A1A12" stroke-width="2"/>
+    <path d="M114 78l20 10-20 10z" fill="#2A1A12"/>
+    <circle cx="150" cy="118" r="15" fill="#2A1A12"/>
+    <rect x="143" y="116" width="14" height="10" rx="2" fill="#FFF8EE"/><path d="M146 116v-3a4 4 0 0 1 8 0v3" fill="none" stroke="#FFF8EE" stroke-width="2"/>
+    <g fill="#E2552A"><circle r="4"><animateMotion dur="3s" repeatCount="indefinite"><mpath href="#leak"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="3s" repeatCount="indefinite"/></circle>
+    <rect x="-4" y="-3" width="8" height="6" rx="1.5" fill="#F2B33D"><animateMotion dur="3s" begin="1s" repeatCount="indefinite"><mpath href="#leak"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="3s" begin="1s" repeatCount="indefinite"/></rect>
+    <circle r="3"><animateMotion dur="3s" begin="2s" repeatCount="indefinite"><mpath href="#leak"/></animateMotion><animate attributeName="opacity" values="0;1;1;0" dur="3s" begin="2s" repeatCount="indefinite"/></circle></g>
+    <g transform="translate(232 18)" stroke="#2A1A12" stroke-width="2" stroke-linecap="round"><path d="M0 -10v6M0 4v6M-10 0h6M4 0h6"/></g>
+    <text x="96" y="22" font-family="Figtree,sans-serif" font-size="11" font-weight="600" fill="#6B5446">stills + words</text>
+   </svg></div>
+   <div class="seals"><span class="seal"><i data-i="screen"></i>Edits on your PC</span><span class="seal"><i data-i="lock"></i>Originals stay put</span><span class="seal"><i data-i="trash"></i>Delete any time</span></div>
   </section>
   <div class="perks reveal">
    <h3>Be one of the <em>first to ask.</em></h3>
@@ -532,9 +777,9 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
     <form class="bar">
      <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
      <textarea rows="1" aria-label="What will you ask for first?" placeholder="I'd ask for…"></textarea>
-     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+     <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
-    <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A trip recap like this one</button><button type="button">Make it feel like a 90s camcorder</button></div>
+    <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A trip recap like this one</button><button type="button">A 90s camcorder look</button></div>
     <div class="reply" role="status"></div>
    </div>
    <p class="made-from">The Short on the phone came from one sentence and 17 clips of Vietnam. Sound on for the score Gumbo wrote for it.</p>
@@ -550,6 +795,66 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
 <script>
 const calm=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
+const NS='http://www.w3.org/2000/svg';
+const el=(name,attrs)=>{const n=document.createElementNS(NS,name);for(const k in attrs)n.setAttribute(k,attrs[k]);return n;};
+// Line icons (24×24, stroked in the current colour), placed wherever an element says data-i="name".
+const ICONS={
+ cut:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.6 7.6 20 18M8.6 16.4 20 6"/>',
+ text:'<path d="M5 6h14M12 6v13M9 19h6"/>',
+ cc:'<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10.5 10.2a2 2 0 1 0 0 3.6M17 10.2a2 2 0 1 0 0 3.6"/>',
+ sliders:'<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+ music:'<path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
+ spark:'<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+ layers:'<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+ crop:'<path d="M6 2v16h16M2 6h16v16"/>',
+ speed:'<path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 17 4-5"/>',
+ mask:'<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none"/>',
+ key:'<path d="m12 4 6 8-6 8-6-8z"/>',
+ palette:'<path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-2 0-3h3a4 4 0 0 0 4-4c0-5-4-9-9-9z"/><circle cx="8" cy="10" r=".8"/><circle cx="12" cy="7" r=".8"/><circle cx="16" cy="10" r=".8"/>',
+ mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+ wand:'<path d="m4 20 12-12M14 4v2M18 8h2M17 4l1.5-1.5M19 10l1.5 1.5"/>',
+ smile:'<circle cx="12" cy="12" r="9"/><path d="M8.5 14a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>',
+ bowtie:'<path d="M4 5l8 7-8 7zM20 5l-8 7 8 7z"/>',
+ cube:'<path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
+ screen:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+ wave:'<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/>',
+ grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+ volume:'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/>',
+ film:'<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M7 3v18M17 3v18M3 8h4M3 16h4M17 8h4M17 16h4"/>',
+ motion:'<circle cx="16" cy="12" r="4"/><path d="M3 9h6M2 12h7M3 15h6"/>',
+ more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+ pin:'<path d="M12 21s-7-6.5-7-12a7 7 0 0 1 14 0c0 5.5-7 12-7 12z"/><circle cx="12" cy="9" r="2.5"/>',
+ tag:'<path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="8.5" r="1.5"/>',
+ clock:'<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M10 2h4"/>',
+ vhs:'<rect x="2" y="7" width="14" height="10" rx="2"/><path d="m16 11 6-3v8l-6-3"/>',
+ phone:'<rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/>',
+ star:'<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+ zoom:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M11 8v6M8 11h6"/>',
+ shrug:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7M12 17h.01"/>',
+ horn:'<path d="M3 10v4h4l8 5V5L7 10z"/><path d="M19 9a4 4 0 0 1 0 6"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/>',
+ type:'<path d="M4 6h16M4 12h10M4 18h7"/>',
+ lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+ trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'};
+const icon=name=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`;
+document.querySelectorAll('[data-i]').forEach(n=>{n.innerHTML=icon(n.dataset.i);});
+// Run fn the first time node comes on screen.
+const whenSeen=(node,fn,threshold=.3)=>{const ob=new IntersectionObserver(es=>{if(es.some(e=>e.isIntersecting)){ob.disconnect();fn();}},{threshold});ob.observe(node);};
+
+// The kitchen: raw clips tumble along the left path into the bowl; the finished Short's frames ride out on the ribbon.
+(function kitchen(){
+ const svg=document.getElementById('kitchen'),raw=document.getElementById('raw'),cooked=document.getElementById('cooked');
+ const rawThumbs=['00','03','11','22','05','13','15','24','07','19','01','21'];
+ rawThumbs.forEach((n,i)=>{const begin=`-${(i*18/rawThumbs.length).toFixed(2)}s`,g=el('g',{});
+  g.appendChild(el('image',{href:`media/clips/${n}.jpg`,x:-38,y:-28,width:76,height:56,preserveAspectRatio:'xMidYMid slice','clip-path':'url(#rr)'}));
+  const m=el('animateMotion',{dur:'18s',repeatCount:'indefinite',rotate:'auto',begin});m.appendChild(el('mpath',{href:'#rawPath'}));g.appendChild(m);
+  g.appendChild(el('animateTransform',{attributeName:'transform',type:'scale',additive:'sum',values:'1;1;.25',keyTimes:'0;.88;1',dur:'18s',repeatCount:'indefinite',begin}));
+  raw.appendChild(g);});
+ for(let i=0;i<13;i++){const g=el('g',{});
+  g.appendChild(el('image',{href:`media/frames/f${String(i).padStart(2,'0')}.jpg`,x:-17,y:-30,width:34,height:60,preserveAspectRatio:'xMidYMid slice','clip-path':'url(#rt)'}));
+  const m=el('animateMotion',{dur:'16s',repeatCount:'indefinite',rotate:'auto',begin:`-${(i*16/13).toFixed(2)}s`});m.appendChild(el('mpath',{href:'#cookedPath'}));g.appendChild(m);cooked.appendChild(g);}
+ if(calm)svg.pauseAnimations();
+})();
 
 // The demo: each order is typed, sent, answered, and applied to the preview and the timeline.
 // shot: which frame is on screen; fx: the look the stage takes; lane/at/w: where its block lands on the timeline.
@@ -566,20 +871,20 @@ const orders=[
 
 (function demo(){
  const stage=document.getElementById('stage'),A=document.getElementById('shotA'),B=document.getElementById('shotB');
- const log=document.getElementById('log'),typed=document.getElementById('typed'),playhead=document.getElementById('playhead');
+ const log=document.getElementById('log'),typed=document.getElementById('typed'),playhead=document.getElementById('playhead'),send=document.getElementById('demoSend');
  const video=document.getElementById('video'),gfx=document.getElementById('gfx'),music=document.getElementById('music'),tryBar=document.getElementById('try');
  const FX=['vhs','title','map','tag','slow','warm','better'];
- let front=A,run=0,step=0,current='f01';
+ let front=A,run=0,step=0,current='f01',pin=0;
  // Video lane: one block per shot, its frame as the thumbnail.
  const vblocks=SHOTS.map(([f,at,w])=>{const b=document.createElement('b');b.style.cssText=`left:${at}%;width:calc(${w}% - 3px);background-image:url(media/frames/${f}.jpg)`;video.appendChild(b);return b;});
  const bed=document.createElement('b');bed.style.cssText='left:0;width:100%';music.appendChild(bed);
  const show=f=>{if(f===current)return;current=f;const back=front===A?B:A;back.src=`media/frames/${f}.jpg`;back.classList.remove('off');front.classList.add('off');front=back;};
- const place=pct=>{const lane=video.getBoundingClientRect(),tl=video.closest('.tl').getBoundingClientRect();playhead.style.left=(lane.left-tl.left+lane.width*pct/100)+'px';};
+ const place=pct=>{pin=pct;const lane=video.getBoundingClientRect(),tl=video.closest('.tl').getBoundingClientRect();playhead.style.left=(lane.left-tl.left+lane.width*pct/100)+'px';};
  const shotAt=f=>{const i=SHOTS.findIndex(s=>s[0]===f);return i<0?0:i;};
  const bubble=(cls,html)=>{const m=document.createElement('div');m.className='msg '+cls;m.innerHTML=html;log.appendChild(m);while(log.children.length>6)log.firstChild.remove();return m;};
- const clearTimeline=()=>{gfx.innerHTML='';music.querySelectorAll('b:not(:first-child)').forEach(b=>b.remove());bed.classList.remove('hot');vblocks.forEach(b=>b.classList.remove('hot'));};
- const reset=()=>{stage.classList.remove(...FX);log.innerHTML='';clearTimeline();vblocks[0].style.backgroundImage='url(media/frames/f01.jpg)';show('f01');place(0);};
-
+ const clearTimeline=()=>{gfx.innerHTML='';music.querySelectorAll('b:not(:first-child)').forEach(b=>b.remove());vblocks.forEach(b=>b.classList.remove('hot'));};
+ const reset=()=>{stage.classList.remove(...FX);log.innerHTML='';clearTimeline();vblocks[0].style.backgroundImage='url(media/frames/f01.jpg)';show('f01');place(0);
+  bubble('gumbo','<b>Gumbo</b>Your Vietnam trip is cut: six shots, forty seconds. Ask for anything.');};
  const apply=o=>{
   clearTimeline();
   const i=o.swap!==undefined?o.swap:shotAt(o.shot==='f02'?'f01':o.shot);
@@ -594,14 +899,14 @@ const orders=[
   if(o.lane==='music')add(music,o.at,o.w);
   if(o.lane==='many'){[1,3].forEach(k=>vblocks[k].classList.add('hot'));add(gfx,0,16,'Shadows');add(gfx,48,14,'Shadows');add(music,0,8);add(music,92,8);}
  };
-
  async function play(i,id){
   const o=orders[i];
   [...tryBar.querySelectorAll('button')].forEach((b,j)=>b.classList.toggle('on',j===i));
   typed.textContent='';
   if(!calm)for(const ch of o.say){if(id!==run)return;typed.textContent+=ch;await wait(ch===' '?55:32);}
   if(id!==run)return;
-  await wait(calm?0:350);if(id!==run)return;
+  await wait(calm?0:300);if(id!==run)return;
+  send.classList.add('press');setTimeout(()=>send.classList.remove('press'),220);
   typed.textContent='';bubble('you','').textContent=o.say;
   const dots=bubble('gumbo dots','<i></i><i></i><i></i>');
   await wait(calm?0:1100);if(id!==run)return;
@@ -610,33 +915,53 @@ const orders=[
  }
  async function loop(from){
   const id=++run;step=from;
-  if(from===0)reset();
   while(id===run){
    await play(step,id);if(id!==run)return;
    if(calm)return;
    await wait(4200);if(id!==run)return;
    step=(step+1)%orders.length;
-   if(step===0){reset();await wait(600);}
+   if(step===0){reset();await wait(1200);}
   }
  }
  orders.forEach((o,i)=>{const b=document.createElement('button');b.type='button';b.textContent=o.chip;b.addEventListener('click',()=>{if(i===0)reset();loop(i);});tryBar.appendChild(b);});
- addEventListener('resize',()=>{const o=orders[step];place(o.lane==='gfx'||o.lane==='music'?o.at+1:SHOTS[shotAt(o.shot==='f02'?'f01':o.shot)][1]+1);});
+ addEventListener('resize',()=>place(pin));
  reset();
- // Start once the window is on screen, and only once.
- let started=false;
- new IntersectionObserver((es,ob)=>{if(!started&&es.some(e=>e.isIntersecting)){started=true;ob.disconnect();loop(0);}},{threshold:.3}).observe(stage);
+ whenSeen(stage,()=>setTimeout(()=>loop(0),600),.5);
 })();
 
-// No menu: one box, a steady stream of very different orders.
-(function stream(){
- const asks=['Trim two frames off the end.','Make it feel like a 90s camcorder.','Turn my talk into three Shorts.','Lose the bit where the dog barks.','Captions that bounce on every beat.','Draw our route on a map.','Warmer, like the last day of summer.','A countdown before the drop.','Punch in on the punchline.','Make it exactly 60 seconds.','It feels slow. Fix it.','Swap the music for something calmer.'];
- const box=document.getElementById('stream');
- [...asks,...asks].forEach(t=>{const q=document.createElement('q');q.textContent=t;box.appendChild(q);});
+// No menu: a cursor hunts through the buttons for something that isn't there...
+(function hunt(){
+ const box=document.getElementById('buttons'),hunter=document.getElementById('hunter'),huh=document.getElementById('huh'),tip=document.getElementById('tip');
+ const tools=[['cut','Split'],['text','Text'],['cc','Auto captions'],['sliders','Adjust'],['music','Stock music'],['spark','Effects'],['layers','Overlays'],['crop','Reframe'],['speed','Speed ramp'],['mask','Masks'],['key','Keyframes'],['palette','Color match'],['mic','Voiceover'],['wand','Smart cut'],['smile','Stickers'],['bowtie','Transitions'],['cube','LUTs'],['screen','Green screen'],['wave','Remove silence'],['grid','Templates'],['volume','Audio ducking'],['film','Clips'],['motion','Animations'],['text','Lower thirds'],['sun','Filters'],['zoom','Zoom'],['star','Favourites'],['more','More…']];
+ const btns=tools.map(([i,name])=>{const b=document.createElement('i');b.innerHTML=icon(i);b.dataset.name=name;box.appendChild(b);return b;});
+ const wants=["Where's the map tool?","Is it under Effects?","Which one is the 90s look?","Maybe Overlays…","Where's the price tag thing?","Animations?"];
+ let n=0,last=-1;
+ const go=()=>{let k;do k=Math.floor(Math.random()*btns.length);while(k===last);last=k;
+  btns.forEach(b=>b.classList.remove('hover'));tip.classList.remove('on');const b=btns[k];
+  const x=b.offsetLeft+b.offsetWidth*.55,y=b.offsetTop+b.offsetHeight*.5;
+  hunter.style.transform=`translate(${x}px,${y}px)`;
+  const W=box.clientWidth;
+  huh.style.transform=`translate(${Math.min(Math.max(8,x-30),W-huh.offsetWidth-8)}px,${y+30}px)`;
+  setTimeout(()=>{b.classList.add('hover');tip.textContent=b.dataset.name+'?';
+   tip.style.transform=`translate(${Math.min(Math.max(8,b.offsetLeft+b.offsetWidth/2-tip.offsetWidth/2),W-tip.offsetWidth-8)}px,${b.offsetTop-26}px)`;tip.classList.add('on');},850);
+  if(n%2===0)huh.textContent=wants[(n/2)%wants.length];n++;};
+ requestAnimationFrame(go);if(!calm)whenSeen(box,()=>setInterval(go,1700),.2);
+})();
+
+// ...while one box types order after order and sends them up the stream.
+(function oneBox(){
+ const asks=[['cut','Trim two frames off the end.'],['vhs','Make it feel like a 90s camcorder.'],['phone','Turn my talk into three Shorts.'],['wave','Lose the bit where the dog barks.'],['cc','Captions that bounce on every beat.'],['pin','Draw our route on a map.'],['sun','Warmer, like the last day of summer.'],['clock','A countdown before the drop.'],['zoom','Punch in on the punchline.'],['speed','Make it exactly 60 seconds.'],['shrug','It feels slow. Fix it.'],['music','Swap the music for something calmer.']];
+ const box=document.getElementById('stream'),line=document.getElementById('oneline');
+ [...asks,...asks].forEach(([i,t])=>{const q=document.createElement('q');q.innerHTML=`<i>${icon(i)}</i><span></span>`;q.lastChild.textContent=t;box.appendChild(q);});
+ if(calm){line.textContent='Anything.';return;}
+ let i=0;
+ const type=async()=>{for(;;){const t=asks[i++%asks.length][1];line.textContent='';for(const ch of t){line.textContent+=ch;await wait(ch===' '?60:38);}await wait(1400);}};
+ whenSeen(line,type,.2);
 })();
 
 // The prompt bars: type an edit; Gumbo answers by asking where to send your invite.
 // No server: the invite request opens an email with the request and address filled in.
-const ideas=['Make it feel like a 90s camcorder…','Cut every um…','Draw our route on a map…','Turn my talk into three Shorts…','Trim two frames off the end…','Make it better…'];
+const ideas=['Cut every um…','Draw our route on a map…','Make it feel like the 90s…','Three Shorts from my talk…','Make the logo smaller…','Make it better…'];
 document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
  const form=ask.querySelector('form'),box=ask.querySelector('textarea'),reply=ask.querySelector('.reply');
  const grow=()=>{box.style.height='40px';box.style.height=Math.min(box.scrollHeight,140)+'px';};
@@ -655,6 +980,22 @@ document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
   reply.append(p,f,note);reply.classList.add('on');f.querySelector('input').focus();});
 });
 
+// What to ask: each request types itself in when its card comes on screen.
+document.querySelectorAll('[data-type]').forEach(h=>{
+ if(calm)return;
+ const text=h.textContent;h.setAttribute('aria-label',text);h.textContent='';const c=document.createElement('span');c.className='c';h.appendChild(c);
+ whenSeen(h,async()=>{await wait(350);for(const ch of text){c.before(ch);await wait(ch===' '?45:26);}await wait(1600);c.remove();},.6);
+});
+
+// Vague is fine: the thread plays itself, the music chip gets struck out, then it starts again.
+(function thread(){
+ const t=document.getElementById('thread'),parts=[...t.children],mus=t.querySelector('.mus');
+ if(calm){parts.forEach(p=>p.classList.add('on'));mus.classList.add('undone');return;}
+ const play=async()=>{for(;;){parts.forEach(p=>p.classList.remove('on'));mus.classList.remove('undone');await wait(700);
+  for(const [k,p] of parts.entries()){p.classList.add('on');if(k===3)mus.classList.add('undone');await wait(k%2?1700:1100);}await wait(3800);}};
+ whenSeen(t,play,.4);
+})();
+
 // Reveal on scroll.
 const seen=new IntersectionObserver(es=>{for(const e of es)if(e.isIntersecting){e.target.classList.add('in');seen.unobserve(e.target);}},{threshold:.15});
 document.querySelectorAll('.reveal').forEach(n=>seen.observe(n));
@@ -665,6 +1006,13 @@ new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!calm){sho
 const sound=document.getElementById('sound');
 sound.addEventListener('click',()=>{short.muted=!short.muted;if(!short.muted){short.preload='auto';short.play().catch(()=>{});}sound.setAttribute('aria-pressed',String(!short.muted));sound.querySelector('span').textContent=short.muted?'Sound off':'Sound on';
  sound.querySelector('svg').innerHTML=short.muted?'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/>':'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>';});
+
+// The cuts waveform and the score's equalizer.
+const cutwave=document.getElementById('cutwave');let wd='';for(let x=0;x<=640;x+=6){const h=Math.max(2,Math.abs(Math.sin(x*.9)+Math.sin(x*.23))*6+2);wd+=`M${x} ${17-h} V${17+h}`;}
+cutwave.innerHTML=`<path d="${wd}" stroke="rgba(42,26,18,.3)" stroke-width="2.4" stroke-linecap="round"/>`;
+const watchwave=document.getElementById('watchwave');let ww='';for(let x=2;x<=298;x+=5){const h=Math.max(1.5,Math.abs(Math.sin(x*.31)+Math.sin(x*.07))*6);ww+=`M${x} ${15-h} V${15+h}`;}
+watchwave.innerHTML=`<path d="${ww}" stroke="rgba(255,248,238,.3)" stroke-width="2" stroke-linecap="round"/>`;
+const eq=document.getElementById('eq');for(let i=0;i<14;i++){const b=document.createElement('i');b.style.setProperty('--h',(45+Math.round(Math.abs(Math.sin(i*1.7))*55))+'%');b.style.animationDelay=(-(i*.13)).toFixed(2)+'s';b.style.animationDuration=(1.2+(i%4)*.18).toFixed(2)+'s';eq.appendChild(b);}
 
 // Save my seat: jump to the prompt at the bottom and put the cursor in it.
 document.getElementById('seat').addEventListener('click',e=>{e.preventDefault();document.getElementById('make').scrollIntoView({behavior:calm?'auto':'smooth'});setTimeout(()=>document.querySelector('#make textarea').focus({preventScroll:true}),calm?0:700);});
