@@ -51,5 +51,16 @@ let secret;
 if(hook){await stripe('webhook_endpoints/'+hook.id,{enabled_events:events});console.log(`Webhook: ${url} (already there; its secret is in Stripe's dashboard)`);}
 else{const made=await stripe('webhook_endpoints',{url,enabled_events:events,description:'Gumbo gateway: credits and plans'});secret=made.secret;console.log(`Webhook: ${url}`);}
 
-console.log(`\nSet these on the gateway (${live?'LIVE':'test mode'}):\n`);
-console.log(`supabase secrets set STRIPE_SECRET_KEY=<the key you used> STRIPE_PRICE_PRO=${prices.pro} STRIPE_PRICE_MAX=${prices.max} STRIPE_PRICE_MAX20=${prices.max20} STRIPE_PRICE_TOPUP=${prices.topup}${secret?` STRIPE_WEBHOOK_SECRET=${secret}`:''}`);
+// With --write <file>, the gateway's secrets go to that file (for `supabase secrets set --env-file <file>`), so neither
+// key is printed; otherwise the command to set them is printed.
+const out=process.argv[process.argv.indexOf('--write')+1];
+if(process.argv.includes('--write')&&out){
+ const {writeFileSync,readFileSync,existsSync}=await import('node:fs');
+ // A webhook made earlier keeps the signing secret written then (Stripe shows it only once).
+ const kept=existsSync(out)?readFileSync(out,'utf8').match(/^STRIPE_WEBHOOK_SECRET=(.+)$/m)?.[1]:undefined,hookSecret=secret??kept;
+ writeFileSync(out,[`STRIPE_SECRET_KEY=${key}`,`STRIPE_PRICE_PRO=${prices.pro}`,`STRIPE_PRICE_MAX=${prices.max}`,`STRIPE_PRICE_MAX20=${prices.max20}`,`STRIPE_PRICE_TOPUP=${prices.topup}`,...(hookSecret?[`STRIPE_WEBHOOK_SECRET=${hookSecret}`]:[])].join('\n')+'\n');
+ console.log(`\nGateway secrets written to ${out} (${live?'LIVE':'test mode'})${hookSecret?'':'; the webhook signing secret is missing: roll it in Stripe and add STRIPE_WEBHOOK_SECRET'}.`);
+}else{
+ console.log(`\nSet these on the gateway (${live?'LIVE':'test mode'}):\n`);
+ console.log(`supabase secrets set STRIPE_SECRET_KEY=<the key you used> STRIPE_PRICE_PRO=${prices.pro} STRIPE_PRICE_MAX=${prices.max} STRIPE_PRICE_MAX20=${prices.max20} STRIPE_PRICE_TOPUP=${prices.topup}${secret?` STRIPE_WEBHOOK_SECRET=${secret}`:''}`);
+}

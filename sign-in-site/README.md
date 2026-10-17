@@ -8,6 +8,8 @@ Gumbo's website, a static site on Vercel served at `https://usegumbo.app`:
   its log and thumbnails in `media/making`. The prompt bars open an early-access email with the visitor's request filled in.
 - `/signin/` the sign-in page the desktop app opens.
 - `/privacy/` and `/terms/`, linked from Google's sign-in screen.
+- `/billing/` where Stripe sends people back after Checkout or the customer portal: it says what happened (`?status=`
+  subscribed, credits, portal or cancelled) and to go back to Gumbo, which shows the new plan or credits.
 - `/dashboard/` the spending dashboard: every billed AI call by provider, model, day, account and request. Nothing links
   to it and it is marked noindex. The page holds no data: the gateway's `spend-dashboard` action checks the password
   (the `DREAM_DASHBOARD_PASSWORD` secret), refuses an address after 8 wrong tries in 15 minutes, and names accounts by
