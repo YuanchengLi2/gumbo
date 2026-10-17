@@ -13,6 +13,8 @@ export class BackgroundProjects<S extends {close():Promise<void>}>{
  park(service:S,project:{id:string;folder:string}){this.parked.set(service,{id:project.id,folder:folderKey(project.folder)});}
  has(service:S){return this.parked.has(service);}
  get size(){return this.parked.size;}
+ /** The projects still editing out of sight, for the home screen's spinners. */
+ ids(){return [...this.parked.values()].map(p=>p.id);}
  /** The parked service of this folder, no longer parked: it becomes the open project's again. */
  take(folder:string):{service:S;id:string}|undefined{
   const wanted=folderKey(folder);

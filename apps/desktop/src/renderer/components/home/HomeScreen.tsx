@@ -1,9 +1,11 @@
 import React from 'react';
-import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus} from 'lucide-react';
+import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2} from 'lucide-react';
+import {useWorking} from '../../working';
 import type {ProjectSummary} from '@dream/contracts';
 import {ChatComposer,type Attachment} from '../chat/ChatComposer';
 import {useEditor} from '../../store/editor';
 import {ProfileMenu} from '../settings/SettingsMenu';
+import {SidebarUpgrade} from '../billing/Upgrade';
 
 /** The Gumbo mark, as on usegumbo.app: a paprika bowl with a play button in it and steam rising. The steam takes the text
  * colour, so the mark reads on light and dark; the bowl is the app's one brand colour. */
@@ -26,7 +28,7 @@ const ideas:[typeof Film,string,string][]=[
  * foot (the profile menu, which holds Settings); beside it one big box to start an edit, quick ideas, and the projects as
  * pictures. The top strip of both is the window's drag area, and the window's own controls sit on the main side. */
 export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;busy:boolean}){
- const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model);
+ const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model),working=useWorking();
  // A new video starts in the box: it is cleared and focused.
  const newVideo=()=>{p.onChange('');requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.fig-home .home-composer textarea')?.focus());};
  return <div className="home-screen fig-home">
@@ -37,8 +39,9 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
     <button type="button" onClick={()=>p.onOpen()}><FolderOpen size={16}/>Open project</button>
    </nav>
    {p.projects.length>0&&<section className="home-recents" aria-label="Recent projects"><h2>Recent</h2>
-    {p.projects.slice(0,30).map(project=><button type="button" key={project.id} className={project.missing?'missing':undefined} title={project.name} onClick={()=>p.onOpen(project.folder)}>{project.name}</button>)}
+    {p.projects.slice(0,30).map(project=><button type="button" key={project.id} className={project.missing?'missing':undefined} title={project.name} onClick={()=>p.onOpen(project.folder)}><span>{project.name}</span>{working.has(project.id)&&<Loader2 size={13} className="spin" aria-label="Gumbo is editing"/>}</button>)}
    </section>}
+   <SidebarUpgrade/>
    <footer className="home-side-foot"><ProfileMenu up label/></footer>
   </aside>
   <main className="fig-home-main">
@@ -51,7 +54,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <section className="fig-recent" aria-label="Your projects">
     <header><h2>Your projects</h2>{p.projects.length>0&&<span>{p.projects.length}</span>}</header>
     {p.projects.length?<div className="fig-project-grid">{p.projects.map(project=><button className={'project-card'+(project.missing?' missing':'')} key={project.id} onClick={()=>p.onOpen(project.folder)}>
-     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
+     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}{working.has(project.id)&&<span className="project-working"><Loader2 size={12} className="spin"/>Editing</span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
      <strong>{project.name}</strong><small>{updated(project)}</small>
     </button>)}</div>:<div className="fig-empty"><GumboMark/><div><strong>Your first edit starts above.</strong><p>Add your clips, say what you want, and Gumbo cuts it on a real timeline. Projects are saved here automatically.</p></div></div>}
    </section>

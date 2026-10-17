@@ -4,6 +4,7 @@ import type {Command,ProjectSummary,InitialRequest,ExportProgress,RuntimeStatus}
 import {useEditor,mergeProjectDelta} from '../store/editor';
 import {grabFrames} from '../engine/frames';
 import {runExport,stopExports} from '../engine/export-job';
+import {openUpgrade} from '../components/billing/Upgrade';
 export type CommandFn=(command:Command)=>Promise<any>;
 export function useProjectSession(){
  const s=useEditor(),[projects,setProjects]=useState<ProjectSummary[]>([]),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[progress,setProgress]=useState<ExportProgress|null>(null),[catalog,setCatalog]=useState<any>({scores:[],sfx:[]});
@@ -42,6 +43,8 @@ export function useProjectSession(){
   if(event.type==='ai.step'){const p=useEditor.getState().project;if(p){const step=event.payload as any,steps=[...(p.experience?.steps??[])],index=steps.findIndex(i=>(i.id??i.label)===(step.id??step.label));if(index<0)steps.push(step);else steps[index]=step;const activity={steps:[],status:p.aiStatus,changes:[],...p.experience?.activity},events=[...(activity.events??[])],id=step.id??step.label,found=events.find(i=>i.id===id&&i.kind==='action');if(found){found.text=step.label;found.status=step.status;}else events.push({id,sequence:events.length,kind:'action',text:step.label,status:step.status});s.setProject({...p,experience:{firstDraftVersionId:p.experience?.firstDraftVersionId??null,...p.experience,steps,activity:{...activity,events}}});}}
   if(['ai.error','media.error','account.error'].includes(event.type))s.setError((event.payload as any).message);
   // A request that failed before it was saved stops showing as sent.
+  // A request stopped because the credits ran out: the upgrade window offers credits and plans.
+  if(event.type==='ai.error'&&(event.payload as {code?:string}).code==='quota')openUpgrade('out');
   if(event.type==='ai.error'){const pending=useEditor.getState().pending;if(pending)useEditor.setState({pending:null,returned:pending.text});}
   if(event.type==='export.progress'){const progress=event.payload as ExportProgress;if(progress.status==='cancelled')stopExports();setProgress(progress);}
   if(event.type==='models.progress'&&(event.payload as any).status==='ready')void window.dream.runtime().then(setRuntime);

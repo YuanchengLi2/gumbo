@@ -16,7 +16,7 @@ let wired=false;
 function wire(){
  if(wired)return;wired=true;
  window.addEventListener('focus',()=>{if(listeners.size)void refreshBilling();});
- window.dream.onEvent(raw=>{const event=raw as {type?:string;payload?:{status?:string}};if(event.type==='account.signed_in'||event.type==='ai.status'&&event.payload?.status!=='running')void refreshBilling();});
+ window.dream.onEvent(raw=>{const event=raw as {type?:string;payload?:{status?:string}};if(event.type==='account.signed_in'||event.type==='app.link'||event.type==='ai.status'&&event.payload?.status!=='running')void refreshBilling();});
 }
 export function useBilling(){
  const [value,setValue]=useState(current);

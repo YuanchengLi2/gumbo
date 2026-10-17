@@ -7,7 +7,8 @@ import {shortcutHints} from '../../shortcuts';
 import {useEditor} from '../../store/editor';
 import {choices,shortLabel,available,useProviders,refreshProviders,modelName} from '../../models';
 import {useAccount,requireSignIn,signedOut} from '../../account';
-import {useBilling,billingReady,choosePlan,buyCredits,manageBilling,credits} from '../../billing';
+import {useBilling,billingReady,buyCredits,manageBilling,credits} from '../../billing';
+import {openUpgrade} from '../billing/Upgrade';
 
 /** Settings as a page of its own, laid out as Claude's: sections in a sidebar on the left, the chosen one on the right, as
  * plain rows (a label, what it does, its control). Most rows change what already exists (the theme, the composer's model,
@@ -57,45 +58,42 @@ function Account(){
  </>;
 }
 
-/** Usage and billing: the plan and the credits left, the plans to choose from and credits to buy (both on Stripe's pages,
- * in the browser), and what the credits went on: today, the last 30 days by day, and by model. */
+/** Usage and billing, like a coding tool's usage page: the credits left, then meters for what was used (the plan's credits
+ * this period, with when they renew; bought credits; today; the last 30 days), and under them topping up and upgrading
+ * (Upgrade only below the top plan). Paying is on Stripe's pages in the browser. */
 function Usage(){
- const billing=useBilling(),[usage,setUsage]=useState<UsageSummary|{unavailable:true}|null|undefined>(undefined),[error,setError]=useState<string|null>(null),[opened,setOpened]=useState<string|null>(null);
+ const billing=useBilling(),[usage,setUsage]=useState<UsageSummary|{unavailable:true}|null|undefined>(undefined),[error,setError]=useState<string|null>(null),[opened,setOpened]=useState(false);
  useEffect(()=>{window.dream.command<any>({type:'account',action:'usage'}).then(setUsage,(e:Error)=>setError(e.message));},[]);
- const pay=async(label:string,open:()=>Promise<unknown>)=>{setError(null);setOpened(label);try{await open();}catch(e){setOpened(null);setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}};
- const summary=usage&&!('unavailable' in usage)?usage:null,b=billingReady(billing)?billing:null,peak=Math.max(1,...(summary?.days??[]).map(d=>d.credits));
- if(billing===null||usage===null)return <><p className="settings-lead">Sign in to see your plan and credits.</p><button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button></>;
- if(billing&&'unavailable' in billing)return <Row label="Billing is not available yet" help="Your Gumbo service needs its latest update to show plans and credits here."/>;
+ const pay=async(open:()=>Promise<unknown>,mark=false)=>{setError(null);if(mark)setOpened(true);try{await open();}catch(e){setOpened(false);setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}};
+ const summary=usage&&!('unavailable' in usage)?usage:null,b=billingReady(billing)?billing:null;
+ if(billing===null||usage===null)return <><p className="settings-lead">Sign in to see your credits and usage.</p><button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button></>;
+ if(billing&&'unavailable' in billing)return <Row label="Billing is not available yet" help="Your Gumbo service needs its latest update to show credits here."/>;
+ if(!b)return <Row label="Loading…"/>;
+ const used=Math.max(0,b.credits.planTotal-b.credits.plan),share=b.credits.planTotal>0?Math.min(1,used/b.credits.planTotal):1;
  return <>
+  <div className="usage-left"><strong>{credits(b.credits.left)}</strong><span>credits left</span></div>
+  <div className="usage-meters">
+   <Meter label={`${b.planName} plan`} share={share} value={`${credits(used)} / ${credits(b.credits.planTotal)}`} note={b.renewsAt?`${b.cancelAtPeriodEnd?'Ends':'Resets'} ${day(b.renewsAt)}`:undefined}/>
+   {b.credits.topups>0&&<Meter label="Bought credits" value={`${credits(b.credits.topups)} left`} note="Never expire"/>}
+   {b.credits.overdraft>0&&<Meter label="Over" value={`${credits(b.credits.overdraft)}`} note="Taken from your next credits"/>}
+   {summary&&<><Meter label="Today" value={`${credits(summary.todayCredits)} used`}/><Meter label="Last 30 days" value={`${credits(summary.monthCredits)} used`} note={`${summary.requests} AI calls`}/></>}
+  </div>
+  <div className="usage-actions">
+   <button type="button" className="settings-button-primary" disabled={!b.payments} onClick={()=>void pay(()=>buyCredits(1),true)}>Top up · {credits(b.topup.credits)} credits for {dollars(b.topup.priceUsd)}</button>
+   {b.plan!=='max20'&&<button type="button" className="settings-button-secondary" onClick={()=>openUpgrade()}>Upgrade plan</button>}
+   {b.portal&&<button type="button" className="usage-manage" onClick={()=>void pay(manageBilling)}>Manage billing</button>}
+  </div>
+  {opened&&<p className="settings-note">Opened in your browser. Your credits show here once you've paid.</p>}
   {error&&<p className="settings-error" role="alert">{error}</p>}
-  {!b?<Row label="Loading your plan…"/>:<>
-   <section className="billing-plan" aria-label="Your plan">
-    <header><div><strong>{b.planName}</strong><span>{b.plan==='free'?'Free':`${dollars(b.plans.find(x=>x.id===b.plan)!.priceUsd)} a month`}{b.renewsAt&&` · ${b.cancelAtPeriodEnd?'ends':b.plan==='free'?'new credits':'renews'} ${day(b.renewsAt)}`}</span></div>
-     {b.portal&&<button type="button" className="settings-button-secondary" onClick={()=>void pay('portal',manageBilling)}>Manage billing</button>}</header>
-    <div className="billing-left"><strong>{credits(b.credits.left)}</strong><span>credits left</span></div>
-    <div className="settings-meter" role="meter" aria-label="Plan credits left" aria-valuemin={0} aria-valuemax={b.credits.planTotal} aria-valuenow={Math.max(0,b.credits.plan)}><span style={{width:`${Math.round(Math.min(1,Math.max(0,b.credits.plan)/Math.max(1,b.credits.planTotal))*100)}%`}}/></div>
-    <p>{credits(b.credits.plan)} of {credits(b.credits.planTotal)} from your plan{b.credits.topups>0&&<>, plus {credits(b.credits.topups)} bought, which don't expire</>}.{b.credits.overdraft>0&&<> {credits(b.credits.overdraft)} over, taken from your next credits.</>}</p>
-    <footer><button type="button" className="settings-button-primary" disabled={!b.payments} onClick={()=>void pay('credits',()=>buyCredits(1))}>Buy {credits(b.topup.credits)} credits · {dollars(b.topup.priceUsd)}</button>{opened&&<span className="billing-opened">Opened in your browser. Your credits show here once you've paid.</span>}</footer>
-   </section>
-   <h3 className="settings-subhead">Plans</h3>
-   <div className="billing-plans">{b.plans.map(plan=>{const current=plan.id===b.plan,order=['free','pro','max','max20'],up=order.indexOf(plan.id)>order.indexOf(b.plan);
-    return <div key={plan.id} className={'billing-plan-card'+(current?' current':'')}>
-     <strong>{plan.name}</strong><span className="billing-price">{plan.priceUsd?<>{dollars(plan.priceUsd)}<small> a month</small></>:'Free'}</span>
-     <span className="billing-credits">{credits(plan.credits)} credits a month</span>
-     {current?<span className="billing-current">Your plan</span>:plan.id==='free'?<span className="billing-current muted">{b.portal?'Cancel in Manage billing':''}</span>:
-      <button type="button" className={up?'settings-button-primary':'settings-button-secondary'} disabled={!b.payments} onClick={()=>void pay(plan.id,()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{b.plan==='free'?'Choose':up?'Upgrade':'Switch'}</button>}
-    </div>;})}</div>
-   {!b.payments&&<p className="settings-note">Paying isn't set up on your Gumbo service yet, so plans and credits can't be bought.</p>}
-   <p className="settings-note">One credit is one cent of AI. A small change uses a few; a whole video usually 100 to 300.</p>
-  </>}
-  <h3 className="settings-subhead">Usage</h3>
-  {usage===undefined?<Row label="Loading usage…"/>:'unavailable' in usage?<Row label="Usage is not available yet" help="Your Gumbo service needs its latest update to report usage here."/>:summary&&<>
-   <Row label="Today"><span className="settings-value">{credits(summary.todayCredits)} credits</span></Row>
-   <Row label="Last 30 days" help={`${summary.requests} AI calls`}><span className="settings-value">{credits(summary.monthCredits)} credits</span></Row>
-   <div className="billing-days" role="img" aria-label="Credits used each day over the last 30 days">{summary.days.map(d=><i key={d.date} title={`${day(d.date+'T12:00:00Z')}: ${credits(d.credits)} credits`} style={{height:`${Math.max(d.credits>0?6:2,Math.round(d.credits/peak*100))}%`}}/>)}</div>
-   {summary.byModel.length>0&&<div className="settings-table" role="table" aria-label="Last 30 days by model">{summary.byModel.map(m=><div role="row" key={m.model}><span role="cell">{modelName(m.model)}</span><span role="cell">{m.calls} calls</span><span role="cell">{credits(m.credits)}</span></div>)}</div>}
-  </>}
+  {!b.payments&&<p className="settings-note">Paying isn't set up on your Gumbo service yet.</p>}
+  <p className="settings-note">One credit is one cent of AI. A small change uses a few; a whole video usually 100 to 300.</p>
  </>;
+}
+/** One usage line: what it is, a bar when it has a limit, and how much. */
+function Meter(p:{label:string;value:string;share?:number;note?:string}){
+ return <div className="usage-meter"><span className="usage-label">{p.label}</span>
+  {p.share!==undefined?<span className="usage-bar" role="meter" aria-label={p.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.share*100)}><i style={{width:`${Math.round(p.share*100)}%`}} className={p.share>=.9?'high':undefined}/></span>:<span className="usage-bar empty"/>}
+  <span className="usage-value">{p.share!==undefined&&<b>{Math.floor(p.share*100)}% used</b>}{p.value}</span>{p.note&&<span className="usage-note">{p.note}</span>}</div>;
 }
 
 function AI(){

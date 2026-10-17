@@ -10,34 +10,45 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-/* Where Stripe sends people back after paying (or not) in the browser: it says what happened and to go back to Gumbo,
-   which shows the new plan or credits as soon as Stripe has told the gateway (seconds). Styled like the sign-in page. */
-:root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--card:#FFFDF7}
-@media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--card:#1D1916}}
+/* Where Stripe sends people back after paying (or not) in the browser. It says what happened and asks to open Gumbo
+   straight away (the browser offers "Open Gumbo?" for the gumbo:// link), with a button for it; the app shows the new plan
+   or credits as soon as Stripe has told the gateway, which takes seconds. Styled like the sign-in page. */
+:root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--card:#FFFDF7;--paprika:#E2552A;--paprika2:#C9471F;--soft:#FBE6D9}
+@media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--card:#1D1916;--soft:#33231B}}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
-main{width:min(420px,100%);background:var(--card);border:1.5px solid var(--line);border-radius:24px;padding:34px 30px 30px;box-shadow:0 30px 70px -40px rgba(31,26,23,.35)}
-.brand{display:flex;align-items:center;gap:8px;margin-bottom:28px;font-weight:700;font-size:20px;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
-.brand svg{width:28px;height:28px}
-h1{margin:0 0 8px;font-family:'EB Garamond',Georgia,serif;font-size:40px;font-weight:400;letter-spacing:-.02em;line-height:1.02}
-p{margin:0;font-size:15px;line-height:1.55;color:var(--muted)}
+main{width:min(440px,100%);background:var(--card);border:1.5px solid var(--line);border-radius:24px;padding:36px 30px 28px;box-shadow:0 30px 70px -40px rgba(31,26,23,.35);text-align:center}
+.badge{width:72px;height:72px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;background:var(--soft)}
+.badge svg{width:44px;height:44px}
+h1{margin:0 0 10px;font-family:'EB Garamond',Georgia,serif;font-size:40px;font-weight:400;letter-spacing:-.02em;line-height:1.05}
+p{margin:0 0 24px;font-size:15px;line-height:1.55;color:var(--muted)}
+a.open{display:flex;align-items:center;justify-content:center;gap:9px;height:50px;border-radius:12px;background:var(--paprika);color:#FFF8EE;font-size:15.5px;font-weight:600;text-decoration:none;transition:background .15s}
+a.open:hover{background:var(--paprika2)}
+small{display:block;margin-top:16px;font-size:12.5px;color:var(--muted)}
+footer{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}footer a{color:var(--muted)}
 </style>
 </head>
 <body>
 <main>
- <a class="brand" href="/" aria-label="Gumbo home"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>Gumbo</a>
- <h1 id="title">You're all set</h1>
- <p id="text">Go back to Gumbo: it shows the change in a few seconds. You can close this tab.</p>
+ <div class="badge"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg></div>
+ <h1 id="title">All saved</h1>
+ <p id="text">Changes show in Gumbo in a few seconds.</p>
+ <a class="open" id="open" href="gumbo://billing">Open Gumbo</a>
+ <small>You can close this tab.</small>
+ <footer>Receipts and your card are in <strong>Manage billing</strong>, in Gumbo's Settings.</footer>
 </main>
 <script>
 const says={
- subscribed:['Welcome to your new plan','Your credits are ready in Gumbo. Go back to the app; you can close this tab.'],
- credits:['Credits added','They show in Gumbo in a few seconds and don’t expire. You can close this tab.'],
- portal:['All saved','Changes to your plan show in Gumbo in a few seconds. You can close this tab.'],
- cancelled:['Nothing was charged','You can choose a plan or buy credits any time in Gumbo, in Settings under Usage and billing.']
+ subscribed:['Welcome to your new plan','Your credits are ready. Open Gumbo and start cooking.'],
+ credits:['Credits added','They’re in Gumbo now and they never expire.'],
+ portal:['All saved','Changes to your plan show in Gumbo in a few seconds.'],
+ cancelled:['Nothing was charged','You can choose a plan or buy credits any time from Gumbo.']
 };
-const [title,text]=says[new URLSearchParams(location.search).get('status')]||says.portal;
+const status=new URLSearchParams(location.search).get('status'),[title,text]=says[status]||says.portal,link='gumbo://billing?status='+encodeURIComponent(status||'portal');
 document.getElementById('title').textContent=title;document.getElementById('text').textContent=text;document.title=title+' · Gumbo';
+document.getElementById('open').href=link;
+// Ask to open Gumbo at once: the browser shows its "Open Gumbo?" prompt; the button does the same if it's dismissed.
+setTimeout(()=>{location.href=link;},500);
 </script>
 </body>
 </html>

@@ -323,6 +323,8 @@
 .home-recents h2{margin:0 10px 4px;font-size:11.5px;font-weight:500;color:var(--n40)}
 .home-recents button{display:block;height:31px;line-height:31px;font-size:13px;color:var(--n65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-recents button.missing{opacity:.5}
+.home-recents button{display:flex;align-items:center;gap:8px}.home-recents button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.home-recents button>svg{flex:none;color:var(--paprika)}
+.fig-home .project-working{position:absolute;left:7px;top:7px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:rgb(0 0 0 / .72);color:#fff;font-size:11px;font-weight:500}
 .home-side-foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--n7)}
 .fig-home-main{position:relative;min-width:0;overflow:auto;padding:0 40px 64px}
 .home-drag{position:sticky;top:0;z-index:5;height:40px;margin:0 -40px;background:var(--chrome);-webkit-app-region:drag}
@@ -701,27 +703,64 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .settings-table{display:grid;margin-top:6px}
 .settings-table [role=row]{display:grid;grid-template-columns:1fr auto 80px;gap:16px;padding:9px 0;border-bottom:1px solid var(--n7);font-size:12.5px;color:var(--n65)}
 .settings-table [role=cell]:last-child{text-align:right;color:var(--n100)}
-/* Usage and billing: the plan and its credits as a card, the plans side by side, and the last 30 days as small bars. */
-.billing-plan{margin-top:6px;padding:18px 20px;border:1px solid var(--n9);border-radius:14px;background:var(--n1)}
-.billing-plan>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.billing-plan>header>div{display:flex;flex-direction:column;gap:3px}
-.billing-plan>header strong{font-size:17px;font-weight:600;color:var(--n100)}.billing-plan>header span{font-size:12.5px;color:var(--n46)}
-.billing-left{display:flex;align-items:baseline;gap:8px;margin:18px 0 10px}
-.billing-left strong{font:400 40px/1 Georgia,"Times New Roman",serif;letter-spacing:-.5px;color:var(--n100);font-variant-numeric:tabular-nums}.billing-left span{font-size:13px;color:var(--n46)}
-.billing-plan .settings-meter{margin:0 0 10px}
-.billing-plan>p{margin:0;font-size:12.5px;line-height:1.5;color:var(--n56)}
-.billing-plan>footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
-.billing-opened{font-size:12px;color:var(--n46)}
-.billing-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:8px}
-.billing-plan-card{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px solid var(--n9);border-radius:12px}
-.billing-plan-card.current{border-color:var(--n100);box-shadow:inset 0 0 0 1px var(--n100)}
-.billing-plan-card strong{font-size:13.5px;font-weight:600;color:var(--n100)}
-.billing-price{font-size:20px;font-weight:600;color:var(--n100);letter-spacing:-.3px}.billing-price small{font-size:12px;font-weight:400;color:var(--n46);letter-spacing:0}
-.billing-credits{font-size:12px;color:var(--n56);margin-bottom:10px}
-.billing-plan-card>button{margin-top:auto;width:100%}
-.billing-current{margin-top:auto;height:32px;display:grid;place-items:center;font-size:12.5px;font-weight:600;color:var(--n100)}.billing-current.muted{font-weight:400;font-size:11.5px;color:var(--n46)}
-.billing-days{display:flex;align-items:flex-end;gap:3px;height:64px;margin:10px 0 6px;padding-bottom:1px;border-bottom:1px solid var(--n7)}
-.billing-days i{flex:1;min-width:2px;border-radius:2px 2px 0 0;background:var(--n25)}.billing-days i:hover{background:var(--n100)}
+/* Usage and billing: the credits left, then usage lines like a coding tool's (label, bar, % used, how much, when it resets),
+   then topping up and upgrading. */
+.usage-left{display:flex;align-items:baseline;gap:10px;margin:4px 0 18px}
+.usage-left strong{font:400 52px/1 Georgia,"Times New Roman",serif;letter-spacing:-1px;color:var(--n100);font-variant-numeric:tabular-nums}
+.usage-left span{font-size:14px;color:var(--n46)}
+.usage-meters{display:flex;flex-direction:column;border-top:1px solid var(--n7)}
+.usage-meter{display:grid;grid-template-columns:130px minmax(80px,1fr) auto;grid-template-rows:auto auto;column-gap:16px;align-items:center;padding:12px 0;border-bottom:1px solid var(--n7)}
+.usage-label{font-size:13px;font-weight:500;color:var(--n87)}
+.usage-bar{height:6px;border-radius:3px;background:var(--n7);overflow:hidden}.usage-bar.empty{background:none}
+.usage-bar i{display:block;height:100%;border-radius:3px;background:var(--n100)}.usage-bar i.high{background:var(--paprika)}
+.usage-value{display:flex;gap:10px;justify-content:flex-end;font-size:12.5px;color:var(--n65);font-variant-numeric:tabular-nums;white-space:nowrap}.usage-value b{font-weight:600;color:var(--n100)}
+.usage-note{grid-column:3;justify-self:end;margin-top:2px;font-size:11.5px;color:var(--n46)}
+.usage-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px}
+.usage-manage{margin-left:auto;font-size:12.5px;color:var(--n56);text-decoration:underline;text-underline-offset:3px}.usage-manage:hover{color:var(--n100)}
+
+/* The upgrade window: the paid plans side by side and credits to buy, over the app. */
+.upgrade-backdrop{position:fixed;inset:0;z-index:160;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .45);backdrop-filter:blur(4px)}
+.upgrade-window{position:relative;width:min(860px,100%);max-height:calc(100vh - 48px);overflow:auto;padding:30px 28px 24px;border:1px solid var(--n9);border-radius:20px;background:var(--chrome);color:var(--n87);box-shadow:0 30px 90px rgb(0 0 0 / .3)}
+.upgrade-close{position:absolute;top:14px;right:14px;width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--n56)}.upgrade-close:hover{background:var(--n5);color:var(--n100)}
+.upgrade-window>header{order:-2;text-align:center;margin-bottom:24px}
+.upgrade-window h2{margin:0 0 8px;font:400 34px/1.1 Georgia,"Times New Roman",serif;letter-spacing:-.5px;color:var(--n100)}
+.upgrade-window>header p{margin:0 auto;max-width:460px;font-size:14px;line-height:1.5;color:var(--n56)}
+.upgrade-loading{text-align:center;color:var(--n46)}
+.upgrade-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.upgrade-plan{position:relative;display:flex;flex-direction:column;padding:20px 18px 18px;border:1px solid var(--n9);border-radius:14px;background:var(--n1)}
+.upgrade-plan.featured{border-color:var(--n100)}.upgrade-plan.current{border-color:var(--paprika)}
+.upgrade-tag{position:absolute;top:-10px;left:18px;padding:2px 9px;border-radius:999px;background:var(--n100);color:var(--chrome);font-size:11px;font-weight:600}
+.upgrade-plan strong{font-size:16px;font-weight:600;color:var(--n100)}.upgrade-plan>small{font-size:12.5px;color:var(--n46);margin-top:2px}
+.upgrade-price{margin:16px 0 14px;font-size:32px;font-weight:600;letter-spacing:-.8px;color:var(--n100)}.upgrade-price span{font-size:13px;font-weight:400;letter-spacing:0;color:var(--n46)}
+.upgrade-plan ul{list-style:none;margin:0 0 18px;padding:0;display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--n76)}
+.upgrade-plan li{display:flex;align-items:center;gap:8px}.upgrade-plan li svg{color:var(--paprika);flex:none}
+.upgrade-plan>button,.upgrade-current{margin-top:auto}
+.upgrade-primary,.upgrade-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 16px;border-radius:10px;font-size:13.5px;font-weight:600;white-space:nowrap}
+.upgrade-plan .upgrade-primary,.upgrade-plan .upgrade-secondary{width:100%}
+.upgrade-primary{background:var(--paprika);color:#fff8ee}.upgrade-primary:hover:not(:disabled){background:var(--paprika-hover)}
+.upgrade-secondary{border:1px solid var(--n14);color:var(--n87)}.upgrade-secondary:hover:not(:disabled){background:var(--n5)}
+.upgrade-current{height:38px;display:grid;place-items:center;font-size:13px;font-weight:600;color:var(--paprika)}
+.upgrade-topup{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:14px;padding:16px 18px;border:1px solid var(--n9);border-radius:14px}
+.upgrade-topup.first{order:-1;margin:0 0 14px}
+.upgrade-topup>div{display:flex;flex-direction:column;gap:3px}.upgrade-topup strong{font-size:14px;font-weight:600;color:var(--n100)}.upgrade-topup span{font-size:12.5px;color:var(--n56)}
+.upgrade-window:has(.upgrade-topup.first){display:flex;flex-direction:column}
+.upgrade-note{margin:14px 0 0;text-align:center;font-size:12.5px;color:var(--n46)}.upgrade-error{margin:14px 0 0;text-align:center;font-size:12.5px;color:#c4433a}
+@media(max-width:760px){.upgrade-plans{grid-template-columns:1fr}.upgrade-topup{flex-direction:column;align-items:stretch}}
+
+/* The home sidebar: Upgrade plan above you, or Buy credits once they've run out. */
+.side-upgrade-button{display:flex;align-items:center;gap:9px;width:100%;height:36px;margin:0 0 8px;padding:0 10px;border:1px solid var(--n10);border-radius:9px;font-size:13px;font-weight:500;color:var(--n87)}
+.side-upgrade-button svg{color:var(--paprika)}.side-upgrade-button:hover{background:var(--n6);border-color:var(--n14)}
+.side-upgrade{display:flex;flex-direction:column;gap:6px;margin:0 0 8px;padding:12px;border:1px solid var(--n10);border-radius:12px;background:var(--n0)}
+.side-upgrade>span{font-size:12.5px;font-weight:600;color:var(--n100)}
+.side-buy{display:flex;align-items:center;justify-content:center;gap:7px;height:34px;border-radius:9px;background:var(--paprika);color:#fff8ee;font-size:13px;font-weight:600}.side-buy:hover:not(:disabled){background:var(--paprika-hover)}
+.side-link{font-size:12px;color:var(--n56);text-decoration:underline;text-underline-offset:3px}.side-link:hover{color:var(--n100)}
+
+/* Over the editor's chat box once credits run out. */
+.out-of-credits{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 8px;padding:10px 12px;border:1px solid var(--n10);border-radius:12px;background:var(--n0);font-size:12.5px;color:var(--n65)}
+.out-of-credits>span{flex:1;min-width:160px}.out-of-credits strong{color:var(--n100);font-weight:600}
+.out-buy,.out-upgrade{height:30px;padding:0 12px;border-radius:8px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.out-buy{background:var(--paprika);color:#fff8ee}.out-buy:hover:not(:disabled){background:var(--paprika-hover)}
+.out-upgrade{border:1px solid var(--n14);color:var(--n87)}.out-upgrade:hover{background:var(--n5)}
 .settings-error{margin:12px 0;font-size:12.5px;color:var(--n100);padding:10px 12px;border-radius:8px;background:var(--n5)}
 .settings-body .settings-shortcuts{margin-top:14px;font-size:13px;gap:12px 24px}
 @media(max-width:760px){.settings-page{grid-template-columns:1fr;grid-template-rows:auto 1fr}.settings-nav{flex-direction:row;flex-wrap:wrap;padding:40px 12px 10px;border-right:0;border-bottom:1px solid var(--n7)}.settings-nav h2{width:100%}.settings-panel{padding:24px 20px 48px}.settings-row{flex-direction:column;align-items:stretch}.settings-input{width:100%}}

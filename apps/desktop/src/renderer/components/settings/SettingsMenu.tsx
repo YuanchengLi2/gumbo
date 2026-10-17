@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Settings,Gauge,LogOut,LogIn,Sun,Moon,Monitor,User} from 'lucide-react';
+import {Settings,Gauge,LogOut,LogIn,Sun,Moon,Monitor,User,Sparkles} from 'lucide-react';
+import {openUpgrade,topPlan} from '../billing/Upgrade';
 import {SettingsPage,type SettingsSection} from './SettingsPage';
 import {useAccount,requireSignIn,signedOut} from '../../account';
 import {useBilling,billingReady,refreshBilling,credits} from '../../billing';
@@ -30,7 +31,7 @@ export function ProfileMenu(p:{up?:boolean;label?:boolean}){
  return <div className={'profile-anchor'+(p.up?' up':'')} ref={anchor}>
   <button type="button" className={'profile-button'+(p.label?' labelled':'')} aria-label="Profile" title={signedIn?email:'Profile'} aria-haspopup="menu" aria-expanded={menu} onClick={()=>setMenu(v=>!v)}>
    <span className={'profile-avatar'+(signedIn?'':' signed-out')} aria-hidden="true">{initial||<User size={15}/>}</span>
-   {p.label&&<span className="profile-name"><strong>{signedIn?name:'Not signed in'}</strong><small>{!signedIn?'Sign in for Gumbo AI':b?`${b.planName} · ${credits(b.credits.left)} credits`:'Gumbo AI'}</small></span>}
+   {p.label&&<span className="profile-name"><strong>{signedIn?name:'Not signed in'}</strong><small>{!signedIn?'Sign in for Gumbo AI':b?`${b.planName} plan`:'Gumbo AI'}</small></span>}
   </button>
   {menu&&<div className="profile-menu" role="menu">
    <header><span className={'profile-avatar'+(signedIn?'':' signed-out')} aria-hidden="true">{initial||<User size={15}/>}</span><span><strong>{signedIn?name:'Not signed in'}</strong><small>{signedIn?email:'Your projects work without an account.'}</small></span></header>
@@ -39,6 +40,7 @@ export function ProfileMenu(p:{up?:boolean;label?:boolean}){
     <i role="meter" aria-label="Plan credits left" aria-valuemin={0} aria-valuemax={b.credits.planTotal} aria-valuenow={Math.max(0,b.credits.plan)}><b style={{width:`${Math.round(Math.min(1,Math.max(0,b.credits.plan)/Math.max(1,b.credits.planTotal))*100)}%`}}/></i>
    </button>}
    <div className="profile-theme" role="group" aria-label="Theme">{themes.map(([value,label,Icon])=><button key={value} type="button" aria-pressed={choice===value} title={label} onClick={()=>setThemeChoice(value)}><Icon size={14}/>{label}</button>)}</div>
+   {signedIn&&b&&!topPlan(b.plan)&&<button type="button" role="menuitem" onClick={()=>{setMenu(false);openUpgrade();}}><Sparkles size={15}/>Upgrade plan</button>}
    <button type="button" role="menuitem" onClick={()=>go('profile')}><Settings size={15}/>Settings</button>
    {signedIn?<button type="button" role="menuitem" onClick={()=>void signOut()}><LogOut size={15}/>Sign out</button>:<button type="button" role="menuitem" onClick={()=>{setMenu(false);void requireSignIn();}}><LogIn size={15}/>Sign in</button>}
   </div>}

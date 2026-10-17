@@ -21,6 +21,7 @@ import {runExport,stopExports} from './engine/export-job';
 import {useChatShortcuts} from './shortcuts';
 import {useTheme} from './theme';
 import {ProfileMenu,SettingsLayer} from './components/settings/SettingsMenu';
+import {UpgradeLayer} from './components/billing/Upgrade';
 
 
 
@@ -67,7 +68,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  {s.error&&<div className="error-toast" role="alert"><p>{s.error}</p><button aria-label="Dismiss error" onClick={()=>s.setError(null)}><X size={17}/></button></div>}
 
- <SettingsLayer/>
+ <SettingsLayer/><UpgradeLayer/>
  {signIn&&<SignInDialog onClose={()=>setSignIn(false)}/>}
  {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
 

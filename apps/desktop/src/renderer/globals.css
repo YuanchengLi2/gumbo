@@ -15,3 +15,6 @@
    document whose scheme differs with an opaque (white) backdrop, which turned a transparent captions scene into a white
    sheet over the video. Embedded documents keep the default scheme so they stay transparent in both themes. */
 iframe{color-scheme:normal}
+
+/* No scrollbars anywhere: everything still scrolls with the wheel, the trackpad and the keyboard. */
+*{scrollbar-width:none!important}*::-webkit-scrollbar{display:none!important}
