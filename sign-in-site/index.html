@@ -147,6 +147,8 @@ em{font-style:italic}
 .l-vhs .rec::before{content:'';width:9px;height:9px;border-radius:50%;background:#ff3b30;animation:blink 1s steps(1) infinite}
 .l-vhs .play{position:absolute;top:16px;right:16px}
 .l-vhs .date{position:absolute;bottom:18px;left:16px;line-height:1.3}
+.l-vhs::after{content:'';position:absolute;left:0;right:0;top:-20%;height:16%;background:linear-gradient(transparent,rgba(255,255,255,.13) 45%,rgba(255,255,255,.05) 55%,transparent);animation:vhsroll 3.4s linear infinite}
+@keyframes vhsroll{to{top:110%}}
 .stage.title .l-title{opacity:1}
 .l-title{display:grid;align-content:end;justify-items:center;padding:0 16px 70px;background:linear-gradient(transparent 50%,rgba(0,0,0,.55));text-align:center;color:#fff}
 .l-title small{font:600 9.5px var(--sans);letter-spacing:.22em;opacity:.85}
@@ -163,14 +165,14 @@ em{font-style:italic}
 .l-map .rider{offset-path:path('M 22 26 C 50 30, 46 64, 76 70 S 96 92, 104 98');offset-distance:0%}
 .stage.map .l-map .rider{animation:ride 2.4s .3s ease-in-out forwards}
 @keyframes ride{to{offset-distance:100%}}
-.stage.tag .l-flash{animation:flash .5s ease}
+.stage.tag .l-flash{animation:flash .5s 1.2s ease}
 .l-flash{background:#fff}
 @keyframes flash{0%{opacity:.9}100%{opacity:0}}
-.stage.tag .l-tag{opacity:1}
+.stage.tag .l-tag{opacity:1;transition-delay:1.2s}
 .l-tag .freeze{position:absolute;top:16px;left:16px;display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:999px;background:rgba(0,0,0,.55);color:#fff;font:600 11px var(--sans);letter-spacing:.08em}
 .l-tag .pin{position:absolute;left:46%;top:58%;width:14px;height:14px;border-radius:50%;background:var(--butter);box-shadow:0 0 0 4px rgba(252,227,162,.45)}
 .l-tag .price{position:absolute;left:22%;top:34%;padding:8px 13px 9px;border-radius:12px;background:var(--butter);color:var(--ink);transform:rotate(-4deg) scale(0);transform-origin:70% 120%;box-shadow:0 12px 24px -10px rgba(0,0,0,.5)}
-.stage.tag .l-tag .price{animation:pop .5s .45s cubic-bezier(.3,1.6,.5,1) forwards}
+.stage.tag .l-tag .price{animation:pop .5s 1.65s cubic-bezier(.3,1.6,.5,1) forwards}
 @keyframes pop{to{transform:rotate(-4deg) scale(1)}}
 .l-tag .price strong{display:block;font:500 italic 22px/1 var(--serif)}
 .l-tag .price small{font:700 11px var(--sans);letter-spacing:.06em}
@@ -446,8 +448,23 @@ em{font-style:italic}
 /* The bottom: the finished Short on a phone, and what will you ask for? */
 .make{margin-top:150px;border-radius:48px 48px 0 0;background:var(--roux);color:var(--cream);padding:110px 0 120px;position:relative;overflow:hidden}
 .make::before{content:'';position:absolute;width:760px;height:760px;right:-180px;top:-120px;border-radius:50%;background:radial-gradient(closest-side,rgba(226,85,42,.35),transparent);pointer-events:none}
-.make-grid{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:90px;align-items:center}
-.phone{position:relative;width:min(320px,78vw);aspect-ratio:9/19.3;border-radius:46px;padding:11px;background:#120A06;box-shadow:inset 0 0 0 1.5px rgba(255,248,238,.14),0 40px 90px -30px #000;justify-self:center}
+.make-grid{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);gap:80px;align-items:center}
+.reel{display:flex;align-items:center;gap:34px;justify-self:center}
+.phone .story{position:absolute;top:54px;left:28px;right:28px;z-index:3;display:flex;gap:4px}
+.phone .story i{flex:var(--w);height:3px;border-radius:2px;background:rgba(255,248,238,.3);overflow:hidden}
+.phone .story i::after{content:'';display:block;height:100%;width:calc(var(--p,0)*100%);background:var(--cream)}
+.chapters{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:230px}
+.chapters button{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:42px 1fr;align-items:baseline;gap:4px 10px;padding:12px 14px;border-radius:16px;color:rgba(255,248,238,.42);transition:color .3s,background .3s}
+.chapters button:hover{color:rgba(255,248,238,.8)}
+.chapters button:focus-visible{outline:2px solid var(--butter);outline-offset:2px}
+.chapters .tc{font:600 12px var(--mono);letter-spacing:.02em}
+.chapters b{font:500 italic 22px/1.1 var(--serif)}
+.chapters small{grid-column:2;font-size:13px;line-height:1.35}
+.chapters .k{display:none}
+.chapters .on{color:var(--cream);background:rgba(255,248,238,.08)}
+.chapters .on .tc{color:var(--butter)}
+.chapters .on b::after{content:'';display:inline-block;width:7px;height:7px;margin-left:9px;border-radius:50%;background:var(--chili);vertical-align:.25em;animation:blink 1s steps(1) infinite}
+.phone{position:relative;flex:none;width:min(320px,78vw);aspect-ratio:9/19.3;border-radius:46px;padding:11px;background:#120A06;box-shadow:inset 0 0 0 1.5px rgba(255,248,238,.14),0 40px 90px -30px #000;justify-self:center}
 .phone video{width:100%;height:100%;object-fit:cover;border-radius:36px;background:#000}
 .phone .notch{position:absolute;top:21px;left:50%;transform:translateX(-50%);width:88px;height:25px;border-radius:20px;background:#120A06;z-index:2}
 .sound{position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:3;display:inline-flex;align-items:center;gap:8px;height:40px;padding:0 15px;border-radius:999px;border:1.5px solid var(--ink);background:var(--cream);color:var(--ink);font:600 14px var(--sans);cursor:pointer;white-space:nowrap}
@@ -463,6 +480,7 @@ em{font-style:italic}
 .make .reply{background:rgba(255,248,238,.1);color:var(--cream)}
 .make .reply small{color:rgba(255,248,238,.65)}
 .made-from{margin-top:30px;font-size:14px;color:rgba(255,248,238,.6);max-width:470px}
+@media (max-width:1180px){.reel{flex-direction:column;gap:22px}.chapters{width:min(320px,78vw);grid-template-columns:repeat(5,1fr);gap:4px}.chapters button{display:block;padding:9px 4px;text-align:center;border-radius:12px}.chapters .k{display:block;font:700 11px var(--sans);letter-spacing:.08em;text-transform:uppercase}.chapters b,.chapters small,.chapters .tc,.chapters .on b::after{display:none}}
 @media (max-width:960px){.make-grid{grid-template-columns:1fr;gap:56px}.make .center-sm{text-align:center}.make .lead{margin-left:auto;margin-right:auto}.make .chips{justify-content:center}.made-from{margin:24px auto 0;text-align:center}}
 @media (max-width:520px){.make{border-radius:32px 32px 0 0;padding:80px 0 96px;margin-top:110px}}
 footer{background:var(--roux);color:rgba(255,248,238,.72);font-size:14.5px;padding:0 0 34px}
@@ -555,8 +573,8 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
      </div>
      <div class="viewer" aria-hidden="true">
       <div class="stage" id="stage">
-       <img class="shot" id="shotA" src="media/frames/f01.jpg" alt="">
-       <img class="shot off" id="shotB" src="media/frames/f01.jpg" alt="">
+       <video class="shot" id="shotA" poster="media/frames/f01.jpg" muted playsinline loop preload="none"></video>
+       <video class="shot off" id="shotB" poster="media/frames/f01.jpg" muted playsinline loop preload="none"></video>
        <div class="layer l-warm"></div>
        <div class="layer l-vhs"><span class="rec">REC</span><span class="play">PLAY ▶</span><span class="date">AM 9:41<br>OCT. 17 1998</span></div>
        <div class="layer l-title"><small>QUẢNG NAM · VIETNAM</small><strong>Hội An</strong></div>
@@ -763,12 +781,16 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  </div></section>
 
  <section class="make" id="make"><div class="wrap make-grid">
-  <div class="phone reveal">
+  <div class="reel reveal">
+  <div class="phone">
    <span class="notch"></span>
-   <video id="short" muted playsinline loop preload="none" poster="media/vietnam-short-poster.jpg" aria-label="A 40-second Vietnam travel Short made with Gumbo">
+   <span class="story" id="story" aria-hidden="true"></span>
+   <video id="short" muted playsinline loop preload="none" poster="media/vietnam-short-poster.jpg" aria-label="A 40-second travel Short of Vietnam in four chapters: the food, the cities, Hạ Long Bay, and the lanterns at night">
     <source src="media/vietnam-short.mp4" type="video/mp4">
    </video>
    <button class="sound" id="sound" type="button" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/></svg><span>Sound off</span></button>
+  </div>
+  <ol class="chapters" id="chapters" aria-label="Chapters of the Short"></ol>
   </div>
   <div class="reveal center-sm">
    <h2>What will you <em>ask for first?</em></h2>
@@ -782,7 +804,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
     <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A trip recap like this one</button><button type="button">A 90s camcorder look</button></div>
     <div class="reply" role="status"></div>
    </div>
-   <p class="made-from">The Short on the phone came from one sentence and 17 clips of Vietnam. Sound on for the score Gumbo wrote for it.</p>
+   <p class="made-from">The Short on the phone: 17 clips of Vietnam cut to a score Gumbo wrote for them. Sound on for the drop.</p>
   </div>
  </div></section>
 </main>
@@ -857,7 +879,7 @@ const whenSeen=(node,fn,threshold=.3)=>{const ob=new IntersectionObserver(es=>{i
 })();
 
 // The demo: each order is typed, sent, answered, and applied to the preview and the timeline.
-// shot: which frame is on screen; fx: the look the stage takes; lane/at/w: where its block lands on the timeline.
+// shot: which clip plays on screen (a 5 s loop, its still as the poster); fx: the look the stage takes; lane/at/w: where its block lands on the timeline.
 const SHOTS=[['f01',0,16],['f05',16,16],['f08',32,16],['f09',48,14],['f11',62,18],['f07',80,20]];
 const orders=[
  {say:'Open on the lantern boat instead.',reply:'Swapped the opening shot for the boat on the river.',shot:'f02',fx:'',chip:'Open on the boat',swap:0},
@@ -878,12 +900,16 @@ const orders=[
  // Video lane: one block per shot, its frame as the thumbnail.
  const vblocks=SHOTS.map(([f,at,w])=>{const b=document.createElement('b');b.style.cssText=`left:${at}%;width:calc(${w}% - 3px);background-image:url(media/frames/${f}.jpg)`;video.appendChild(b);return b;});
  const bed=document.createElement('b');bed.style.cssText='left:0;width:100%';music.appendChild(bed);
- const show=f=>{if(f===current)return;current=f;const back=front===A?B:A;back.src=`media/frames/${f}.jpg`;back.classList.remove('off');front.classList.add('off');front=back;};
+ // Clips load only once the demo is on screen; with reduced motion the stills stay still.
+ let live=false;
+ const roll=v=>{if(!live)return;if(!v.getAttribute('src'))v.src=`media/loops/${current}.mp4`;v.play().catch(()=>{});};
+ const show=f=>{if(f===current)return;current=f;const back=front===A?B:A,old=front;back.poster=`media/frames/${f}.jpg`;if(live){back.src=`media/loops/${f}.mp4`;back.playbackRate=1;roll(back);}
+  back.classList.remove('off');old.classList.add('off');front=back;setTimeout(()=>{if(old!==front)old.pause();},700);};
  const place=pct=>{pin=pct;const lane=video.getBoundingClientRect(),tl=video.closest('.tl').getBoundingClientRect();playhead.style.left=(lane.left-tl.left+lane.width*pct/100)+'px';};
  const shotAt=f=>{const i=SHOTS.findIndex(s=>s[0]===f);return i<0?0:i;};
  const bubble=(cls,html)=>{const m=document.createElement('div');m.className='msg '+cls;m.innerHTML=html;log.appendChild(m);while(log.children.length>6)log.firstChild.remove();return m;};
  const clearTimeline=()=>{gfx.innerHTML='';music.querySelectorAll('b:not(:first-child)').forEach(b=>b.remove());vblocks.forEach(b=>b.classList.remove('hot'));};
- const reset=()=>{stage.classList.remove(...FX);log.innerHTML='';clearTimeline();vblocks[0].style.backgroundImage='url(media/frames/f01.jpg)';show('f01');place(0);
+ const reset=()=>{stage.classList.remove(...FX);front.playbackRate=1;roll(front);log.innerHTML='';clearTimeline();vblocks[0].style.backgroundImage='url(media/frames/f01.jpg)';show('f01');place(0);
   bubble('gumbo','<b>Gumbo</b>Your Vietnam trip is cut: six shots, forty seconds. Ask for anything.');};
  const apply=o=>{
   clearTimeline();
@@ -893,6 +919,9 @@ const orders=[
   show(o.shot);
   stage.classList.remove(...FX);void stage.offsetWidth;
   if(o.fx)stage.classList.add(o.fx);
+  // The edit happens to the moving clip: a freeze stops it on the flash, a slow push-in halves its speed.
+  front.playbackRate=o.fx==='slow'?.5:1;
+  if(o.fx==='tag')setTimeout(()=>{if(stage.classList.contains('tag'))front.pause();},1200);else roll(front);
   place(o.lane==='gfx'||o.lane==='music'?o.at+1:SHOTS[i][1]+1);
   const add=(track,at,w,label)=>{const b=document.createElement('b');b.className='new hot';b.style.cssText=`left:${at}%;width:calc(${w}% - 3px)`;if(label)b.textContent=label;track.appendChild(b);return b;};
   if(o.lane==='gfx')add(gfx,o.at,o.w,o.label);
@@ -926,7 +955,7 @@ const orders=[
  orders.forEach((o,i)=>{const b=document.createElement('button');b.type='button';b.textContent=o.chip;b.addEventListener('click',()=>{if(i===0)reset();loop(i);});tryBar.appendChild(b);});
  addEventListener('resize',()=>place(pin));
  reset();
- whenSeen(stage,()=>setTimeout(()=>loop(0),600),.5);
+ whenSeen(stage,()=>{if(!calm){live=true;roll(front);}setTimeout(()=>loop(0),600);},.5);
 })();
 
 // No menu: a cursor hunts through the buttons for something that isn't there...
@@ -1003,6 +1032,24 @@ document.querySelectorAll('.reveal').forEach(n=>seen.observe(n));
 // The Short plays only while on screen.
 const short=document.getElementById('short');
 new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting&&!calm){short.preload='auto';short.play().catch(()=>{});}else short.pause();}},{threshold:.35}).observe(short);
+// Chapters of the Short: the list lights the one playing, the story bar on the screen fills with it, and a tap jumps there.
+(function chapters(){
+ const CH=[[0,'Intro','Vietnam','Lanterns on the river at night'],[8.46,'One','Eat everything.','Phở, bánh mì and bánh xèo, cut on the beat'],[16.46,'Two','City energy.','Hà Nội and Sài Gòn at full speed'],[24.46,'Three','Hạ Long Bay.','From the air, then out on the water'],[31.96,'Outro','Until next time.','Sunset, and the lanterns again']];
+ const list=document.getElementById('chapters'),story=document.getElementById('story');
+ const end=i=>i+1<CH.length?CH[i+1][0]:40;
+ const fmt=t=>'0:'+String(Math.floor(t)).padStart(2,'0');
+ const items=CH.map(([t,kicker,name,note],i)=>{const li=document.createElement('li'),b=document.createElement('button');b.type='button';
+  b.innerHTML=`<span class="tc">${fmt(t)}</span><b></b><small></small><span class="k">${kicker}</span>`;b.querySelector('b').textContent=name;b.querySelector('small').textContent=note;
+  b.setAttribute('aria-label',`Play from ${fmt(t)}: ${name}`);
+  b.addEventListener('click',()=>{short.preload='auto';short.currentTime=t+.05;short.play().catch(()=>{});});li.appendChild(b);list.appendChild(li);return b;});
+ const bars=CH.map(([t],i)=>{const bar=document.createElement('i');bar.style.setProperty('--w',(end(i)-t).toFixed(2));story.appendChild(bar);return bar;});
+ let last=-1;
+ const tick=()=>{const t=short.currentTime||0;const k=CH.reduce((a,[s],i)=>t>=s?i:a,0);
+  bars.forEach((bar,i)=>bar.style.setProperty('--p',i<k?1:i>k?0:((t-CH[i][0])/(end(i)-CH[i][0])).toFixed(3)));
+  if(k!==last){items.forEach((b,i)=>b.classList.toggle('on',i===k));last=k;}};
+ const loop=()=>{tick();if(!short.paused)requestAnimationFrame(loop);};
+ short.addEventListener('play',loop);short.addEventListener('seeked',tick);tick();
+})();
 const sound=document.getElementById('sound');
 sound.addEventListener('click',()=>{short.muted=!short.muted;if(!short.muted){short.preload='auto';short.play().catch(()=>{});}sound.setAttribute('aria-pressed',String(!short.muted));sound.querySelector('span').textContent=short.muted?'Sound off':'Sound on';
  sound.querySelector('svg').innerHTML=short.muted?'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M23 9l-6 6M17 9l6 6"/>':'<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>';});

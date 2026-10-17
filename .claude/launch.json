@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "website",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", "sign-in-site", "-p", "4173", "-c-1", "--silent"],
+      "port": 4173
+    }
+  ]
+}
