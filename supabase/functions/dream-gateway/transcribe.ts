@@ -21,7 +21,7 @@ export async function handleTranscription(req:Request,userId:string,{db,key,fetc
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(v=>v.toString(16).padStart(2,'0')).join('');
  const cacheKey=(translate?'groq-translate-v1:':language?`groq-turbo-words-v1:${language}:`:'groq-turbo-words-v1:')+hash,cost=Math.max(10,duration)*(translate?.111:.04)/3600;
  const {data:reservation,error}=await db.rpc('dream_reserve_speech',{p_user:userId,p_hash:cacheKey,p_seconds:duration,p_cost:cost});
- if(error)return fail(error.code==='D0003'?'Daily AI allowance reached.':'Could not reserve transcription.',error.code==='D0003'?429:503);
+ if(error)return fail(error.code==='D0004'?'You have used all your credits.':error.code==='D0003'?'Daily AI allowance reached.':'Could not reserve transcription.',error.code==='D0004'?402:error.code==='D0003'?429:503);
  if(reservation.result)return{status:200,body:{...reservation.result,cached:true}};
  if(reservation.busy)return{status:409,body:{error:'This audio is already being transcribed.',retryAfterMs:2000}};
  const usageId=reservation.usage_id;

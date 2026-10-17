@@ -22,6 +22,7 @@
     "qualify:code-runtime": "tsx scripts/qualify-code-runtime.ts"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
     "@playwright/test": "^1.56.0",
     "@remotion/bundler": "4.0.533",
     "@remotion/renderer": "4.0.533",

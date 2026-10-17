@@ -8,6 +8,7 @@ import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
+import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
@@ -23,17 +24,25 @@ Deno.serve(async(req)=>{
  if(action==='updates'){const {data}=await db.from('dream_releases').select('*').order('published_at',{ascending:false}).limit(10);return json({releases:data??[]});}
  // The spending dashboard (usegumbo.app/dashboard/) has its own password, not an account; see spend-dashboard.ts.
  if(action==='spend-dashboard'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleSpendDashboard(body,address,supabaseSpendPorts(db,Deno.env.get('DREAM_DASHBOARD_PASSWORD'),name=>Deno.env.get(name)));return Response.json(result.body,{status:result.status,headers:{...cors,'Cache-Control':'no-store'}});}
+ // Stripe's webhook (see billing.ts): signed by Stripe, not an account. A failure answers 500 so Stripe sends it again.
+ if(action==='stripe-webhook'&&req.method==='POST'){const config=stripeConfig(name=>Deno.env.get(name)),payload=await req.text();
+  if(!config?.webhookSecret)return json({error:'Billing is not set up'},503);
+  if(!await verifyStripeSignature(payload,req.headers.get('stripe-signature'),config.webhookSecret))return json({error:'Invalid signature'},400);
+  try{const event=JSON.parse(payload),note=await handleStripeEvent(event,supabaseBillingPorts(db),config);console.log(`Stripe ${event.type} ${event.id}: ${note}`);return json({received:true});}
+  catch(error){console.error('Stripe webhook failed',error);return json({error:(error as Error).message},500);}}
  if(action==='login-start'&&req.method==='POST'){const body=await req.json();const email=String(body.email??'').trim().toLowerCase();const {data}=await db.from('dream_invites').select('email').eq('email',email).maybeSingle();return data?json({allowed:true}):json({error:'Use the email address on your beta invitation.'},403);}
  if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('title,object_key').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,60);return error?json({error:'Video unavailable'},404):json({title:data.title,url:signed.signedUrl});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
  const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
- if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,daily_budget_usd,is_guest').eq('id',user.id).single();return json(data);}
- // Settings > Usage: spend today (the day the daily allowance counts, from midnight UTC), over the last 30 days and by model.
- if(action==='usage'){const today=new Date();today.setUTCHours(0,0,0,0);const since=new Date(Date.now()-30*86_400_000);
-  const [{data:rows},{data:account}]=await Promise.all([db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000),db.from('dream_accounts').select('daily_budget_usd').eq('id',user.id).single()]);
-  return json(usageSummary(rows??[],today,Number(account?.daily_budget_usd??0)));}
+ if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest').eq('id',user.id).single();return json(data);}
+ // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
+ if(action==='usage'){const since=new Date(Date.now()-30*86_400_000);
+  const {data:rows}=await db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000);
+  return json(usageSummary(rows??[],new Date()));}
+ // The plan, the credits left and what is on offer (billing.ts).
+ if(action==='billing'){try{return json(await billingSummary(user.id,supabaseBillingPorts(db),stripeConfig(name=>Deno.env.get(name))));}catch(error){return json({error:(error as Error).message},500);}}
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
  try{
   if(action==='transcribe'){const result=await handleTranscription(req,user.id,{db,key:Deno.env.get('GROQ_API_KEY')});return json(result.body,result.status);}
@@ -45,6 +54,9 @@ Deno.serve(async(req)=>{
   if(action==='admin'||action==='admin-invite'){const {data:account}=await db.from('dream_accounts').select('is_admin').eq('id',user.id).single();if(!account?.is_admin)return json({error:'Administrator access is required.'},403);if(action==='admin-invite'){const email=String(body.email??'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a valid email address.'},400);const {error}=await db.from('dream_invites').upsert({email});if(error)throw error;return json({invited:true});}const {data:accounts}=await db.from('dream_accounts').select('id,email,status,daily_budget_usd');const {data:usage}=await db.from('dream_usage').select('cost_usd').gte('created_at',new Date(new Date().setUTCHours(0,0,0,0)).toISOString());return json({accounts:accounts??[],requests:usage?.length??0,cost:(usage??[]).reduce((sum:number,u:any)=>sum+Number(u.cost_usd),0)});}
   // Free-to-use music, sound, footage and images for the agent (see media-search.ts).
   if(action==='media-search'){const result=await handleMediaSearch(body,{keys:Object.fromEntries(Object.entries(mediaKeys).map(([id,secret])=>[id,Deno.env.get(secret)]))});return json(result.body,result.status);}
+  // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).
+  if(action==='billing-checkout'||action==='billing-portal'){const config=stripeConfig(name=>Deno.env.get(name));if(!config)return json({error:'Paying is not set up on the gateway yet.'},503);
+   try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
   if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000))});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
   if(action==='share-create'){

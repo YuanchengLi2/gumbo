@@ -7,16 +7,17 @@ import {shortcutHints} from '../../shortcuts';
 import {useEditor} from '../../store/editor';
 import {choices,shortLabel,available,useProviders,refreshProviders,modelName} from '../../models';
 import {useAccount,requireSignIn,signedOut} from '../../account';
+import {useBilling,billingReady,choosePlan,buyCredits,manageBilling,credits} from '../../billing';
 
 /** Settings as a page of its own, laid out as Claude's: sections in a sidebar on the left, the chosen one on the right, as
  * plain rows (a label, what it does, its control). Most rows change what already exists (the theme, the composer's model,
  * mode and effort, file access, the export window's choices); Profile and Privacy are the app's settings (settings.json),
- * which every request's agent and the model list follow. Billing and updates are not built yet and say so. */
+ * which every request's agent and the model list follow. Usage and billing shows the plan and credits; paying is on Stripe. */
 export type SettingsSection='profile'|'appearance'|'account'|'usage'|'ai'|'files'|'export'|'privacy'|'shortcuts'|'about';
 const sections:[SettingsSection,string,typeof User][]=[['profile','Profile',User],['appearance','Appearance',Sun],['account','Account',KeyRound],['usage','Usage and billing',Gauge],['ai','AI',Sparkles],['files','Files and access',FolderOpen],['export','Export',Clapperboard],['privacy','Privacy',ShieldCheck],['shortcuts','Shortcuts',Keyboard],['about','About',Info]];
 const themes:[ThemeChoice,string,typeof Sun][]=[['light','Light',Sun],['dark','Dark',Moon],['system','System',Monitor]];
 const shortcuts:[string,string][]=[[shortcutHints.chat+' or /','Type in the chat'],[shortcutHints.mode,'Edit, Plan or Ask'],['Ctrl+1 / 2 / 3','Edit / Plan / Ask'],[shortcutHints.model,'Next model'],['Space','Play or pause'],['Ctrl+B','Split at playhead'],['Ctrl+D','Duplicate'],['Delete','Delete selection'],['Ctrl+Z','Undo'],['Esc','Leave fullscreen or close Settings']];
-const money=(n:number)=>n>=10?`$${n.toFixed(0)}`:`$${n.toFixed(2)}`;
+const dollars=(n:number)=>`$${n%1?n.toFixed(2):n}`,day=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 
 /** One setting: what it is and what it does on the left, its control on the right. */
 function Row(p:{label:string;help?:React.ReactNode;children?:React.ReactNode;stacked?:boolean}){
@@ -50,28 +51,50 @@ function Account(){
  const signedIn=!!account?.signedIn;
  return <>
   <Row label={signedIn?'Signed in as':'Not signed in'} help={!account?'Checking…':signedIn?undefined:'Sign in with Google or your email to use Gumbo AI. Your projects stay on this computer either way.'}>{signedIn&&<span className="settings-value">{account!.email}</span>}</Row>
-  {signedIn&&account?.dailyBudgetUsd!==undefined&&<Row label="Daily AI allowance" help="How much Gumbo AI you can use each day during the beta."><span className="settings-value">{money(account.dailyBudgetUsd)}</span></Row>}
   <Row label={signedIn?'Sign out':'Sign in'} help={signedIn?'Your projects stay on this computer; Gumbo AI needs you to sign in again.':'New here? Signing in creates your account.'}>
    {signedIn?<button type="button" className="settings-button-secondary" disabled={busy} onClick={()=>void signOut()}>Sign out</button>:<button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button>}
   </Row>
  </>;
 }
 
+/** Usage and billing: the plan and the credits left, the plans to choose from and credits to buy (both on Stripe's pages,
+ * in the browser), and what the credits went on: today, the last 30 days by day, and by model. */
 function Usage(){
- const [usage,setUsage]=useState<UsageSummary|{unavailable:true}|null|undefined>(undefined),[error,setError]=useState<string|null>(null);
+ const billing=useBilling(),[usage,setUsage]=useState<UsageSummary|{unavailable:true}|null|undefined>(undefined),[error,setError]=useState<string|null>(null),[opened,setOpened]=useState<string|null>(null);
  useEffect(()=>{window.dream.command<any>({type:'account',action:'usage'}).then(setUsage,(e:Error)=>setError(e.message));},[]);
- const summary=usage&&!('unavailable' in usage)?usage:null,share=summary&&summary.dailyBudgetUsd>0?Math.min(1,summary.todayUsd/summary.dailyBudgetUsd):0;
+ const pay=async(label:string,open:()=>Promise<unknown>)=>{setError(null);setOpened(label);try{await open();}catch(e){setOpened(null);setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}};
+ const summary=usage&&!('unavailable' in usage)?usage:null,b=billingReady(billing)?billing:null,peak=Math.max(1,...(summary?.days??[]).map(d=>d.credits));
+ if(billing===null||usage===null)return <><p className="settings-lead">Sign in to see your plan and credits.</p><button type="button" className="settings-button-primary" onClick={()=>void requireSignIn()}>Sign in</button></>;
+ if(billing&&'unavailable' in billing)return <Row label="Billing is not available yet" help="Your Gumbo service needs its latest update to show plans and credits here."/>;
  return <>
-  <h3 className="settings-subhead">Usage</h3>
-  {error?<p className="settings-error" role="alert">{error}</p>:usage===undefined?<Row label="Loading usage…"/>:usage===null?<Row label="Sign in to see your usage."/>:'unavailable' in usage?<Row label="Usage is not available yet" help="Your Gumbo service needs its latest update to report usage here."/>:summary&&<>
-   <Row label="Today" help={summary.dailyBudgetUsd>0?`Of your ${money(summary.dailyBudgetUsd)} daily allowance, which starts again at midnight UTC.`:undefined}><span className="settings-value">{money(summary.todayUsd)}</span></Row>
-   {summary.dailyBudgetUsd>0&&<div className="settings-meter" role="meter" aria-label="Today's AI use" aria-valuemin={0} aria-valuemax={summary.dailyBudgetUsd} aria-valuenow={summary.todayUsd}><span style={{width:`${Math.round(share*100)}%`}}/></div>}
-   <Row label="Last 30 days" help={`${summary.requests} AI calls`}><span className="settings-value">{money(summary.monthUsd)}</span></Row>
-   {summary.byModel.length>0&&<div className="settings-table" role="table" aria-label="Last 30 days by model">{summary.byModel.map(m=><div role="row" key={m.model}><span role="cell">{modelName(m.model)}</span><span role="cell">{m.calls} calls</span><span role="cell">{money(m.costUsd)}</span></div>)}</div>}
+  {error&&<p className="settings-error" role="alert">{error}</p>}
+  {!b?<Row label="Loading your plan…"/>:<>
+   <section className="billing-plan" aria-label="Your plan">
+    <header><div><strong>{b.planName}</strong><span>{b.plan==='free'?'Free':`${dollars(b.plans.find(x=>x.id===b.plan)!.priceUsd)} a month`}{b.renewsAt&&` · ${b.cancelAtPeriodEnd?'ends':b.plan==='free'?'new credits':'renews'} ${day(b.renewsAt)}`}</span></div>
+     {b.portal&&<button type="button" className="settings-button-secondary" onClick={()=>void pay('portal',manageBilling)}>Manage billing</button>}</header>
+    <div className="billing-left"><strong>{credits(b.credits.left)}</strong><span>credits left</span></div>
+    <div className="settings-meter" role="meter" aria-label="Plan credits left" aria-valuemin={0} aria-valuemax={b.credits.planTotal} aria-valuenow={Math.max(0,b.credits.plan)}><span style={{width:`${Math.round(Math.min(1,Math.max(0,b.credits.plan)/Math.max(1,b.credits.planTotal))*100)}%`}}/></div>
+    <p>{credits(b.credits.plan)} of {credits(b.credits.planTotal)} from your plan{b.credits.topups>0&&<>, plus {credits(b.credits.topups)} bought, which don't expire</>}.{b.credits.overdraft>0&&<> {credits(b.credits.overdraft)} over, taken from your next credits.</>}</p>
+    <footer><button type="button" className="settings-button-primary" disabled={!b.payments} onClick={()=>void pay('credits',()=>buyCredits(1))}>Buy {credits(b.topup.credits)} credits · {dollars(b.topup.priceUsd)}</button>{opened&&<span className="billing-opened">Opened in your browser. Your credits show here once you've paid.</span>}</footer>
+   </section>
+   <h3 className="settings-subhead">Plans</h3>
+   <div className="billing-plans">{b.plans.map(plan=>{const current=plan.id===b.plan,order=['free','pro','max','max20'],up=order.indexOf(plan.id)>order.indexOf(b.plan);
+    return <div key={plan.id} className={'billing-plan-card'+(current?' current':'')}>
+     <strong>{plan.name}</strong><span className="billing-price">{plan.priceUsd?<>{dollars(plan.priceUsd)}<small> a month</small></>:'Free'}</span>
+     <span className="billing-credits">{credits(plan.credits)} credits a month</span>
+     {current?<span className="billing-current">Your plan</span>:plan.id==='free'?<span className="billing-current muted">{b.portal?'Cancel in Manage billing':''}</span>:
+      <button type="button" className={up?'settings-button-primary':'settings-button-secondary'} disabled={!b.payments} onClick={()=>void pay(plan.id,()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{b.plan==='free'?'Choose':up?'Upgrade':'Switch'}</button>}
+    </div>;})}</div>
+   {!b.payments&&<p className="settings-note">Paying isn't set up on your Gumbo service yet, so plans and credits can't be bought.</p>}
+   <p className="settings-note">One credit is one cent of AI. A small change uses a few; a whole video usually 100 to 300.</p>
   </>}
-  <h3 className="settings-subhead">Billing</h3>
-  <Row label="Plan and credits" help="Paid plans and credits are coming. During the beta, Gumbo AI is free up to your daily allowance."><span className="settings-badge">Coming soon</span></Row>
-  <Row label="Buy credits" help="Add credits to keep editing past your allowance."><button type="button" className="settings-button-secondary" disabled>Buy credits</button></Row>
+  <h3 className="settings-subhead">Usage</h3>
+  {usage===undefined?<Row label="Loading usage…"/>:'unavailable' in usage?<Row label="Usage is not available yet" help="Your Gumbo service needs its latest update to report usage here."/>:summary&&<>
+   <Row label="Today"><span className="settings-value">{credits(summary.todayCredits)} credits</span></Row>
+   <Row label="Last 30 days" help={`${summary.requests} AI calls`}><span className="settings-value">{credits(summary.monthCredits)} credits</span></Row>
+   <div className="billing-days" role="img" aria-label="Credits used each day over the last 30 days">{summary.days.map(d=><i key={d.date} title={`${day(d.date+'T12:00:00Z')}: ${credits(d.credits)} credits`} style={{height:`${Math.max(d.credits>0?6:2,Math.round(d.credits/peak*100))}%`}}/>)}</div>
+   {summary.byModel.length>0&&<div className="settings-table" role="table" aria-label="Last 30 days by model">{summary.byModel.map(m=><div role="row" key={m.model}><span role="cell">{modelName(m.model)}</span><span role="cell">{m.calls} calls</span><span role="cell">{credits(m.credits)}</span></div>)}</div>}
+  </>}
  </>;
 }
 

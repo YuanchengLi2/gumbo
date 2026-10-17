@@ -27,7 +27,7 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
  const estimatedInput=promptEstimate({system:body.system,messages:body.messages,tools:body.tools}),reservationPrice=other?providerRates(other,{input_tokens:estimatedInput}).price:body.model==='claude-haiku-5-5'&&estimatedInput>100000?[.5,2.5]:prices[body.model];
  const estimate=(estimatedInput*reservationPrice[0]+maxTokens*reservationPrice[1])/1e6;
  const {data:usageId,error:limit}=await db.rpc('dream_reserve_usage',{p_user:userId,p_request:body.requestId,p_turn:body.turnId??body.requestId,p_model:body.model,p_reserved:estimate});
- if(limit){const result=failed(limit.message,limit.code==='D0001'?403:limit.code==='D0002'?409:limit.code==='D0003'?429:503,limit.code??'reservation_error');await requests?.finish(userId,body.requestId,'failed',result.body,limit.message);return result;}
+ if(limit){const result=failed(limit.message,limit.code==='D0001'?403:limit.code==='D0002'?409:limit.code==='D0003'?429:limit.code==='D0004'?402:503,limit.code==='D0004'?'credits_exhausted':limit.code??'reservation_error');await requests?.finish(userId,body.requestId,'failed',result.body,limit.message);return result;}
  let response:Response;const abort=new AbortController();
  if(other)return handleProvider(body,userId,{db,usageId,maxTokens,abort,fetcher,timeoutMs,requests,key:providerKeys[other.provider]!});
  const policyFor=(budget:boolean)=>inferencePolicy(body.model,body.purpose,body.profile,budget?{taskBudget:body.taskBudget}:{});

@@ -701,6 +701,27 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .settings-table{display:grid;margin-top:6px}
 .settings-table [role=row]{display:grid;grid-template-columns:1fr auto 80px;gap:16px;padding:9px 0;border-bottom:1px solid var(--n7);font-size:12.5px;color:var(--n65)}
 .settings-table [role=cell]:last-child{text-align:right;color:var(--n100)}
+/* Usage and billing: the plan and its credits as a card, the plans side by side, and the last 30 days as small bars. */
+.billing-plan{margin-top:6px;padding:18px 20px;border:1px solid var(--n9);border-radius:14px;background:var(--n1)}
+.billing-plan>header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.billing-plan>header>div{display:flex;flex-direction:column;gap:3px}
+.billing-plan>header strong{font-size:17px;font-weight:600;color:var(--n100)}.billing-plan>header span{font-size:12.5px;color:var(--n46)}
+.billing-left{display:flex;align-items:baseline;gap:8px;margin:18px 0 10px}
+.billing-left strong{font:400 40px/1 Georgia,"Times New Roman",serif;letter-spacing:-.5px;color:var(--n100);font-variant-numeric:tabular-nums}.billing-left span{font-size:13px;color:var(--n46)}
+.billing-plan .settings-meter{margin:0 0 10px}
+.billing-plan>p{margin:0;font-size:12.5px;line-height:1.5;color:var(--n56)}
+.billing-plan>footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.billing-opened{font-size:12px;color:var(--n46)}
+.billing-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:8px}
+.billing-plan-card{display:flex;flex-direction:column;gap:4px;padding:14px;border:1px solid var(--n9);border-radius:12px}
+.billing-plan-card.current{border-color:var(--n100);box-shadow:inset 0 0 0 1px var(--n100)}
+.billing-plan-card strong{font-size:13.5px;font-weight:600;color:var(--n100)}
+.billing-price{font-size:20px;font-weight:600;color:var(--n100);letter-spacing:-.3px}.billing-price small{font-size:12px;font-weight:400;color:var(--n46);letter-spacing:0}
+.billing-credits{font-size:12px;color:var(--n56);margin-bottom:10px}
+.billing-plan-card>button{margin-top:auto;width:100%}
+.billing-current{margin-top:auto;height:32px;display:grid;place-items:center;font-size:12.5px;font-weight:600;color:var(--n100)}.billing-current.muted{font-weight:400;font-size:11.5px;color:var(--n46)}
+.billing-days{display:flex;align-items:flex-end;gap:3px;height:64px;margin:10px 0 6px;padding-bottom:1px;border-bottom:1px solid var(--n7)}
+.billing-days i{flex:1;min-width:2px;border-radius:2px 2px 0 0;background:var(--n25)}.billing-days i:hover{background:var(--n100)}
 .settings-error{margin:12px 0;font-size:12.5px;color:var(--n100);padding:10px 12px;border-radius:8px;background:var(--n5)}
 .settings-body .settings-shortcuts{margin-top:14px;font-size:13px;gap:12px 24px}
 @media(max-width:760px){.settings-page{grid-template-columns:1fr;grid-template-rows:auto 1fr}.settings-nav{flex-direction:row;flex-wrap:wrap;padding:40px 12px 10px;border-right:0;border-bottom:1px solid var(--n7)}.settings-nav h2{width:100%}.settings-panel{padding:24px 20px 48px}.settings-row{flex-direction:column;align-items:stretch}.settings-input{width:100%}}

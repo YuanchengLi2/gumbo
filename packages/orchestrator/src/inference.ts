@@ -195,7 +195,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   receipt.providerRequestId=body?.dream_request?.providerRequestId;
   if(!response.ok){
    receipt.error=failure(body,response.status);
-   if(['D0003','budget_exceeded','spend_limit'].includes(body?.error?.type)){receipt.status='failed';receipt.retryable=false;save();throw new InferenceError(receipt.error!,'quota',response.status);}
+   if(['D0003','credits_exhausted','budget_exceeded','spend_limit'].includes(body?.error?.type)){receipt.status='failed';receipt.retryable=false;save();throw new InferenceError(receipt.error!,'quota',response.status);}
    if(body?.error?.type==='D0002'){receipt.status='failed';receipt.retryable=false;save();throw new InferenceError(receipt.error!,'request_conflict',response.status);}
    if([401,403].includes(response.status)){receipt.status='failed';receipt.retryable=false;save();throw new InferenceError(receipt.error!,'authentication',response.status);}
    const confirmedRetry=body?.dream_request?.status==='failed'&&body?.dream_request?.retryable===true,unconfirmed=body?.dream_request?.status!=='failed'&&transientStatus(response.status);

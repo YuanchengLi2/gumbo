@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Gumbo billing</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFFBEF'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFFBEF'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%231F1A17' stroke-width='3.2' stroke-linecap='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Where Stripe sends people back after paying (or not) in the browser: it says what happened and to go back to Gumbo,
+   which shows the new plan or credits as soon as Stripe has told the gateway (seconds). Styled like the sign-in page. */
+:root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--card:#FFFDF7}
+@media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--card:#1D1916}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px 16px;font-family:Figtree,system-ui,sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+main{width:min(420px,100%);background:var(--card);border:1.5px solid var(--line);border-radius:24px;padding:34px 30px 30px;box-shadow:0 30px 70px -40px rgba(31,26,23,.35)}
+.brand{display:flex;align-items:center;gap:8px;margin-bottom:28px;font-weight:700;font-size:20px;letter-spacing:-.03em;color:var(--ink);text-decoration:none}
+.brand svg{width:28px;height:28px}
+h1{margin:0 0 8px;font-family:'EB Garamond',Georgia,serif;font-size:40px;font-weight:400;letter-spacing:-.02em;line-height:1.02}
+p{margin:0;font-size:15px;line-height:1.55;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+ <a class="brand" href="/" aria-label="Gumbo home"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>Gumbo</a>
+ <h1 id="title">You're all set</h1>
+ <p id="text">Go back to Gumbo: it shows the change in a few seconds. You can close this tab.</p>
+</main>
+<script>
+const says={
+ subscribed:['Welcome to your new plan','Your credits are ready in Gumbo. Go back to the app; you can close this tab.'],
+ credits:['Credits added','They show in Gumbo in a few seconds and don’t expire. You can close this tab.'],
+ portal:['All saved','Changes to your plan show in Gumbo in a few seconds. You can close this tab.'],
+ cancelled:['Nothing was charged','You can choose a plan or buy credits any time in Gumbo, in Settings under Usage and billing.']
+};
+const [title,text]=says[new URLSearchParams(location.search).get('status')]||says.portal;
+document.getElementById('title').textContent=title;document.getElementById('text').textContent=text;document.title=title+' · Gumbo';
+</script>
+</body>
+</html>
