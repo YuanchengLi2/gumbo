@@ -683,6 +683,12 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 - The prefix is 9,003 tokens (system 2,383, tools 6,519, search 101). The same first call costs about 6¢ instead of 13.6¢. The tool list stays whole: each tool is a few hundred tokens and the rarely used ones (file changes and export on the computer, decisions, resources) are needed when they are asked for.
 - Gateway change (requires deployment): `cachedPrompt` gives system and tools the conversation's TTL.
 
+## October 17, 2026 — The dashboard shows the money left in each API account
+
+- Only DeepSeek publishes an account's balance (GET /user/balance); the dashboard reads it live with the gateway's key. Anthropic, OpenAI, Google and Groq show their balance only on their billing pages (no API for it as of today), so the dashboard keeps the balance read off that page, entered with Set balance, and counts it down by what the gateway billed on that provider since it was entered. Calls made with the same keys outside the gateway (scripts, other apps) are not seen, so Update it from the billing page now and then.
+- Balances live in dream_provider_balances (service role only; migration 202610170002). Saving one needs the dashboard password like reading. A tile turns amber under $5 and red at nothing left; each links to its provider's billing page.
+- Requires the migration and a gateway deployment.
+
 ## October 17, 2026 — Auto runs only Claude Haiku 5.5 and GPT-6.1 Sol
 
 - Auto now chooses between two models: Claude Haiku 5.5 for light work and GPT-6.1 Sol for everything else, the hardest whole-video work and big plans included. Opus, like every other model, runs only when the user picks it. The router is shown only the light and strong tiers; a frontier tier or model it still names (an older prompt, a "still not fixed" climb) runs on Sol. Claude Sonnet 5.5 still stands in for Sol only when Sol cannot run (no OpenAI key on the gateway). Settings > AI says the same.

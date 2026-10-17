@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {handleSpendDashboard,supabaseSpendPorts,MAX_FAILURES,type SpendPorts,type SpendCall} from '../../supabase/functions/dream-gateway/spend-dashboard';
+import {handleSpendDashboard,supabaseSpendPorts,deepseekBalance,MAX_FAILURES,type SpendPorts,type SpendCall} from '../../supabase/functions/dream-gateway/spend-dashboard';
 
 const call=(n:number,over:Partial<SpendCall>={}):SpendCall=>({user_id:'user-b',turn_id:'turn-'+n,model:'claude-opus-5-5',status:'completed',cost_usd:'0.05',reserved_usd:'1',input_tokens:10,output_tokens:20,cache_read_tokens:30,cache_write_tokens:40,audio_seconds:'0',error_code:null,provider_status:null,created_at:new Date(Date.UTC(2026,9,16,4,n)).toISOString(),...over});
 function ports(password?:string){
@@ -39,6 +39,30 @@ it('gives the right password every call with accounts named by label, never an i
  expect(body.calls.map((c:any)=>[c.account,c.provider,c.cost,c.status])).toEqual([['a2','Anthropic',.05,'completed'],['a1','Groq',.05,'completed'],['a2','Anthropic',0,'reserved']]);
  expect(body.calls[1].audio).toBe(61);
  const text=JSON.stringify(body);expect(text).not.toContain('user-a');expect(text).not.toContain('user-b');expect(text).not.toContain('@');
+});
+
+it('counts each account\'s money down from the balance entered off its billing page, and reads DeepSeek\'s live',async()=>{
+ const saved=new Map<string,{provider:string;balance_usd:string;set_at:string}>([['Anthropic',{provider:'Anthropic',balance_usd:'20',set_at:new Date(Date.UTC(2026,9,16,4,2)).toISOString()}]]);
+ const p:SpendPorts={...ports('correct horse'),keys:{Anthropic:true,DeepSeek:true},
+  balances:async()=>[...saved.values()],setBalance:async(provider,usd)=>{saved.set(provider,{provider,balance_usd:String(usd),set_at:new Date(Date.UTC(2026,9,16,4,0)).toISOString()});},
+  liveBalance:async provider=>provider==='DeepSeek'?{amount:7.5,currency:'USD',available:true}:undefined};
+ const body=(await handleSpendDashboard({password:'correct horse'},'1.2.3.4',p)).body as any;
+ // Only the Anthropic call made after the balance was entered counts; a reservation that never settled is not spend.
+ expect(body.balances.find((b:any)=>b.provider==='Anthropic')).toMatchObject({key:true,entered:{usd:20},spentSince:0,remaining:20});
+ expect(body.balances.find((b:any)=>b.provider==='DeepSeek')).toMatchObject({key:true,live:{amount:7.5,currency:'USD',available:true}});
+ expect(body.balances.find((b:any)=>b.provider==='Groq')).toMatchObject({key:false});expect(body.balances.find((b:any)=>b.provider==='Groq').remaining).toBeUndefined();
+ const after=(await handleSpendDashboard({password:'correct horse',setBalance:{provider:'Anthropic',usd:12.345}},'1.2.3.4',p)).body as any;
+ const anthropic=after.balances.find((b:any)=>b.provider==='Anthropic');expect(anthropic).toMatchObject({entered:{usd:12.35},spentSince:.05});expect(anthropic.remaining).toBeCloseTo(12.3,6);
+ for(const setBalance of [{provider:'Acme',usd:5},{provider:'OpenAI',usd:-1},{provider:'OpenAI',usd:'5'},{provider:'OpenAI'}])expect((await handleSpendDashboard({password:'correct horse',setBalance},'1.2.3.4',p)).status).toBe(400);
+ // Saving needs the password like everything else.
+ expect((await handleSpendDashboard({password:'wrong',setBalance:{provider:'OpenAI',usd:5}},'1.2.3.4',p)).status).toBe(401);expect(saved.has('OpenAI')).toBe(false);
+});
+
+it('reads DeepSeek\'s balance in dollars when the account has them, and says when it cannot cover calls',async()=>{
+ const reply=(body:object)=>async()=>new Response(JSON.stringify(body),{status:200});
+ expect(await deepseekBalance('k',reply({is_available:false,balance_infos:[{currency:'CNY',total_balance:'30.00'},{currency:'USD',total_balance:'0.00'}]}) as any)).toEqual({amount:0,currency:'USD',available:false});
+ expect(await deepseekBalance('k',reply({is_available:true,balance_infos:[{currency:'CNY',total_balance:'30.00'}]}) as any)).toEqual({amount:30,currency:'CNY',available:true});
+ await expect(deepseekBalance('k',(async()=>new Response('{}',{status:401})) as any)).rejects.toThrow('401');
 });
 
 it('reads every call from the database, past the 1,000 rows one select returns',async()=>{

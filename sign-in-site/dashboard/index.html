@@ -105,6 +105,17 @@ tbody tr.req:hover{background:var(--raised)}
 .empty{color:var(--muted);padding:18px 0;text-align:center}
 .more{display:block;margin:10px auto 0}
 .tabletoggle{font-size:12px}
+.money{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.money .tile{display:flex;flex-direction:column;gap:2px}
+.money .k{display:flex;align-items:center;gap:6px}
+.money .low .v{color:var(--warn)}.money .out .v{color:var(--bad)}
+.money .unset .v{color:var(--muted);font-size:18px;font-weight:550;padding:5px 0 3px}
+.money .acts{display:flex;gap:10px;align-items:center;margin-top:8px;font-size:12px}
+.money .acts a{color:var(--text-2)}
+.link{border:0;background:none;padding:0;color:var(--text);text-decoration:underline;cursor:pointer;font-size:12px}
+.money form{display:flex;gap:6px;margin-top:8px}
+.money form input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line-strong);border-radius:8px;padding:5px 8px}
+.money form .err{color:var(--bad);font-size:12px}
 @media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}.grid2>.card{margin-bottom:16px}}
 @media (max-width:560px){.wrap{padding:16px 16px 48px}.controls{margin-left:0}.bar{grid-template-columns:86px minmax(0,1fr) 72px}.tile .v{font-size:22px}}
 </style>
@@ -135,6 +146,10 @@ tbody tr.req:hover{background:var(--raised)}
  <div id="notices"></div>
  <section class="tiles" id="tiles"></section>
  <section class="card">
+  <h2>Money left</h2><div class="sub">In each API account. DeepSeek is read live; the others show the balance from their billing page minus what Gumbo spent since.</div>
+  <div class="money" id="money"></div>
+ </section>
+ <section class="card">
   <div class="cardhead"><div><h2>Spend per day</h2><div class="sub">By provider. Click a provider to hide it.</div></div>
    <div class="right"><button class="btn tabletoggle" id="daytable" aria-pressed="false">Table</button></div></div>
   <div class="legend" id="legend"></div>
@@ -160,7 +175,7 @@ const LIVE='https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/
 const local=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),API=local&&new URLSearchParams(location.search).get('api')||LIVE;
 const PROVIDERS=['Anthropic','OpenAI','Google','DeepSeek','Groq','Other'];
 const COLOR={Anthropic:'var(--s1)',OpenAI:'var(--s2)',Google:'var(--s3)',DeepSeek:'var(--s4)',Groq:'var(--s5)',Other:'var(--s0)'};
-const state={range:'all',account:'',kind:'Request',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null};
+const state={range:'all',account:'',kind:'Request',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null,editing:null};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=n=>{n=n||0;if(n===0)return '$0';if(Math.abs(n)<.01)return '$'+n.toFixed(4);if(Math.abs(n)<1)return '$'+n.toFixed(3);if(Math.abs(n)<100)return '$'+n.toFixed(2);return '$'+Math.round(n).toLocaleString();};
@@ -269,13 +284,36 @@ function problems(v){
  const rows=v.calls.filter(c=>c.status!=='completed').sort((a,b)=>a.at<b.at?1:-1);
  $('problems').innerHTML=rows.length?`<table><thead><tr><th>When</th><th>Model</th><th>Status</th><th>Reason</th><th>Account</th><th class="num">Charged</th><th class="num">Held</th></tr></thead><tbody>${rows.slice(0,100).map(c=>`<tr><td style="white-space:nowrap">${when(c.at)}</td><td style="white-space:nowrap">${esc(c.model)}</td><td><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td><td>${esc(c.error??'')}${c.http?' (HTTP '+c.http+')':''}</td><td style="white-space:nowrap">${esc(accountName(c.account))}</td><td class="num">${usd(billed(c))}</td><td class="num">${c.status==='reserved'?usd(c.reserved):'<span class="muted">–</span>'}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">Every call in this range completed.</div>';
 }
-function render(){if(!state.data)return;const v=view();tiles(v);legend(v);daily(v);providers(v);accounts(v);models(v);requests(v);problems(v);}
+// Where each provider shows its balance, to read it off and enter it here.
+const BILLING={Anthropic:'https://console.anthropic.com/settings/billing',OpenAI:'https://platform.openai.com/settings/organization/billing/overview',Google:'https://console.cloud.google.com/billing',DeepSeek:'https://platform.deepseek.com/usage',Groq:'https://console.groq.com/settings/billing'};
+const LOW=5;
+function money(){
+ const rows=state.data.balances??[];
+ if(!rows.length){$('money').innerHTML='<div class="empty">No API accounts yet.</div>';return;}
+ $('money').innerHTML=rows.map(b=>{
+  let value,sub,cls='';
+  if(b.live){const n=b.live.amount;value=b.live.currency==='USD'?usd(n):n.toFixed(2)+' '+esc(b.live.currency);sub=b.live.available?'Live from DeepSeek':'DeepSeek says this cannot cover calls';cls=!b.live.available||n<=0?'out':b.live.currency==='USD'&&n<LOW?'low':'';}
+  else if(b.entered){value=usd(Math.max(0,b.remaining));sub=`${usd(b.entered.usd)} on ${when(b.entered.at)}, ${usd(b.spentSince)} spent since`;cls=b.remaining<=0?'out':b.remaining<LOW?'low':'';}
+  else{value='Not set';sub=b.liveError?'Could not read it: '+b.liveError:'Enter the balance from its billing page';cls='unset';}
+  const editing=state.editing===b.provider;
+  return `<div class="tile ${cls}"><div class="k"><span class="sw" style="background:${COLOR[b.provider]}"></span>${esc(b.provider)}${b.key?'':' <span class="muted">· no key</span>'}</div><div class="v">${value}</div><div class="s">${esc(sub)}</div>`+
+   (editing?`<form data-p="${esc(b.provider)}"><input type="number" min="0" step="0.01" inputmode="decimal" placeholder="Balance in $" aria-label="${esc(b.provider)} balance in dollars" value="${b.entered?Math.max(0,b.remaining).toFixed(2):''}" required><button class="btn" type="submit">Save</button><button class="btn" type="button" data-cancel>Cancel</button></form><div class="s err" id="moneyerr"></div>`
+    :`<div class="acts">${b.live?'':`<button class="link" data-edit="${esc(b.provider)}">${b.entered?'Update':'Set balance'}</button>`}<a href="${BILLING[b.provider]}" target="_blank" rel="noopener noreferrer">Billing page ↗</a></div>`)+'</div>';}).join('');
+ for(const btn of $('money').querySelectorAll('[data-edit]'))btn.onclick=()=>{state.editing=btn.dataset.edit;money();$('money').querySelector('form input')?.focus();};
+ const form=$('money').querySelector('form');if(!form)return;
+ form.querySelector('[data-cancel]').onclick=()=>{state.editing=null;money();};
+ form.onsubmit=async e=>{e.preventDefault();const value=Number(form.querySelector('input').value);if(!Number.isFinite(value)||value<0)return;
+  for(const el of form.elements)el.disabled=true;
+  try{const data=await fetchData({setBalance:{provider:form.dataset.p,usd:value}});state.editing=null;show(data);}
+  catch(error){for(const el of form.elements)el.disabled=false;if(error.status===401||error.status===429)lock(error.message);else $('moneyerr').textContent=error.message;}};
+}
+function render(){if(!state.data)return;const v=view();tiles(v);money();legend(v);daily(v);providers(v);accounts(v);models(v);requests(v);problems(v);}
 
 // The password is kept for this tab only, so Refresh works; Lock, or closing the tab, forgets it.
 const remembered={get(){try{return sessionStorage.getItem('dashboard')||'';}catch{return '';}},set(v){try{v?sessionStorage.setItem('dashboard',v):sessionStorage.removeItem('dashboard');}catch{}}};
 let password='';
-async function fetchData(){
- const response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password}),cache:'no-store',credentials:'omit'});
+async function fetchData(extra={}){
+ const response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password,...extra}),cache:'no-store',credentials:'omit'});
  const body=await response.json().catch(()=>({error:'The gateway sent an unreadable answer ('+response.status+').'}));
  if(!response.ok)throw Object.assign(new Error(body.error||('The gateway answered '+response.status+'.')),{status:response.status});
  return body;

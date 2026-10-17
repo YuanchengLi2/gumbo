@@ -12,7 +12,7 @@ import {tmpdir,homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import postgres from 'postgres';
-import {handleSpendDashboard,type SpendPorts} from '../../supabase/functions/dream-gateway/spend-dashboard';
+import {handleSpendDashboard,balanceProviders,providerKeys,deepseekBalance,type SpendPorts} from '../../supabase/functions/dream-gateway/spend-dashboard';
 
 const here=dirname(fileURLToPath(import.meta.url)),root=resolve(here,'../..');
 const PORT=Number(process.env.DASHBOARD_PORT??4317);
@@ -41,7 +41,14 @@ async function spendDashboard(body:unknown,address:string){
   calls:async()=>[...await sql`select user_id,turn_id,model,status,cost_usd,reserved_usd,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,audio_seconds,error_code,provider_status,created_at from dream_usage order by created_at limit 500000`] as any,
   accounts:async()=>[...await sql`select id,status,coalesce(is_guest,false) is_guest,daily_budget_usd,created_at from dream_accounts`] as any,
   failures:async(who,since)=>localFailures.filter(f=>f.address===who&&f.at>=since.getTime()).length,
-  fail:async who=>{localFailures.push({address:who,at:Date.now()});}};
+  fail:async who=>{localFailures.push({address:who,at:Date.now()});},
+  // Provider keys on this computer (.env.local), not the gateway's: here usually only Anthropic's.
+  keys:Object.fromEntries(balanceProviders.map(p=>[p,!!(process.env[providerKeys[p]]??e[providerKeys[p]])])),
+  liveBalance:async provider=>{const key=process.env[providerKeys[provider]]??e[providerKeys[provider]];return provider==='DeepSeek'&&key?deepseekBalance(key):undefined;},
+  balances:async()=>{try{return [...await sql`select provider,balance_usd,set_at from dream_provider_balances`] as any;}catch{return [];}},
+  // The read-only session cannot write, so saving a balance opens its own short connection.
+  setBalance:async(provider,usd)=>{const write=postgres(url.toString(),{ssl:'require',max:1,idle_timeout:5,connect_timeout:15,connection:{application_name:'gumbo-dashboard'}});
+   try{await write`insert into dream_provider_balances(provider,balance_usd,set_at) values(${provider},${usd},now()) on conflict(provider) do update set balance_usd=excluded.balance_usd,set_at=excluded.set_at`;}finally{await write.end({timeout:2}).catch(()=>{});}}};
  try{return await handleSpendDashboard(body,address,ports);}finally{await sql.end({timeout:2}).catch(()=>{});}
 }
 
