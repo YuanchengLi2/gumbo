@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<meta name="referrer" content="no-referrer">
+<title>Dashboard</title>
+<!-- Gumbo's spending dashboard. Nothing links here and search engines are told to skip it. The password is checked by the
+ gateway (spend-dashboard.ts), which is the only thing that can read spend; this page holds no data and no password. -->
+<style>
+:root{color-scheme:light;
+ --bg:#ffffff;--surface:#fcfcfb;--raised:#f4f4f2;--line:#e4e3df;--line-strong:#cfcec9;
+ --text:#0b0b0b;--text-2:#52514e;--muted:#8a8984;--focus:#0b0b0b;
+ --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s0:#a3a29d;
+ --bad:#c62f2f;--warn:#a86a00;--good:#167a3e}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+ --bg:#111110;--surface:#1a1a19;--raised:#232321;--line:#2e2e2c;--line-strong:#454542;
+ --text:#f0efec;--text-2:#c3c2b7;--muted:#8d8c86;--focus:#f0efec;
+ --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s0:#6d6c67;
+ --bad:#ef6b6b;--warn:#e0a43a;--good:#4cc27e}}
+:root[data-theme="dark"]{color-scheme:dark;
+ --bg:#111110;--surface:#1a1a19;--raised:#232321;--line:#2e2e2c;--line-strong:#454542;
+ --text:#f0efec;--text-2:#c3c2b7;--muted:#8d8c86;--focus:#f0efec;
+ --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s0:#6d6c67;
+ --bad:#ef6b6b;--warn:#e0a43a;--good:#4cc27e}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.gate{min-height:100vh;display:grid;place-items:center;padding:16px}
+.gate form{width:min(340px,100%);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px}
+.gate h1{font-size:18px;margin:0 0 4px}
+.gate p{color:var(--muted);margin:0 0 16px;font-size:13px}
+.gate input{width:100%;background:var(--bg);border:1px solid var(--line-strong);border-radius:8px;padding:9px 11px;margin-bottom:10px}
+.gate button{width:100%;border:0;border-radius:8px;padding:9px 11px;background:var(--text);color:var(--bg);font-weight:600;cursor:pointer}
+.gate button:disabled{opacity:.6;cursor:default}
+.gate .err{color:var(--bad);font-size:13px;min-height:18px;margin:10px 0 0}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 24px 64px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:20px}
+h1{font-size:20px;font-weight:650;margin:0;letter-spacing:-.01em}
+.stamp{color:var(--muted);font-size:12px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 11px;cursor:pointer;color:var(--text-2)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+select{max-width:240px}
+select,input[type=search]{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px}
+.btn{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 11px;cursor:pointer}
+.btn:hover,.seg button:hover{background:var(--raised)}
+.seg button[aria-pressed="true"]:hover{background:var(--text)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.notice{border:1px solid var(--line-strong);background:var(--raised);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--text-2)}
+.notice b{color:var(--text)}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .k{color:var(--text-2);font-size:12px}
+.tile .v{font-size:26px;font-weight:650;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .s{color:var(--muted);font-size:12px;margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;min-width:0}
+.card h2{font-size:14px;font-weight:650;margin:0}
+.card .sub{color:var(--muted);font-size:12px;margin:2px 0 12px}
+.cardhead{display:flex;align-items:flex-start;gap:12px}
+.cardhead .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid2>.card{margin-bottom:0}
+.row{margin-bottom:16px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text-2);margin-bottom:8px}
+.legend button{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0;cursor:pointer;color:var(--text-2)}
+.legend button[aria-pressed="false"]{opacity:.4}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .axis{fill:var(--muted);font-size:11px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.tip{position:fixed;pointer-events:none;z-index:10;background:var(--text);color:var(--bg);border-radius:8px;padding:8px 10px;font-size:12px;min-width:150px;box-shadow:0 6px 20px rgba(0,0,0,.18);display:none}
+.tip .t{font-weight:650;margin-bottom:4px}
+.tip .l{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.tip .l span:first-child{display:inline-flex;gap:6px;align-items:center}
+.bars{display:grid;gap:10px}
+.bar{display:grid;grid-template-columns:150px minmax(0,1fr) 92px;gap:10px;align-items:center}
+.bar .name{display:flex;gap:8px;align-items:center;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{height:10px;background:var(--raised);border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;border-radius:4px}
+.bar .val{text-align:right;font-variant-numeric:tabular-nums}
+.bar .val small{color:var(--muted);display:block;font-size:11px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--text-2);font-weight:550;font-size:12px;white-space:nowrap}
+th.num,td.num{text-align:right}
+th[data-sort]{cursor:pointer;user-select:none}
+th[data-sort]:hover{color:var(--text)}
+tbody tr.req{cursor:pointer}
+tbody tr.req:hover{background:var(--raised)}
+.scroll{overflow-x:auto}
+.prov{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.completed::before{background:var(--good)}.pill.failed::before{background:var(--bad)}
+.pill.uncertain::before,.pill.reserved::before{background:var(--warn)}
+.detail td{background:var(--raised);padding:12px 14px}
+.detail table{background:var(--surface);border-radius:8px}
+.muted{color:var(--muted)}
+.empty{color:var(--muted);padding:18px 0;text-align:center}
+.more{display:block;margin:10px auto 0}
+.tabletoggle{font-size:12px}
+@media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}.grid2>.card{margin-bottom:16px}}
+@media (max-width:560px){.wrap{padding:16px 16px 48px}.controls{margin-left:0}.bar{grid-template-columns:86px minmax(0,1fr) 72px}.tile .v{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="gate" id="gate">
+ <form id="login" autocomplete="off">
+  <h1>Dashboard</h1>
+  <p>Enter the password.</p>
+  <input type="password" id="password" aria-label="Password" autocomplete="current-password" required>
+  <button type="submit" id="open">Open</button>
+  <div class="err" id="err" role="alert"></div>
+ </form>
+</div>
+<div class="wrap" id="app" hidden>
+ <header>
+  <div><h1>Spending</h1><div class="stamp" id="stamp"></div></div>
+  <div class="controls">
+   <div class="seg" role="group" aria-label="Time range" id="range">
+    <button data-r="1">Today</button><button data-r="7">7 days</button><button data-r="30">30 days</button><button data-r="all" aria-pressed="true">All time</button>
+   </div>
+   <select id="account" aria-label="Account"><option value="">All accounts</option></select>
+   <button class="btn" id="refresh">Refresh</button>
+   <button class="btn" id="theme" aria-label="Switch light or dark">Theme</button>
+   <button class="btn" id="lock">Lock</button>
+  </div>
+ </header>
+ <div id="notices"></div>
+ <section class="tiles" id="tiles"></section>
+ <section class="card">
+  <div class="cardhead"><div><h2>Spend per day</h2><div class="sub">By provider. Click a provider to hide it.</div></div>
+   <div class="right"><button class="btn tabletoggle" id="daytable" aria-pressed="false">Table</button></div></div>
+  <div class="legend" id="legend"></div>
+  <div class="chart" id="daily"></div>
+  <div class="scroll" id="dailytable" hidden></div>
+ </section>
+ <div class="grid2 row">
+  <section class="card"><h2>By provider</h2><div class="sub">Share of spend</div><div class="bars" id="providers"></div></section>
+  <section class="card"><h2>Accounts</h2><div class="sub">Spend per account (named by when they started)</div><div class="scroll" id="accounts"></div></section>
+ </div>
+ <section class="card"><h2>By model</h2><div class="sub">Calls, tokens and cost per model</div><div class="scroll" id="models"></div></section>
+ <section class="card">
+  <div class="cardhead"><div><h2>Requests</h2><div class="sub" id="reqsub">Every request the agent ran. Click one to see its calls.</div></div>
+   <div class="right"><select id="kind" aria-label="Kind"><option value="Request">Requests</option><option value="Transcription">Transcription</option><option value="Footage analysis">Footage analysis</option><option value="Background">Other background jobs</option><option value="">Everything</option></select></div></div>
+  <div class="scroll" id="requests"></div>
+ </section>
+ <section class="card"><h2>Calls that did not finish cleanly</h2><div class="sub">Failed calls, calls whose result could not be confirmed, and reservations that never settled (held against the daily limit, not counted as spend)</div><div class="scroll" id="problems"></div></section>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+// The live gateway. On this computer (localhost) a ?api= address may stand in for it, to test the page.
+const LIVE='https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/spend-dashboard';
+const local=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),API=local&&new URLSearchParams(location.search).get('api')||LIVE;
+const PROVIDERS=['Anthropic','OpenAI','Google','DeepSeek','Groq','Other'];
+const COLOR={Anthropic:'var(--s1)',OpenAI:'var(--s2)',Google:'var(--s3)',DeepSeek:'var(--s4)',Groq:'var(--s5)',Other:'var(--s0)'};
+const state={range:'all',account:'',kind:'Request',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const usd=n=>{n=n||0;if(n===0)return '$0';if(Math.abs(n)<.01)return '$'+n.toFixed(4);if(Math.abs(n)<1)return '$'+n.toFixed(3);if(Math.abs(n)<100)return '$'+n.toFixed(2);return '$'+Math.round(n).toLocaleString();};
+const int=n=>(n||0).toLocaleString();
+const tok=n=>{n=n||0;return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(n>=1e4?0:1)+'k':String(n);};
+const dur=ms=>{if(!ms&&ms!==0)return '–';const s=Math.round(ms/1000);return s<60?s+' s':Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s';};
+const dayKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+const when=d=>new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+const short=m=>m.replace(/^claude-/,'').replace(/-\d{8}$/,'');
+// Spend is what the gateway settled; a reservation that never settled is shown apart (the provider may or may not have run it).
+const billed=c=>c.status==='reserved'?0:c.cost;
+// What a group of calls was: a request someone made, or work the app did on its own (transcribing, analysing footage,
+// one-call jobs such as indexing shots), each of which the gateway files under an id of its own.
+const kindOf=(turn,count)=>/^groq-/.test(turn)?'Transcription':/^observe:/.test(turn)?'Footage analysis':count<2?'Background':'Request';
+const accountName=key=>state.data?.accounts.find(a=>a.key===key)?.name??'Unknown account';
+
+function since(){if(state.range==='all')return 0;const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(Number(state.range)-1));return d.getTime();}
+function view(){
+ const from=since(),calls=state.data.calls.filter(c=>new Date(c.at).getTime()>=from&&(!state.account||c.account===state.account));
+ const byTurn=new Map();for(const c of calls){const list=byTurn.get(c.turn)??[];list.push(c);byTurn.set(c.turn,list);}
+ const requests=[...byTurn.entries()].map(([turn,list])=>{const times=list.map(c=>new Date(c.at).getTime());const worst=list.some(c=>c.status==='failed')?'failed':list.some(c=>c.status!=='completed')?'uncertain':'completed';
+  return {turn,calls:list,at:new Date(Math.min(...times)).toISOString(),ms:Math.max(...times)-Math.min(...times),cost:list.reduce((s,c)=>s+billed(c),0),account:list[0].account,models:[...new Set(list.map(c=>short(c.model)))].join(', '),count:list.length,status:worst,kind:kindOf(turn,list.length)};});
+ return {calls,requests};
+}
+function tiles(v){
+ const spent=v.calls.reduce((s,c)=>s+billed(c),0),problems=v.calls.filter(c=>c.status!=='completed').length,held=v.calls.filter(c=>c.status==='reserved'),heldUsd=held.reduce((s,c)=>s+c.reserved,0);
+ const asked=v.requests.filter(r=>r.kind==='Request'),paid=asked.filter(r=>r.cost>0),sorted=paid.map(r=>r.cost).sort((a,b)=>a-b),avg=paid.length?paid.reduce((s,r)=>s+r.cost,0)/paid.length:0,median=sorted.length?sorted[Math.floor(sorted.length/2)]:0;
+ const today=state.data.calls.filter(c=>dayKey(c.at)===dayKey(new Date())).reduce((s,c)=>s+billed(c),0);
+ $('tiles').innerHTML=[
+  ['Spent',usd(spent),`${usd(today)} today`],
+  ['AI calls',int(v.calls.length),`${tok(v.calls.reduce((s,c)=>s+c.input+c.cacheRead+c.cacheWrite,0))} tokens in, ${tok(v.calls.reduce((s,c)=>s+c.output,0))} out`],
+  ['Requests',int(asked.length),`plus ${int(v.requests.length-asked.length)} background jobs · ${int(new Set(v.calls.map(c=>c.account)).size)} accounts`],
+  ['Per request',usd(avg),`average · median ${usd(median)}`],
+  ['Not clean',int(problems),problems?`failed or unconfirmed${held.length?`, ${usd(heldUsd)} held in ${held.length} unsettled`:''}`:'every call completed']
+ ].map(([k,val,s])=>`<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${esc(s)}</div></div>`).join('');
+}
+function legend(v){
+ const present=PROVIDERS.filter(p=>v.calls.some(c=>c.provider===p));
+ $('legend').innerHTML=present.map(p=>`<button data-p="${p}" aria-pressed="${!state.hidden.has(p)}"><span class="sw" style="background:${COLOR[p]}"></span>${p}</button>`).join('');
+ for(const b of $('legend').querySelectorAll('button'))b.onclick=()=>{const p=b.dataset.p;state.hidden.has(p)?state.hidden.delete(p):state.hidden.add(p);render();};
+}
+function niceMax(n){const p=Math.pow(10,Math.floor(Math.log10(n)));for(const m of [1,2,2.5,5,10])if(m*p>=n)return m*p;return 10*p;}
+function roundTop(x,y,w,h){const r=Math.min(4,w/2,h);return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`;}
+function daily(v){
+ const days=new Map(),add=(k,p,n)=>{let row=days.get(k);if(!row){row={};days.set(k,row);}row[p]=(row[p]||0)+n;};
+ for(const c of v.calls)add(dayKey(c.at),c.provider,billed(c));
+ const keys=[...days.keys()].sort();
+ if(!keys.length){$('daily').innerHTML='<div class="empty">No spend in this range.</div>';$('dailytable').innerHTML='';return;}
+ // Every day between the first and last, so a quiet day shows as a gap rather than disappearing.
+ const all=[];for(let t=new Date(keys[0]+'T00:00');dayKey(t)<=keys[keys.length-1];t.setDate(t.getDate()+1))all.push(dayKey(t));
+ const shown=PROVIDERS.filter(p=>!state.hidden.has(p)),totals=all.map(k=>shown.reduce((s,p)=>s+((days.get(k)||{})[p]||0),0));
+ const nice=niceMax(Math.max(...totals,0.01)),W=1000,H=260,L=48,B=26,T=8,plotH=H-B-T,slot=(W-L)/all.length,bw=Math.max(2,Math.min(44,slot*.68));
+ let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Spend per day by provider">`;
+ for(let i=0;i<=4;i++){const y=T+plotH-plotH*i/4;svg+=`<line class="grid" x1="${L}" x2="${W}" y1="${y}" y2="${y}"/><text class="axis" x="${L-8}" y="${y+4}" text-anchor="end">${usd(nice*i/4)}</text>`;}
+ const every=Math.ceil(all.length/12);
+ all.forEach((k,i)=>{const x=L+slot*i+(slot-bw)/2;let y=T+plotH;const row=days.get(k)||{};
+  shown.forEach((p,j)=>{const n=row[p]||0;if(!n)return;const h=Math.max(1,plotH*n/nice),top=shown.slice(j+1).every(q=>!row[q]);
+   y-=h;svg+=top?`<path d="${roundTop(x,y,bw,h-(j?1:0))}" fill="${COLOR[p]}"/>`:`<rect x="${x}" y="${y+1}" width="${bw}" height="${Math.max(0,h-2)}" fill="${COLOR[p]}"/>`;});
+  svg+=`<rect class="hit" data-k="${k}" x="${L+slot*i}" y="${T}" width="${slot}" height="${plotH}" fill="transparent"/>`;
+  if(i%every===0)svg+=`<text class="axis" x="${L+slot*i+slot/2}" y="${H-8}" text-anchor="middle">${new Date(k+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</text>`;});
+ $('daily').innerHTML=svg+'</svg>';
+ const tip=$('tip');
+ for(const r of $('daily').querySelectorAll('.hit')){
+  r.onmousemove=e=>{const row=days.get(r.dataset.k)||{},list=shown.filter(p=>row[p]),total=list.reduce((s,p)=>s+row[p],0);
+   tip.innerHTML=`<div class="t">${new Date(r.dataset.k+'T00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${usd(total)}</div>`+(list.length?list.map(p=>`<div class="l"><span><span class="sw" style="background:${COLOR[p]}"></span>${p}</span><span>${usd(row[p])}</span></div>`).join(''):'<div class="muted">No spend</div>');
+   tip.style.display='block';tip.style.left=Math.min(innerWidth-tip.offsetWidth-8,e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px';};
+  r.onmouseleave=()=>{tip.style.display='none';};}
+ $('dailytable').innerHTML=`<table><thead><tr><th>Day</th>${shown.map(p=>`<th class="num">${p}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>${all.slice().reverse().map((k,i)=>{const row=days.get(k)||{};return `<tr><td>${k}</td>${shown.map(p=>`<td class="num">${row[p]?usd(row[p]):'<span class="muted">–</span>'}</td>`).join('')}<td class="num">${usd(totals[all.length-1-i])}</td></tr>`;}).join('')}</tbody></table>`;
+ $('daily').hidden=state.showDayTable;$('dailytable').hidden=!state.showDayTable;$('daytable').setAttribute('aria-pressed',String(state.showDayTable));
+}
+function providers(v){
+ const rows=PROVIDERS.map(p=>{const list=v.calls.filter(c=>c.provider===p);return {label:p,value:list.reduce((s,c)=>s+billed(c),0),count:list.length};}).filter(r=>r.count).sort((a,b)=>b.value-a.value);
+ const max=Math.max(...rows.map(r=>r.value),0),total=rows.reduce((s,r)=>s+r.value,0);
+ $('providers').innerHTML=rows.length?rows.map(r=>`<div class="bar"><div class="name"><span class="sw" style="background:${COLOR[r.label]}"></span><span>${r.label}</span></div><div class="track"><div class="fill" style="width:${max?Math.max(1.5,100*r.value/max):0}%;background:${COLOR[r.label]}"></div></div><div class="val">${usd(r.value)}<small>${total?Math.round(100*r.value/total):0}% · ${int(r.count)} calls</small></div></div>`).join(''):'<div class="empty">Nothing in this range.</div>';
+}
+function models(v){
+ const map=new Map();for(const c of v.calls){const r=map.get(c.model)??{model:c.model,provider:c.provider,calls:0,input:0,cacheRead:0,cacheWrite:0,output:0,audio:0,cost:0};
+  r.calls++;r.input+=c.input;r.cacheRead+=c.cacheRead;r.cacheWrite+=c.cacheWrite;r.output+=c.output;r.audio+=c.audio;r.cost+=billed(c);map.set(c.model,r);}
+ const rows=[...map.values()].sort((a,b)=>b.cost-a.cost);
+ $('models').innerHTML=rows.length?`<table><thead><tr><th>Model</th><th>Provider</th><th class="num">Calls</th><th class="num">Input</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="num">Output</th><th class="num">Per call</th><th class="num">Cost</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="white-space:nowrap">${esc(r.model)}</td><td><span class="prov"><span class="sw" style="background:${COLOR[r.provider]}"></span>${r.provider}</span></td><td class="num">${int(r.calls)}</td><td class="num">${tok(r.input)}</td><td class="num">${tok(r.cacheRead)}</td><td class="num">${tok(r.cacheWrite)}</td><td class="num">${r.audio?Math.round(r.audio/60)+' min audio':tok(r.output)}</td><td class="num">${usd(r.cost/r.calls)}</td><td class="num"><b>${usd(r.cost)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No calls in this range.</div>';
+}
+function requests(v){
+ const rows=v.requests.filter(r=>!state.kind||r.kind===state.kind),{key,dir}=state.sort;rows.sort((a,b)=>{const x=a[key],y=b[key];return (x>y?1:x<y?-1:0)*dir;});
+ $('reqsub').textContent=`${int(rows.length)} ${state.kind?state.kind.toLowerCase()+(state.kind==='Request'?'s':' jobs'):'groups of calls'}, ${usd(rows.reduce((s,r)=>s+r.cost,0))}. Click one to see its calls. What was asked stays on the computer it was asked on.`;
+ const head=[['at','When'],['kind','Kind'],['account','Account'],['models','Models'],['count','Calls','num'],['ms','Time','num'],['cost','Cost','num'],['status','Calls ended']];
+ const arrow=k=>state.sort.key===k?(dir<0?' ↓':' ↑'):'';
+ let html=`<table><thead><tr>${head.map(([k,l,c])=>`<th data-sort="${k}" class="${c??''}" aria-sort="${state.sort.key===k?(dir<0?'descending':'ascending'):'none'}">${l}${arrow(k)}</th>`).join('')}</tr></thead><tbody>`;
+ for(const r of rows.slice(0,state.limit)){
+  html+=`<tr class="req" data-t="${esc(r.turn)}" tabindex="0" aria-expanded="${state.open.has(r.turn)}"><td style="white-space:nowrap">${when(r.at)}</td><td style="white-space:nowrap">${esc(r.kind)}</td><td style="white-space:nowrap">${esc(accountName(r.account))}</td><td>${esc(r.models)}</td><td class="num">${r.count}</td><td class="num">${dur(r.ms)}</td><td class="num"><b>${usd(r.cost)}</b></td><td><span class="pill ${r.status}">${r.status==='completed'?'All completed':r.status==='failed'?'Some failed':'Some unconfirmed'}</span></td></tr>`;
+  if(state.open.has(r.turn))html+=`<tr class="detail"><td colspan="8"><div class="scroll"><table><thead><tr><th>Time</th><th>Model</th><th class="num">Tokens in</th><th class="num">Cached</th><th class="num">Out</th><th class="num">Cost</th><th>Status</th></tr></thead><tbody>${r.calls.map(c=>`<tr><td>${new Date(c.at).toLocaleTimeString()}</td><td style="white-space:nowrap">${esc(short(c.model))}</td><td class="num">${tok(c.input+c.cacheRead+c.cacheWrite)}</td><td class="num">${tok(c.cacheRead)}</td><td class="num">${c.audio?Math.round(c.audio)+' s audio':tok(c.output)}</td><td class="num">${usd(billed(c))}</td><td><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td></tr>`).join('')}</tbody></table></div></td></tr>`;}
+ html+='</tbody></table>';
+ if(!rows.length)html='<div class="empty">No requests in this range.</div>';
+ if(rows.length>state.limit)html+=`<button class="btn more" id="morereq">Show ${Math.min(200,rows.length-state.limit)} more${rows.length-state.limit>200?' of '+int(rows.length-state.limit):''}</button>`;
+ $('requests').innerHTML=html;
+ for(const th of $('requests').querySelectorAll('th[data-sort]'))th.onclick=()=>{const k=th.dataset.sort;state.sort=state.sort.key===k?{key:k,dir:-state.sort.dir}:{key:k,dir:['at','cost','count','ms'].includes(k)?-1:1};render();};
+ for(const tr of $('requests').querySelectorAll('tr.req')){const toggle=()=>{const t=tr.dataset.t;state.open.has(t)?state.open.delete(t):state.open.add(t);requests(view());};tr.onclick=toggle;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};}
+ const more=$('morereq');if(more)more.onclick=()=>{state.limit+=200;requests(view());};
+}
+function accounts(v){
+ const map=new Map();for(const c of v.calls){const r=map.get(c.account)??{calls:0,cost:0};r.calls++;r.cost+=billed(c);map.set(c.account,r);}
+ const today=new Map();for(const c of state.data.calls)if(dayKey(c.at)===dayKey(new Date()))today.set(c.account,(today.get(c.account)||0)+billed(c));
+ const rows=state.data.accounts.map(a=>({...a,...(map.get(a.key)??{calls:0,cost:0}),today:today.get(a.key)||0})).filter(a=>a.calls).sort((a,b)=>b.cost-a.cost);
+ $('accounts').innerHTML=rows.length?`<table><thead><tr><th>Account</th><th>Started</th><th class="num">Calls</th><th class="num">Today / limit</th><th class="num">Cost</th></tr></thead><tbody>${rows.map(a=>`<tr><td style="white-space:nowrap">${esc(a.name)}${a.status!=='active'?' <span class="muted">('+esc(a.status)+')</span>':''}</td><td style="white-space:nowrap">${new Date(a.since).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</td><td class="num">${int(a.calls)}</td><td class="num">${usd(a.today)} / ${usd(a.dailyBudget)}</td><td class="num"><b>${usd(a.cost)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No spend in this range.</div>';
+}
+function problems(v){
+ const rows=v.calls.filter(c=>c.status!=='completed').sort((a,b)=>a.at<b.at?1:-1);
+ $('problems').innerHTML=rows.length?`<table><thead><tr><th>When</th><th>Model</th><th>Status</th><th>Reason</th><th>Account</th><th class="num">Charged</th><th class="num">Held</th></tr></thead><tbody>${rows.slice(0,100).map(c=>`<tr><td style="white-space:nowrap">${when(c.at)}</td><td style="white-space:nowrap">${esc(c.model)}</td><td><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td><td>${esc(c.error??'')}${c.http?' (HTTP '+c.http+')':''}</td><td style="white-space:nowrap">${esc(accountName(c.account))}</td><td class="num">${usd(billed(c))}</td><td class="num">${c.status==='reserved'?usd(c.reserved):'<span class="muted">–</span>'}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">Every call in this range completed.</div>';
+}
+function render(){if(!state.data)return;const v=view();tiles(v);legend(v);daily(v);providers(v);accounts(v);models(v);requests(v);problems(v);}
+
+// The password is kept for this tab only, so Refresh works; Lock, or closing the tab, forgets it.
+const remembered={get(){try{return sessionStorage.getItem('dashboard')||'';}catch{return '';}},set(v){try{v?sessionStorage.setItem('dashboard',v):sessionStorage.removeItem('dashboard');}catch{}}};
+let password='';
+async function fetchData(){
+ const response=await fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password}),cache:'no-store',credentials:'omit'});
+ const body=await response.json().catch(()=>({error:'The gateway sent an unreadable answer ('+response.status+').'}));
+ if(!response.ok)throw Object.assign(new Error(body.error||('The gateway answered '+response.status+'.')),{status:response.status});
+ return body;
+}
+function show(data){
+ state.data=data;$('gate').hidden=true;$('app').hidden=false;
+ $('account').innerHTML='<option value="">All accounts</option>'+data.accounts.filter(a=>data.calls.some(c=>c.account===a.key)).map(a=>`<option value="${a.key}">${esc(a.name)}</option>`).join('');$('account').value=state.account;
+ const last=data.calls.at(-1)?.at;$('stamp').textContent=`Updated ${new Date(data.generatedAt).toLocaleTimeString()} · ${int(data.calls.length)} calls${last?' · last call '+when(last):''}`;
+ render();
+}
+function lock(message=''){password='';remembered.set('');state.data=null;$('app').hidden=true;$('gate').hidden=false;$('password').value='';$('err').textContent=message;$('password').focus();}
+$('login').onsubmit=async e=>{e.preventDefault();password=$('password').value;$('open').disabled=true;$('err').textContent='';
+ try{const data=await fetchData();remembered.set(password);show(data);}catch(error){password='';$('err').textContent=error.message;$('password').select();}
+ finally{$('open').disabled=false;}};
+$('refresh').onclick=async()=>{$('refresh').disabled=true;try{show(await fetchData());$('notices').innerHTML='';}catch(error){if(error.status===401||error.status===429)lock(error.message);else $('notices').innerHTML=`<div class="notice"><b>Could not refresh.</b> ${esc(error.message)}</div>`;}finally{$('refresh').disabled=false;}};
+$('lock').onclick=()=>lock();
+for(const b of $('range').querySelectorAll('button'))b.onclick=()=>{state.range=b.dataset.r;for(const x of $('range').querySelectorAll('button'))x.setAttribute('aria-pressed',String(x===b));state.limit=60;render();};
+$('account').onchange=e=>{state.account=e.target.value;render();};
+$('kind').onchange=e=>{state.kind=e.target.value;state.limit=60;render();};
+$('daytable').onclick=()=>{state.showDayTable=!state.showDayTable;render();};
+$('theme').onclick=()=>{const dark=matchMedia('(prefers-color-scheme: dark)').matches,cur=document.documentElement.dataset.theme??(dark?'dark':'light'),next=cur==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('theme',next);}catch{}};
+try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch{}
+addEventListener('resize',()=>{$('tip').style.display='none';});
+password=remembered.get();
+if(password)fetchData().then(show,error=>lock(error.status===401?'':error.message));else $('password').focus();
+</script>
+</body>
+</html>

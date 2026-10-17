@@ -8,6 +8,11 @@ Gumbo's website, a static site on Vercel served at `https://usegumbo.app`:
   its log and thumbnails in `media/making`. The prompt bars open an early-access email with the visitor's request filled in.
 - `/signin/` the sign-in page the desktop app opens.
 - `/privacy/` and `/terms/`, linked from Google's sign-in screen.
+- `/dashboard/` the spending dashboard: every billed AI call by provider, model, day, account and request. Nothing links
+  to it and it is marked noindex. The page holds no data: the gateway's `spend-dashboard` action checks the password
+  (the `DREAM_DASHBOARD_PASSWORD` secret), refuses an address after 8 wrong tries in 15 minutes, and names accounts by
+  label, never email. To try it before deploying, run `pnpm dashboard` and open
+  http://127.0.0.1:4317/site-dashboard/?api=/spend-dashboard (password from `.env.local`).
 
 Deploy from this folder with `npx vercel deploy --prod`. `vercel.json` keeps other sites from framing the pages and sends
 no referrer (the sign-in page's address carries the app's one-time callback). Supabase needs `http://127.0.0.1:**/callback**`

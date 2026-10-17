@@ -7,6 +7,7 @@ import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
+import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
@@ -20,6 +21,8 @@ Deno.serve(async(req)=>{
  // Which other providers have a key here (never the keys themselves), so the app can offer their models and Auto can use them.
  if(action==='providers')return json(Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Boolean(Deno.env.get(secret))])));
  if(action==='updates'){const {data}=await db.from('dream_releases').select('*').order('published_at',{ascending:false}).limit(10);return json({releases:data??[]});}
+ // The spending dashboard (usegumbo.app/dashboard/) has its own password, not an account; see spend-dashboard.ts.
+ if(action==='spend-dashboard'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleSpendDashboard(body,address,supabaseSpendPorts(db,Deno.env.get('DREAM_DASHBOARD_PASSWORD')));return Response.json(result.body,{status:result.status,headers:{...cors,'Cache-Control':'no-store'}});}
  if(action==='login-start'&&req.method==='POST'){const body=await req.json();const email=String(body.email??'').trim().toLowerCase();const {data}=await db.from('dream_invites').select('email').eq('email',email).maybeSingle();return data?json({allowed:true}):json({error:'Use the email address on your beta invitation.'},403);}
  if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('title,object_key').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,60);return error?json({error:'Video unavailable'},404):json({title:data.title,url:signed.signedUrl});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);

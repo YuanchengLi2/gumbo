@@ -12,6 +12,7 @@ import {tmpdir,homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import postgres from 'postgres';
+import {handleSpendDashboard,type SpendPorts} from '../../supabase/functions/dream-gateway/spend-dashboard';
 
 const here=dirname(fileURLToPath(import.meta.url)),root=resolve(here,'../..');
 const PORT=Number(process.env.DASHBOARD_PORT??4317);
@@ -25,6 +26,23 @@ function env(){
 export function providerOf(model:string){
  if(/^claude/.test(model))return 'Anthropic';if(/^gpt|^o\d/.test(model))return 'OpenAI';if(/^gemini/.test(model))return 'Google';
  if(/^deepseek/.test(model))return 'DeepSeek';if(/^whisper/.test(model))return 'Groq';return 'Other';
+}
+
+/** The website dashboard's gateway action (spend-dashboard.ts), run here against the same database, so the page in
+ * sign-in-site/dashboard/ can be tried before the gateway is deployed: open it on localhost with
+ * ?api=http://127.0.0.1:4317/spend-dashboard. Its password is DREAM_DASHBOARD_PASSWORD in .env.local. */
+const localFailures:{address:string;at:number}[]=[];
+async function spendDashboard(body:unknown,address:string){
+ const e=env(),poolerFile=join(root,'supabase/.temp/pooler-url');
+ if(!e.DREAM_DB_PASSWORD||!existsSync(poolerFile))return {status:503,body:{error:'Needs DREAM_DB_PASSWORD in .env.local and a linked Supabase project.'}};
+ const url=new URL(readFileSync(poolerFile,'utf8').trim());url.password=encodeURIComponent(e.DREAM_DB_PASSWORD);
+ const sql=postgres(url.toString(),{ssl:'require',max:1,idle_timeout:5,connect_timeout:15,connection:{default_transaction_read_only:true,application_name:'gumbo-dashboard'}});
+ const ports:SpendPorts={password:process.env.DREAM_DASHBOARD_PASSWORD??e.DREAM_DASHBOARD_PASSWORD,
+  calls:async()=>[...await sql`select user_id,turn_id,model,status,cost_usd,reserved_usd,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,audio_seconds,error_code,provider_status,created_at from dream_usage order by created_at limit 500000`] as any,
+  accounts:async()=>[...await sql`select id,status,coalesce(is_guest,false) is_guest,daily_budget_usd,created_at from dream_accounts`] as any,
+  failures:async(who,since)=>localFailures.filter(f=>f.address===who&&f.at>=since.getTime()).length,
+  fail:async who=>{localFailures.push({address:who,at:Date.now()});}};
+ try{return await handleSpendDashboard(body,address,ports);}finally{await sql.end({timeout:2}).catch(()=>{});}
 }
 
 async function gateway(){
@@ -81,7 +99,13 @@ async function data(){
 
 const page=()=>readFileSync(join(here,'index.html'),'utf8');
 createServer(async(req,res)=>{
+ const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
  try{
+  if(req.url==='/spend-dashboard'&&req.method==='OPTIONS'){res.writeHead(204,cors).end();return;}
+  if(req.url==='/spend-dashboard'&&req.method==='POST'){let raw='';for await(const chunk of req)raw+=chunk;let body:unknown={};try{body=JSON.parse(raw);}catch{}
+   const result=await spendDashboard(body,req.socket.remoteAddress??'local');res.writeHead(result.status,{...cors,'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(result.body));return;}
+  // The website's dashboard page, to try it here: /site-dashboard/?api=/spend-dashboard
+  if(req.url?.startsWith('/site-dashboard/')){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(readFileSync(join(root,'sign-in-site/dashboard/index.html'),'utf8'));return;}
   if(req.url==='/'||req.url==='/index.html'){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});res.end(page());return;}
   if(req.url==='/api/data'){const body=JSON.stringify(await data());res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(body);return;}
   res.writeHead(404).end('Not found');
