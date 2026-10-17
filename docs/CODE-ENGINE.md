@@ -127,7 +127,7 @@ The compaction target is 180K tokens.
 
 ## Inference, caching and cost
 
-- **Transport**: requests stream through the Supabase gateway. Tools and system carry a one-hour cache breakpoint. The editing agent's conversation switches to one-hour caching of its whole history (`cacheTtl`) once a wait for its helpers in the request has outlasted the five-minute cache; short requests keep the cheaper one. Helpers share their snapshot's cached prefix.
+- **Transport**: requests stream through the Supabase gateway. Tools, system and history are cached for five minutes. The editing agent's conversation switches to one-hour caching of all of them (`cacheTtl`) once a wait for its helpers in the request has outlasted the five-minute cache; short requests keep the cheaper one. Helpers share their snapshot's cached prefix.
 - **Task budgets**: each role gets a budget the model can see (editing agent 120K, helpers 100K, planner 60K, replies 40K). The remainder is sent explicitly after compaction.
 - **Failures**: a 90-second idle watchdog replaces a total timeout. Transient and unconfirmed failures are cancelled server-side and retried up to three times.
 - **Usage tracking**: every response is recorded in the append-only `ai_usage` table: phase, helper, tokens, cost (a parity-tested client mirror of the gateway's price formula), duration and visible size.

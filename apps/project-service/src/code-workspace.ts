@@ -1,6 +1,6 @@
 import {bundleScene} from './bundle-scene';
 import {liveSceneGuide} from './live-scene-guide';
-import {sceneReference} from '../../../packages/scene-engine/src/reference-parts';
+import {sceneReference,projectReference} from '../../../packages/scene-engine/src/reference-parts';
 import {editingGuide} from '../../../packages/orchestrator/src/editing-guide';
 import {activeDecisions} from '../../../packages/orchestrator/src/project-memory';
 import {searchWorkspace} from './workspace-search';
@@ -120,7 +120,9 @@ export class CodeWorkspace implements CodeWorkspacePort {
   this.write('context/environment.json',JSON.stringify(workspaceEnvironment(this.root),null,2));
   // The HTML scene guide only matters to the legacy bundling workflow (advanced tools).
   if(process.env.DREAM_AGENT_ADVANCED_TOOLS==='1')this.write('context/live-scenes.md',liveSceneGuide);
-  // The scene-authoring half of the engine reference, read when a scene or sound is written (not carried on every call).
+  // The two halves of the engine reference, read when the work needs them (not carried on every call): the project
+  // document before editing project.json, scene authoring when a scene or sound is written.
+  this.write('context/project.md',projectReference);
   this.write('context/engine.md',sceneReference);
   // How a good editor makes the choices a request leaves open; read before a first cut or a creative decision.
   this.write('context/editing.md',editingGuide);

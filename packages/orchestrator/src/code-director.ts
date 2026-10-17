@@ -34,8 +34,9 @@ export type AIConfig={url:string;token:string;accountId?:string};
 /** Anthropic's server-side web search: the dynamic-filtering version on Opus 5.5 and Sonnet 5.5, the basic one on Haiku. */
 // The 20250305 search on every model: later versions bring Anthropic's own code sandbox along for filtering results,
 // and the agent took it for its project workspace (it wrote project.json edits there, which never ran).
-// Other providers' models get web_search as a plain function, answered by a small Haiku search (webSearch below).
-export const webSearchTool=(model:string)=>model.startsWith('claude-')?{type:'web_search_20250305',name:'web_search',max_uses:8}:webSearchFunction();
+// Every model gets web_search as a plain function, answered by a small Haiku search (webSearch below). Anthropic's own
+// search tool added 2,440 tokens to every call of a request that rarely searches; the function adds about 100.
+export const webSearchTool=(_model:string)=>webSearchFunction();
 /** The editing agent's conversation cache: five minutes until a wait for its helpers in this request has outlasted that,
  * then one hour (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
 export const helperWaitCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('helper-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
@@ -85,7 +86,7 @@ export class Director {
   // A request stops at its spending limit before the next call; completed work stays saved and a resume continues it.
   if(turnId){const resumes=Number(this.db.getMeta('resume_count:'+turnId)??0),limit=requestBudgetUsd(resumes),spent=this.db.turnUsage(turnId).costUsd;if(spent>=limit){this.db.event('ai.request_budget',{turnId,spentUsd:spent,limitUsd:limit});throw new InferenceError(`This request reached its $${limit.toFixed(2)} spending limit ($${spent.toFixed(2)} used). Completed work is saved; resume to continue with another $${requestBudgetUsd(0).toFixed(2)}.`,'request_budget');}}
   const route=purpose==='worker'?undefined:this.db.loadState<any>('routing:'+turnId),profile=intelligence(model,purpose,route,0,turnId?this.db.getMeta('effort:'+turnId) as 'low'|'medium'|'high'|''|undefined:undefined,{workerMode:extra.workerMode,lower});
-  // Web search runs on Anthropic's servers; it goes first so the cache breakpoint stays on the last of Gumbo's own tools.
+  // Web search goes first so the cache breakpoint stays on the last of Gumbo's own tools.
   const searchKey='web-search-off:'+model,withSearch=(tools as any[]).length>0&&purpose!=='routing'&&purpose!=='model_routing'&&purpose!=='web_search'&&!this.db.getMeta(searchKey);
   if(withSearch)tools=[webSearchTool(model),...(tools as any[])];
   try{return await this.infer(model,system,messages,tools,turnId,purpose,phase,profile,extra);}

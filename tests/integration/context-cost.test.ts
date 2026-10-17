@@ -9,12 +9,15 @@ import {fixedPrefix,imageSize,imageTokens} from '../../scripts/cost-anatomy';
 
 // Every call re-reads the system prompt, the tools and the conversation, so these sizes are what each call costs.
 
-it('keeps the editing agent\'s fixed prefix small: the scene-authoring reference is read from context/engine.md on demand',()=>{
+it('keeps the editing agent\'s fixed prefix small: the project and scene references are read from context/ on demand',()=>{
  // About 250 tokens of it are the rule that the user's choices win and the editing-taste summary, and about 70 the
  // per-part finish report (October 13, 2026).
  // Raised from 7,700 on October 14, 2026 for the footage index (find_shots) and listening: core capabilities, not wording.
- const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(8000);
- expect(codePrompt).toContain('## The project document');expect(codePrompt).toContain('read context/engine.md');expect(codePrompt).not.toContain('## @dream/engine');
+ // Lowered to 6,000 on October 17, 2026: the project-document reference moved to context/project.md, read before the
+ // first edit of project.json (a reply or a search no longer carries it).
+ const {editing}=fixedPrefix();expect(editing.system+editing.tools).toBeLessThan(6000);
+ expect(codePrompt).not.toContain('## The project document');expect(codePrompt).toContain('read context/project.md');expect(codePrompt).toContain('read context/engine.md');expect(codePrompt).not.toContain('## @dream/engine');
+ expect(projectReference).toContain('## The project document');
  expect(sceneReference).toContain('## @dream/engine');expect(sceneReference).toContain('## Example: score');
  // The two halves together are the whole reference.
  const api=readFileSync('packages/scene-engine/reference/api.md','utf8').replace(/\r\n/g,'\n');

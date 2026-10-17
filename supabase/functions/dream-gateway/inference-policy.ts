@@ -16,12 +16,13 @@ export function inferencePolicy(model:string,purpose:unknown='routine',profile?:
  if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...format,...budget}};
  return{};
 }
-/** Tools and system are identical across every request of a role, so they keep a one-hour cache between user requests.
- * The conversation itself uses automatic five-minute caching at its last block (longer TTLs must precede shorter ones).
- * conversationTtl '1h' is for an editing agent that waits many minutes on its helpers: every breakpoint is then one hour. */
+/** Tools, system and the conversation are cached for five minutes, which covers the calls of a request (seconds apart);
+ * a one-hour write costs twice the input price, against 1.25 times for five minutes, so the first call of every request
+ * paid 60% more to keep a prefix that few next requests arrived in time to read. conversationTtl '1h' is for an editing
+ * agent that waits many minutes on its helpers: every breakpoint is then one hour. */
 export function cachedPrompt(system:unknown,tools:unknown,conversationTtl?:unknown){
- const longLived={type:'ephemeral',ttl:'1h'};
- return{system:typeof system==='string'?[{type:'text',text:system,cache_control:longLived}]:system,tools:Array.isArray(tools)?tools.map((tool,n)=>n===tools.length-1?{...tool,cache_control:longLived}:tool):tools,cache_control:conversationTtl==='1h'?longLived:{type:'ephemeral'}};
+ const cache=conversationTtl==='1h'?{type:'ephemeral',ttl:'1h'}:{type:'ephemeral'};
+ return{system:typeof system==='string'?[{type:'text',text:system,cache_control:cache}]:system,tools:Array.isArray(tools)?tools.map((tool,n)=>n===tools.length-1?{...tool,cache_control:cache}:tool):tools,cache_control:cache};
 }
 // Prices for models that can serve a server-side refusal fallback; billed per attempt from usage.iterations.
 const attemptPrices:Record<string,[number,number]>={'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-opus-5':[5,25],'claude-opus-4-8':[5,25],'claude-sonnet-5':[2,10],'claude-sonnet-4-6':[3,15]};

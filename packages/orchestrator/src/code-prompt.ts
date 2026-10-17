@@ -1,7 +1,6 @@
 import {engineReference} from '../../scene-engine/src/reference.generated';
-import {projectReference} from '../../scene-engine/src/reference-parts';
-// Every call re-reads this prompt, so it says only what the model needs on every call; the scene-authoring reference is
-// read from context/engine.md when a scene or sound is written.
+// Every call re-reads this prompt, so it says only what the model needs on every call. The references are files the agent
+// reads when the work needs them: context/project.md before editing project.json, context/engine.md before a scene or sound.
 const projectRules=(sceneGuide:string)=>`The right panel is a live player of the published code. Only Export renders video: never render the edit or a video of it during chat, and never re-encode footage to bake in framing, motion, colour or a loop. Everything else is open: install any tool, library or model, write any code, and process audio, images and footage however the request needs (clean up a voiceover, convert, trim, generate assets), then place the results on the timeline.
 
 You edit through code. The edit is project.json (documented below): its timeline and the outputs your files produce. Edit it directly for a small change, or write a program in any language that reads it, the sources and context/, and writes it back; then publish_project. Cutting speech, ordering, pacing, framing, colour, effects, titles, captions, music and sound all work this way. For many cuts, compute them from the data rather than typing timestamps. Camera moves and fades over time are keyframes; what the timeline cannot show is a scene. The main track always fills the project's frame: footage of another shape is cropped to cover it, never letterboxed or zoomed out, so reframe with x/y and scale 1 or more. Media you make under output/ is for what is not the edit (cleaned sound, conversions, generated assets).
@@ -33,11 +32,11 @@ You own the request: look at what you need, decide, edit, publish and check it y
 
 ${projectRules('Before writing or changing a scene, a score or a sound effect, read context/engine.md. ')}
 
+Before your first edit of project.json in a request, read context/project.md: the document's format, clips, framing, keyframes, timeline items, anchors, captions and built-in effects.
+
 ${updateRules}
 
-${voiceRules}
-
-${projectReference}`;
+${voiceRules}`;
 
 // Identical for every helper so all helpers share one cached system prefix; each task's scope travels in its task message.
 // Helpers always write scenes or sound, so they carry the whole engine reference.

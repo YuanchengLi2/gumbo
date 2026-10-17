@@ -112,8 +112,8 @@ it('lets the agent search online, import a result with its license, and see that
  }finally{db.close();}
 },60_000);
 
-it('gives other providers\' models web search as a function, answered by a quiet low-effort Haiku search',async()=>{
- expect(webSearchTool('claude-sonnet-5-5')).toMatchObject({type:'web_search_20250305',name:'web_search'});
+it('gives every model web search as a function, answered by a quiet low-effort Haiku search',async()=>{
+ expect(webSearchTool('claude-sonnet-5-5')).toMatchObject({name:'web_search',input_schema:{type:'object',properties:{query:{type:'string'}},required:['query']}});
  expect(webSearchTool('gpt-6.1-sol')).toMatchObject({name:'web_search',input_schema:{type:'object',properties:{query:{type:'string'}},required:['query']}});
  expect((webSearchTool('deepseek-flash') as any).type).toBeUndefined();
  expect(intelligence('claude-haiku-5-5','web_search',{difficulty:4},0,'high').effort).toBe('low');expect(quietPurposes.has('web_search')).toBe(true);
