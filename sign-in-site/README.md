@@ -2,8 +2,9 @@
 
 Gumbo's website, a static site on Vercel served at `https://usegumbo.app`:
 
-- `/` the homepage. The kitchen animation, the bento and the phone Short use `media/` (frames and clips from the
-  Vietnam demo, footage from Pexels). The prompt bars open an early-access email with the visitor's idea filled in.
+- `/` the homepage, built around one idea: type anything, get the edit. The hero demo types very different requests
+  into a Gumbo window and applies each to frames of the Vietnam demo in `media/frames` (footage from Pexels); the phone
+  plays the finished Short. The prompt bars open an early-access email with the visitor's request filled in.
 - `/signin/` the sign-in page the desktop app opens.
 - `/privacy/` and `/terms/`, linked from Google's sign-in screen.
 
