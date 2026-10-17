@@ -8,7 +8,7 @@
 .preview-working>strong{font-size:17px;font-weight:500;letter-spacing:-.3px;color:var(--n80)}
 .preview-working>.editing-status{position:static;display:block;max-width:300px;font-size:12px;color:var(--n44);background:none;border:0;padding:0;line-height:1.6;border-radius:0}
 .editing-animation{position:relative;width:88px;height:88px;display:grid;place-items:center;margin-bottom:3px}
-.editing-animation>.dream-mark{transform:scale(1.4);animation:dream-float 2.8s ease-in-out infinite}
+.editing-animation>.gumbo-mark{transform:scale(1.4);animation:dream-float 2.8s ease-in-out infinite}
 .editing-orbit{position:absolute;inset:0;border:1.5px solid rgb(var(--accent-rgb) / 0.122);border-top-color:var(--accent);border-radius:50%;animation:spin 3s linear infinite}
 .editing-pulse{display:flex;gap:5px;margin-top:3px}.editing-pulse i{position:static;width:4px;height:4px;border-radius:50%;background:var(--accent);animation:dream-pulse 1.6s ease-in-out infinite}.editing-pulse i:nth-child(2){animation-delay:.2s}.editing-pulse i:nth-child(3){animation-delay:.4s}
 @keyframes dream-float{50%{transform:translateY(-4px) scale(1.4)}}@keyframes dream-pulse{0%,80%,100%{opacity:.25}40%{opacity:1}}
@@ -17,7 +17,7 @@
 .task-plan-card{border:1px solid var(--n10);border-radius:12px;background:var(--n0);padding:19px;margin:18px 0;font-size:12px;line-height:1.7;color:var(--n65)}.plan-document-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:10px;color:var(--n37)}.plan-document-heading .text-button{font-size:10px;padding:0;color:var(--n43)}.task-plan-card h3{font-size:18px;font-weight:600;line-height:1.35;letter-spacing:-.4px;color:var(--n82);margin:12px 0}.plan-document-steps{list-style:decimal;padding-left:21px;margin:22px 0}.plan-document-steps>li{padding-left:4px;margin:0 0 20px}.plan-document-steps>li::marker{color:var(--accent);font-size:11px}.plan-document-steps h4{font-size:12px;font-weight:600;color:var(--n73);margin-bottom:5px}.plan-acceptance{display:flex;gap:7px;align-items:baseline;color:var(--n41);font-size:10px;margin-top:9px}.plan-acceptance svg{flex-shrink:0}.plan-assumptions{border-top:1px solid var(--n6);padding-top:13px;font-size:11px}.plan-assumptions h4{font-size:11px;margin-bottom:6px}.plan-assumptions ul{padding-left:18px}.task-plan-card footer{border-top:1px solid var(--n6);padding-top:16px;margin-top:18px;display:flex;flex-direction:column;align-items:flex-start;gap:12px}.task-plan-card footer>span{font-size:10px;color:var(--n41)}.task-plan-card footer .button{font-size:11px;padding:9px 12px}.task-plan-card textarea,.task-plan-card input{width:100%;border:1px solid var(--n11);border-radius:6px;padding:8px;background:var(--n2);font-size:12px;line-height:1.6}.task-plan-card textarea{min-height:86px;resize:vertical}.task-plan-card input{margin-bottom:8px}
 .export-format-options{display:grid;gap:9px;margin:17px 0}.export-format-options label{display:flex;gap:11px;align-items:flex-start;padding:13px;border:1px solid var(--n10);border-radius:10px;font-size:12px;cursor:pointer}.export-format-options input{margin-top:3px;accent-color:var(--n52)}.export-format-options small{display:block;margin-top:4px;font-size:10px;line-height:1.5;color:var(--n41)}
 @media(max-width:1200px){.ai-stage{padding:16px;gap:12px}.assistant-timeline{min-height:150px}.task-plan-card{padding:15px}.project-title{width:200px}.preview-working{padding:18px}.preview-working>strong{font-size:16px}}
-@media(prefers-reduced-motion:reduce){.editing-animation>.dream-mark,.editing-orbit,.editing-pulse i{animation:none}.editing-pulse i{opacity:.7}}
+@media(prefers-reduced-motion:reduce){.editing-animation>.gumbo-mark,.editing-orbit,.editing-pulse i{animation:none}.editing-pulse i{opacity:.7}}
 
 /* Workspace layout owns the preview; intrinsic media size must never size the grid. */
 .ai-workspace{overflow:hidden}.ai-stage{overflow:hidden}.project-player{min-width:0;min-height:0;overflow:hidden}.preview-viewport{position:relative;contain:size;flex:1 1 0;min-width:0;min-height:0}.preview-frame{min-width:0;min-height:0;flex:none}.preview-working{position:absolute;inset:0;opacity:1;z-index:10;pointer-events:auto}.preview-error{padding:24px;color:var(--n0);font-size:13px}.preview-frame:has(.preview-error){display:grid;place-items:center}
@@ -277,9 +277,9 @@
 :is(.ai-workspace,.fig-home) .composer-chip>svg{flex:none;color:var(--side-faint)}
 :is(.ai-workspace,.fig-home) .composer-chip:hover,:is(.ai-workspace,.fig-home) .composer-chip[aria-expanded=true]{background:var(--side-hover);color:var(--side-text)}
 :is(.ai-workspace,.fig-home) .permission-chip.plan>svg:first-child{color:var(--side-accent)}:is(.ai-workspace,.fig-home) .permission-chip.ask>svg:first-child{color:#3d8a72}
-.ai-workspace .sidebar .composer .send{width:26px;height:26px;border-radius:50%;background:var(--side-text);color:var(--n0);box-shadow:none}
+.ai-workspace .sidebar .composer .send{width:26px;height:26px;border-radius:50%;background:var(--paprika);color:#fff8ee;box-shadow:none}
 .ai-workspace .sidebar .composer .send:disabled{background:var(--n10);color:var(--n0);opacity:1}
-.ai-workspace .sidebar .composer .send:not(:disabled):hover{background:var(--n76)}
+.ai-workspace .sidebar .composer .send:not(:disabled):hover{background:var(--paprika-hover)}
 /* The timeline selection and attachments ride in the box as small tiles. */
 .ai-workspace .sidebar .selection-strip{display:flex;align-items:flex-start;gap:6px;margin:0 0 8px;padding:0;border:0;background:none}
 .ai-workspace .sidebar .selection-strip-items{display:flex;gap:5px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none}
@@ -304,63 +304,98 @@
 :is(.ai-workspace,.fig-home) .permission-computer>span{flex:1;min-width:0}:is(.ai-workspace,.fig-home) .permission-computer>svg{flex:none;color:var(--n56)}
 @media(prefers-reduced-motion:reduce){.ai-workspace .shimmer{animation:none;color:var(--n56);background:none}}
 
-/* The Gumbo mark: the fig from usegumbo.app. */
-.dream-mark{display:inline-block;flex:none;width:28px;height:28px}
+/* The Gumbo mark: the paprika bowl from usegumbo.app. */
+.gumbo-mark{display:inline-block;flex:none;width:28px;height:28px;color:var(--n100)}
 
-/* Home: a greeting, one big box to start an edit, quick ideas, and recent projects as cards. The page's top matches the
-   window-control strip so the controls sit on it without a box. */
-.fig-home{--side-text:var(--n87);--side-muted:var(--n46);--side-faint:var(--n32);--side-line:var(--n8);--side-hover:var(--n5);--side-accent:var(--accent);height:100%;overflow:auto;background:radial-gradient(640px 380px at 14% 34%,var(--n5) 0%,rgb(var(--paper-rgb) / 0) 70%),radial-gradient(560px 360px at 88% 26%,#e2f4ea 0%,#e2f4ea00 70%),var(--n3);color:var(--n87);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
-.fig-home-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:8px;height:52px;padding:0 150px 0 22px;-webkit-app-region:drag}
-.fig-home-top button{-webkit-app-region:no-drag}
-.fig-brand{display:flex;align-items:center;gap:9px;font:700 19px/1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-.5px;color:var(--accent)}
-.fig-brand .dream-mark{width:26px;height:26px}
-.fig-ghost{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 12px;border-radius:8px;font-size:13px;color:var(--n65)}
-.fig-ghost:hover{background:var(--n8);color:var(--n87)}
-.fig-home-main{max-width:940px;margin:0 auto;padding:16vh 28px 64px}
-.fig-hero{text-align:center}
-.fig-greeting{margin:0 0 10px;font-size:20px;font-weight:600;color:var(--accent);letter-spacing:.1px}
-.fig-hero h1{margin:0 0 34px;font:700 54px/1.1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-1.3px;color:var(--accent)}
-.fig-home .home-composer{width:100%;max-width:760px;margin:0 auto;padding:0;text-align:left}
-.fig-home .home-composer .composer{min-height:0;padding:16px 14px 12px 18px;border:1px solid var(--n11);border-radius:18px;background:var(--n0);box-shadow:0 1px 2px #0000000a,0 14px 44px #2b1f6614;transition:border-color .15s,box-shadow .15s}
-.fig-home .home-composer .composer:focus-within{border-color:var(--n14);box-shadow:0 0 0 4px #6b4fd812,0 14px 44px #2b1f6618}
+/* Home: a sidebar (the mark, New video, Open project, the recent projects, you at the foot) and beside it a headline, one
+   big box to start an edit, quick ideas and the projects as pictures. Black and white like the rest of the app; paprika
+   only where Gumbo itself is (the mark, sending, your circle). The window's controls sit on the main side's top strip. */
+.fig-home{--side-text:var(--n87);--side-muted:var(--n46);--side-faint:var(--n32);--side-line:var(--n8);--side-hover:var(--n5);--side-accent:var(--accent);display:grid;grid-template-columns:240px minmax(0,1fr);height:100%;overflow:hidden;background:var(--chrome);color:var(--n87);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
+.home-side{display:flex;flex-direction:column;min-height:0;padding:12px 10px 10px;border-right:1px solid var(--n7);background:var(--n2)}
+.home-brand{display:flex;align-items:center;gap:9px;height:40px;padding:0 8px 2px;font:600 19px/1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-.4px;color:var(--n100);-webkit-app-region:drag}
+.home-brand .gumbo-mark{width:28px;height:28px}
+.home-nav{display:flex;flex-direction:column;gap:1px;margin-top:12px}
+.home-nav button,.home-recents button{display:flex;align-items:center;gap:9px;width:100%;height:34px;padding:0 10px;border-radius:8px;text-align:left;font-size:13.5px;color:var(--n76)}
+.home-nav button svg{flex:none;color:var(--n56)}
+.home-nav button:hover,.home-recents button:hover{background:var(--n6);color:var(--n100)}
+.home-nav .home-new{color:var(--n100);font-weight:500}.home-nav .home-new svg{color:var(--n100)}
+.home-recents{flex:1;min-height:0;overflow:auto;margin-top:18px;scrollbar-width:thin}
+.home-recents h2{margin:0 10px 4px;font-size:11.5px;font-weight:500;color:var(--n40)}
+.home-recents button{display:block;height:31px;line-height:31px;font-size:13px;color:var(--n65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-recents button.missing{opacity:.5}
+.home-side-foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--n7)}
+.fig-home-main{position:relative;min-width:0;overflow:auto;padding:0 40px 64px}
+.home-drag{position:sticky;top:0;z-index:5;height:40px;margin:0 -40px;background:var(--chrome);-webkit-app-region:drag}
+.fig-hero{max-width:760px;margin:12vh auto 0;text-align:center}
+.fig-hero h1{margin:0 0 28px;font:400 46px/1.12 Georgia,"Times New Roman",serif;letter-spacing:-.6px;color:var(--n100)}
+.fig-home .home-composer{width:100%;margin:0 auto;padding:0;text-align:left}
+.fig-home .home-composer .composer{min-height:0;padding:16px 14px 12px 18px;border:1px solid var(--n12);border-radius:18px;background:var(--n0);box-shadow:0 1px 2px rgb(0 0 0 / .04),0 12px 40px rgb(0 0 0 / .06);transition:border-color .15s,box-shadow .15s}
+.fig-home .home-composer .composer:focus-within{border-color:var(--n35);box-shadow:0 0 0 4px rgb(var(--ink-rgb) / .05),0 12px 40px rgb(0 0 0 / .08)}
 .fig-home .home-composer textarea{min-height:64px;max-height:240px;padding:0 2px;font-size:15px;line-height:1.55;color:var(--n87)}
 .fig-home .home-composer textarea::placeholder{color:var(--n34)}
 .fig-home .home-composer .composer-actions{margin-top:10px;gap:6px}
 .fig-home .home-composer .composer-chip{height:32px;padding:0 10px;font-size:13px}
 .fig-home .home-composer .add-media{gap:7px;height:32px;white-space:nowrap;padding:0 12px 0 5px;border:1px solid var(--n9);border-radius:9px;font-size:13px;color:var(--n76)}
-.fig-home .home-composer .add-media>span{width:22px;height:22px;border-radius:6px;background:var(--n4);color:var(--accent)}
+.fig-home .home-composer .add-media>span{width:22px;height:22px;border-radius:6px;background:var(--n4);color:var(--n100)}
 .fig-home .home-composer .add-media:hover{background:var(--n3);border-color:var(--n12)}
-.fig-home .home-composer .send{width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--n0);box-shadow:none}
-.fig-home .home-composer .send:disabled{background:var(--n10);opacity:1}
+.fig-home .home-composer .send{width:34px;height:34px;border-radius:50%;background:var(--paprika);color:#fff8ee;box-shadow:none}
+.fig-home .home-composer .send:hover:not(:disabled){background:var(--paprika-hover)}
+.fig-home .home-composer .send:disabled{background:var(--n10);color:var(--n0);opacity:1}
 .fig-home .home-composer .attachment-list{gap:6px;padding-bottom:10px}
 .fig-home .attachment-menu{border-radius:10px;border-color:var(--n8);box-shadow:0 10px 30px #0000001f;padding:4px}
 .fig-home .attachment-menu button{padding:8px 9px;border-radius:6px;font-size:13px}
 .fig-ideas{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:16px}
-.fig-ideas button{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border:1px solid var(--n10);border-radius:999px;background:rgb(var(--paper-rgb) / 0.722);font-size:12.5px;color:var(--n65);transition:background .15s,border-color .15s,color .15s}
-.fig-ideas button svg{color:var(--accent)}
-.fig-ideas button:hover{background:var(--n0);border-color:var(--n12);color:var(--n87)}
-.fig-recent{margin-top:60px}
+.fig-ideas button{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 13px;border:1px solid var(--n10);border-radius:999px;background:transparent;font-size:12.5px;color:var(--n65);transition:border-color .15s,color .15s}
+.fig-ideas button svg{color:var(--n56)}
+.fig-ideas button:hover{border-color:var(--n25);color:var(--n100)}
+.fig-recent{max-width:1040px;margin:64px auto 0}
 .fig-recent>header{display:flex;align-items:baseline;gap:8px;margin:0 2px 12px}
 .fig-recent h2{margin:0;font-size:15px;font-weight:600;color:var(--n87)}
 .fig-recent>header>span{font-size:12px;color:var(--n38);font-variant-numeric:tabular-nums}
 .fig-project-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
-.fig-home .project-card{display:block;min-width:0;padding:8px;text-align:left;border:1px solid transparent;border-radius:14px;transition:background .15s,border-color .15s,box-shadow .15s}
-.fig-home .project-card:hover{background:var(--n0);border-color:var(--n8);box-shadow:0 8px 24px #17142512}
+.fig-home .project-card{display:block;min-width:0;padding:8px;text-align:left;border:1px solid transparent;border-radius:14px;transition:background .15s,border-color .15s}
+.fig-home .project-card:hover{background:var(--n3);border-color:var(--n8)}
 .fig-home .project-card.missing{opacity:.6}
-.fig-home .project-cover{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,var(--n5),#e5f2ec)}
+.fig-home .project-cover{position:relative;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--n5)}
 .fig-home .project-cover img{width:100%;height:100%;object-fit:cover;transition:transform .3s}
 .fig-home .project-card:hover .project-cover img{transform:scale(1.03)}
-.fig-home .project-cover-empty{height:100%;display:grid;place-items:center;color:var(--accent)}
-.fig-home .duration-badge{position:absolute;right:7px;bottom:7px;padding:2px 6px;border-radius:5px;background:rgb(var(--accent-rgb) / 0.8);color:var(--n0);font-size:11px;font-variant-numeric:tabular-nums}
-.fig-home .project-open{position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--n0);color:var(--accent);box-shadow:0 2px 8px #0000001f;opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s}
+.fig-home .project-cover-empty{height:100%;display:grid;place-items:center;color:var(--n40)}
+.fig-home .duration-badge{position:absolute;right:7px;bottom:7px;padding:2px 6px;border-radius:5px;font-size:11px;font-variant-numeric:tabular-nums}
+.fig-home .project-open{position:absolute;top:7px;right:7px;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--n0);color:var(--n100);box-shadow:0 2px 8px #0000001f;opacity:0;transform:translateY(-3px);transition:opacity .15s,transform .15s}
 .fig-home .project-card:hover .project-open{opacity:1;transform:none}
 .fig-home .project-card>strong{display:block;margin:10px 2px 1px;font-size:13.5px;font-weight:600;color:var(--n87);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fig-home .project-card>small{display:block;margin:0 2px;font-size:12px;color:var(--n46)}
-.fig-empty{display:flex;align-items:center;gap:16px;padding:22px;border:1px dashed var(--n13);border-radius:14px;background:rgb(var(--paper-rgb) / 0.549)}
-.fig-empty .dream-mark{width:36px;height:36px}
+.fig-empty{display:flex;align-items:center;gap:16px;padding:22px;border:1px dashed var(--n13);border-radius:14px}
+.fig-empty .gumbo-mark{width:36px;height:36px}
 .fig-empty strong{font-size:14px;font-weight:600;color:var(--n87)}
 .fig-empty p{margin:3px 0 0;font-size:12.5px;line-height:1.55;color:var(--n46)}
-@media(max-width:760px){.fig-hero h1{font-size:36px}.fig-greeting{font-size:16px}.fig-home-main{padding-top:8vh}}
+.platform-darwin .home-brand{margin-top:24px}
+@media(max-width:760px){.fig-home{grid-template-columns:1fr}.home-side{display:none}.fig-hero h1{font-size:34px}.fig-hero{margin-top:6vh}.fig-home-main{padding:0 18px 48px}.home-drag{margin:0 -18px}}
+
+/* You: your initial in a paprika circle, and the menu it opens (who, today's use, the theme, Settings, sign in or out). */
+.profile-anchor{position:relative;flex:none;-webkit-app-region:no-drag}
+.profile-button{display:flex;align-items:center;gap:9px;height:34px;padding:0 4px;border-radius:9px;text-align:left;min-width:0}
+.profile-button.labelled{width:100%;height:46px;padding:0 8px}
+.profile-button:hover,.profile-button[aria-expanded=true]{background:var(--n6)}
+.profile-avatar{flex:none;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--paprika);color:#fff8ee;font-size:13px;font-weight:600}
+.profile-avatar.signed-out{background:var(--n8);color:var(--n56)}
+.profile-name{min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.profile-name strong,.profile-name small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.profile-name strong{font-size:13px;font-weight:500;color:var(--n87)}.profile-name small{font-size:11.5px;color:var(--n46)}
+.profile-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:40;width:264px;padding:5px;border:1px solid var(--n9);border-radius:12px;background:var(--n0);box-shadow:0 12px 36px rgb(0 0 0 / .16);color:var(--n87)}
+.profile-anchor.up .profile-menu{top:auto;bottom:calc(100% + 6px);left:0;right:auto;width:100%;min-width:220px}
+.profile-menu header{display:flex;align-items:center;gap:10px;padding:8px 8px 10px;margin-bottom:4px;border-bottom:1px solid var(--n6)}
+.profile-menu header>span:last-child{min-width:0;display:flex;flex-direction:column;line-height:1.3}
+.profile-menu header strong{font-size:13px;font-weight:600}.profile-menu header small{font-size:11.5px;color:var(--n46);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.profile-menu>button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 9px;border-radius:7px;font-size:13px;text-align:left}
+.profile-menu>button svg{color:var(--n56)}
+.profile-menu>button:hover{background:var(--n5)}
+.profile-menu .profile-usage{display:grid;grid-template-columns:1fr auto;height:auto;padding:7px 9px 9px;row-gap:6px}
+.profile-usage>span:first-child{display:flex;align-items:center;gap:9px}.profile-usage>span:nth-child(2){font-size:12px;color:var(--n46);font-variant-numeric:tabular-nums}
+.profile-usage>i{grid-column:1/-1;height:4px;border-radius:2px;background:var(--n7);overflow:hidden}.profile-usage>i>b{display:block;height:100%;background:var(--n100);border-radius:2px}
+.profile-theme{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin:4px 4px 6px;padding:2px;border-radius:8px;background:var(--n5)}
+.profile-theme button{display:flex;align-items:center;justify-content:center;gap:5px;height:26px;border-radius:6px;font-size:12px;color:var(--n56)}
+.profile-theme button[aria-pressed=true]{background:var(--n0);color:var(--n100);box-shadow:0 1px 2px rgb(0 0 0 / .1)}
 
 /* Media: a bin like CapCut's. Search and import, kinds as small toggles, pictures with their length, a muted preview on
    hover, and only the states that need attention. Click to send with the next message; drag onto the timeline. */
@@ -491,21 +526,9 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .app .icon-button{color:var(--n65)}.app .icon-button:hover:not(:disabled){background:var(--n5);color:var(--n100)}
 .app .sidebar{background:var(--chrome)}
 .app .ai-stage{background:var(--n2)}
-.fig-home{background:var(--chrome)!important}
-.fig-home-top{background:var(--chrome)}
-.fig-brand{gap:11px;font-size:23px;color:var(--n100)}
-.fig-brand .dream-mark{width:34px;height:34px;color:var(--n100)}
-.fig-greeting{color:var(--n46);font-weight:500}
-.fig-hero h1{color:var(--n100)}
-.fig-home .home-composer .composer{border-color:var(--n12);box-shadow:0 1px 2px rgb(0 0 0 / .04),0 12px 40px rgb(0 0 0 / .06)}
-.fig-home .home-composer .composer:focus-within{border-color:var(--n35);box-shadow:0 0 0 4px rgb(var(--ink-rgb) / .05),0 12px 40px rgb(0 0 0 / .08)}
-.fig-ideas button{border-color:var(--n10);color:var(--n65)}.fig-ideas button:hover{border-color:var(--n25);color:var(--n100);background:var(--n3)}
 :root[data-theme=dark] .fig-home .home-composer .composer,:root[data-theme=dark] .composer{background:var(--n4)}
 
-/* Settings, top right. */
-.settings-anchor{position:relative;-webkit-app-region:no-drag;flex:none}
-.settings-button{width:34px;height:34px;display:grid;place-items:center;border-radius:9px;color:var(--n56)}
-.settings-button:hover,.settings-button[aria-expanded=true]{background:var(--n5);color:var(--n100)}
+/* Settings. */
 .settings-segments{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(64px,1fr);gap:3px;padding:3px;border-radius:10px;background:var(--n5)}
 .settings-segments button{display:flex;align-items:center;justify-content:center;gap:6px;height:30px;border-radius:8px;font-size:12px;color:var(--n56)}
 .settings-segments button:hover{color:var(--n100)}
@@ -537,8 +560,6 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .media-tile-length,.fig-home .duration-badge,.ai-workspace .asset-length{background:rgb(0 0 0 / .72);color:#fff}
 .export-cover-state{background:rgb(0 0 0 / .62);color:#fff}
 .preview-error{color:var(--n87)}
-.fig-ideas button,.fig-ideas button:hover{background:transparent}
-.fig-ideas button svg{color:var(--n56)}
 
 /* Change cards under a reply, as Codex and Claude Code show a diff: a quiet box with one row per change; a row opens to
    its details and lights the change up on the timeline. */
