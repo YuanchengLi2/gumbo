@@ -17,7 +17,7 @@ import {HomeScreen} from './components/home/HomeScreen';
 
 import {AIWorkspace} from './components/workspace/AIWorkspace';
 import {ExportDialog,type ExportChoices} from './components/export/ExportDialog';
-import {renderVideo} from './engine/export';
+import {runExport,stopExports} from './engine/export-job';
 import {useChatShortcuts} from './shortcuts';
 import {useTheme} from './theme';
 import {SettingsMenu,SettingsLayer} from './components/settings/SettingsMenu';
@@ -55,10 +55,10 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  async function exportVideo(request:ExportChoices|'timeline'){s.setProgress({status:'rendering',progress:0});
   try{if(request==='timeline'){const result=await window.dream.exportVideo('timeline');if(!result)s.setProgress(null);return;}
    // The engine draws and encodes the video here, on the graphics card; the main process mixes the sound and joins them.
+   // The agent's exports run the same job (export-job.ts).
    const job=await window.dream.beginExport(request),abort=new AbortController();exportAbort.current=abort;
-   if(job.video){const current=useEditor.getState().project!;await renderVideo({timeline:current.timeline,footage:current.footage,...job.video,write:(data,position)=>window.dream.exportChunk(job.id,position,data),onProgress:(done,total)=>s.setProgress({status:'rendering',progress:done/total*.98,phase:'Rendering the video'}),signal:abort.signal});}
-   await window.dream.finishExport(job.id);}
-  catch(error){if(exportAbort.current?.signal.aborted)s.setProgress({status:'cancelled',progress:0});else{void window.dream.cancelExport();s.setProgress({status:'failed',progress:0,error:(error as Error).message});}}
+   const current=useEditor.getState().project!;await runExport(job,current.timeline,current.footage,s.setProgress);}
+  catch(error){if(exportAbort.current?.signal.aborted)s.setProgress({status:'cancelled',progress:0});else s.setProgress({status:'failed',progress:0,error:(error as Error).message});}
   finally{exportAbort.current=null;}}
 
  return <main className={'app platform-'+s.runtime?.platform+' '+''} onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();void window.dream.registerDropped([...e.dataTransfer.files]).then(paths=>attach(paths)).catch(error=>s.setError(error.message));}}>
@@ -71,7 +71,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  {signIn&&<SignInDialog onClose={()=>setSignIn(false)}/>}
  {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
 
- {dialog==='export'&&project&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&s.progress?.status!=='rendering')setDialog(null);}}><ExportDialog project={project} frame={s.frame} progress={s.progress} onClose={()=>{setDialog(null);if(s.progress?.status!=='rendering')s.setProgress(null);}} onExport={choices=>void exportVideo(choices)} onCancel={()=>{exportAbort.current?.abort();void window.dream.cancelExport();}} onTimeline={()=>void exportVideo('timeline')} onShare={()=>setDialog('share')}/></div>}
+ {dialog==='export'&&project&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&s.progress?.status!=='rendering')setDialog(null);}}><ExportDialog project={project} frame={s.frame} progress={s.progress} onClose={()=>{setDialog(null);if(s.progress?.status!=='rendering')s.setProgress(null);}} onExport={choices=>void exportVideo(choices)} onCancel={()=>{exportAbort.current?.abort();stopExports();void window.dream.cancelExport();}} onTimeline={()=>void exportVideo('timeline')} onShare={()=>setDialog('share')}/></div>}
  {dialog&&dialog!=='export'&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null);}}><section className="dialog" role="dialog" aria-label={dialog}><div className="dialog-header"><h2>{dialog==='share'?'Share your video':'Export video'}</h2><button className="icon-button" aria-label="Close dialog" onClick={()=>setDialog(null)}><X size={20}/></button></div>
 
  

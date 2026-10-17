@@ -17,7 +17,7 @@ export default function Card(){
 }
 `;
 
-test('a coded scene plays live in the engine preview, under a lower third, and Export draws its frames',async()=>{
+test('a coded scene plays live in the engine preview, under a lower third, and Export draws its frames, the same for the agent',async()=>{
  test.setTimeout(300000);
  const script=(_body:any,step:number)=>[
   [use('w','write_file',{path:'src/card.tsx',content:card})],
@@ -63,6 +63,11 @@ test('a coded scene plays live in the engine preview, under a lower third, and E
   // Somewhere along the bottom the lower third covers the scene.
   const bottom=Array.from({length:16},(_,n)=>pixel(video,Math.round(width*(n+.5)/16),Math.round(height*.8),1.5));
   expect(bottom.some(p=>!near(p,[0,0,255],40))).toBe(true);
+  // The agent's export (an approved render_video) runs the same engine export, so it comes out the same as the button's.
+  await page.evaluate(()=>window.dream.grantComputer());const agentVideo=join(out,'agent.mp4');
+  const receipt:any=await page.evaluate(r=>window.dream.files({action:'propose',requestId:'agent-export',title:'Export the video',operations:[{kind:'render_video',path:r.path,projectId:r.projectId,versionId:r.versionId}]}),{path:agentVideo,projectId:state.meta.id,versionId:state.versionId});
+  expect(receipt.status,receipt.error).toBe('complete');expect(existsSync(agentVideo)).toBe(true);
+  for(const [x,y,t] of [[8,8,.2],[8,8,1.5],...bottom.map((_,n)=>[Math.round(width*(n+.5)/16),Math.round(height*.8),1.5])]){const a=pixel(agentVideo,x,y,t),b=pixel(video,x,y,t);expect(near(a,b,6),`agent ${a} vs button ${b} at ${x},${y} ${t}s`).toBe(true);}
   expect(errors).toEqual([]);
  }finally{await app.close();await gateway.close?.();}
 });

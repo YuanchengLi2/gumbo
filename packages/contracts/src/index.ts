@@ -59,7 +59,7 @@ export interface DreamDesktop {
  mediaPath(file:File):string;
  exportVideo(request?:'video'|'timeline'|Record<string,unknown>):Promise<{path:string;format?:'video'|'timeline'}|null>;
  cancelExport():Promise<void>;pickExportFolder(current?:string):Promise<string|null>;beginExport(settings:Record<string,unknown>):Promise<{id:string;video?:{width:number;height:number;fps:number;codec:'h264'|'hevc';quality:'lower'|'recommended'|'higher';container:'mp4'|'mov'}}>;exportChunk(id:string,position:number,data:Uint8Array):Promise<void>;sceneFrame(request:{key:string;source:{url:string}|{html:string};width:number;height:number;frame:number;fps:number}):Promise<{width:number;height:number;data:Uint8Array}>;closeScenes():Promise<void>;
- /** Puts the app's window in or out of fullscreen (the preview's Fullscreen button). */ setFullScreen(on:boolean):Promise<void>;sceneStill(request:{source:{url:string}|{html:string};width:number;height:number;frame:number;fps:number}):Promise<string>;finishExport(id:string):Promise<{path:string;paths:string[]}>;
+ /** Puts the app's window in or out of fullscreen (the preview's Fullscreen button). */ setFullScreen(on:boolean):Promise<void>;sceneStill(request:{source:{url:string}|{html:string};width:number;height:number;frame:number;fps:number}):Promise<string>;finishExport(id:string):Promise<{path:string;paths:string[]}>;/** Stops an engine export the window could not draw, with the reason. */ failExport(id:string,message:string):Promise<void>;
  reveal(path:string):Promise<void>;
  shareExport():Promise<{url:string;id:string}|null>;
  runtime():Promise<RuntimeStatus>;

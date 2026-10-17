@@ -3,6 +3,7 @@ import {useCallback,useEffect,useState} from 'react';
 import type {Command,ProjectSummary,InitialRequest,ExportProgress,RuntimeStatus} from '@dream/contracts';
 import {useEditor,mergeProjectDelta} from '../store/editor';
 import {grabFrames} from '../engine/frames';
+import {runExport,stopExports} from '../engine/export-job';
 export type CommandFn=(command:Command)=>Promise<any>;
 export function useProjectSession(){
  const s=useEditor(),[projects,setProjects]=useState<ProjectSummary[]>([]),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[progress,setProgress]=useState<ExportProgress|null>(null),[catalog,setCatalog]=useState<any>({scores:[],sfx:[]});
@@ -18,6 +19,8 @@ export function useProjectSession(){
  useEffect(()=>{void window.dream.command({type:'state'}).then(s.setProject).catch(()=>{});void refreshProjects();void window.dream.runtime().then(setRuntime);void window.dream.catalog().then(setCatalog);return window.dream.onEvent(event=>{
   // The agent asked to look at frames of its edit: they are drawn here, by the player's own engine, and sent back.
   if(event.type==='frames.request'){const request=event.payload as any;void grabFrames(request).then(result=>window.dream.framesResult(request.id,result),(error:Error)=>window.dream.framesResult(request.id,{error:error.message||'The frames could not be drawn.'}));return;}
+  // The agent's export: main began the job for the version it was approved for; it is drawn here as the Export button's is.
+  if(event.type==='export.request'){const {id,video,timeline,footage}=event.payload as any;setProgress({status:'rendering',progress:0});void runExport({id,video},timeline,footage,setProgress).catch(()=>{});return;}
   const current=useEditor.getState().project;if(event.projectId&&current&&event.projectId!==current.meta.id&&event.type!=='state')return;
   if(event.type==='state')s.setProject(event.payload as any);
   if(event.type==='workspace.draft'){const next=(event.payload as any).draft,last=useEditor.getState().draft;useEditor.getState().setDraft(!next?null:next.timeline?next:last?{...last,error:next.error,hash:next.hash}:null);}
@@ -40,7 +43,7 @@ export function useProjectSession(){
   if(['ai.error','media.error','account.error'].includes(event.type))s.setError((event.payload as any).message);
   // A request that failed before it was saved stops showing as sent.
   if(event.type==='ai.error'){const pending=useEditor.getState().pending;if(pending)useEditor.setState({pending:null,returned:pending.text});}
-  if(event.type==='export.progress')setProgress(event.payload as ExportProgress);
+  if(event.type==='export.progress'){const progress=event.payload as ExportProgress;if(progress.status==='cancelled')stopExports();setProgress(progress);}
   if(event.type==='models.progress'&&(event.payload as any).status==='ready')void window.dream.runtime().then(setRuntime);
  });},[]);
  const create=async(request:InitialRequest)=>{if(useEditor.getState().busy)return; s.setBusy(true);try{const project=await window.dream.createProject(request);s.setProject(project);s.setRoute('ai');await refreshProjects();return project;}catch(error){s.setError((error as Error).message);}finally{s.setBusy(false);}};

@@ -1,7 +1,8 @@
 import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,mkdirSync,readdirSync,statSync,existsSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';
 
-/** Exports a real project in the packaged app and reports the time and the peak space its work files took.
+/** Exports a real project in the packaged app through the Export window (the engine export, which the agent's exports
+ * also use) and reports the time and the peak space its work files took.
  * DREAM_EXPORT_PROJECT=<project folder> [DREAM_EXPORT_OUT=<folder>] npx playwright test tests/desktop/export-real.spec.ts */
 test('exports a real project, reporting time and peak work space',async()=>{
  const folder=process.env.DREAM_EXPORT_PROJECT;test.skip(!folder,'Set DREAM_EXPORT_PROJECT to a project folder.');test.setTimeout(3_600_000);
@@ -12,13 +13,16 @@ test('exports a real project, reporting time and peak work space',async()=>{
   const page=await app.firstWindow();
   await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},resolve(folder!));
   await page.evaluate(()=>window.dream.pickProject(true));await page.evaluate(async folder=>{await window.dream.command({type:'open',folder});},resolve(folder!));
-  await app.evaluate(({dialog},output)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:output});},output);
+  await page.reload();await app.evaluate(({dialog},out)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[out]});},out);
+  await page.getByRole('button',{name:'Export',exact:true}).first().click();const dialog=page.getByRole('dialog',{name:'Export'});
+  await dialog.getByLabel('Choose folder').click();await expect(dialog.locator('.export-folder')).toHaveAttribute('title',out);
+  await dialog.getByLabel('Name').fill('export');
   // Everything the export writes lives beside the output, so the folder's size over time is its footprint.
   let peak=0;const started=Date.now(),timer=setInterval(()=>{peak=Math.max(peak,size(out));},2000);
-  let result:any;try{result=await page.evaluate(async()=>window.dream.exportVideo('video'));}finally{clearInterval(timer);}
+  try{await dialog.getByRole('button',{name:'Export',exact:true}).click();await expect(dialog.getByText('Exported')).toBeVisible({timeout:3_600_000});}finally{clearInterval(timer);}
   const seconds=Math.round((Date.now()-started)/1000);
   console.log(`exported in ${seconds}s; peak work space ${(peak/1e9).toFixed(2)} GB; output ${(size(output)/1e6).toFixed(0)} MB`);
-  expect(result?.path).toBe(output);expect(existsSync(output)).toBe(true);
+  expect(existsSync(output)).toBe(true);
   expect(readdirSync(out).filter(f=>f!=='export.mp4')).toEqual([]);
  }finally{await app.close();}
 });

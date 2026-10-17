@@ -28,7 +28,7 @@ Dream runs its packaged React interface locally in Electron. The renderer has no
 
 | Analysis child | `apps/ingest-worker/src/dream_ingest/main.py` | Offline bounded stage requests; structured responses; no direct database writes |
 
-| Rendering browser | `apps/desktop/src/main/rendering.ts` | Shared Remotion composition rendered from an immutable snapshot through a tokenized loopback media server |
+| Export | `apps/desktop/src/renderer/engine/export.ts`, `apps/desktop/src/main/engine-export.ts` | One engine export for the Export button and the agent (`agent-export.ts`): the window draws and encodes with the shared WebGL compositor from WebCodecs-decoded frames; main mixes the sound (`export-audio.ts`), writes and joins the file |
 
 | Supabase Edge | `supabase/functions/dream-gateway/index.ts` | Authenticated provider access, invitation enforcement, usage and finished-export sharing |
 
