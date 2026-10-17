@@ -12,6 +12,7 @@
     "package": "pnpm --filter @dream/desktop package",
     "make": "pnpm --filter @dream/desktop make",
     "cli": "tsx apps/cli/src/main.ts",
+    "dashboard": "tsx scripts/dashboard/server.ts",
     "check:env": "tsx scripts/check-env.ts",
     "stage:runtime": "tsx scripts/stage-runtime.ts",
     "build:catalog": "tsx scripts/build-catalog.ts",
@@ -28,10 +29,11 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "esbuild": "0.25.12",
+    "postgres": "3.4.5",
     "tsx": "^4.20.0",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4",
-    "esbuild": "0.25.12"
+    "vitest": "^3.2.4"
   },
   "pnpm": {
     "patchedDependencies": {

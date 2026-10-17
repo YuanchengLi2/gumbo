@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gumbo Spending</title>
+<style>
+:root{color-scheme:light;
+ --bg:#ffffff;--surface:#fcfcfb;--raised:#f4f4f2;--line:#e4e3df;--line-strong:#cfcec9;
+ --text:#0b0b0b;--text-2:#52514e;--muted:#8a8984;--focus:#0b0b0b;
+ --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s0:#a3a29d;
+ --bad:#c62f2f;--warn:#a86a00;--good:#167a3e}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+ --bg:#111110;--surface:#1a1a19;--raised:#232321;--line:#2e2e2c;--line-strong:#454542;
+ --text:#f0efec;--text-2:#c3c2b7;--muted:#8d8c86;--focus:#f0efec;
+ --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s0:#6d6c67;
+ --bad:#ef6b6b;--warn:#e0a43a;--good:#4cc27e}}
+:root[data-theme="dark"]{color-scheme:dark;
+ --bg:#111110;--surface:#1a1a19;--raised:#232321;--line:#2e2e2c;--line-strong:#454542;
+ --text:#f0efec;--text-2:#c3c2b7;--muted:#8d8c86;--focus:#f0efec;
+ --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s0:#6d6c67;
+ --bad:#ef6b6b;--warn:#e0a43a;--good:#4cc27e}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1240px;margin:0 auto;padding:24px 24px 64px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:20px}
+h1{font-size:20px;font-weight:650;margin:0;letter-spacing:-.01em}
+.stamp{color:var(--muted);font-size:12px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 11px;cursor:pointer;color:var(--text-2)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--text);color:var(--bg)}
+select{max-width:240px}
+select,input[type=search]{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 10px}
+.btn{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:6px 11px;cursor:pointer}
+.btn:hover,.seg button:hover{background:var(--raised)}
+.seg button[aria-pressed="true"]:hover{background:var(--text)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.notice{border:1px solid var(--line-strong);background:var(--raised);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--text-2)}
+.notice b{color:var(--text)}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.tile .k{color:var(--text-2);font-size:12px}
+.tile .v{font-size:26px;font-weight:650;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .s{color:var(--muted);font-size:12px;margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px;min-width:0}
+.card h2{font-size:14px;font-weight:650;margin:0}
+.card .sub{color:var(--muted);font-size:12px;margin:2px 0 12px}
+.cardhead{display:flex;align-items:flex-start;gap:12px}
+.cardhead .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.grid2>.card{margin-bottom:0}
+.row{margin-bottom:16px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--text-2);margin-bottom:8px}
+.legend button{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0;cursor:pointer;color:var(--text-2)}
+.legend button[aria-pressed="false"]{opacity:.4}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .axis{fill:var(--muted);font-size:11px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.tip{position:fixed;pointer-events:none;z-index:10;background:var(--text);color:var(--bg);border-radius:8px;padding:8px 10px;font-size:12px;min-width:150px;box-shadow:0 6px 20px rgba(0,0,0,.18);display:none}
+.tip .t{font-weight:650;margin-bottom:4px}
+.tip .l{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.tip .l span:first-child{display:inline-flex;gap:6px;align-items:center}
+.bars{display:grid;gap:10px}
+.bar{display:grid;grid-template-columns:150px minmax(0,1fr) 92px;gap:10px;align-items:center}
+.bar .name{display:flex;gap:8px;align-items:center;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .track{height:10px;background:var(--raised);border-radius:4px;overflow:hidden}
+.bar .fill{height:100%;border-radius:4px}
+.bar .val{text-align:right;font-variant-numeric:tabular-nums}
+.bar .val small{color:var(--muted);display:block;font-size:11px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--text-2);font-weight:550;font-size:12px;white-space:nowrap}
+th.num,td.num{text-align:right}
+th[data-sort]{cursor:pointer;user-select:none}
+th[data-sort]:hover{color:var(--text)}
+tbody tr.edit{cursor:pointer}
+tbody tr.edit:hover{background:var(--raised)}
+td.req{max-width:420px}
+td.req .clip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.scroll{overflow-x:auto}
+.prov{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.pill.complete::before{background:var(--good)}.pill.interrupted::before,.pill.failed::before{background:var(--bad)}
+.pill.running::before,.pill.uncertain::before,.pill.awaiting_approval::before,.pill.awaiting_file_permission::before{background:var(--warn)}
+.detail td{background:var(--raised);padding:12px 14px}
+.detail .reply{white-space:pre-wrap;color:var(--text-2);max-height:260px;overflow:auto;margin:0 0 10px;font-size:13px}
+.detail table{background:var(--surface);border-radius:8px}
+.muted{color:var(--muted)}
+.empty{color:var(--muted);padding:18px 0;text-align:center}
+.more{display:block;margin:10px auto 0}
+.tabletoggle{font-size:12px}
+@media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}.grid2>.card{margin-bottom:16px}}
+@media (max-width:560px){.wrap{padding:16px 16px 48px}.controls{margin-left:0}.bar{grid-template-columns:86px minmax(0,1fr) 72px}.tile .v{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header>
+  <div><h1>Spending</h1><div class="stamp" id="stamp">Loading…</div></div>
+  <div class="controls">
+   <div class="seg" role="group" aria-label="Time range" id="range">
+    <button data-r="1">Today</button><button data-r="7">7 days</button><button data-r="30">30 days</button><button data-r="all" aria-pressed="true">All time</button>
+   </div>
+   <select id="account" aria-label="Account"><option value="">All accounts</option></select>
+   <button class="btn" id="refresh">Refresh</button>
+   <button class="btn" id="theme" aria-label="Switch light or dark">Theme</button>
+  </div>
+ </header>
+ <div id="notices"></div>
+ <section class="tiles" id="tiles"></section>
+ <section class="card">
+  <div class="cardhead"><div><h2>Spend per day</h2><div class="sub">Gateway-billed, by provider. Click a provider to hide it.</div></div>
+   <div class="right"><button class="btn tabletoggle" id="daytable" aria-pressed="false">Table</button></div></div>
+  <div class="legend" id="legend"></div>
+  <div class="chart" id="daily"></div>
+  <div class="scroll" id="dailytable" hidden></div>
+ </section>
+ <div class="grid2 row">
+  <section class="card"><h2>By provider</h2><div class="sub">Share of gateway spend</div><div class="bars" id="providers"></div></section>
+  <section class="card"><h2>By kind of work</h2><div class="sub">From this computer's records: what each call was for</div><div class="bars" id="purposes"></div></section>
+ </div>
+ <section class="card"><h2>By model</h2><div class="sub">Calls, tokens and cost per model, from the gateway</div><div class="scroll" id="models"></div></section>
+ <section class="card">
+  <div class="cardhead"><div><h2>Edits</h2><div class="sub" id="editsub">Every request on this computer. Click one to see its reply and every call it made.</div></div>
+   <div class="right"><select id="project" aria-label="Project"><option value="">All projects</option></select><input type="search" id="search" placeholder="Search requests" aria-label="Search requests"></div></div>
+  <div class="scroll" id="edits"></div>
+ </section>
+ <div class="grid2 row">
+  <section class="card"><h2>By project</h2><div class="sub">Edits and spend per project</div><div class="scroll" id="projects"></div></section>
+  <section class="card"><h2>Accounts</h2><div class="sub">Gateway spend per signed-in account</div><div class="scroll" id="accounts"></div></section>
+ </div>
+ <section class="card"><h2>Calls that did not finish cleanly</h2><div class="sub">Failed calls, calls whose result the gateway could not confirm, and reservations that never settled (held against the daily limit, not counted as spend)</div><div class="scroll" id="problems"></div></section>
+</div>
+<div class="tip" id="tip" role="tooltip"></div>
+<script>
+const PROVIDERS=['Anthropic','OpenAI','Google','DeepSeek','Groq','Other'];
+const COLOR={Anthropic:'var(--s1)',OpenAI:'var(--s2)',Google:'var(--s3)',DeepSeek:'var(--s4)',Groq:'var(--s5)',Other:'var(--s0)'};
+const PURPOSE={execution:'Editing (main agent)',triage:'Routing',shot_index:'Shot index',listening:'Listening',watching:'Watching',vision:'Looking at frames',compaction:'Summarising history',planning:'Planning',parts:'Splitting requests',consult:'Second opinion',title:'Naming projects',speech:'Transcription'};
+const state={range:'all',account:'',project:'',search:'',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const usd=n=>{n=n||0;if(n===0)return '$0';if(Math.abs(n)<.01)return '$'+n.toFixed(4);if(Math.abs(n)<1)return '$'+n.toFixed(3);if(Math.abs(n)<100)return '$'+n.toFixed(2);return '$'+Math.round(n).toLocaleString();};
+const int=n=>(n||0).toLocaleString();
+const tok=n=>{n=n||0;return n>=1e6?(n/1e6).toFixed(1)+'M':n>=1e3?(n/1e3).toFixed(n>=1e4?0:1)+'k':String(n);};
+const dur=ms=>{if(!ms&&ms!==0)return '–';const s=Math.round(ms/1000);return s<60?s+' s':Math.floor(s/60)+' min '+String(s%60).padStart(2,'0')+' s';};
+const dayKey=d=>{const x=new Date(d);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+const when=d=>new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+const providerOf=m=>/^claude/.test(m)?'Anthropic':/^gpt|^o\d/.test(m)?'OpenAI':/^gemini/.test(m)?'Google':/^deepseek/.test(m)?'DeepSeek':/^whisper/.test(m)?'Groq':'Other';
+// Spend is what the gateway settled; a reservation that never settled is shown apart (the provider may or may not have run it).
+const billed=c=>c.status==='reserved'?0:c.cost;
+
+function since(){if(state.range==='all')return 0;const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-(Number(state.range)-1));return d.getTime();}
+function view(){
+ const d=state.data,from=since(),inRange=t=>new Date(t).getTime()>=from;
+ const calls=d.gateway.calls.filter(c=>inRange(c.created_at)&&(!state.account||c.user_id===state.account));
+ const byTurn=new Map();for(const c of calls){const list=byTurn.get(c.turn_id)??[];list.push(c);byTurn.set(c.turn_id,list);}
+ const edits=[];
+ for(const p of d.projects){const local=new Map();for(const c of p.calls){const list=local.get(c.turn_id)??[];list.push(c);local.set(c.turn_id,list);}
+  for(const e of p.edits){if(!inRange(e.at))continue;const g=byTurn.get(e.turnId)??[],l=local.get(e.turnId)??[];
+   if(state.account&&!g.length)continue;
+   const cost=g.length?g.reduce((s,c)=>s+billed(c),0):l.reduce((s,c)=>s+(c.cost||0),0);
+   const times=[...g.map(c=>c.created_at),...l.map(c=>c.created_at),e.at,e.repliedAt].filter(Boolean).map(t=>new Date(t).getTime());
+   const models=[...new Set([...g,...l].map(c=>c.model))];
+   edits.push({...e,project:p.name,projectId:p.id,gateway:g,local:l,cost,calls:Math.max(g.length,l.length),models,source:g.length?'gateway':l.length?'local':'none',ms:e.repliedAt?new Date(e.repliedAt).getTime()-new Date(e.at).getTime():Math.max(...times)-Math.min(...times)});}}
+ const known=new Set(edits.map(e=>e.turnId)),unmatched=calls.filter(c=>!known.has(c.turn_id));
+ const localCalls=d.projects.flatMap(p=>p.calls.map(c=>({...c,project:p.name}))).filter(c=>inRange(c.created_at));
+ return {calls,edits,unmatched,localCalls};
+}
+
+function tiles(v){
+ const spent=v.calls.reduce((s,c)=>s+billed(c),0),problems=v.calls.filter(c=>c.status!=='completed').length;
+ const paid=v.edits.filter(e=>e.cost>0),avg=paid.length?paid.reduce((s,e)=>s+e.cost,0)/paid.length:0;
+ const sorted=paid.map(e=>e.cost).sort((a,b)=>a-b),median=sorted.length?sorted[Math.floor(sorted.length/2)]:0;
+ const unmatchedCost=v.unmatched.reduce((s,c)=>s+billed(c),0),held=v.calls.filter(c=>c.status==='reserved'),heldUsd=held.reduce((s,c)=>s+c.reserved,0);
+ const done=v.edits.filter(e=>e.status==='complete').length;
+ $('tiles').innerHTML=[
+  ['Spent',usd(spent),`${usd(unmatchedCost)} outside this computer's edits`],
+  ['AI calls',int(v.calls.length),`${tok(v.calls.reduce((s,c)=>s+c.input_tokens+c.cache_read_tokens+c.cache_write_tokens,0))} tokens in, ${tok(v.calls.reduce((s,c)=>s+c.output_tokens,0))} out`],
+  ['Edits',int(v.edits.length),`${int(done)} finished`],
+  ['Per edit',usd(avg),`average · median ${usd(median)}`],
+  ['Not clean',int(problems),problems?`failed or unconfirmed${held.length?`, ${usd(heldUsd)} held in ${held.length} unsettled`:''}`:'every call completed']
+ ].map(([k,val,s])=>`<div class="tile"><div class="k">${k}</div><div class="v">${val}</div><div class="s">${esc(s)}</div></div>`).join('');
+}
+
+function legend(v){
+ const present=PROVIDERS.filter(p=>v.calls.some(c=>c.provider===p));
+ $('legend').innerHTML=present.map(p=>`<button data-p="${p}" aria-pressed="${!state.hidden.has(p)}"><span class="sw" style="background:${COLOR[p]}"></span>${p}</button>`).join('');
+ for(const b of $('legend').querySelectorAll('button'))b.onclick=()=>{const p=b.dataset.p;state.hidden.has(p)?state.hidden.delete(p):state.hidden.add(p);render();};
+}
+
+function daily(v){
+ const days=new Map();
+ const add=(k,p,n)=>{let row=days.get(k);if(!row){row={};days.set(k,row);}row[p]=(row[p]||0)+n;};
+ for(const c of v.calls)add(dayKey(c.created_at),c.provider,billed(c));
+ const keys=[...days.keys()].sort();
+ if(!keys.length){$('daily').innerHTML='<div class="empty">No spend in this range.</div>';$('dailytable').innerHTML='';return;}
+ // Every day between the first and last, so a quiet day shows as a gap rather than disappearing.
+ const all=[];for(let t=new Date(keys[0]+'T00:00');dayKey(t)<=keys[keys.length-1];t.setDate(t.getDate()+1))all.push(dayKey(t));
+ const shown=PROVIDERS.filter(p=>!state.hidden.has(p));
+ const totals=all.map(k=>shown.reduce((s,p)=>s+((days.get(k)||{})[p]||0),0));
+ const max=Math.max(...totals,0.01),nice=niceMax(max),W=1000,H=260,L=48,B=26,T=8,plotH=H-B-T,slot=(W-L)/all.length,bw=Math.max(2,Math.min(44,slot*.68));
+ let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Spend per day by provider">`;
+ for(let i=0;i<=4;i++){const y=T+plotH-plotH*i/4;svg+=`<line class="grid" x1="${L}" x2="${W}" y1="${y}" y2="${y}"/><text class="axis" x="${L-8}" y="${y+4}" text-anchor="end">${usd(nice*i/4)}</text>`;}
+ const every=Math.ceil(all.length/12);
+ all.forEach((k,i)=>{const x=L+slot*i+(slot-bw)/2;let y=T+plotH;const row=days.get(k)||{};
+  shown.forEach((p,j)=>{const n=row[p]||0;if(!n)return;const h=Math.max(1,plotH*n/nice);const top=shown.slice(j+1).every(q=>!row[q]);
+   y-=h;svg+=top?`<path d="${roundTop(x,y,bw,h-(j?1:0))}" fill="${COLOR[p]}"/>`:`<rect x="${x}" y="${y+1}" width="${bw}" height="${Math.max(0,h-2)}" fill="${COLOR[p]}"/>`;});
+  svg+=`<rect class="hit" data-k="${k}" x="${L+slot*i}" y="${T}" width="${slot}" height="${plotH}" fill="transparent"/>`;
+  if(i%every===0)svg+=`<text class="axis" x="${L+slot*i+slot/2}" y="${H-8}" text-anchor="middle">${new Date(k+'T00:00').toLocaleDateString(undefined,{month:'short',day:'numeric'})}</text>`;});
+ svg+='</svg>';$('daily').innerHTML=svg;
+ const tip=$('tip');
+ for(const r of $('daily').querySelectorAll('.hit')){
+  r.onmousemove=e=>{const row=days.get(r.dataset.k)||{},list=shown.filter(p=>row[p]);const total=list.reduce((s,p)=>s+row[p],0);
+   tip.innerHTML=`<div class="t">${new Date(r.dataset.k+'T00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})} · ${usd(total)}</div>`+(list.length?list.map(p=>`<div class="l"><span><span class="sw" style="background:${COLOR[p]}"></span>${p}</span><span>${usd(row[p])}</span></div>`).join(''):'<div class="muted">No spend</div>');
+   tip.style.display='block';const w=tip.offsetWidth;tip.style.left=Math.min(innerWidth-w-8,e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px';};
+  r.onmouseleave=()=>{tip.style.display='none';};}
+ $('dailytable').innerHTML=`<table><thead><tr><th>Day</th>${shown.map(p=>`<th class="num">${p}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>${all.slice().reverse().map((k,i)=>{const row=days.get(k)||{};return `<tr><td>${k}</td>${shown.map(p=>`<td class="num">${row[p]?usd(row[p]):'<span class="muted">–</span>'}</td>`).join('')}<td class="num">${usd(totals[all.length-1-i])}</td></tr>`;}).join('')}</tbody></table>`;
+ $('daily').hidden=state.showDayTable;$('dailytable').hidden=!state.showDayTable;$('daytable').setAttribute('aria-pressed',String(state.showDayTable));
+}
+function niceMax(n){const p=Math.pow(10,Math.floor(Math.log10(n)));for(const m of [1,2,2.5,5,10])if(m*p>=n)return m*p;return 10*p;}
+function roundTop(x,y,w,h){const r=Math.min(4,w/2,h);return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`;}
+
+function barList(el,rows,colorOf){
+ const max=Math.max(...rows.map(r=>r.value),0),total=rows.reduce((s,r)=>s+r.value,0);
+ el.innerHTML=rows.length?rows.map(r=>`<div class="bar" title="${esc(r.title??'')}"><div class="name">${colorOf?`<span class="sw" style="background:${colorOf(r)}"></span>`:''}<span>${esc(r.label)}</span></div><div class="track"><div class="fill" style="width:${max?Math.max(1.5,100*r.value/max):0}%;background:${colorOf?colorOf(r):'var(--text)'}"></div></div><div class="val">${usd(r.value)}<small>${total?Math.round(100*r.value/total):0}% · ${int(r.count)} calls</small></div></div>`).join(''):'<div class="empty">Nothing in this range.</div>';
+}
+function providers(v){
+ const rows=PROVIDERS.map(p=>{const list=v.calls.filter(c=>c.provider===p);return {label:p,value:list.reduce((s,c)=>s+billed(c),0),count:list.length};}).filter(r=>r.count).sort((a,b)=>b.value-a.value);
+ barList($('providers'),rows,r=>COLOR[r.label]);
+}
+function purposes(v){
+ const map=new Map();for(const c of v.localCalls){const k=c.purpose||'other';const r=map.get(k)??{label:PURPOSE[k]??k,value:0,count:0,title:k};r.value+=c.cost||0;r.count++;map.set(k,r);}
+ // Transcription is billed by the gateway only (it never reaches a project's call log).
+ const speech=v.calls.filter(c=>c.provider==='Groq');if(speech.length)map.set('speech',{label:PURPOSE.speech,value:speech.reduce((s,c)=>s+billed(c),0),count:speech.length,title:'whisper (gateway)'});
+ barList($('purposes'),[...map.values()].sort((a,b)=>b.value-a.value));
+}
+function models(v){
+ const map=new Map();for(const c of v.calls){const r=map.get(c.model)??{model:c.model,provider:c.provider,calls:0,input:0,cacheRead:0,cacheWrite:0,output:0,audio:0,cost:0};
+  r.calls++;r.input+=c.input_tokens;r.cacheRead+=c.cache_read_tokens;r.cacheWrite+=c.cache_write_tokens;r.output+=c.output_tokens;r.audio+=c.audio_seconds;r.cost+=billed(c);map.set(c.model,r);}
+ const rows=[...map.values()].sort((a,b)=>b.cost-a.cost);
+ $('models').innerHTML=rows.length?`<table><thead><tr><th>Model</th><th>Provider</th><th class="num">Calls</th><th class="num">Input</th><th class="num">Cache read</th><th class="num">Cache write</th><th class="num">Output</th><th class="num">Per call</th><th class="num">Cost</th></tr></thead><tbody>${rows.map(r=>`<tr><td style="white-space:nowrap">${esc(r.model)}</td><td><span class="prov"><span class="sw" style="background:${COLOR[r.provider]}"></span>${r.provider}</span></td><td class="num">${int(r.calls)}</td><td class="num">${tok(r.input)}</td><td class="num">${tok(r.cacheRead)}</td><td class="num">${tok(r.cacheWrite)}</td><td class="num">${r.audio?Math.round(r.audio/60)+' min audio':tok(r.output)}</td><td class="num">${usd(r.cost/r.calls)}</td><td class="num"><b>${usd(r.cost)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No calls in this range.</div>';
+}
+
+function edits(v){
+ const q=state.search.trim().toLowerCase();
+ let rows=v.edits.filter(e=>(!state.project||e.projectId===state.project)&&(!q||(e.request+' '+(e.reply??'')+' '+e.project).toLowerCase().includes(q)));
+ const {key,dir}=state.sort;rows.sort((a,b)=>{const x=a[key],y=b[key];return (x>y?1:x<y?-1:0)*dir;});
+ const total=rows.reduce((s,e)=>s+e.cost,0);
+ $('editsub').textContent=`${int(rows.length)} requests on this computer, ${usd(total)}. Click one to see its reply and every call it made.`;
+ const head=[['at','When'],['project','Project'],['request','Request'],['models','Model'],['calls','Calls','num'],['ms','Time','num'],['cost','Cost','num'],['status','Result']];
+ const arrow=k=>state.sort.key===k?(state.sort.dir<0?' ↓':' ↑'):'';
+ let html=`<table><thead><tr>${head.map(([k,l,c])=>`<th data-sort="${k}" class="${c??''}" aria-sort="${state.sort.key===k?(dir<0?'descending':'ascending'):'none'}">${l}${arrow(k)}</th>`).join('')}</tr></thead><tbody>`;
+ for(const e of rows.slice(0,state.limit)){
+  html+=`<tr class="edit" data-t="${esc(e.turnId)}" tabindex="0" aria-expanded="${state.open.has(e.turnId)}"><td>${when(e.at)}</td><td>${esc(e.project)}</td><td class="req"><div class="clip">${esc(e.request)}</div></td><td>${esc(e.models.map(short).join(', ')||e.model||'–')}</td><td class="num">${e.calls||'–'}</td><td class="num">${dur(e.ms)}</td><td class="num"><b>${e.source==='none'?'<span class="muted">–</span>':usd(e.cost)}</b>${e.source==='local'?'<div class="muted" title="Not found in the gateway; from the project\'s own log">local</div>':''}</td><td><span class="pill ${esc(e.status)}">${esc(label(e.status))}</span></td></tr>`;
+  if(state.open.has(e.turnId))html+=`<tr class="detail"><td colspan="8">${detail(e)}</td></tr>`;}
+ html+='</tbody></table>';
+ if(!rows.length)html='<div class="empty">No requests match.</div>';
+ if(rows.length>state.limit)html+=`<button class="btn more" id="moreedits">Show ${Math.min(200,rows.length-state.limit)} more${rows.length-state.limit>200?' of '+int(rows.length-state.limit):''}</button>`;
+ $('edits').innerHTML=html;
+ for(const th of $('edits').querySelectorAll('th[data-sort]'))th.onclick=()=>{const k=th.dataset.sort;state.sort=state.sort.key===k?{key:k,dir:-state.sort.dir}:{key:k,dir:k==='at'||k==='cost'||k==='calls'||k==='ms'?-1:1};render();};
+ for(const tr of $('edits').querySelectorAll('tr.edit')){const toggle=()=>{const t=tr.dataset.t;state.open.has(t)?state.open.delete(t):state.open.add(t);edits(view());};tr.onclick=toggle;tr.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}};}
+ const more=$('moreedits');if(more)more.onclick=()=>{state.limit+=200;edits(view());};
+}
+const short=m=>m.replace(/^claude-/,'').replace(/-\d{8}$/,'');
+// Guest accounts have no email; they are named by when they started and the start of their id.
+const accountName=a=>a.email||`Guest ${String(a.id).slice(0,8)}${a.created_at?' · '+new Date(a.created_at).toLocaleDateString(undefined,{month:'short',day:'numeric'}):''}`;
+const label=s=>({complete:'Finished',interrupted:'Stopped',running:'Still running',awaiting_approval:'Waiting for approval',awaiting_file_permission:'Waiting for file access',unknown:'Unknown',queued:'Queued'}[s]??s);
+function detail(e){
+ const local=e.local.map(c=>({at:c.created_at,model:c.model,purpose:PURPOSE[c.purpose]??c.purpose,input:(c.input_tokens||0)+(c.cache_read||0)+(c.cache_write||0),cached:c.cache_read||0,output:c.output_tokens||0,cost:c.cost||0,ms:c.duration_ms,status:c.stop_reason}));
+ const calls=local.length?local:e.gateway.map(c=>({at:c.created_at,model:c.model,purpose:'–',input:c.input_tokens+c.cache_read_tokens+c.cache_write_tokens,cached:c.cache_read_tokens,output:c.output_tokens,cost:billed(c),ms:null,status:c.status}));
+ const gw=e.gateway.reduce((s,c)=>s+billed(c),0),lc=e.local.reduce((s,c)=>s+(c.cost||0),0);
+ return `<p class="reply">${esc(e.reply??'No reply recorded.')}</p>
+ <div class="muted" style="margin-bottom:8px">Gateway billed ${usd(gw)} over ${e.gateway.length} calls · the project logged ${usd(lc)} over ${e.local.length} · ${e.work?esc(e.work)+' · ':''}${e.difficulty?'difficulty '+e.difficulty+' · ':''}model choice ${esc(e.modelChoice??'–')}</div>
+ ${calls.length?`<div class="scroll"><table><thead><tr><th>Time</th><th>For</th><th>Model</th><th class="num">Tokens in</th><th class="num">Cached</th><th class="num">Out</th><th class="num">Took</th><th class="num">Cost</th><th>Ended</th></tr></thead><tbody>${calls.map(c=>`<tr><td>${new Date(c.at).toLocaleTimeString()}</td><td>${esc(c.purpose)}</td><td style="white-space:nowrap">${esc(short(c.model))}</td><td class="num">${tok(c.input)}</td><td class="num">${tok(c.cached)}</td><td class="num">${tok(c.output)}</td><td class="num">${c.ms==null?'–':(c.ms/1000).toFixed(1)+' s'}</td><td class="num">${usd(c.cost)}</td><td>${esc(c.status??'')}</td></tr>`).join('')}</tbody></table></div>`:'<div class="muted">No AI calls recorded for this request.</div>'}`;
+}
+
+function projectsTable(v){
+ const map=new Map();for(const e of v.edits){const r=map.get(e.projectId)??{name:e.project,edits:0,cost:0,last:''};r.edits++;r.cost+=e.cost;if(e.at>r.last)r.last=e.at;map.set(e.projectId,r);}
+ const rows=[...map.values()].sort((a,b)=>b.cost-a.cost);
+ $('projects').innerHTML=rows.length?`<table><thead><tr><th>Project</th><th class="num">Edits</th><th class="num">Per edit</th><th class="num">Cost</th><th>Last edit</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td class="num">${r.edits}</td><td class="num">${usd(r.cost/r.edits)}</td><td class="num"><b>${usd(r.cost)}</b></td><td>${when(r.last)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">No edits in this range.</div>';
+}
+function accounts(v){
+ const d=state.data,map=new Map();for(const c of v.calls){const r=map.get(c.user_id)??{calls:0,cost:0,today:0};r.calls++;r.cost+=billed(c);if(dayKey(c.created_at)===dayKey(new Date()))r.today+=billed(c);map.set(c.user_id,r);}
+ const rows=d.gateway.accounts.map(a=>({...a,...(map.get(a.id)??{calls:0,cost:0,today:0})})).filter(a=>a.calls||!state.account).sort((a,b)=>b.cost-a.cost);
+ $('accounts').innerHTML=rows.length?`<table><thead><tr><th>Account</th><th>Status</th><th class="num">Calls</th><th class="num">Today / daily limit</th><th class="num">Cost</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${esc(accountName(a))}</td><td>${esc(a.is_guest?'guest':a.status)}</td><td class="num">${int(a.calls)}</td><td class="num">${usd(a.today)} / ${usd(a.daily_budget)}</td><td class="num"><b>${usd(a.cost)}</b></td></tr>`).join('')}</tbody></table>`:'<div class="empty">No accounts.</div>';
+}
+function problems(v){
+ const rows=v.calls.filter(c=>c.status!=='completed').sort((a,b)=>a.created_at<b.created_at?1:-1);
+ const email=new Map(state.data.gateway.accounts.map(a=>[a.id,accountName(a)]));
+ $('problems').innerHTML=rows.length?`<table><thead><tr><th>When</th><th>Model</th><th>Status</th><th>Reason</th><th>Account</th><th class="num">Charged</th><th class="num">Held</th></tr></thead><tbody>${rows.slice(0,100).map(c=>`<tr><td>${when(c.created_at)}</td><td>${esc(c.model)}</td><td><span class="pill ${esc(c.status)}">${esc(c.status)}</span></td><td>${esc(c.error_code??'')}${c.provider_status?' (HTTP '+c.provider_status+')':''}</td><td>${esc(email.get(c.user_id)??'')}</td><td class="num">${usd(billed(c))}</td><td class="num">${c.status==='reserved'?usd(c.reserved):'<span class="muted">–</span>'}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">Every call in this range completed.</div>';
+}
+
+function render(){
+ if(!state.data)return;const v=view();
+ tiles(v);legend(v);daily(v);providers(v);purposes(v);models(v);edits(v);projectsTable(v);accounts(v);problems(v);
+}
+function notices(d){
+ const list=[];if(d.gateway.error)list.push(`<b>Gateway spend unavailable.</b> ${esc(d.gateway.error)} Edits below use each project's own call log.`);
+ const broken=d.projects.filter(p=>p.error);if(broken.length)list.push(`<b>${broken.length} project${broken.length>1?'s':''} could not be read:</b> ${broken.map(p=>esc(p.name)+' ('+esc(p.error)+')').join(', ')}`);
+ $('notices').innerHTML=list.map(n=>`<div class="notice">${n}</div>`).join('');
+}
+async function load(){
+ $('refresh').disabled=true;$('stamp').textContent='Loading…';
+ try{
+  const d=await (await fetch('/api/data',{cache:'no-store'})).json();state.data=d;notices(d);
+  const accountSel=$('account'),projectSel=$('project');
+  accountSel.innerHTML='<option value="">All accounts</option>'+d.gateway.accounts.filter(a=>d.gateway.calls.some(c=>c.user_id===a.id)).map(a=>`<option value="${a.id}">${esc(accountName(a))}</option>`).join('');accountSel.value=state.account;
+  projectSel.innerHTML='<option value="">All projects</option>'+d.projects.filter(p=>p.edits.length).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');projectSel.value=state.project;
+  const last=d.gateway.calls.at(-1)?.created_at;
+  $('stamp').textContent=`Updated ${new Date(d.generatedAt).toLocaleTimeString()} · ${int(d.gateway.calls.length)} gateway calls, ${d.projects.length} projects${last?' · last call '+when(last):''}`;
+  render();
+ }catch(error){$('notices').innerHTML=`<div class="notice"><b>Could not load.</b> ${esc(error.message)}</div>`;$('stamp').textContent='';}
+ finally{$('refresh').disabled=false;}
+}
+for(const b of $('range').querySelectorAll('button'))b.onclick=()=>{state.range=b.dataset.r;for(const x of $('range').querySelectorAll('button'))x.setAttribute('aria-pressed',String(x===b));state.limit=60;render();};
+$('account').onchange=e=>{state.account=e.target.value;render();};
+$('project').onchange=e=>{state.project=e.target.value;state.limit=60;render();};
+$('search').oninput=e=>{state.search=e.target.value;state.limit=60;edits(view());};
+$('refresh').onclick=load;
+$('daytable').onclick=()=>{state.showDayTable=!state.showDayTable;render();};
+$('theme').onclick=()=>{const dark=matchMedia('(prefers-color-scheme: dark)').matches,cur=document.documentElement.dataset.theme??(dark?'dark':'light'),next=cur==='dark'?'light':'dark';document.documentElement.dataset.theme=next;try{localStorage.setItem('theme',next);}catch{}};
+try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t;}catch{}
+addEventListener('resize',()=>{$('tip').style.display='none';});
+load();
+</script>
+</body>
+</html>

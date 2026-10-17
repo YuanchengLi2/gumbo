@@ -4,8 +4,24 @@
     {
       "name": "website",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "http-server", "sign-in-site", "-p", "4173", "-c-1", "--silent"],
+      "runtimeArgs": [
+        "--yes",
+        "http-server",
+        "sign-in-site",
+        "-p",
+        "4173",
+        "-c-1",
+        "--silent"
+      ],
       "port": 4173
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "dashboard"
+      ],
+      "port": 4317
     }
   ]
 }
