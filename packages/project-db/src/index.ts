@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS exports(id TEXT PRIMARY KEY,version_id TEXT NOT NULL,
 CREATE VIRTUAL TABLE IF NOT EXISTS footage_fts USING fts5(id UNINDEXED,asset_id UNINDEXED,kind UNINDEXED,text);
 
 `;
+/** The reply a request gets when it stops because its project or the app closed before it finished. */
+export const STOPPED_WHEN_CLOSED='This request stopped when the app closed, before it finished. Say "continue" to pick up where it left off.';
 export class ProjectDB {
  inspectSource?:SourceInspector;
  /** Tiles frames into one grid image (set by the project service, which has ffmpeg). */
@@ -155,6 +157,18 @@ export class ProjectDB {
  restore(id:string){const t=this.timeline(id);return this.db.transaction(()=>{const branch=this.getMeta('branch')??'main',before=this.head(),after=this.writeVersion(t,before,'Restored version',null);this.db.prepare('UPDATE branches SET head_id=? WHERE id=?').run(after,branch);this.db.prepare('DELETE FROM actions WHERE branch_id=? AND undone=1').run(branch);const seq=(this.db.prepare('SELECT MAX(seq) AS seq FROM actions WHERE branch_id=?').get(branch) as {seq:number|null}).seq??0;this.db.prepare('INSERT INTO actions(id,branch_id,before_id,after_id,seq) VALUES(?,?,?,?,?)').run(randomUUID(),branch,before,after,seq+1);this.workspace.inherit(after,id);this.workspace.queueRestore(after);this.event('version.restored',{versionId:after});return this.state();})();}
  branch(id:string,name:string){this.timeline(id);const branch=`b_${randomUUID()}`;this.db.prepare('INSERT INTO branches VALUES(?,?,?)').run(branch,name,id);this.setMeta('branch',branch);this.workspace.queueRestore(id);return this.state();}
  userMessage(text:string,turnId:string,assetIds:string[]=[],selection:import('@dream/timeline').SelectionRef[]=[]){const existing=this.db.prepare("SELECT id FROM messages WHERE role='user' AND turn_id=? ORDER BY rowid LIMIT 1").get(turnId) as {id:string}|undefined;if(existing){this.db.prepare('UPDATE messages SET attachments=?,selection=? WHERE id=?').run(JSON.stringify(assetIds),JSON.stringify(selection),existing.id);return;}const m=this.message('user',text,turnId,undefined,assetIds);if(selection.length)this.db.prepare('UPDATE messages SET selection=? WHERE id=?').run(JSON.stringify(selection),m.id);}
+ /** A request still marked running when the project opens was cut off: the app quit, crashed or was stopped before the request
+  * could record its end. It is marked stopped, gets a reply saying so unless it already has one, and its unfinished steps
+  * are closed, so the chat never shows a request that silently went quiet. */
+ recoverStoppedRun(){
+  if(this.getMeta('ai_status')!=='running')return false;
+  this.setMeta('ai_status','interrupted');
+  const turnId=this.loadState<{turnId?:string}>('pending_request')?.turnId;if(!turnId)return true;
+  const last=this.db.prepare('SELECT role,turn_id FROM messages ORDER BY created_at DESC,rowid DESC LIMIT 1').get() as {role:string;turn_id:string|null}|undefined;
+  if(!(last?.role==='assistant'&&last.turn_id===turnId))this.message('assistant',STOPPED_WHEN_CLOSED,turnId);
+  for(const row of this.db.prepare('SELECT json FROM activity_events WHERE turn_id=?').all(turnId) as {json:string}[]){const event=JSON.parse(row.json);if(['running','ready','paused'].includes(event.status))this.activityEvent(turnId,{id:event.id,kind:event.kind,text:event.text,status:'interrupted'});}
+  return true;
+ }
  message(role:Message['role'],text:string,turnId?:string,report?:unknown,assetIds:string[]=[]):Message {const m={id:randomUUID(),role,text,createdAt:new Date().toISOString(),turnId,report,assetIds};this.db.prepare('INSERT INTO messages(id,role,text,created_at,turn_id,report,attachments) VALUES(?,?,?,?,?,?,?)').run(m.id,role,text,m.createdAt,turnId??null,report?JSON.stringify(report):null,JSON.stringify(assetIds));this.event('message.created',m);return m;}
  event(type:string,payload:unknown){this.db.prepare('INSERT INTO events(type,json,created_at) VALUES(?,?,?)').run(type,JSON.stringify(payload),new Date().toISOString());}
  events(after=0){return(this.db.prepare('SELECT * FROM events WHERE seq>? ORDER BY seq').all(after) as {seq:number;type:string;json:string}[]).map(e=>({seq:e.seq,type:e.type,payload:JSON.parse(e.json)}));}

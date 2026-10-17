@@ -3,7 +3,7 @@ import {models,engineBudgets,agentModels,autoModel,routerChoices,isTier,workOf,m
 import {triagePrompt,triageMessage,parseTriage,ruleTriage,withMode,routeRecord,type Triage,type TriageInput} from './triage';
 import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
 import type {RequestScore} from '@dream/config';
-import type {ProjectDB} from '@dream/project-db';
+import {STOPPED_WHEN_CLOSED,type ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
 import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
 import {webSearchFunction} from './code-tools';
@@ -50,7 +50,7 @@ export class Director {
  cancel(reason:'user'|'shutdown'='user'){this.controller?.abort(Object.assign(new DOMException(reason==='user'?'Stopped by you.':'Project closed.','AbortError'),{dreamStop:reason}));}
  private async lifecycle(work:()=>Promise<void>,turnId:string){this.controller=new AbortController();this.db.setMeta('ai_status','running');
   // Each run (a new request, an approved plan, a resume) starts the clock again, even within one request.
-  const startedAt=new Date().toISOString();this.db.setMeta('run_started_at',startedAt);this.publish('ai.status',{status:'running',startedAt});try{await work();}catch(error){const status=error instanceof FileApprovalRequired?'awaiting_file_permission':'interrupted';this.db.setMeta('ai_status',status);if(error instanceof FileApprovalRequired)this.db.setMeta('file_wait',JSON.stringify(error.proposal?{kind:'approval',proposal:error.proposal}:{kind:'permission'}));else{const message=this.controller.signal.aborted?'Stopped.':(error as Error).message;this.db.message('assistant',message,turnId);if(!this.controller.signal.aborted)this.publish('ai.error',{message});}this.publish('ai.status',{status});}finally{this.controller=null;this.publish('state',this.db.state({bounded:true}));}}
+  const startedAt=new Date().toISOString();this.db.setMeta('run_started_at',startedAt);this.publish('ai.status',{status:'running',startedAt});try{await work();}catch(error){const status=error instanceof FileApprovalRequired?'awaiting_file_permission':'interrupted';this.db.setMeta('ai_status',status);if(error instanceof FileApprovalRequired)this.db.setMeta('file_wait',JSON.stringify(error.proposal?{kind:'approval',proposal:error.proposal}:{kind:'permission'}));else{const message=this.controller.signal.aborted?(this.controller.signal.reason?.dreamStop==='shutdown'?STOPPED_WHEN_CLOSED:'Stopped.'):(error as Error).message;this.db.message('assistant',message,turnId);if(!this.controller.signal.aborted)this.publish('ai.error',{message});}this.publish('ai.status',{status});}finally{this.controller=null;this.publish('state',this.db.state({bounded:true}));}}
  async message(text:string,selection:string[]=[],intent:RequestIntent='auto',assetIds:string[]=[],requestId?:string,effort?:Effort,model?:ModelChoice):Promise<void>{
   if(this.running)throw new Error('An edit is already running.');const turnId=requestId??randomUUID();if(this.db.getMeta('submitted:'+turnId))return;
   if(model==='auto')await this.refreshProviders();
