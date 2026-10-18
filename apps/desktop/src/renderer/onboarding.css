@@ -34,7 +34,7 @@
 .onboarding-body.step-ready{width:min(640px,calc(100vw - 48px))}.onboarding-body.step-ready .welcome-prompts{width:100%;text-align:left}
 
 /* Claude's plan cards: Max's two sizes on a switch in its card. */
-.upgrade-plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.upgrade-plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:28px}
 .upgrade-size{display:inline-flex;padding:2px;border-radius:8px;background:var(--n5)}
 .upgrade-size button{height:24px;padding:0 9px;border-radius:6px;font-size:12px;font-weight:600;color:var(--n56)}
 .upgrade-size button[aria-checked=true]{background:var(--chrome);color:var(--n100);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
