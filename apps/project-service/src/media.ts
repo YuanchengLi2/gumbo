@@ -5,7 +5,7 @@ import {transcriptWords} from './transcript';
 import {analyzeStage} from './analysis-client';
 import {atomicArtifact} from './artifacts';
 import {mediaFacts} from '../../../packages/footage/src/capture-time';
-import {spawn} from 'node:child_process';import {createReadStream,existsSync,mkdirSync,writeFileSync,readFileSync,statSync} from 'node:fs';import {join,basename} from 'node:path';import {createHash,randomUUID} from 'node:crypto';import {ProjectDB} from '@dream/project-db';import {AssetSchema,type Asset} from '@dream/footage';
+import {spawn} from 'node:child_process';import {createReadStream,existsSync,mkdirSync,writeFileSync,readFileSync,statSync,readdirSync,unlinkSync} from 'node:fs';import {join,basename} from 'node:path';import {createHash,randomUUID} from 'node:crypto';import {ProjectDB} from '@dream/project-db';import {AssetSchema,type Asset} from '@dream/footage';
 export function run(exe:string,args:string[],signal?:AbortSignal):Promise<string>{return new Promise((resolve,reject)=>{const child=spawn(exe,args,{windowsHide:true,signal});let out='',err='';child.stdout.on('data',d=>{out+=d.toString();});child.stderr.on('data',d=>{err=(err+d.toString()).slice(-16000);});child.on('error',reject);child.on('close',code=>code===0?resolve(out):reject(new Error(`${basename(exe)} exited ${code}: ${err.slice(-1500)}`)));});}
 export async function fingerprint(path:string){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
 /** When the media was captured: the phone's own creation date (with its time zone), the container's creation time, EXIF for photos, else the file time. */
@@ -84,6 +84,8 @@ export class Ingest {
     this.db.job(asset.id,'preview_proxy','running');
     const every=PREVIEW_KEYFRAME_SEC,frames=String(Math.max(1,Math.round((asset.fps||30)*every)));
     mkdirSync(folder,{recursive:true});
+    // A preview cut short when the app closed leaves its partial file behind (one is made at a time, so none is in use).
+    for(const name of readdirSync(folder))if(name.startsWith(`.${asset.id}-preview-v1.`)&&name.endsWith('.partial.mp4'))try{unlinkSync(join(folder,name));}catch{}
     await atomicArtifact(target,async temporary=>{await run(this.ffmpeg,['-y','-i',asset.originalPath,'-map','0:v:0','-an','-sn','-dn',
      '-vf',"scale=w='trunc(iw*min(1,1080/min(iw,ih))/2)*2':h='trunc(ih*min(1,1080/min(iw,ih))/2)*2'",
      '-c:v','libx264','-preset','veryfast','-crf','23','-pix_fmt','yuv420p','-g',frames,'-keyint_min',frames,'-force_key_frames',`expr:gte(t,n_forced*${every})`,

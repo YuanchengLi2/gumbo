@@ -5,7 +5,7 @@ import type {PlayerRef} from './engine/EngineView';
 
 import {resolve} from '@dream/timeline';
 
-import {ArrowLeft,Undo2,Redo2,SlidersHorizontal,Upload,History,X,Download,Check,Share2,FolderOpen} from 'lucide-react';
+import {ArrowLeft,Undo2,Redo2,SlidersHorizontal,Upload,History,X,Download,Check,Share2,FolderOpen,Lock,Scissors} from 'lucide-react';
 
 import {useProjectSession} from './hooks/useProjectSession';
 
@@ -13,7 +13,7 @@ import {useEditor} from './store/editor';
 import {approvesPlan} from '@dream/contracts';
 import {selectionRefs} from '@dream/timeline';
 
-import {HomeScreen} from './components/home/HomeScreen';
+import {HomeScreen,GumboMark} from './components/home/HomeScreen';
 
 import {AIWorkspace} from './components/workspace/AIWorkspace';
 import {ExportDialog,type ExportChoices} from './components/export/ExportDialog';
@@ -35,11 +35,15 @@ import {requireSignIn} from './account';
 
 /** Gumbo's chat layout or the editor's (OpenCut's: assets, preview and properties over a full-width timeline), as two
  * words in the header. Both edit the same timeline; the choice is remembered. */
-function LayoutSwitch(){const layout=useEditor(s=>s.layout);
+/** Gumbo's layout or the editor, centred in the header. While Gumbo is editing the editor is closed: the workspace shows
+ * Gumbo's layout, and the editor comes back by itself when the edit ends if it was the layout chosen. */
+function LayoutSwitch({locked}:{locked:boolean}){const layout=useEditor(s=>locked?'gumbo':s.layout);
  const choose=(next:'gumbo'|'editor')=>{const store=useEditor.getState();if(next===store.layout)return;store.setLayout(next);
   // The editor opens on the media; Gumbo's layout has no library tabs, so it goes back to the chat from one.
   if(next==='editor'&&store.sidebarTab==='chat')store.setSidebarTab('media');if(next==='gumbo'&&!['chat','media','elements'].includes(store.sidebarTab))store.setSidebarTab('chat');};
- return <div className="layout-switch" role="radiogroup" aria-label="Layout">{(['gumbo','editor'] as const).map(id=><button key={id} type="button" role="radio" aria-checked={layout===id} onClick={()=>choose(id)}>{id==='gumbo'?'Gumbo':'Editor'}</button>)}</div>;}
+ return <div className={'layout-switch'+(locked?' locked':'')} role="radiogroup" aria-label="Layout">{(['gumbo','editor'] as const).map(id=>{const closed=locked&&id==='editor';
+  return <button key={id} type="button" role="radio" aria-checked={layout===id} aria-disabled={closed||undefined} title={closed?'The editor opens when Gumbo finishes editing':undefined} onClick={()=>{if(!closed)choose(id);}}>
+   {id==='gumbo'?<span className="layout-switch-mark"><GumboMark/></span>:closed?<Lock size={14}/>:<Scissors size={14}/>}{id==='gumbo'?'Gumbo':'Editor'}</button>;})}</div>;}
 
 export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),[input,setInput]=useState(''),[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
  const [signIn,setSignIn]=useState(false);// A request picked in the welcome goes into the home screen's box; a new plan opens the welcome, and so does a first sign-in.
@@ -82,7 +86,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  return <main className={'app platform-'+s.runtime?.platform+' '+''} onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();void window.dream.registerDropped([...e.dataTransfer.files]).then(paths=>attach(paths)).catch(error=>s.setError(error.message));}}>
 
- {s.route==='home'||!project?<HomeScreen projects={s.projects} value={homeInput} onChange={setHomeInput} attachments={homePaths.map(path=>({id:path,name:path.split(/[\\/]/).pop()!}))} onRemove={id=>setHomePaths(paths=>paths.filter(p=>p!==id))} onSubmit={()=>void create()} onUpload={()=>void attach()} onOpen={folder=>void s.open(folder)} onProjectAction={async(project,action)=>{try{await window.dream.projectAction(project.id,action);await s.refreshProjects();}catch(e){s.setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}}} busy={s.busy}/>:<><header className="workspace-header"><button className="icon-button" aria-label="Back to projects" onClick={()=>{player.current?.pause();s.setRoute('home');void s.refreshProjects();}}><ArrowLeft size={21}/></button><input className="project-title" aria-label="Project name" key={project.meta.id+project.meta.name} defaultValue={project.meta.name} onBlur={e=>{const name=e.target.value.trim();if(name&&name!==project.meta.name)void s.command({type:'rename',name});}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}/><LayoutSwitch/><span className="spacer"/><button className="icon-button" title="Undo" aria-label="Undo" disabled={!project.canUndo||active} onClick={()=>s.command({type:'undo'})}><Undo2 size={17}/></button><button className="icon-button" title="Redo" aria-label="Redo" disabled={!project.canRedo||active} onClick={()=>s.command({type:'redo'})}><Redo2 size={17}/></button><button className="button primary" disabled={!duration||active} onClick={()=>setDialog('export')}><Upload size={17}/>Export</button><ProfileMenu/></header>{<AIWorkspace key={project.meta.id} project={project} player={player} frame={s.frame} playing={s.playing} onFrame={s.setFrame} onPlaying={s.setPlaying} onSeek={seek} selected={s.selected} onSelect={s.setSelected} attachments={s.attachments} onAttachments={s.setAttachments} importFiles={s.importFiles} tab={s.sidebarTab} onTab={s.setSidebarTab} value={input} onChange={setInput} command={s.command} onSubmit={()=>void submit()} onRevise={text=>submit(text)} onImport={()=>void attach()} onError={s.setError} busy={s.busy} catalog={s.catalog}/>}</>}
+ {s.route==='home'||!project?<HomeScreen projects={s.projects} value={homeInput} onChange={setHomeInput} attachments={homePaths.map(path=>({id:path,name:path.split(/[\\/]/).pop()!}))} onRemove={id=>setHomePaths(paths=>paths.filter(p=>p!==id))} onSubmit={()=>void create()} onUpload={()=>void attach()} onOpen={folder=>void s.open(folder)} onProjectAction={async(project,action)=>{try{await window.dream.projectAction(project.id,action);await s.refreshProjects();}catch(e){s.setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}}} busy={s.busy}/>:<><header className="workspace-header"><button className="icon-button" aria-label="Back to projects" onClick={()=>{player.current?.pause();s.setRoute('home');void s.refreshProjects();}}><ArrowLeft size={21}/></button><input className="project-title" aria-label="Project name" key={project.meta.id+project.meta.name} defaultValue={project.meta.name} onBlur={e=>{const name=e.target.value.trim();if(name&&name!==project.meta.name)void s.command({type:'rename',name});}} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}}/><LayoutSwitch locked={active}/><span className="spacer"/><button className="icon-button" title="Undo" aria-label="Undo" disabled={!project.canUndo||active} onClick={()=>s.command({type:'undo'})}><Undo2 size={17}/></button><button className="icon-button" title="Redo" aria-label="Redo" disabled={!project.canRedo||active} onClick={()=>s.command({type:'redo'})}><Redo2 size={17}/></button><button className="button primary" disabled={!duration||active} onClick={()=>setDialog('export')}><Upload size={17}/>Export</button><ProfileMenu/></header>{<AIWorkspace key={project.meta.id} project={project} player={player} frame={s.frame} playing={s.playing} onFrame={s.setFrame} onPlaying={s.setPlaying} onSeek={seek} selected={s.selected} onSelect={s.setSelected} attachments={s.attachments} onAttachments={s.setAttachments} importFiles={s.importFiles} tab={s.sidebarTab} onTab={s.setSidebarTab} value={input} onChange={setInput} command={s.command} onSubmit={()=>void submit()} onRevise={text=>submit(text)} onImport={()=>void attach()} onError={s.setError} busy={s.busy} catalog={s.catalog}/>}</>}
 
  {s.error&&<div className="error-toast" role="alert"><p>{s.error}</p><button aria-label="Dismiss error" onClick={()=>s.setError(null)}><X size={17}/></button></div>}
 

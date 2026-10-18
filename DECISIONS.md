@@ -715,3 +715,10 @@ This entry supersedes "Manual UI is disabled while shared project/timeline code 
 - Hiding a track now hides that row's items: the frame description names an item's track as the timeline does (text, stickers, effects, filters, overlays). Before, hiding a text, effect or filter row did nothing to the picture.
 - Text from before styles (no style, no animation) still fades in over 8 frames with the soft shadow, so existing projects look the same.
 - The editor's canvas-ratio choice in the transport is a quiet outlined control like the rest of the bar, in light and dark.
+
+## October 18, 2026 — The editor waits while Gumbo edits; a crash leaves a record
+
+- While Gumbo is editing, the Editor layout is closed: the workspace shows Gumbo's layout (the chat beside the player and timeline), the switch shows Editor with a lock, and the editor comes back by itself when the edit ends if it was the layout chosen. A request sent from the editor's chat tab moves to Gumbo's layout for the edit.
+- The Gumbo / Editor switch is a larger segmented control centred in the header, with the Gumbo mark and scissors, instead of small words beside the project name.
+- On October 17 the app closed during an edit (a 21-minute video being imported, its preview being made and an agent command just finished) with exit code 0xCFFFFFFF and nothing in crashes.log: a crash in the main process runs no JavaScript. The app now keeps Electron's crash dumps on this computer (nothing is uploaded) and writes a marker while it runs; a start that finds the marker records in crashes.log that the last run ended without quitting, when it started, and the newest dump. The cause of that crash is not known yet.
+- A preview cut short when the app closed no longer leaves its partial file in Media/Proxies: the next preview of that clip removes it.

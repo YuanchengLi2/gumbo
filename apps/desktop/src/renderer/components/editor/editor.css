@@ -1,9 +1,15 @@
 /* The editor layout (OpenCut's): assets, preview and properties over a full-width timeline. Flush panes split by
    hairlines, no boxes, no button bars; the black-and-white tokens from globals.css, paprika only on the Gumbo mark. */
-.layout-switch{display:flex;gap:2px;margin-left:4px;-webkit-app-region:no-drag}
-.layout-switch button{font-size:12px;padding:6px 11px;border-radius:7px;color:var(--n42)}
-.layout-switch button:hover{color:var(--n80)}
-.layout-switch button[aria-checked=true]{color:var(--n90);background:var(--n5)}
+/* The layout switch: a segmented control centred in the header (its own vertical place, as the header's other items). */
+.workspace-header{position:relative}
+.layout-switch{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:2px;padding:3px;border-radius:11px;background:var(--n5);-webkit-app-region:no-drag;--switch-on:#ffffff}
+:root[data-theme=dark] .layout-switch{--switch-on:hsl(0 0% 19%)}
+.layout-switch button{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;padding:7px 18px;border-radius:8px;color:var(--n45);transition:color .15s,background .15s,box-shadow .15s}
+.layout-switch button:hover:not([aria-disabled]){color:var(--n85)}
+.layout-switch button[aria-checked=true]{color:var(--n95);background:var(--switch-on);box-shadow:0 1px 2px rgb(0 0 0 / .1),0 0 0 .5px rgb(0 0 0 / .06)}
+.layout-switch button[aria-disabled]{color:var(--n30);cursor:not-allowed}
+.layout-switch-mark{display:flex}.layout-switch-mark .gumbo-mark{width:16px;height:16px}
+.layout-switch button:not([aria-checked=true]) .layout-switch-mark{filter:grayscale(1);opacity:.7}
 
 .ai-workspace.editor-workspace{display:flex;flex-direction:column}
 .ai-stage.editor-layout{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;background:var(--n0);overflow:hidden}

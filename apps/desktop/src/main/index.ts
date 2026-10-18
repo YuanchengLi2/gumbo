@@ -14,9 +14,9 @@ import {renderVisual} from '../sandbox/manager';
 import {PlayerFrames} from './player-frames';
 import {BackgroundProjects,sameFolder} from './background-projects';
 import {handleInstallerEvent} from './lifecycle';
-import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme} from 'electron';import {join,dirname} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
+import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme,crashReporter} from 'electron';import {join,dirname} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
 import {Models} from './models';
-import {startCrashLog,logCrash} from './crash-log';
+import {startCrashLog,logCrash,markRunning,markQuit} from './crash-log';
 import {beginBrowserSignIn} from './auth';
 import {openPayPage} from './pay-page';
 import {registerProtocol,protocolLink,linkPage} from './protocol';
@@ -36,8 +36,10 @@ if(secondCopy)app.exit(0);
 if(!installerLaunch&&!secondCopy)registerProtocol();
 app.on('second-instance',(_event,argv)=>{if(window?.isMinimized())window.restore();window?.show();window?.focus();const link=protocolLink(argv);if(link)window?.webContents.send('dream:event',{type:'app.link',payload:{page:linkPage(link)}});});
 app.on('open-url',(event,link)=>{event.preventDefault();window?.show();window?.focus();window?.webContents.send('dream:event',{type:'app.link',payload:{page:linkPage(link)}});});
-// Crashes are recorded (crash-log.ts): renderer and helper processes going away, and errors nothing caught.
+// Crashes are recorded (crash-log.ts): renderer and helper processes going away, errors nothing caught, and a run that
+// ended without quitting (found at the next start), with the crash dump Electron keeps locally (nothing is uploaded).
 startCrashLog(app.getPath('userData'));
+if(!secondCopy){crashReporter.start({uploadToServer:false});markRunning(app.getPath('crashDumps'));app.on('will-quit',markQuit);}
 app.on('render-process-gone',(_event,contents,details)=>logCrash('render-process-gone',{url:contents.getURL().slice(0,200),...details}));
 app.on('child-process-gone',(_event,details)=>logCrash('child-process-gone',{...details}));
 process.on('uncaughtException',error=>logCrash('main-uncaught',{message:error.message,stack:error.stack}));
