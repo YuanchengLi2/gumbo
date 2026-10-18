@@ -6,6 +6,6 @@ export const models={agent:chosenModel&&/^claude-(haiku|sonnet|opus)-5-5$/.test(
 
 // Working targets trigger archival of completed exchanges, not task failure. Haiku compacts at 80K and is never sent
 // more than 96K, so it stays under its 100K long-context price tier.
-export const engineBudgets={routerInput:12000,workingInput:60000,haikuInput:60000,compactTo:20000,compactGap:6,haikuHardInput:96000,maxOutput:64000,toolCalls:40,agentSteps:80,maxWorkers:4,textNudges:2,readCalls:12,readRequests:16,cacheBytes:5*1024**3} as const;
+export const engineBudgets={routerInput:12000,workingInput:60000,haikuInput:60000,compactTo:20000,compactGap:6,compactGrowth:25000,haikuHardInput:96000,maxOutput:64000,toolCalls:40,agentSteps:80,maxWorkers:4,textNudges:2,readCalls:12,readRequests:16,cacheBytes:5*1024**3} as const;
 export * from './pricing';
 export * from './models';

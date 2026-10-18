@@ -30,7 +30,12 @@ function archive(db:ProjectDB,turn:string,messages:Message[]){
  }
  return entries;
 }
-const describe=(entry:Entry,turn:string)=>({id:entry.id,receipt:prefix(turn)+entry.id,toolCallId:entry.toolCallId,name:entry.name,status:entry.result.is_error?'failed':'succeeded',excerpt:textOf(entry.result.content).slice(0,1000),truncated:textOf(entry.result.content).length>1000});
+/** What a compaction keeps of results it summarizes: the latest RECENT_RECEIPTS with a short excerpt each; the full
+ * results stay archived and can be read again. With twenty receipts of a thousand characters, and copies of recent reads
+ * up to 30% of the target, a compaction could not get below about 35k tokens on a long edit, so it ran again a few calls
+ * later and each time the rewritten prompt was billed as new input (October 18: 14 compactions in one request). */
+const RECEIPT_EXCERPT=300,RECENT_RECEIPTS=10,WORKING_SHARE=.15;
+const describe=(entry:Entry,turn:string)=>({id:entry.id,receipt:prefix(turn)+entry.id,toolCallId:entry.toolCallId,name:entry.name,status:entry.result.is_error?'failed':'succeeded',excerpt:textOf(entry.result.content).slice(0,RECEIPT_EXCERPT),truncated:textOf(entry.result.content).length>RECEIPT_EXCERPT});
 
 /** Older user messages that stay authoritative after compaction: real instructions and feedback, the two latest
  * pieces of advice from a stronger model, and only the newest project-state snapshot. Engine nudges are dropped, and media images
@@ -70,8 +75,8 @@ function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:
   const decisions=[...earlier?.recentAssistantNotes??[],...older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[])].slice(-8).map((t:string)=>t.slice(0,1500));
   // A later compaction carries the earlier summary forward instead of losing it.
   const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length;
-  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-20),recentReceipts:receipts.slice(-20),recentAssistantNotes:decisions,...(planNotes?{planNotes}:{})};
-  const working=workingContext(messages,tail,targetBytes*.3);
+  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-RECENT_RECEIPTS),recentReceipts:receipts.slice(-RECENT_RECEIPTS).map((r:any)=>typeof r?.excerpt==='string'&&r.excerpt.length>RECEIPT_EXCERPT?{...r,excerpt:r.excerpt.slice(0,RECEIPT_EXCERPT),truncated:true}:r),recentAssistantNotes:decisions,...(planNotes?{planNotes}:{})};
+  const working=workingContext(messages,tail,targetBytes*WORKING_SHARE);
   plan={cut,prefix:[cleanMessage(messages[0]),{role:'user',...(keepMetadata?{dreamSource:'snapshot' as const}:{}),content:JSON.stringify(digest)},...directions,...(working?[cleanMessage(working)]:[])]};
   if(bytes([...plan.prefix,...tail])<=targetBytes)break;
  }

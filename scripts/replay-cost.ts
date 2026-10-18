@@ -17,7 +17,7 @@ type Call={prompt:number;output:number;cost:number};
  * October 18); gap: calls that must pass after a compaction before another, unless a prompt passes 1.5 x target;
  * cap/keep: tool results capped at cap characters except the tools in keep; warm: the system prompt and tools are
  * already cached when the run starts (a cache key shared across requests). */
-export type Setting={name:string;target?:number;to?:number;gap?:number;cap?:number;keep?:string[];warm?:boolean};
+export type Setting={name:string;target?:number;to?:number;gap?:number;growth?:number;cap?:number;keep?:string[];warm?:boolean};
 
 const [folder,turn,phase='main']=process.argv.slice(2);
 const db=new ProjectDB(folder);
@@ -40,7 +40,7 @@ const slope=estimates.slice(0,n).reduce((s,x,i)=>s+(x-mx)*(calls[i].prompt-my),0
 const tokens=(list:any[])=>slope*estimateTokens(list);
 
 function replay(setting:Setting){
- const scratch=`replay:${setting.name}:${Date.now()}`;let previous:any[]=[],total=0,peak=0,compactions=0,last=-1e9;const perCall:number[]=[];
+ const scratch=`replay:${setting.name}:${Date.now()}`;let previous:any[]=[],total=0,peak=0,compactions=0,last=-1e9,after=0;const perCall:number[]=[];
  // Results capped at setting.cap characters, except the tools named in keep (their results are read in pages anyway).
  const names=new Map<string,string>();for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_use')names.set(b.id,b.name);
  const capped=setting.cap?messages.map(m=>Array.isArray(m.content)?{...m,content:m.content.map((b:any)=>b.type==='tool_result'&&!setting.keep?.includes(names.get(b.tool_use_id)??'')?{...b,content:capText(b.content,'replay',setting.cap)}:b)}:m):messages;
@@ -50,9 +50,10 @@ function replay(setting:Setting){
   // As inference does: past the target, compact (to half of it unless setting.to says otherwise), at most once every
   // setting.gap calls unless the prompt passes 1.5 x target, so later calls append to a stable, cached prefix.
   const size=base+tokens(view);
-  if(setting.target&&size>setting.target&&(k-last>=(setting.gap??0)||size>setting.target*1.5)){
+  // growth: as inference does, a compaction runs only once that many tokens have come in since the last one left the prompt.
+  if(setting.target&&size>setting.target&&((k-last>=(setting.gap??0)&&size>=after+(setting.growth??0))||size>setting.target*1.5)){
    const ratio=setting.to?deepCompaction(view,(setting.to-base)/Math.max(1,size-base)):Math.max(.2,setting.target/size*.5);
-   view=providerView(db,turn,scratch,history,Math.floor(conversationBytes(view)*ratio));compactions++;last=k;}
+   view=providerView(db,turn,scratch,history,Math.floor(conversationBytes(view)*ratio));compactions++;last=k;after=base+tokens(view);}
   let same=0;while(same<view.length&&same<previous.length&&JSON.stringify(view[same])===JSON.stringify(previous[same]))same++;
   const prompt=base+tokens(view),cached=k?base+tokens(view.slice(0,same)):setting.warm?base:0,fresh=prompt-cached;
   const cost=price(fresh,cached,calls[k].output);
