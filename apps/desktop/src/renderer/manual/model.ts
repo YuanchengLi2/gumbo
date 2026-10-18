@@ -1,4 +1,4 @@
-import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,type Op,type TimelineDocument} from '@dream/timeline';
+import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,KEYFRAME_PROPS,type Keyframe,type KeyframeProp,type Op,type TimelineDocument} from '@dream/timeline';
 // Placement helpers live in @dream/timeline so the assistant timeline's drag-and-drop shares them.
 export {newId,projectAnchor,ensureDuration,addAsset};
 import type {FootageIndex} from '@dream/footage';
@@ -78,3 +78,12 @@ export function splitRemove(t:TimelineDocument,f:FootageIndex,ids:string[],time:
 }
 /** Everything on the timeline that can be selected and changed (captions are words of the speech, not blocks). */
 export const selectableIds=(t:TimelineDocument,f:FootageIndex)=>manualItems(t,f).filter(i=>i.kind!=='caption'&&!t.trackSettings?.[i.track]?.locked).map(i=>i.id);
+
+/** A keyframe list with prop set to value at sec (a keyframe within half a frame is that keyframe), or removed there. */
+export function setKeyframe(keys:Keyframe[]|undefined,sec:number,prop:KeyframeProp,value:number|undefined,fps:number):Keyframe[]{
+ const list=[...(keys??[])].sort((a,b)=>a.sec-b.sec),at=list.findIndex(k=>Math.abs(k.sec-sec)<=.5/fps);
+ if(value===undefined){if(at<0)return list;const k={...list[at]};delete k[prop];return KEYFRAME_PROPS.some(name=>k[name]!==undefined)?list.map((x,n)=>n===at?k:x):list.filter((_,n)=>n!==at);}
+ if(at>=0)return list.map((k,n)=>n===at?{...k,[prop]:value}:k);
+ return [...list,{sec:Math.max(0,sec),easing:'linear' as const,[prop]:value}].sort((a,b)=>a.sec-b.sec);
+}
+

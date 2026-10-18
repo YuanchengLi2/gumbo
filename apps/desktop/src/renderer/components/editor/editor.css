@@ -50,3 +50,59 @@
 .shortcuts-groups h3{font-size:11px;color:var(--n40);font-weight:500;margin:12px 0 4px}
 .shortcuts-groups p{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;padding:5px 0;color:var(--n70)}
 .shortcuts-groups kbd{font:11px Consolas,monospace;padding:2px 6px;border-radius:5px;background:var(--n5);color:var(--n80);margin-left:4px;white-space:nowrap}
+
+/* Properties: what is selected, in plain sections; values are sliders with their number beside them. */
+.editor-properties{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--n1);color:var(--n80);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif}
+.prop-header{flex:none;display:flex;align-items:center;gap:8px;height:44px;padding:0 16px;border-bottom:1px solid var(--n5);color:var(--n50)}
+.prop-header strong{font-size:12.5px;font-weight:600;color:var(--n85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prop-scroll{flex:1;min-height:0;overflow-y:auto;padding:6px 16px 24px}
+.prop-note{font-size:11px;color:var(--n42);padding:10px 0 2px}
+.prop-hint{font-size:10.5px;color:var(--n38);line-height:1.5;padding:4px 0 2px}
+.prop-section{padding:12px 0 6px;border-bottom:1px solid var(--n4)}
+.prop-section:last-child{border-bottom:0}
+.prop-section>h3{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:600;color:var(--n50);letter-spacing:.2px;margin-bottom:6px}
+.prop-field{display:flex;flex-direction:column;gap:3px;padding:5px 0;font-size:11.5px;color:var(--n62)}
+.prop-field>label,.prop-field.choice,.prop-field.toggle,.prop-field.color,.prop-field.segmented{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+.prop-field.text{flex-direction:column;align-items:stretch}
+.prop-field input[type=text],.prop-field textarea,.prop-field select{font:inherit;font-size:11.5px;color:var(--n85);background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;outline:none}
+.prop-field.number input[type=text]{width:74px;text-align:right;font-variant-numeric:tabular-nums}
+.prop-field input[type=text]:hover,.prop-field select:hover,.prop-field textarea:hover{background:var(--n4)}
+.prop-field input[type=text]:focus,.prop-field textarea:focus{background:var(--n0);border-color:var(--n12)}
+.prop-field.text textarea,.prop-field.text input{background:var(--n3);padding:7px 8px;resize:vertical;min-height:30px}
+.prop-field select{max-width:62%;cursor:pointer}
+.prop-slider{display:flex;align-items:center;gap:8px}
+.prop-slider input[type=range]{flex:1;min-width:0;height:16px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+.prop-slider input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:linear-gradient(90deg,var(--n60) var(--fill,50%),var(--n10) var(--fill,50%))}
+.prop-slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4.5px;border-radius:50%;background:var(--n0);border:1.5px solid var(--n70);box-shadow:0 1px 2px rgb(0 0 0 / .15)}
+.prop-slider input[type=range]:disabled{opacity:.45;cursor:default}
+.keyframe-toggle{flex:none;width:20px;height:20px;display:grid;place-items:center;border-radius:5px;color:var(--n30)}
+.keyframe-toggle:hover:not(:disabled){color:var(--n75);background:var(--n4)}
+.prop-field.animated .keyframe-toggle{color:var(--n70)}
+.keyframe-toggle.here{color:var(--n90)!important}
+.prop-field.toggle input{width:28px;height:16px;-webkit-appearance:none;appearance:none;border-radius:8px;background:var(--n12);position:relative;cursor:pointer;transition:background .15s}
+.prop-field.toggle input:before{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:var(--n0);transition:left .15s;box-shadow:0 1px 2px rgb(0 0 0 / .2)}
+.prop-field.toggle input:checked{background:var(--n80)}
+.prop-field.toggle input:checked:before{left:14px}
+.color-pick{display:flex;align-items:center;gap:6px}
+.color-pick input[type=color]{width:26px;height:20px;border:0;padding:0;background:none;cursor:pointer}
+.color-pick input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.color-pick input[type=color]::-webkit-color-swatch{border:1px solid var(--n12);border-radius:5px}
+.color-none{font-size:10.5px;color:var(--n42);padding:2px 6px;border-radius:5px}
+.color-none.on{color:var(--n85);background:var(--n5)}
+.prop-field.segmented>div{display:flex;gap:2px}
+.prop-field.segmented button{font-size:11px;padding:3px 8px;border-radius:6px;color:var(--n45)}
+.prop-field.segmented button[aria-checked=true]{background:var(--n5);color:var(--n88)}
+.prop-link{font-size:11px;color:var(--n55);padding:6px 0;text-decoration:underline;text-underline-offset:2px}
+.prop-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;color:var(--n40);padding:40px 20px;flex:1}
+.prop-empty p{font-size:13px;color:var(--n70)}
+.prop-empty small{font-size:11px;line-height:1.5}
+.prop-empty.compact{flex-direction:row;padding:14px 0 6px;justify-content:flex-start;flex:none;text-align:left}
+
+/* Selection on the preview: an outline with corner handles and a knob to turn it; guides when it snaps to the centre. */
+.preview-handles{position:absolute;inset:0;width:100%;height:100%;z-index:4;cursor:default;touch-action:none}
+.preview-selection polygon{fill:none;stroke:#fff;filter:drop-shadow(0 0 1px rgb(0 0 0 / .8))}
+.preview-selection.main polygon{stroke:rgb(255 255 255 / .55)}
+.preview-selection rect,.preview-selection circle{fill:#fff;stroke:#111;cursor:nwse-resize}
+.preview-selection circle{cursor:grab}
+.preview-selection line{stroke:#fff}
+.preview-guide{stroke:#fff;stroke-dasharray:6 6;filter:drop-shadow(0 0 1px rgb(0 0 0 / .9))}
