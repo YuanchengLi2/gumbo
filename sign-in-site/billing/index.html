@@ -10,9 +10,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-/* Where Stripe sends people back after paying (or not) in the browser. It says what happened and asks to open Gumbo
-   straight away (the browser offers "Open Gumbo?" for the gumbo:// link), with a button for it; the app shows the new plan
-   or credits as soon as Stripe has told the gateway, which takes seconds. Styled like the sign-in page. */
+/* Where Stripe sends people back after paying (or not), when it happened in a browser: it says what happened and to go
+   back to Gumbo, which shows the new plan or credits within seconds. Styled like the sign-in page. */
 :root{--ink:#1F1A17;--muted:#5F5650;--line:rgba(31,26,23,.16);--bg:#FFFBEF;--card:#FFFDF7;--paprika:#E2552A;--paprika2:#C9471F;--soft:#FBE6D9}
 @media (prefers-color-scheme:dark){:root{--ink:#FFF5E6;--muted:#C9BBAE;--line:rgba(255,245,230,.18);--bg:#14110F;--card:#1D1916;--soft:#33231B}}
 *{box-sizing:border-box}
@@ -33,7 +32,6 @@ footer{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);font-si
  <div class="badge"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg></div>
  <h1 id="title">All saved</h1>
  <p id="text">Changes show in Gumbo in a few seconds.</p>
- <a class="open" id="open" href="gumbo://billing">Open Gumbo</a>
  <small>You can close this tab.</small>
  <footer>Receipts and your card are in <strong>Manage billing</strong>, in Gumbo's Settings.</footer>
 </main>
@@ -44,11 +42,8 @@ const says={
  portal:['All saved','Changes to your plan show in Gumbo in a few seconds.'],
  cancelled:['Nothing was charged','You can choose a plan or buy credits any time from Gumbo.']
 };
-const status=new URLSearchParams(location.search).get('status'),[title,text]=says[status]||says.portal,link='gumbo://billing?status='+encodeURIComponent(status||'portal');
+const status=new URLSearchParams(location.search).get('status'),[title,text]=says[status]||says.portal;
 document.getElementById('title').textContent=title;document.getElementById('text').textContent=text;document.title=title+' · Gumbo';
-document.getElementById('open').href=link;
-// Ask to open Gumbo at once: the browser shows its "Open Gumbo?" prompt; the button does the same if it's dismissed.
-setTimeout(()=>{location.href=link;},500);
 </script>
 </body>
 </html>
