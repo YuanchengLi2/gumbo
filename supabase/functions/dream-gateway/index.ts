@@ -19,7 +19,7 @@ const sha=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.dig
 Deno.serve(async(req)=>{
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
  const action=new URL(req.url).pathname.split('/').filter(Boolean).at(-1);
- if(action==='health')return json({service:'dream-gateway',configured:Boolean(Deno.env.get('ANTHROPIC_API_KEY'))});
+ if(action==='health')return json({service:'dream-gateway',configured:Boolean(Deno.env.get('ANTHROPIC_API_KEY')),promptCacheKey:'user-and-prompt'});
  // Which other providers have a key here (never the keys themselves), so the app can offer their models and Auto can use them.
  if(action==='providers')return json(Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Boolean(Deno.env.get(secret))])));
  if(action==='updates'){const {data}=await db.from('dream_releases').select('*').order('published_at',{ascending:false}).limit(10);return json({releases:data??[]});}

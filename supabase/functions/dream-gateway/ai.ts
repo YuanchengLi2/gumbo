@@ -68,7 +68,9 @@ async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;ma
   await o.requests?.finish(userId,body.requestId,'uncertain',undefined,'The provider connection ended before confirming the response.');await o.db.from('dream_usage').update({status:'uncertain',error_code:'connection_ended'}).eq('id',o.usageId);
   return{status:503,body:{error:{message:'The provider connection ended before its outcome was received.',type:'connection_ended'},dream_request:{status:'uncertain',retryable:false}}};
  }
- const policy={pricingVersion,thinkingDisplay:'omitted',maxTokens:o.maxTokens,features:['cost-receipts']};
+ // The receipt names the cache key the call was sent with, so the app's records show which gateway answered: a key per
+ // user and prompt start ('gumbo-<user>-<prompt>') shares the cache across requests; a request id does not.
+ const policy={pricingVersion,thinkingDisplay:'omitted',maxTokens:o.maxTokens,features:['cost-receipts',...((request as any).prompt_cache_key?['prompt-cache-key:'+(request as any).prompt_cache_key]:[])]};
  if(!response.ok){
   const body_=await response.json().catch(()=>({})) as any,detail=Array.isArray(body_)?body_[0]:body_,message=detail?.error?.message?`${providerNames[model.provider]} refused the request (${response.status}): ${String(detail.error.message).slice(0,300)}`:`${providerNames[model.provider]} returned ${response.status}.`,retryable=[429,500,502,503,504].includes(response.status);
   await o.db.from('dream_usage').update({status:'failed',provider_status:response.status,error_code:detail?.error?.type??detail?.error?.code??'provider_error'}).eq('id',o.usageId);
