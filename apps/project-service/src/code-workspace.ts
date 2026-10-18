@@ -4,6 +4,7 @@ import {sceneReference,projectReference} from '../../../packages/scene-engine/sr
 import {editingGuide} from '../../../packages/orchestrator/src/editing-guide';
 import {activeDecisions} from '../../../packages/orchestrator/src/project-memory';
 import {searchWorkspace} from './workspace-search';
+import {codeContext} from './code-context';
 import {workspaceEnvironment} from './workspace-environment';
 import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,lstatSync,renameSync,copyFileSync,unlinkSync,statSync} from 'node:fs';
 import {createReadStream} from 'node:fs';
@@ -70,13 +71,15 @@ export class CodeWorkspace implements CodeWorkspacePort {
   const names=new Map(this.db.footage().assets.map(a=>[a.scene?.revisionId,a.filename]));
   const found=this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
   // Finishing judges only this request's scenes; the project state also carries errors that are still live.
-  if(options.inEdit)return found;
-  const seen=new Set(found.map(e=>e.message+'|'+e.location));
-  return[...found,...this.liveSceneErrors().filter(e=>!seen.has(e.message+'|'+e.location))].slice(0,20);
+  const seen=new Set(found.map(e=>e.message+'|'+e.location)),all=options.inEdit?found:[...found,...this.liveSceneErrors().filter(e=>!seen.has(e.message+'|'+e.location))].slice(0,20);
+  return all.map(e=>{const code=e.location?codeContext(this.root,e.location,1)[0]?.code:undefined;return code?{...e,code}:e;});
  }
  /** Errors from the last day whose file has not changed since the scene reported them, in this request or an earlier one:
   * the code that crashed is still the code there. A crash seen while the user watched, or in a stopped request, used to
   * be invisible to the next request, which then looked for why the drawings were blank. */
+ /** The code around each line an error text names (a compile error, a traceback, a stack), for the agent. */
+ codeContext(text:string){return codeContext(this.root,text);}
+ private withCode<T extends {file?:string;line?:number;column?:number}>(errors:T[]){return errors.map((e,n)=>{if(n>=3||!e.file||!e.line)return e;const code=codeContext(this.root,`${e.file}:${e.line}${e.column?':'+e.column:''}`,1)[0]?.code;return code?{...e,code}:e;});}
  liveSceneErrors(){
   const names=new Map(this.db.footage().assets.map(a=>[a.id,a.filename]));
   return this.db.recentSceneErrors(new Date(Date.now()-86_400_000).toISOString()).flatMap(e=>{
@@ -218,7 +221,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Scene code is compiled (never run) right away, so syntax and import mistakes come back with this write.
    // Sound and music files are checked the same way: every problem in them comes back with this write.
    if(/\.(sfx|score)\.json$/.test(input.path)){const checked=this.checkSound({path:input.path});return{...written,check:'errors'in checked?{errors:checked.errors,note:'Check of this file; fix every listed problem before publishing.'}:{valid:true}};}
-   if(isEngineScene(input.path)&&normalizeScope(input.path).startsWith('src/'))try{const compiled=await compileScene(this.root,{entry:input.path,mode:'draft'});return{...written,check:compiled.errors.length?{errors:compiled.errors.slice(0,8),note:'Compile check of this file. Errors about files you have not written yet resolve once they exist.'}:{compiles:true}};}catch{}
+   if(isEngineScene(input.path)&&normalizeScope(input.path).startsWith('src/'))try{const compiled=await compileScene(this.root,{entry:input.path,mode:'draft'});return{...written,check:compiled.errors.length?{errors:this.withCode(compiled.errors.slice(0,8)),note:'Compile check of this file. Errors about files you have not written yet resolve once they exist.'}:{compiles:true}};}catch{}
    return written;
   });
   if(name==='check_outputs')return this.exclusive(()=>this.checkOutputs(input,callId,turnId,scope));
@@ -426,7 +429,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    if(entry.kind==='music'||String(entry.path).endsWith('.score.json')||entry.kind==='sfx'||String(entry.path).endsWith('.sfx.json')){results.push(this.checkSound(entry));continue;}
    if(!isEngineScene(String(entry.path))){results.push({id:entry.id,path:entry.path,skipped:'Only engine scenes (.tsx, .ts, .jsx, .js) and score or sound files can be checked.'});continue;}
    const compiled=await compileScene(this.root,{entry:entry.path,mode:'draft'});
-   if(compiled.errors.length){results.push({id:entry.id,path:entry.path,errors:compiled.errors.slice(0,8)});continue;}
+   if(compiled.errors.length){results.push({id:entry.id,path:entry.path,errors:this.withCode(compiled.errors.slice(0,8))});continue;}
    const hash=compiled.hash.slice(0,32),stored=storeEngineScene(this.db.folder,this.root,compiled,join(this.db.folder,'Media/Drafts',hash));
    const size={width:entry.width??settings.width,height:entry.height??settings.height,fps:entry.fps??settings.fps,durationInFrames:entry.durationInFrames??Math.round((entry.fps??settings.fps)*5)};
    this.publishEvent('scene.draft',{hash,source:{config:{assetId:'draft_'+hash,revisionId:compiled.hash,...size,chunks:compiled.chunks,props:entry.props,transparent:!!entry.transparent,beats:{}},...stored}});

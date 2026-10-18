@@ -234,7 +234,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      // Failures are counted per distinct error: publish_project has no input, so without the error every publish looks
      // like the same attempt, and fixing one problem only to meet the next would end the request.
      const message=(error as Error).message,signature=failureSignature(message),failureKey=operationKey+'#'+signature,coarseFailure=coarse+'#'+signature,count=(checkpoint.failures[failureKey]??0)+1,similar=((checkpoint.coarse??={})[coarseFailure]??0)+1;checkpoint.failures[failureKey]=count;checkpoint.coarse[coarseFailure]=similar;
-     result={error:message,diagnosisRequired:count>=2||similar>=3};db.saveState(receiptKey,result);activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,call.input)??call.name,status:'failed',detail:message});
+     // The code at each file and line the error names comes with it, so the agent sees the failing line without reading again.
+     const code=workspace.codeContext?.(message)??[];
+     result={error:message,...(code.length?{code:code.map(f=>`${f.file}:${f.line}\n${f.code}`)}:{}),diagnosisRequired:count>=2||similar>=3};db.saveState(receiptKey,result);activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,call.input)??call.name,status:'failed',detail:message});
      // The same error three times (or a similar one four times) ends the request instead of spending more steps on it.
      if(count>=3||similar>=4)conclude({status:'blocked',summary:'Repeated attempts could not complete this step: '+message,evidence:[],nextAction:'Resolve the diagnosed failure, then resume with the saved source and logs.'});
     }

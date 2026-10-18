@@ -35,7 +35,9 @@ export interface CodeWorkspacePort {
  runningCommands?():{id:string;command:string;runningSec:number}[];
  /** Errors scenes reported while playing (player or chat preview) for scenes changed in this request and its current drafts;
   * inEdit leaves out drafts of scenes no longer in the edit (what finishing checks). */
- sceneErrors?(turnId?:string,options?:{inEdit?:boolean}):{scene:string;assetId?:string;location?:string;message:string}[];
+ sceneErrors?(turnId?:string,options?:{inEdit?:boolean}):{scene:string;assetId?:string;location?:string;message:string;code?:string}[];
+ /** The code around each workspace file and line an error text names, the failing line marked. */
+ codeContext?(text:string):{file:string;line:number;column?:number;code:string}[];
  /** Fact checks of what this request has published so far (mustFix blocks finishing unless kept with a reason). */
  editChecks?(turnId:string):{mustFix:{id:string;text:string}[];notes:{id:string;text:string}[]}|undefined;
  context(query:string):unknown;

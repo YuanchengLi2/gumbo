@@ -34,6 +34,22 @@ describe('what a look at the edit tells the agent',()=>{
  });
 });
 
+describe('code errors come with their code',()=>{
+ it('shows the lines around each file and line an error names, from compile errors, tracebacks and stacks',async()=>{
+  const {mkdtempSync,mkdirSync,writeFileSync}=await import('node:fs'),{join}=await import('node:path'),{tmpdir}=await import('node:os');
+  const {codeContext}=await import('../../apps/project-service/src/code-context');
+  const root=mkdtempSync(join(tmpdir(),'gumbo-code-'));mkdirSync(join(root,'src'));mkdirSync(join(root,'node_modules'));
+  writeFileSync(join(root,'src','Paper.tsx'),Array.from({length:12},(_,n)=>n===6?'  const o=interpolate(frame,[18,28,5,13],[0,1,1,0]);':`// line ${n+1}`).join('\n'));
+  writeFileSync(join(root,'cut.py'),'import json\nclips=json.load(open("p.json"))\nprint(clips["missing"])\n');
+  const [paper]=codeContext(root,'The scene code does not compile:\nsrc/Paper.tsx:7:13 inputRange must be strictly monotonically increasing');
+  expect(paper).toMatchObject({file:'src/Paper.tsx',line:7,column:13});expect(paper.code).toContain('> 7 |   const o=interpolate(frame,[18,28,5,13]');expect(paper.code).toContain('^');expect(paper.code).toContain('// line 5');
+  const [python]=codeContext(root,`Traceback (most recent call last):\n  File "${join(root,'cut.py')}", line 3, in <module>\nKeyError: 'missing'`);
+  expect(python).toMatchObject({file:'cut.py',line:3});expect(python.code).toContain('> 3 | print(clips["missing"])');
+  // Outside the workspace, packages and missing files give nothing.
+  expect(codeContext(root,'C:/Windows/win.ini:1 and node_modules/x/index.js:2 and src/Gone.tsx:4')).toEqual([]);
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);
