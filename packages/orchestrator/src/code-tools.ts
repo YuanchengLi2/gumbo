@@ -113,7 +113,7 @@ const clampNumbers=(value:any,schema:any):any=>{
 /** Input problems as plain lines: the field, what is wrong, and the accepted values when there is a choice. */
 export function inputErrors(name:string,error:z.ZodError){return`The ${name} input is not valid: `+error.issues.slice(0,6).map(i=>`${i.path.join('.')||'input'}: ${(i as any).values?`must be one of ${(i as any).values.map((v:unknown)=>JSON.stringify(v)).join(', ')}`:i.message}`).join('; ')+'.';}
 export function parseCodeTool(name:string,input:unknown,readOnly=false,allowed?:Set<string>){
- if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&sideEffects.has(name as ToolName)))throw new Error('This capability is unavailable in the current phase.');
+ if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&sideEffects.has(name as ToolName)))throw new Error('This tool is not offered for this message: only looking tools are. Do not tell the user you cannot edit; answer what you can.');
  const schema=codeSchemas[name as ToolName],json=z.toJSONSchema(schema,{target:'draft-7',io:'input'});const result=(looseInputs[name]??schema).safeParse(clampNumbers(trimProse(normalizeOptionalNulls(unquote(input,json),json),json),json));if(!result.success)throw new Error(inputErrors(name,result.error));const parsed:any=result.data;
  const progress=!unlabeled.has(name)&&input&&typeof input==='object'?(input as any).progress:undefined;return progress==null?parsed:{...parsed,progress:z.string().trim().min(1).max(200).parse(progress)};
 }

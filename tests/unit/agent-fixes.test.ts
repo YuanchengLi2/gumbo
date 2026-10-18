@@ -14,6 +14,15 @@ describe('after a stop',()=>{
  });
 });
 
+describe('replies',()=>{
+ it('never tell the user about modes or that they cannot edit',async()=>{
+  const {modeNote}=await import('../../packages/orchestrator/src/code-agent');
+  const reply=modeNote('readonly',false);
+  expect(reply).not.toMatch(/Current mode|in this mode|unavailable/);expect(reply).toMatch(/never mention modes/);expect(reply).toMatch(/last edit is finished/);
+  expect(()=>parseCodeTool('write_file',{path:'a.txt',content:'x'},true)).toThrow(/not offered.*Do not tell the user you cannot edit/);
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

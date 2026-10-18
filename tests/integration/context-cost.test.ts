@@ -34,7 +34,7 @@ it('gives the model types and choices, not validation limits, which parsing stil
 it('offers replies the editing agent\'s exact tools, so both read one cached prefix, while replies still cannot change anything',()=>{
  const editing=allowedTools('solo'),reply=allowedTools('readonly');
  expect(reply.has('write_file')).toBe(false);expect(reply.has('publish_project')).toBe(false);expect(reply.has('read_file')).toBe(true);expect(editing.has('write_file')).toBe(true);
- expect(()=>parseCodeTool('run_command',{command:'dir'},true,reply)).toThrow('unavailable');
+ expect(()=>parseCodeTool('run_command',{command:'dir'},true,reply)).toThrow('not offered');
 });
 
 it('writes timed words as one short line each and merges transcription coverage into spans',()=>{

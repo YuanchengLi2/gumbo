@@ -44,7 +44,7 @@ it('answers a request for a script after a stop as a new turn, and continues the
   await director.message('wait can you make a script for it first');
   // The reply is offered the editing agent's tools so both read one cached prefix; the engine refuses its write calls.
   const answer=calls.at(-1)!,edit=calls.find(c=>c.purpose==='execution')!;expect(answer).toMatchObject({purpose:'answering',model:models.agent});expect(answer.tools).toEqual(edit.tools);
-  expect(()=>parseCodeTool('write_file',{path:'a.txt',content:'x'},true,allowedTools('readonly'))).toThrow('unavailable');
+  expect(()=>parseCodeTool('write_file',{path:'a.txt',content:'x'},true,allowedTools('readonly'))).toThrow('not offered');
   expect(db.getMeta('ai_status')).toBe('complete');expect(pending(db)).not.toBe(first);
   expect(db.state().messages.at(-1)).toMatchObject({role:'assistant',text:'Script: Steve opens a chest and finds Claude, who explains what it can do.'});
   expect(db.state().messages.filter(m=>m.turnId===first&&m.role==='user')).toHaveLength(1);
