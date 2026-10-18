@@ -79,6 +79,20 @@ describe('helping improve Gumbo',()=>{
  });
 });
 
+describe('a cold cache',()=>{
+ it('is met after a pause longer than the provider keeps it, or on another model, but not on the first call',async()=>{
+  const {coldCache,cacheLifeMs}=await import('../../packages/orchestrator/src/inference');
+  const now=Date.parse('2026-10-18T23:19:10Z'),stopped={at:Date.parse('2026-10-18T23:08:48Z'),model:'gpt-6.1-sol'};
+  expect(coldCache(stopped,'gpt-6.1-sol',now)).toBe(true);
+  expect(coldCache({...stopped,at:now-60_000},'gpt-6.1-sol',now)).toBe(false);
+  expect(coldCache({...stopped,at:now-60_000},'claude-sonnet-5-5',now)).toBe(true);
+  // DeepSeek keeps its cache for hours; Claude's one-hour cache when it was asked for.
+  expect(coldCache({at:now-20*60_000,model:'deepseek-flash'},'deepseek-flash',now)).toBe(false);
+  expect(cacheLifeMs('claude-sonnet-5-5','1h')).toBe(3_600_000);expect(cacheLifeMs('gemini-3.8-flash')).toBe(300_000);
+  expect(coldCache(undefined,'deepseek-flash',now)).toBe(false);
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

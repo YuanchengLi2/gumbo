@@ -24,6 +24,12 @@ export function deepCompaction(messages:any[],wanted:number){
  const lastAt=messages.findLastIndex((m:any)=>m.role==='assistant'),total=conversationBytes(messages),latest=lastAt<0?0:conversationBytes(messages.slice(lastAt));
  return Math.min(1,Math.max(.05,wanted,latest*2.2/Math.max(1,total)));
 }
+/** How long a provider keeps a conversation's cache warm: Claude five minutes (an hour when asked for), OpenAI and
+ * Google about five minutes, DeepSeek hours (its cache is kept on disk), counted here as one. */
+export function cacheLifeMs(model:string,cacheTtl?:string){return model.startsWith('deepseek')?3_600_000:model.startsWith('claude')&&cacheTtl==='1h'?3_600_000:300_000;}
+/** Whether this call meets a cold cache: the request's last call was on another model (each model's cache is its own),
+ * or longer ago than the cache lives (a stop, then continue minutes later). */
+export function coldCache(last:{at:number;model:string}|undefined,model:string,now:number,cacheTtl?:string){return!!last&&(last.model!==model||now-last.at>cacheLifeMs(model,cacheTtl));}
 /** Whether a prompt of count tokens over its target compacts now. A compaction rewrites the cached prompt, billed as new
  * input, so it waits compactGap calls after the last one and until compactGrowth tokens have come in since that one
  * left the prompt; only a prompt past 1.5 x the target or the provider's limit compacts sooner. On October 18 a request
@@ -109,10 +115,17 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
  // few calls. Only a prompt past 1.5 x the target, or the provider's limit, compacts sooner.
  const callsKey=`context-calls:${input.turnId??'standalone'}:${scopeName}`,compactedKey=`context-compacted-call:${input.turnId??'standalone'}:${scopeName}`,afterKey=`context-compacted-size:${input.turnId??'standalone'}:${scopeName}`;
  const call=saved?.response?Number(db.getMeta(callsKey)??0):Number(db.getMeta(callsKey)??0)+1;if(!saved?.response)db.setMeta(callsKey,String(call));
- if(!saved?.response&&needsCount())for(let pass=0;;pass++){
-  const count=await measure();if(count<=budget.target)break;
+ // A cold cache bills the whole conversation at the full input price whatever its size, so a large one is first cut to
+ // compactTo: on October 18 a continue ten minutes after a stop re-sent 49K tokens (10 credits), and switching to
+ // another model for the last step re-sent 85K (21 credits). The last call's time and model are kept per request.
+ const lastKey=`context-last-call:${input.turnId??'standalone'}:${input.purpose}:${input.phase??'main'}`;
+ const last=(()=>{try{return JSON.parse(db.getMeta(lastKey)||'null') as {at:number;model:string}|null;}catch{return null;}})()??undefined;
+ const cold=!saved?.response&&coldCache(last,input.model,Date.now(),input.cacheTtl),coldFloor=engineBudgets.compactTo*1.5;
+ if(!saved?.response)db.setMeta(lastKey,JSON.stringify({at:Date.now(),model:input.model}));
+ if(!saved?.response&&(needsCount()||cold&&(calibrated(budget.estimated)??budget.estimated)>coldFloor))for(let pass=0;;pass++){
+  const count=await measure();if(count<=budget.target&&!(cold&&!pass&&count>coldFloor))break;
   if(pass>=2){if(count>budget.limit)throw tooLarge();break;}
-  if(!pass&&!shouldCompact({count,target:budget.target,limit:budget.limit,call,lastCall:Number(db.getMeta(compactedKey)??-1e9),lastSize:Number(db.getMeta(afterKey)??0)}))break;
+  if(!pass&&!cold&&!shouldCompact({count,target:budget.target,limit:budget.limit,call,lastCall:Number(db.getMeta(compactedKey)??-1e9),lastSize:Number(db.getMeta(afterKey)??0)}))break;
   // The system prompt and tools stay; the conversation is cut so the whole prompt lands near compactTo.
   const fixed=estimateTokens({system:input.system,tools:input.tools})*count/Math.max(1,budget.estimated),to=Math.min(engineBudgets.compactTo,budget.target/2);
   // Never so deep that the latest exchange (the result the agent has just been given) would be summarized away.

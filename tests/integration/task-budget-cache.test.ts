@@ -27,7 +27,7 @@ it('sends Claude byte-identical prompts between compactions, so each call after 
   const messages:any[]=[{role:'user',content:'Cut the Vietnam recap to the music.'}];
   for(let step=0;step<40;step++){
    const response=await infer({db,config:{url:'http://local-fixture',token:'fixture'},resume:0,input:{model:'claude-opus-5-5',system:'Editor',messages,tools:[{name:'read_file',description:'Read a file',input_schema:{type:'object',properties:{}}}],turnId:'turn',purpose:'execution',profile,max_tokens:16384,taskBudget:{total:120000}}},{fetch:app});
-   messages.push({role:'assistant',content:response.content},{role:'user',content:[{type:'tool_result',tool_use_id:response.content.find((b:any)=>b.type==='tool_use').id,content:`// shot ${step}\n`+'export const frame=interpolate(f,[0,30],[0,1]);\n'.repeat(260)}]});
+   messages.push({role:'assistant',content:response.content},{role:'user',content:[{type:'tool_result',tool_use_id:response.content.find((b:any)=>b.type==='tool_use').id,content:`// shot ${step}\n`+'export const frame=interpolate(f,[0,30],[0,1]);\n'.repeat(420)}]});
   }
   expect(sent).toHaveLength(40);
   const digests=[...new Set(sent.map(compacted).filter(Boolean))];expect(digests.length).toBeGreaterThanOrEqual(2);

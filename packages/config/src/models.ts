@@ -64,7 +64,7 @@ export function workOf(score:RequestScore):Work{
 }
 /** Auto: the tier Haiku chose for the request, weighing how hard it is against what each tier costs (model), or else the
  * tier its kind of work needs at its difficulty (bestFor), run on Auto's model for that tier (autoModels). Auto runs
- * only Claude Haiku 5.5 and GPT-6.1 Sol: a frontier tier or model the router still names runs on the strong model.
+ * only Claude Haiku 5.5 and DeepSeek V4.1 Flash: a frontier tier or model the router still names runs on the strong model.
  * A model the user picks always wins over Auto (Opus and the other frontier models run only when picked). */
 export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>):string{
  const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3)),can=(m:ModelInfo)=>(m.provider==='anthropic'||!!providers?.[m.provider])&&(!score.vision||m.vision);
@@ -79,10 +79,13 @@ export const tiers:Tier[]=['light','strong','frontier'];
 export type AutoTier=Exclude<Tier,'frontier'>;
 export const autoTiers:AutoTier[]=['light','strong'];
 export const autoTier=(tier:Tier):AutoTier=>tier==='frontier'?'strong':tier;
-/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work and GPT-6.1 Sol for everything else, the
- * hardest work included (Sonnet's price, half its cache-read rate). Opus and every other model run only when the user
- * picks them. When Sol cannot run (no OpenAI key on the gateway), Claude Sonnet 5.5 stands in for it. */
-export const autoModels:Record<AutoTier,Choice[]>={light:['haiku'],strong:['gpt-sol','sonnet']};
+/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work and DeepSeek V4.1 Flash for everything else,
+ * the hardest work included. Chosen on October 18 for value: GPT-6.1 Sol edits cost 20 to 115 credits, and DeepSeek's
+ * input is about a seventh of Sol's price, its cached input a sixteenth, and its cache lasts hours (a stop and continue
+ * does not pay for the whole conversation again). A request may take longer. Every other model runs only when the user
+ * picks it, and the user's pick always wins. When DeepSeek cannot run (no key on the gateway), GPT-6.1 Sol, then Claude
+ * Sonnet 5.5, stands in. */
+export const autoModels:Record<AutoTier,Choice[]>={light:['haiku'],strong:['deepseek-flash','gpt-sol','sonnet']};
 export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
 /** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
  * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */
