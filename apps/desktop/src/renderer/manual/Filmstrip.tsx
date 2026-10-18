@@ -1,4 +1,4 @@
-import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
+import React,{useEffect,useState} from 'react';
 import {Input,UrlSource,ALL_FORMATS,CanvasSink} from 'mediabunny';
 import type {Asset} from '@dream/footage';
 import {previewUrl} from '../engine/player';
@@ -40,7 +40,7 @@ async function pump(asset:Asset,s:Source){
 const nearest=(s:Source,t:number)=>{let best:number|undefined;for(const k of s.frames.keys())if(best===undefined||Math.abs(k-t)<Math.abs(best-t))best=k;return best;};
 
 export function Filmstrip({asset,srcIn,speed,width,height,pps}:{asset:Asset;srcIn:number;speed:number;width:number;height:number;pps:number}){
- const canvas=useRef<HTMLCanvasElement>(null),[version,setVersion]=useState(0);
+ const [url,setUrl]=useState<string>(),[version,setVersion]=useState(0);
  const aspect=asset.width&&asset.height?asset.width/asset.height:16/9,tile=Math.max(24,height*aspect),shown=Math.min(width,16000),count=Math.max(1,Math.ceil(shown/tile));
  // Tiles cover about tile/pps timeline seconds each; frames come from the grid step nearest that, so zooming in decodes more.
  const span=tile/pps*Math.max(speed,0),step=steps.find(s=>s>=span*.9)??steps.at(-1)!,last=Math.max(0,asset.durationSec-.05);
@@ -48,13 +48,17 @@ export function Filmstrip({asset,srcIn,speed,width,height,pps}:{asset:Asset;srcI
  useEffect(()=>{const s=source(asset),listen=()=>setVersion(v=>v+1);s.listeners.add(listen);
   let missing=false;for(const t of times)if(!s.frames.has(t)){s.wanted.add(t);missing=true;}if(missing)void pump(asset,s);
   return()=>{s.listeners.delete(listen);};},[asset.id,asset.proxyPath,times.join(',')]);
- useLayoutEffect(()=>{
-  const node=canvas.current;if(!node)return;const dpr=Math.min(2,devicePixelRatio||1),w=Math.round(shown*dpr),h=Math.round(height*dpr);
-  if(node.width!==w||node.height!==h){node.width=w;node.height=h;}
-  const ctx=node.getContext('2d');if(!ctx)return;ctx.clearRect(0,0,w,h);const s=source(asset);if(!s.frames.size)return;
+ // The strip is drawn off screen and shown as an image. A canvas on the page is promoted to its own compositing layer once
+ // drawn, and a hundred of them made every frame of the page re-layerize (about 20 ms a frame while anything animated).
+ useEffect(()=>{
+  const s=source(asset);if(!s.frames.size)return;let live=true;
+  const dpr=Math.min(2,devicePixelRatio||1),w=Math.max(1,Math.round(shown*dpr)),h=Math.max(1,Math.round(height*dpr)),canvas=new OffscreenCanvas(w,h),ctx=canvas.getContext('2d');if(!ctx)return;
   times.forEach((t,n)=>{const frame=s.frames.get(t)??s.frames.get(nearest(s,t)!);if(!frame)return;
    const x=n*tile*dpr,tw=tile*dpr,scale=Math.max(tw/frame.width,h/frame.height),fw=frame.width*scale,fh=frame.height*scale;
    ctx.save();ctx.beginPath();ctx.rect(x,0,tw,h);ctx.clip();ctx.drawImage(frame,x+(tw-fw)/2,(h-fh)/2,fw,fh);ctx.restore();});
+  void canvas.convertToBlob({type:'image/jpeg',quality:.85}).then(blob=>{if(live)setUrl(URL.createObjectURL(blob));});
+  return()=>{live=false;};
  },[version,times.join(','),shown,height,tile]);
- return <canvas ref={canvas} className="manual-clip-filmstrip" style={{width:shown,height}} aria-hidden="true"/>;
+ useEffect(()=>()=>{if(url)URL.revokeObjectURL(url);},[url]);
+ return url?<img src={url} className="manual-clip-filmstrip" style={{width:shown,height}} alt="" aria-hidden="true" draggable={false}/>:null;
 }

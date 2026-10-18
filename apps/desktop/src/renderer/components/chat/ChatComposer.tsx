@@ -1,4 +1,5 @@
 import React,{useState,useRef,useLayoutEffect,useEffect} from 'react';
+import {useDraft,setDraft} from '../../store/draft';
 import {MediaTile} from '../media/MediaTile';
 import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown,Wand2,Cpu} from 'lucide-react';
 import type {Permission,ModelChoice} from '../../store/editor';
@@ -6,7 +7,7 @@ import {shortcutHints} from '../../shortcuts';
 import {modelCatalog,providerLabels} from '@dream/config';
 import {useProviders,available,shortLabel} from '../../models';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
-type Props={value:string;onChange:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
+type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
 
 export const permissions:{id:Permission;label:string;short:string;detail:string;icon:React.ReactNode}[]=[
  {id:'auto',label:'Edit automatically',short:'Edit',detail:'Gumbo changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
@@ -56,7 +57,8 @@ export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:Mo
 }
 
 
-export function ChatComposer(p:Props){const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null);
+/** The value and onChange are the caller's when given; otherwise the box keeps the workspace draft (store/draft.ts). */
+export function ChatComposer(props:Props){const draft=useDraft(s=>props.value===undefined?s.text:''),p={...props,value:props.value??draft,onChange:props.onChange??setDraft};const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null);
  // Send becomes Stop in the same place: a click in the very first moment after sending is the same click repeated, not a
  // decision to stop. Any later click stops at once (it waited 1.5 s, so a quick Stop did nothing).
  const stopShown=useRef(0);useEffect(()=>{if(p.active)stopShown.current=Date.now();},[p.active]);const stop=()=>{if(Date.now()-stopShown.current>=350)p.onStop?.();};
