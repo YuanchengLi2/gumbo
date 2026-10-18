@@ -36,27 +36,41 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
  </div>;
 }
 
+/** The model picker: Auto first, as the one to leave on, then each provider's models as rows with what they're for (Most
+ * capable, Balanced, Fast) and their cost as a five-step meter. A provider without its key on the gateway is listed but
+ * greyed out. */
+const tierTag:Record<string,[string,typeof Zap]>={frontier:['Most capable',Crown],strong:['Balanced',Cpu],light:['Fast',Zap]};
+const providerDot:Record<string,string>={anthropic:'#d97757',openai:'#10a37f',google:'#4285f4',deepseek:'#536af5'};
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
- // Auto first, then each provider's models; a provider without a key on the gateway is listed but cannot be picked yet.
  const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- const item=(choice:ModelChoice,title:string,ready=true,detail='',cost='')=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={choice===value?'selected':''} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span><strong>{title}</strong>{detail&&<small>{detail}{cost&&<em>{cost}</em>}</small>}</span>{choice===value&&<Check size={14} className="permission-check"/>}</button>;
+ const pick=(choice:ModelChoice)=>{onChange(choice);menu.setOpen(false);};
  return <div className="composer-popover-anchor" ref={menu.ref}>
-  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
-  {menu.open&&<div className="composer-popover permission-menu model-menu" role="menu" aria-label="Model">
-   <header>Model<kbd>{shortcutHints.model}</kbd></header>
-   {item('auto','Auto',true,'Picks the best model for each request')}
-   {groups.map(g=><React.Fragment key={g.provider}><div className="model-group">{providerLabels[g.provider]}{!available(g.models[0].choice,providers)&&<small>Add its key on the gateway</small>}</div>
-    {g.models.map(m=>item(m.choice,m.label.replace(/^Claude /,''),available(m.choice,providers),m.detail,m.cost))}</React.Fragment>)}
+  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}>{value==='auto'&&<Sparkles size={13}/>}<span>{label}</span><ChevronDown size={12}/></button>
+  {menu.open&&<div className="composer-popover model-picker" role="menu" aria-label="Model">
+   <header><span>Model</span><kbd>{shortcutHints.model}</kbd></header>
+   <button type="button" role="menuitemradio" aria-checked={value==='auto'} className={'model-auto'+(value==='auto'?' selected':'')} onClick={()=>pick('auto')}>
+    <span className="model-auto-icon"><Wand2 size={16}/></span><span className="model-auto-text"><b>Auto<em>Recommended</em></b><small>Picks the right model for each request</small></span>{value==='auto'&&<Check size={15}/>}
+   </button>
+   {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <section key={g.provider} className={'model-provider'+(ready?'':' off')}>
+    <h4><i style={{background:providerDot[g.provider]}}/>{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</h4>
+    {g.models.map(m=>{const [tag,Icon]=tierTag[m.tier]??tierTag.strong,dots=Math.min(5,m.cost.length);
+     return <button key={m.choice} type="button" role="menuitemradio" aria-checked={m.choice===value} disabled={!available(m.choice,providers)} className={'model-row'+(m.choice===value?' selected':'')} title={m.detail} onClick={()=>pick(m.choice)}>
+      <span className="model-name">{m.label.replace(/^Claude /,'')}</span>
+      <span className={'model-tag '+m.tier}><Icon size={11}/>{tag}</span>
+      <span className="model-cost" aria-label={`Cost ${dots} of 5`}>{[1,2,3,4,5].map(n=><i key={n} className={n<=dots?'on':''}/>)}</span>
+      <span className="model-check">{m.choice===value&&<Check size={14}/>}</span>
+     </button>;})}
+   </section>;})}
   </div>}
  </div>;
 }
 
 
 export function ChatComposer(p:Props){const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null);
- // Send becomes Stop in the same place: a click in the first moment after sending is the same click repeated (three requests
- // in the vlog were stopped 2–5 s after sending and sent again), not a decision to stop.
- const stopShown=useRef(0);useEffect(()=>{if(p.active)stopShown.current=Date.now();},[p.active]);const stop=()=>{if(Date.now()-stopShown.current>=1500)p.onStop?.();};
+ // Send becomes Stop in the same place: a click in the very first moment after sending is the same click repeated, not a
+ // decision to stop. Any later click stops at once (it waited 1.5 s, so a quick Stop did nothing).
+ const stopShown=useRef(0);useEffect(()=>{if(p.active)stopShown.current=Date.now();},[p.active]);const stop=()=>{if(Date.now()-stopShown.current>=350)p.onStop?.();};
  const resize=()=>{const node=textarea.current;if(!node)return;node.style.height='auto';node.style.height=Math.min(p.home?280:200,Math.max(p.home?76:44,node.scrollHeight))+'px';};
  useLayoutEffect(resize,[p.value,p.home,p.attachments.length]);
  useLayoutEffect(()=>{const node=textarea.current;if(!node)return;let width=node.offsetWidth;const observer=new ResizeObserver(()=>{if(node.offsetWidth!==width){width=node.offsetWidth;resize();}});observer.observe(node);return()=>observer.disconnect();},[]);

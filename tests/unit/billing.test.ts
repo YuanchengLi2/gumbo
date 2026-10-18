@@ -36,7 +36,7 @@ describe('billing',()=>{
   expect(await verifyStripeSignature(payload,null,'whsec_x')).toBe(false);
  });
  it('opens Checkout for a plan, for credits, and the portal for an account already paying',async()=>{
-  const calls:{url:string;body:string}[]=[];const fetcher=(async(url:string,init:any)=>{calls.push({url,body:String(init.body)});return Response.json({url:'https://checkout.stripe.com/x'});}) as typeof fetch;
+  const calls:{url:string;body:string}[]=[];const fetcher=(async(url:string,init:any)=>{calls.push({url,body:String(init.body)});return Response.json(url.includes('/subscriptions/')?{items:{data:[{id:'si_1'}]}}:{url:'https://checkout.stripe.com/x'});}) as typeof fetch;
   const {ports,account}=memory();
   expect(await startCheckout('user-1',{plan:'max'},ports,config,fetcher)).toEqual({url:'https://checkout.stripe.com/x'});
   const plan=new URLSearchParams(calls[0].body);expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions');
@@ -46,7 +46,12 @@ describe('billing',()=>{
   await expect(startCheckout('user-1',{packs:0},ports,config,fetcher)).rejects.toThrow(/between 1 and/);
   await expect(startCheckout('user-1',{plan:'gold'},ports,config,fetcher)).rejects.toThrow(/Choose/);
   Object.assign(account,{plan:'pro',stripe_customer_id:'cus_1',stripe_subscription_id:'sub_1'});
-  await startCheckout('user-1',{plan:'max20'},ports,config,fetcher);expect(calls[2].url).toBe('https://api.stripe.com/v1/billing_portal/sessions');
+  // A paying account changes plan on Stripe's confirm step for that plan, prorated.
+  await startCheckout('user-1',{plan:'max20'},ports,config,fetcher);expect(calls[2].url).toBe('https://api.stripe.com/v1/subscriptions/sub_1');expect(calls[3].url).toBe('https://api.stripe.com/v1/billing_portal/sessions');
+  const change=new URLSearchParams(calls[3].body);expect([change.get('flow_data[type]'),change.get('flow_data[subscription_update_confirm][items][0][id]'),change.get('flow_data[subscription_update_confirm][items][0][price]')]).toEqual(['subscription_update_confirm','si_1','price_max20']);
+  await expect(startCheckout('user-1',{plan:'pro'},ports,config,fetcher)).rejects.toThrow(/already on that plan/);
+  const {openPortal}=await import('../../supabase/functions/dream-gateway/billing');await openPortal('user-1',ports,config,fetcher,{cancel:true});
+  expect(new URLSearchParams(calls.at(-1)!.body).get('flow_data[type]')).toBe('subscription_cancel');
  });
  it('grants a paid invoice\'s plan credits once, lasting a few days past the period',async()=>{
   const {ports,account,grants}=memory({stripe_customer_id:'cus_1'});const start=Math.floor(Date.now()/1000),end=start+30*86400;
@@ -91,4 +96,12 @@ it('opens only Stripe\'s own pages from the app',async()=>{
  const {stripePage}=await import('../../apps/desktop/src/main/pay-page');
  expect(['https://checkout.stripe.com/c/pay/cs_test_1','https://billing.stripe.com/p/session/x'].map(stripePage)).toEqual([true,true]);
  expect(['http://checkout.stripe.com/x','https://checkout.stripe.com.evil.test/x','https://evil.test/?checkout.stripe.com','javascript:alert(1)','not a url'].map(stripePage)).toEqual([false,false,false,false,false]);
+});
+
+it('counts tokens by day, the busiest day, the longest task and the streaks',async()=>{
+ const {tokenActivity}=await import('../../supabase/functions/dream-gateway/activity');
+ const row=(turn:string,at:string,tokens:number)=>({turn_id:turn,input_tokens:tokens,output_tokens:0,cache_read_tokens:0,cache_write_tokens:0,created_at:at});
+ const a=tokenActivity([row('t1','2026-10-14T10:00:00Z',100),row('t1','2026-10-14T10:30:00Z',50),row('t2','2026-10-15T09:00:00Z',300),row('t3','2026-10-16T09:00:00Z',20),row('t3','2026-10-16T09:00:05Z',5)],new Date('2026-10-17T12:00:00Z'));
+ expect([a.lifetimeTokens,a.peakTokens,a.longestTaskMs,a.longestStreak,a.currentStreak,a.days.length]).toEqual([475,300,30*60_000,3,3,365]);
+ expect(a.days.at(-2)).toEqual({date:'2026-10-16',tokens:25});
 });

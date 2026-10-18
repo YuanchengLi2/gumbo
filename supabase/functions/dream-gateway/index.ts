@@ -7,6 +7,7 @@ import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
+import {tokenActivity} from './activity.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
@@ -41,6 +42,10 @@ Deno.serve(async(req)=>{
  if(action==='usage'){const since=new Date(Date.now()-30*86_400_000);
   const {data:rows}=await db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000);
   return json(usageSummary(rows??[],new Date()));}
+ // Settings > Profile: tokens over the last year, by day, with the longest task and the streaks (activity.ts).
+ if(action==='activity'){const since=new Date(Date.now()-371*86_400_000);
+  const {data:rows,error}=await db.from('dream_usage').select('turn_id,input_tokens,output_tokens,cache_read_tokens,cache_write_tokens,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).order('created_at').limit(100000);
+  if(error)return json({error:error.message},500);return json(tokenActivity(rows??[],new Date()));}
  // The plan, the credits left and what is on offer (billing.ts).
  if(action==='billing'){try{return json(await billingSummary(user.id,supabaseBillingPorts(db),stripeConfig(name=>Deno.env.get(name))));}catch(error){return json({error:(error as Error).message},500);}}
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
@@ -56,7 +61,7 @@ Deno.serve(async(req)=>{
   if(action==='media-search'){const result=await handleMediaSearch(body,{keys:Object.fromEntries(Object.entries(mediaKeys).map(([id,secret])=>[id,Deno.env.get(secret)]))});return json(result.body,result.status);}
   // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).
   if(action==='billing-checkout'||action==='billing-portal'){const config=stripeConfig(name=>Deno.env.get(name));if(!config)return json({error:'Paying is not set up on the gateway yet.'},503);
-   try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
+   try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config,fetch,body.flow==='cancel'?{cancel:true}:undefined):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
   if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000))});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
   if(action==='share-create'){

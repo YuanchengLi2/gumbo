@@ -24,7 +24,7 @@ export const CommandSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('library_list')}),z.object({type:z.literal('library_get'),revisionId:z.string()}),
  z.object({type:z.literal('generation_cancel'),requestId:z.string()}),z.object({type:z.literal('generation_resume'),requestId:z.string()}),
  z.object({type:z.literal('relink'),assetId:z.string(),path:z.string()}),z.object({type:z.literal('collect'),folder:z.string()}),
- z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage','browser','billing','checkout','portal']),email:z.string().max(320).optional(),password:z.string().optional(),plan:z.enum(['pro','max','max20']).optional(),packs:z.number().int().min(1).max(10).optional()}),
+ z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage','browser','billing','checkout','portal','activity']),email:z.string().max(320).optional(),password:z.string().optional(),plan:z.enum(['pro','max','max20']).optional(),packs:z.number().int().min(1).max(10).optional(),flow:z.enum(['cancel']).optional()}),
  z.object({type:z.literal('config'),supabaseUrl:z.string().url(),anonKey:z.string()}),
  z.object({type:z.literal('models'),action:z.enum(['install','cancel']),id:z.string()})
 ]);
@@ -41,6 +41,8 @@ export type AppSettings=z.infer<typeof AppSettingsSchema>;
 /** Credits requests took (one credit is one cent of their AI cost): today, the last 30 days, each of those days, by model. */
 export type UsageSummary={todayCredits:number;monthCredits:number;requests:number;days:{date:string;credits:number}[];byModel:{model:string;calls:number;credits:number}[]};
 export type PlanId='free'|'pro'|'max'|'max20';
+/** Tokens over the last year, for Settings > Profile: by day (UTC), the busiest day, the longest task, the streaks. */
+export type TokenActivity={lifetimeTokens:number;peakTokens:number;longestTaskMs:number;longestStreak:number;currentStreak:number;days:{date:string;tokens:number}[]};
 /** The plan, the credits left (the plan's for this period, top-ups, less an overdraft) and what can be bought. */
 export type BillingSummary={plan:PlanId;planName:string;status:string|null;cancelAtPeriodEnd:boolean;renewsAt:string|null;
  credits:{left:number;plan:number;planTotal:number;topups:number;overdraft:number};plans:{id:PlanId;name:string;priceUsd:number;credits:number}[];

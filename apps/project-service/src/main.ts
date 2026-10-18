@@ -57,6 +57,8 @@ port.on('message',({data}:{data:any})=>{
  if(data.config.settings){Object.assign(process.env,data.config.settings);return;}ingest?.modelsChanged();return;}
  if(data.close){closing=true;director?.cancel('shutdown');void ingest?.cancel();commands=commands.then(async()=>{await close();process.exit(0);});return;}
  if(closing){port.postMessage({id:data.id,error:'Gumbo is closing this project.'});return;}
+ // Stop acts at once: it does not wait behind commands already queued (a long one held it for seconds).
+ if(data.command?.type==='cancel'&&db){director?.cancel();if(bootstrap?.pending){void ingest?.cancel();void bootstrap.cancel();}port.postMessage({id:data.id,result:undefined});return;}
  commands=commands.then(async()=>{try{const result=await command(data.command);if(result&&typeof result==='object'&&'timeline' in result){if(data.command.type!=='state')publish('state',result);Object.assign(result,{stateSequence});}port.postMessage({id:data.id,result});}catch(error){port.postMessage({id:data.id,error:(error as Error).message});}});
 });
 process.on('exit',()=>{connection.close();files.close();codeExecution.close();try{db?.close();if(lock)unlinkSync(lock);}catch{}});

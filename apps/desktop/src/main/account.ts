@@ -28,7 +28,9 @@ export class Account {
  /** The plan and credits (Settings > Usage and billing, the profile menu). */
  async billing(){if(!this.signedIn())return null;const response=await fetch(`${this.gateway()}/billing`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Billing is unavailable.');return body;}
  /** A Stripe page to pay on (Checkout for a plan or credits, or the portal to manage the plan): its address. */
- async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
+ /** Tokens over the last year (Settings > Profile). */
+ async activity(){if(!this.signedIn())return null;const response=await fetch(`${this.gateway()}/activity`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Activity is unavailable.');return body;}
+ async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number;flow?:string}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
  signout(){this.generation++;this.clear();return {signedIn:false};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }

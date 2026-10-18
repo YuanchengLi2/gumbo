@@ -15,7 +15,7 @@ async function callback(account:Account,publish:Publish,focus:()=>void){
   if(url.pathname!=='/callback'||url.searchParams.get('state')!==state){res.writeHead(400).end('Invalid Gumbo sign-in callback.');return;}
   const denied=url.searchParams.get('error_description')??url.searchParams.get('error');if(denied){res.writeHead(400,{'Content-Type':'text/plain'}).end(denied);publish('account.error',{message:denied});server.close();return;}
   const code=url.searchParams.get('code');if(!code){res.writeHead(400).end('Missing authorization code.');return;}
-  try{await account.exchange(code,verifier);const info=await account.info();res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(signedInPage);publish('account.signed_in',info);focus();}
+  try{await account.exchange(code,verifier);const info=await account.info();res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'}).end(signedInPage(String(info?.email??'')));publish('account.signed_in',info);focus();}
   catch(e){res.writeHead(400).end((e as Error).message);publish('account.error',{message:(e as Error).message});}
   finally{server.close();}});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));pending=server;

@@ -1,7 +1,7 @@
 import {acceptRunActivity,acceptRunPhase,acceptUsage} from '../store/editor';
 import {useCallback,useEffect,useState} from 'react';
 import type {Command,ProjectSummary,InitialRequest,ExportProgress,RuntimeStatus} from '@dream/contracts';
-import {useEditor,mergeProjectDelta} from '../store/editor';
+import {useEditor,mergeProjectDelta,stopConfirmed} from '../store/editor';
 import {grabFrames} from '../engine/frames';
 import {runExport,stopExports} from '../engine/export-job';
 import {openUpgrade} from '../components/billing/Upgrade';
@@ -39,6 +39,7 @@ export function useProjectSession(){
   if(event.type==='ai.phase')acceptRunPhase((event.payload as any).turnId,(event.payload as any).phase);
   if(event.type==='ai.usage')acceptUsage(event.payload as any);
   if(event.type==='ai.commentary')useEditor.getState().setCommentary(event.payload as any);
+  if(event.type==='ai.status'&&(event.payload as {status?:string}).status!=='running')stopConfirmed();
   if(event.type==='ai.status'){const p=useEditor.getState().project,payload=event.payload as {status:string;startedAt?:string};if(p)s.setProject({...p,aiStatus:payload.status,...(payload.startedAt?{experience:{...(p.experience??{firstDraftVersionId:null,steps:[]}),runStartedAt:payload.startedAt}}:{})});}
   if(event.type==='ai.step'){const p=useEditor.getState().project;if(p){const step=event.payload as any,steps=[...(p.experience?.steps??[])],index=steps.findIndex(i=>(i.id??i.label)===(step.id??step.label));if(index<0)steps.push(step);else steps[index]=step;const activity={steps:[],status:p.aiStatus,changes:[],...p.experience?.activity},events=[...(activity.events??[])],id=step.id??step.label,found=events.find(i=>i.id===id&&i.kind==='action');if(found){found.text=step.label;found.status=step.status;}else events.push({id,sequence:events.length,kind:'action',text:step.label,status:step.status});s.setProject({...p,experience:{firstDraftVersionId:p.experience?.firstDraftVersionId??null,...p.experience,steps,activity:{...activity,events}}});}}
   if(['ai.error','media.error','account.error'].includes(event.type))s.setError((event.payload as any).message);

@@ -4,7 +4,7 @@ import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex} from '@dream/footage';
 import {manualItems} from '../../manual/model';
 import type {PublicActivity} from '@dream/contracts';
-import {editingActivity} from '../../editing-language';
+import {AgentStage} from './AgentStage';
 
 /** While Gumbo edits, the editor shows it the way Codex or Antigravity show an agent using your computer: a blue glow
  * around the editor, a bar saying so with Stop, and Gumbo's cursor gliding to each block the edit adds, moves or trims as
@@ -41,9 +41,8 @@ export function AgentCursor({active,label,steps=[],stage,timeline,footage,onStop
   <div className="agent-glow" aria-hidden="true"/>
   {/* The editor is locked while Gumbo edits: clicks and drags land on this shield, not the player or timeline. */}
   <div className="agent-lock" aria-hidden="true" onPointerDown={e=>e.preventDefault()}/>
-  {/* What Gumbo is doing, step by step, so the editor shows its process even while nothing on the timeline changes. */}
-  <ol className="agent-activity" aria-label="What Gumbo is doing">{steps.map(e=>{const live=['running','drafting'].includes(e.status),detail=live&&e.detail?String(e.detail).split('\n')[0].slice(0,110):'';return <li key={e.id} className={live?'live':e.status}><i/><span>{editingActivity(e)}</span>{detail&&<code>{detail}</code>}</li>;})}
-   {!steps.some(e=>['running','drafting'].includes(e.status))&&<li className="live"><i/><span>{label}</span></li>}</ol>
+  {/* What Gumbo is doing right now, pictured over the preview: footage it checks, code it writes, a search, or thinking. */}
+  <AgentStage step={[...steps].reverse().find(e=>['running','drafting'].includes(e.status))} root={stage} label={label}/>
   <div className="agent-bar" role="status"><span className="agent-bar-dot"/><span>{label}</span><button type="button" onClick={onStop}><Square size={9} fill="currentColor"/>Stop</button></div>
   {spot&&<div className="agent-cursor" aria-hidden="true" style={{transform:`translate(${spot.x}px,${spot.y}px)`}}>
    <svg width="20" height="22" viewBox="0 0 20 22"><path d="M2 1.5 L2 18 L6.6 13.8 L9.6 20.5 L12.6 19.2 L9.7 12.6 L16 12.6 Z" fill="#2f6bff" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round"/></svg>

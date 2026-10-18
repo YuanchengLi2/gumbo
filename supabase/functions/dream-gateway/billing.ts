@@ -108,7 +108,8 @@ export async function startCheckout(user:string,request:{plan?:unknown;packs?:un
  if(request.plan!==undefined){
   const plan=request.plan as PaidPlan;if(!paidPlans.includes(plan))throw new Error('Choose Pro, Max or Max 20x.');
   if(!config.prices[plan])throw new Error('Plans are not set up on the gateway yet.');
-  if(account.plan!=='free'&&account.stripe_subscription_id&&account.stripe_customer_id)return openPortal(user,ports,config,fetcher);
+  if(account.plan===plan)throw new Error('You are already on that plan.');
+  if(account.plan!=='free'&&account.stripe_subscription_id&&account.stripe_customer_id)return openPortal(user,ports,config,fetcher,{change:plan});
   const session=await stripeCall(config,'checkout/sessions',{mode:'subscription',...who,client_reference_id:user,line_items:[{price:config.prices[plan],quantity:1}],
    metadata:{user_id:user,kind:'plan',plan},subscription_data:{metadata:{user_id:user}},allow_promotion_codes:true,success_url:back('subscribed'),cancel_url:back('cancelled')},fetcher);
   return{url:session.url};
@@ -121,11 +122,20 @@ export async function startCheckout(user:string,request:{plan?:unknown;packs?:un
  return{url:session.url};
 }
 
-/** The customer portal: change or cancel the plan, invoices, the card. */
-export async function openPortal(user:string,ports:BillingPorts,config:StripeConfig,fetcher:typeof fetch=fetch):Promise<{url:string}>{
+/** The customer portal: invoices, the card, and the plan. With a flow it opens straight on one step: confirming a change
+ * to another paid plan (Stripe prorates it), or cancelling at the end of the period (which is how Free is chosen). */
+export async function openPortal(user:string,ports:BillingPorts,config:StripeConfig,fetcher:typeof fetch=fetch,flow?:{change:PaidPlan}|{cancel:true}):Promise<{url:string}>{
  const account=await ports.account(user);
  if(!account?.stripe_customer_id)throw new Error('There is nothing to manage yet: choose a plan or buy credits first.');
- const session=await stripeCall(config,'billing_portal/sessions',{customer:account.stripe_customer_id,return_url:`${config.returnUrl}?status=portal`},fetcher);
+ const back=`${config.returnUrl}?status=portal`,subscription=account.stripe_subscription_id;
+ let flow_data:Record<string,unknown>|undefined;
+ if(flow&&!subscription)throw new Error('You have no plan to change: choose one first.');
+ if(flow&&'cancel' in flow)flow_data={type:'subscription_cancel',subscription_cancel:{subscription},after_completion:{type:'redirect',redirect:{return_url:back}}};
+ if(flow&&'change' in flow){
+  const sub=await stripeCall(config,'subscriptions/'+subscription,undefined,fetcher),item=sub?.items?.data?.[0]?.id;if(!item)throw new Error('Your plan could not be found on Stripe.');
+  flow_data={type:'subscription_update_confirm',subscription_update_confirm:{subscription,items:[{id:item,price:config.prices[flow.change],quantity:1}]},after_completion:{type:'redirect',redirect:{return_url:back}}};
+ }
+ const session=await stripeCall(config,'billing_portal/sessions',{customer:account.stripe_customer_id,return_url:back,...(flow_data?{flow_data}:{})},fetcher);
  return{url:session.url};
 }
 
