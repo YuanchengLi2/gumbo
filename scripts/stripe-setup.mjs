@@ -4,7 +4,7 @@
  *   STRIPE_SECRET_KEY=sk_test_... node scripts/stripe-setup.mjs
  *
  * It makes (or finds again, so it can be run more than once):
- * - the plans, monthly: Pro $30, Max $100, Max 20x $200, and the credits pack, $10 for 500 credits. Prices are found by
+ * - the plans, monthly: Pro $25, Max $100, Max 20x $200, and the credits pack, $10 for 500 credits. Prices are found by
  *   their lookup key (gumbo_pro_monthly, gumbo_max_monthly, gumbo_max20_monthly, gumbo_credits_500);
  * - the customer portal: switch between the plans (prorated and invoiced at once, which grants the new plan's share of
  *   credits), cancel at the end of the period, invoices and the card;
@@ -23,18 +23,22 @@ async function stripe(path,params,method=params?'POST':'GET'){
 }
 
 const items=[
- {id:'pro',name:'Gumbo Pro',lookup:'gumbo_pro_monthly',cents:3000,recurring:true,description:'900 credits a month for Gumbo AI'},
- {id:'max',name:'Gumbo Max',lookup:'gumbo_max_monthly',cents:10000,recurring:true,description:'4,500 credits a month for Gumbo AI (5x Pro)'},
- {id:'max20',name:'Gumbo Max 20x',lookup:'gumbo_max20_monthly',cents:20000,recurring:true,description:'18,000 credits a month for Gumbo AI (20x Pro)'},
+ {id:'pro',name:'Gumbo Pro',lookup:'gumbo_pro_monthly',cents:2500,recurring:true,description:'1,000 credits a month for Gumbo AI'},
+ {id:'max',name:'Gumbo Max',lookup:'gumbo_max_monthly',cents:10000,recurring:true,description:'4,500 credits a month for Gumbo AI'},
+ {id:'max20',name:'Gumbo Max 20x',lookup:'gumbo_max20_monthly',cents:20000,recurring:true,description:'18,000 credits a month for Gumbo AI'},
  {id:'topup',name:'Gumbo credits',lookup:'gumbo_credits_500',cents:1000,recurring:false,description:'500 credits for Gumbo AI, which do not expire'}
 ];
-const prices={},products={};
+const prices={},products={},oldPrices=[];
 for(const item of items){
  const found=(await stripe('prices?'+new URLSearchParams({'lookup_keys[]':item.lookup,active:'true'}))).data[0];
- if(found){prices[item.id]=found.id;products[item.id]=found.product;console.log(`${item.name}: ${found.id} (already there)`);continue;}
- const product=await stripe('products',{name:item.name,description:item.description,metadata:{gumbo:item.id}});
- const price=await stripe('prices',{product:product.id,currency:'usd',unit_amount:item.cents,lookup_key:item.lookup,...(item.recurring?{recurring:{interval:'month'}}:{}),metadata:{gumbo:item.id}});
- prices[item.id]=price.id;products[item.id]=product.id;console.log(`${item.name}: ${price.id}`);
+ if(found&&found.unit_amount===item.cents){prices[item.id]=found.id;products[item.id]=found.product;console.log(`${item.name}: ${found.id} (already there)`);continue;}
+ // A price's amount can't change on Stripe: a new price takes the lookup key and the old one is archived. Subscriptions on
+ // the old price carry on; its id goes in the gateway's STRIPE_PRICES_OLD so they stay this plan.
+ const product=found?{id:found.product}:await stripe('products',{name:item.name,description:item.description,metadata:{gumbo:item.id}});
+ if(found){await stripe('products/'+found.product,{description:item.description});oldPrices.push(`${item.id}=${found.id}`);}
+ const price=await stripe('prices',{product:product.id,currency:'usd',unit_amount:item.cents,lookup_key:item.lookup,...(found?{transfer_lookup_key:true}:{}),...(item.recurring?{recurring:{interval:'month'}}:{}),metadata:{gumbo:item.id}});
+ if(found)await stripe('prices/'+found.id,{active:false});
+ prices[item.id]=price.id;products[item.id]=product.id;console.log(`${item.name}: ${price.id}${found?` (was ${found.id}, now archived)`:''}`);
 }
 
 const portal={business_profile:{headline:'Gumbo: manage your plan'},default_return_url:'https://usegumbo.app/billing/?status=portal',
@@ -58,9 +62,10 @@ if(process.argv.includes('--write')&&out){
  const {writeFileSync,readFileSync,existsSync}=await import('node:fs');
  // A webhook made earlier keeps the signing secret written then (Stripe shows it only once).
  const kept=existsSync(out)?readFileSync(out,'utf8').match(/^STRIPE_WEBHOOK_SECRET=(.+)$/m)?.[1]:undefined,hookSecret=secret??kept;
- writeFileSync(out,[`STRIPE_SECRET_KEY=${key}`,`STRIPE_PRICE_PRO=${prices.pro}`,`STRIPE_PRICE_MAX=${prices.max}`,`STRIPE_PRICE_MAX20=${prices.max20}`,`STRIPE_PRICE_TOPUP=${prices.topup}`,...(hookSecret?[`STRIPE_WEBHOOK_SECRET=${hookSecret}`]:[])].join('\n')+'\n');
+ const old=[...new Set([...(existsSync(out)?readFileSync(out,'utf8').match(/^STRIPE_PRICES_OLD=(.+)$/m)?.[1].split(','):[])??[],...oldPrices])].join(',');
+ writeFileSync(out,[`STRIPE_SECRET_KEY=${key}`,`STRIPE_PRICE_PRO=${prices.pro}`,`STRIPE_PRICE_MAX=${prices.max}`,`STRIPE_PRICE_MAX20=${prices.max20}`,`STRIPE_PRICE_TOPUP=${prices.topup}`,...(old?[`STRIPE_PRICES_OLD=${old}`]:[]),...(hookSecret?[`STRIPE_WEBHOOK_SECRET=${hookSecret}`]:[])].join('\n')+'\n');
  console.log(`\nGateway secrets written to ${out} (${live?'LIVE':'test mode'})${hookSecret?'':'; the webhook signing secret is missing: roll it in Stripe and add STRIPE_WEBHOOK_SECRET'}.`);
 }else{
  console.log(`\nSet these on the gateway (${live?'LIVE':'test mode'}):\n`);
- console.log(`supabase secrets set STRIPE_SECRET_KEY=<the key you used> STRIPE_PRICE_PRO=${prices.pro} STRIPE_PRICE_MAX=${prices.max} STRIPE_PRICE_MAX20=${prices.max20} STRIPE_PRICE_TOPUP=${prices.topup}${secret?` STRIPE_WEBHOOK_SECRET=${secret}`:''}`);
+ console.log(`supabase secrets set STRIPE_SECRET_KEY=<the key you used> STRIPE_PRICE_PRO=${prices.pro} STRIPE_PRICE_MAX=${prices.max} STRIPE_PRICE_MAX20=${prices.max20} STRIPE_PRICE_TOPUP=${prices.topup}${oldPrices.length?` STRIPE_PRICES_OLD=${oldPrices.join(',')}`:''}${secret?` STRIPE_WEBHOOK_SECRET=${secret}`:''}`);
 }

@@ -8,11 +8,12 @@
  * - a top-up's checkout is paid: its credits, which do not expire;
  * - a subscription changes or ends: the account's plan follows it.
  * The secrets are STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET, and the prices' ids STRIPE_PRICE_PRO, STRIPE_PRICE_MAX,
- * STRIPE_PRICE_MAX20 and STRIPE_PRICE_TOPUP (scripts/stripe-setup.mjs makes them in test mode). */
+ * STRIPE_PRICE_MAX20 and STRIPE_PRICE_TOPUP (scripts/stripe-setup.mjs makes them in test mode). A plan's price that
+ * changed keeps its old id in STRIPE_PRICES_OLD ("pro=price_...,max=price_..."), so subscriptions still on it stay that plan. */
 
 export const PLANS={
  free:{name:'Free',priceUsd:0,credits:100},
- pro:{name:'Pro',priceUsd:30,credits:900},
+ pro:{name:'Pro',priceUsd:25,credits:1000},
  max:{name:'Max',priceUsd:100,credits:4500},
  max20:{name:'Max 20x',priceUsd:200,credits:18000}
 } as const;
@@ -24,13 +25,18 @@ export const TOPUP={credits:500,priceUsd:10,maxPacks:10};
 export const GRACE_MS=3*86_400_000;
 const MONTH_MS=30.44*86_400_000;
 
-export type StripeConfig={secret:string;webhookSecret?:string;prices:Partial<Record<PaidPlan|'topup',string>>;returnUrl:string};
+export type StripeConfig={secret:string;webhookSecret?:string;prices:Partial<Record<PaidPlan|'topup',string>>;oldPrices?:Partial<Record<PaidPlan,string[]>>;returnUrl:string};
 export function stripeConfig(env:(name:string)=>string|undefined):StripeConfig|undefined{
  const secret=env('STRIPE_SECRET_KEY');if(!secret)return undefined;
  return{secret,webhookSecret:env('STRIPE_WEBHOOK_SECRET'),returnUrl:env('DREAM_BILLING_RETURN_URL')||'https://usegumbo.app/billing/',
-  prices:{pro:env('STRIPE_PRICE_PRO'),max:env('STRIPE_PRICE_MAX'),max20:env('STRIPE_PRICE_MAX20'),topup:env('STRIPE_PRICE_TOPUP')}};
+  prices:{pro:env('STRIPE_PRICE_PRO'),max:env('STRIPE_PRICE_MAX'),max20:env('STRIPE_PRICE_MAX20'),topup:env('STRIPE_PRICE_TOPUP')},oldPrices:oldPrices(env('STRIPE_PRICES_OLD'))};
 }
-const planOfPrice=(config:StripeConfig,price:unknown):PaidPlan|undefined=>paidPlans.find(plan=>!!config.prices[plan]&&config.prices[plan]===price);
+export function oldPrices(text?:string){
+ const out:Partial<Record<PaidPlan,string[]>>={};
+ for(const pair of (text??'').split(',')){const [plan,price]=pair.split('=').map(x=>x.trim());if(paidPlans.includes(plan as PaidPlan)&&price)(out[plan as PaidPlan]??=[]).push(price);}
+ return out;
+}
+const planOfPrice=(config:StripeConfig,price:unknown):PaidPlan|undefined=>typeof price!=='string'||!price?undefined:paidPlans.find(plan=>config.prices[plan]===price||!!config.oldPrices?.[plan]?.includes(price));
 
 /** Stripe's form encoding, nested keys in brackets: {line_items:[{price:'p',quantity:1}]} is line_items[0][price]=p&... */
 export function stripeForm(params:Record<string,unknown>){

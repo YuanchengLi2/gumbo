@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {createHmac} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {PLANS,TOPUP,GRACE_MS,stripeForm,verifyStripeSignature,billingSummary,startCheckout,handleStripeEvent,type BillingPorts,type BillingAccount,type StripeConfig} from '../../supabase/functions/dream-gateway/billing';
+import {PLANS,TOPUP,GRACE_MS,stripeForm,verifyStripeSignature,billingSummary,startCheckout,handleStripeEvent,oldPrices,type BillingPorts,type BillingAccount,type StripeConfig} from '../../supabase/functions/dream-gateway/billing';
 
 const config:StripeConfig={secret:'sk_test_x',webhookSecret:'whsec_x',returnUrl:'https://usegumbo.app/billing/',prices:{pro:'price_pro',max:'price_max',max20:'price_max20',topup:'price_topup'}};
 /** An account and its grants in memory, recording what billing does to them. */
@@ -22,7 +22,7 @@ const sign=(payload:string,secret:string,t=Math.floor(Date.now()/1000))=>`t=${t}
 describe('billing',()=>{
  it('keeps the free plan\'s credits the same in the gateway and the database',()=>{
   expect(readFileSync('supabase/migrations/202610170003_billing.sql','utf8')).toContain(`select ${PLANS.free.credits}::numeric`);
-  expect([PLANS.pro.priceUsd,PLANS.max.priceUsd,PLANS.max20.priceUsd,PLANS.pro.credits,PLANS.max.credits,PLANS.max20.credits,TOPUP.credits,TOPUP.priceUsd]).toEqual([30,100,200,900,4500,18000,500,10]);
+  expect([PLANS.pro.priceUsd,PLANS.max.priceUsd,PLANS.max20.priceUsd,PLANS.pro.credits,PLANS.max.credits,PLANS.max20.credits,TOPUP.credits,TOPUP.priceUsd]).toEqual([25,100,200,1000,4500,18000,500,10]);
  });
  it('encodes Stripe\'s nested form fields',()=>{
   expect(stripeForm({mode:'payment',line_items:[{price:'p',quantity:2}],metadata:{user_id:'u'},skip:undefined}).toString()).toBe('mode=payment&line_items%5B0%5D%5Bprice%5D=p&line_items%5B0%5D%5Bquantity%5D=2&metadata%5Buser_id%5D=u');
@@ -53,10 +53,17 @@ describe('billing',()=>{
   const {openPortal}=await import('../../supabase/functions/dream-gateway/billing');await openPortal('user-1',ports,config,fetcher,{cancel:true});
   expect(new URLSearchParams(calls.at(-1)!.body).get('flow_data[type]')).toBe('subscription_cancel');
  });
+ it('keeps a subscription on a plan\'s old price on that plan, at the plan\'s credits now',async()=>{
+  expect(oldPrices('pro=price_pro_30, max=price_max_old,gold=x,pro=')).toEqual({pro:['price_pro_30'],max:['price_max_old']});
+  const {ports,account}=memory({stripe_customer_id:'cus_1'}),start=Math.floor(Date.now()/1000),end=start+30*86400,withOld={...config,oldPrices:{pro:['price_pro_30']}};
+  const event={type:'invoice.paid',data:{object:{id:'in_old',customer:'cus_1',billing_reason:'subscription_cycle',parent:{subscription_details:{subscription:'sub_1'}},lines:{data:[{amount:3000,pricing:{price_details:{price:'price_pro_30'}},period:{start,end}}]}}}};
+  expect(await handleStripeEvent(event,ports,config)).toBe('invoice without a plan');
+  expect(await handleStripeEvent(event,ports,withOld)).toBe('Pro: 1000 credits');expect(account.plan).toBe('pro');
+ });
  it('grants a paid invoice\'s plan credits once, lasting a few days past the period',async()=>{
   const {ports,account,grants}=memory({stripe_customer_id:'cus_1'});const start=Math.floor(Date.now()/1000),end=start+30*86400;
   const event={type:'invoice.paid',data:{object:{id:'in_1',customer:'cus_1',billing_reason:'subscription_create',parent:{subscription_details:{subscription:'sub_1'}},lines:{data:[{amount:3000,pricing:{price_details:{price:'price_pro'}},period:{start,end}}]}}}};
-  expect(await handleStripeEvent(event,ports,config)).toBe('Pro: 900 credits');
+  expect(await handleStripeEvent(event,ports,config)).toBe('Pro: 1000 credits');
   expect(await handleStripeEvent(event,ports,config)).toBe('invoice already granted');
   expect(grants).toHaveLength(1);expect(new Date(grants[0].expires_at!).getTime()).toBe(end*1000+GRACE_MS);
   expect([account.plan,account.stripe_subscription_id,account.period_end]).toEqual(['pro','sub_1',new Date(end*1000).toISOString()]);
