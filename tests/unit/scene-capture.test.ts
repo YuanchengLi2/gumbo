@@ -20,15 +20,29 @@ function scenePage(mountAfterMs:number|undefined){
 }
 
 describe('scene frame capture',()=>{
+ it('says whether drawing the frame changed the page, so a changed frame is waited for until it paints',async()=>{
+  // A page whose scene changes an element for frame 42 and nothing for frame 43 (already showing).
+  for(const [frame,changes,expected] of [[42,true,true],[43,false,false]] as const){
+   const listeners:((e:{data:any})=>void)[]=[];let observer:(()=>void)|undefined;
+   const page:any={setTimeout,clearTimeout,setInterval,clearInterval,requestAnimationFrame:(f:()=>void)=>setTimeout(f,1),
+    document:{querySelector:()=>null},MutationObserver:class{constructor(callback:()=>void){observer=callback;}observe(){}disconnect(){}},
+    addEventListener:(_t:string,f:(e:{data:any})=>void)=>{listeners.push(f);},removeEventListener:(_t:string,f:(e:{data:any})=>void)=>{const i=listeners.indexOf(f);if(i>=0)listeners.splice(i,1);},
+    postMessage:(data:any)=>setTimeout(()=>{for(const f of [...listeners])f({data});},0)};
+   page.window=page;
+   page.addEventListener('message',(e:{data:any})=>{if(e.data?.type!=='frame')return;setTimeout(()=>{if(changes)observer?.();page.postMessage({dreamScene:true,requestId:e.data.requestId});},5);});
+   page.postMessage({dreamScene:true,ready:true});
+   expect(await runInContext(frameRequestScript(1,frame,30,3000),createContext(page))).toEqual({changed:expected});
+  }
+ });
  it('draws the frame when the scene mounts after the first request',async()=>{
   const page=scenePage(600);
-  expect(await page.request(1,42)).toEqual({});
+  expect(await page.request(1,42)).toEqual({changed:true});
   expect(page.drawn).toContain(42);
  });
  it('draws the frame for a scene that was ready before the request',async()=>{
   const page=scenePage(0);await new Promise(resolve=>setTimeout(resolve,20));
-  expect(await page.request(1,42)).toEqual({});
-  expect(await page.request(2,66)).toEqual({});
+  expect(await page.request(1,42)).toEqual({changed:true});
+  expect(await page.request(2,66)).toEqual({changed:true});
   expect(page.drawn).toEqual([42,66]);
  });
  it('gives up with an error when the scene never answers',async()=>{

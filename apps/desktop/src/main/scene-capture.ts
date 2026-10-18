@@ -19,6 +19,8 @@ const FRAME_TIMEOUT_MS=60_000;
 const FRAME_RATE=240;
 // How long a paint may take to arrive after the page has drawn the frame: about five frames. Past that, nothing changed.
 export const SETTLE_MS=20;
+// How long a frame that changed the page may take to paint before the capture stops waiting for it.
+export const CHANGED_WAIT_MS=1000;
 
 let paintNumber=0;
 /** A window's paints: the latest picture and its number. Numbers count across every window, so a picture's number never
@@ -57,7 +59,11 @@ export function frameRequestScript(id:number,frame:number,fps:number,timeoutMs=F
   const post=()=>postMessage({dreamScene:true,type:'frame',requestId:${id},frame:${Math.max(0,Math.floor(frame))},fps:${Number(fps)||30}},'*');
   // The scene has drawn the frame into its page, but the window paints it on its next frame: answering at once captured
   // the frame before (blank for a scene's first frame, so the agent and Export missed graphics that were there).
-  const finish=value=>{removeEventListener('message',receive);clearInterval(retry);clearTimeout(limit);requestAnimationFrame(()=>requestAnimationFrame(()=>resolve(value)));};
+  // Whether the frame changed anything on the page: a change to the page's elements, or a canvas or video (they draw
+  // without one). Unchanged, the picture already painted is this frame; changed, its paint must be waited for.
+  let mutated=false;const changes=typeof MutationObserver==='function'&&typeof document!=='undefined'?new MutationObserver(()=>{mutated=true;}):null;
+  changes?.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
+  const finish=value=>{removeEventListener('message',receive);clearInterval(retry);clearTimeout(limit);requestAnimationFrame(()=>requestAnimationFrame(()=>{const changed=!changes||mutated||!!document.querySelector('canvas,video');changes?.disconnect();resolve({...value,changed});}));};
   const receive=e=>{const d=e.data;if(!d?.dreamScene||d.type==='frame')return;if(d.ready){state.ready=true;post();return;}
    if(d.error&&(d.fatal||d.requestId===${id}||d.requestId===undefined))finish({error:String(d.error)});else if(d.requestId===${id})finish({});};
   addEventListener('message',receive);
@@ -71,14 +77,16 @@ export function frameRequestScript(id:number,frame:number,fps:number,timeoutMs=F
 export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number,since?:number):Promise<ScenePixels>{
  let entry=windows.get(key);if(!entry||entry.window.isDestroyed()){entry=open(source,width,height);windows.set(key,entry);}
  await entry.loaded;const id=++entry.sequence,before=entry.paints.number;
- const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string};
+ const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string;changed?:boolean};
  if(answer?.error)throw new Error(answer.error);
- // The page answers once its next frame has begun, so a change it drew has nearly always painted by now; if nothing has
- // painted since the request, a paint still on its way is given a few frames to land.
- if(entry.paints.number===before)await entry.paints.next(SETTLE_MS);
- // A window that has never painted (it should have, on loading) is captured instead, every time.
- const latest=entry.paints.latest;
- if(!latest){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:0,data:image.toBitmap()};}
+ // A frame that changed the page is waited for until its paint lands (a big drawing can take well past a few frames to
+ // paint, and returning early handed back the picture before it: a fresh window's load, so the agent saw a scene's drawings
+ // blank and spent a long edit "fixing" them). A frame that changed nothing gets a few frames' grace and is then the
+ // picture already painted.
+ if(entry.paints.number===before)await entry.paints.next(answer?.changed!==false?CHANGED_WAIT_MS:SETTLE_MS);
+ // Still no paint of this frame: a window's first picture, or one that never painted, is captured instead.
+ const latest=entry.paints.latest,painted=entry.paints.number!==before;
+ if(!latest||(!painted&&answer?.changed!==false&&since===undefined)){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:latest?.number??0,data:image.toBitmap()};}
  const size=latest.image.getSize();
  return latest.number===since?{width:size.width,height:size.height,paint:latest.number}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap()};
 }
