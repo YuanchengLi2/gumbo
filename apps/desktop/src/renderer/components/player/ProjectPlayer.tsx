@@ -39,7 +39,9 @@ export function ProjectPlayer(p:Props){
  return <section className={'project-player '+(p.manual?'manual-player':'')+(full?' preview-fullscreen':'')}>
   <div className="preview-viewport" ref={viewport}>
    <div className="preview-frame" style={{width:size.width||'100%',height:size.height||'100%',aspectRatio:t.settings.width+'/'+t.settings.height}}>
-    {r.durationInFrames>0?<EngineView ref={p.player} timeline={t} footage={p.project.footage} clickToPlay onReady={setEngine}/>:<div className="preview-empty"><Film size={30}/><h3>Your canvas is ready</h3><p>Add media or describe the video you want to make.</p></div>}
+    {r.durationInFrames>0?<EngineView ref={p.player} timeline={t} footage={p.project.footage} clickToPlay onReady={setEngine}/>:p.working?null:<div className="preview-empty"><Film size={30}/><h3>Your canvas is ready</h3><p>Add media or describe the video you want to make.</p></div>}
+    {/* One state at a time: while Gumbo works on an empty edit, only "Gumbo is editing" shows (it has no background, so the
+        empty canvas's message showed through it). */}
     {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Gumbo is editing"><GumboMark/><strong>Gumbo is editing</strong><span className="editing-status">{currentAction?editingActivity(currentAction):currentStep?editingTask(currentStep.label):'Putting your ideas in motion'}</span></div>}
    </div>
    {full&&<button className="icon-button fullscreen-exit" title="Exit fullscreen (Esc)" aria-label="Exit fullscreen" onClick={()=>fullscreen(false)}><Minimize size={18}/></button>}
