@@ -1,0 +1,52 @@
+/* The editor layout (OpenCut's): assets, preview and properties over a full-width timeline. Flush panes split by
+   hairlines, no boxes, no button bars; the black-and-white tokens from globals.css, paprika only on the Gumbo mark. */
+.layout-switch{display:flex;gap:2px;margin-left:4px;-webkit-app-region:no-drag}
+.layout-switch button{font-size:12px;padding:6px 11px;border-radius:7px;color:var(--n42)}
+.layout-switch button:hover{color:var(--n80)}
+.layout-switch button[aria-checked=true]{color:var(--n90);background:var(--n5)}
+
+.ai-workspace.editor-workspace{display:flex;flex-direction:column}
+.ai-stage.editor-layout{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative;background:var(--n0);overflow:hidden}
+.editor-layout .editor-top{flex:1;min-height:0;display:grid;grid-template-columns:var(--assets-width,24%) 1px minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
+.editor-layout .editor-top.with-properties{grid-template-columns:var(--assets-width,24%) 1px minmax(0,1fr) 1px var(--properties-width,22%)}
+.editor-resizer{cursor:col-resize;background:var(--n6);position:relative;z-index:3}
+.editor-resizer:before{content:'';position:absolute;inset:0 -4px}
+.editor-layout>.timeline-resizer{flex:none}
+
+/* Assets: a rail of tabs, then the open tab. */
+.editor-assets{display:flex;min-width:0;min-height:0;background:var(--n1)}
+.editor-rail{flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0;overflow-y:auto;border-right:1px solid var(--n5)}
+.rail-tab{width:54px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 7px;border-radius:9px;color:var(--n40);font-size:9.5px;letter-spacing:.1px}
+.rail-tab:hover{color:var(--n75);background:var(--n3)}
+.rail-tab[aria-pressed=true]{color:var(--n90);background:var(--n5)}
+.rail-tab .gumbo-mark{width:21px;height:21px}
+.editor-assets-body{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.editor-assets-body>.sidebar-scroll{padding:16px 16px 20px}
+.editor-chat{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 14px 14px}
+.editor-chat>.sidebar-scroll{padding-top:16px}
+
+/* Preview: the picture with OpenCut's transport under it (timecode, play in the middle, view controls). */
+.editor-preview{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--n2);position:relative}
+.editor-layout .editor-preview>.project-player{flex:1;min-height:0;padding:18px 22px 6px}
+.manual-player .transport{padding:0 2px}
+.manual-player .transport-gap{flex:1}
+.manual-player .timecode{font-family:Consolas,'Courier New',monospace;font-size:11.5px;letter-spacing:.2px;min-width:150px}
+
+/* Media cards in the editor have a + to put them on the timeline at the playhead. */
+.asset-card{position:relative}
+.asset-add{position:absolute;top:7px;right:7px;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;background:rgb(0 0 0 / .62);color:#fff;opacity:0;transition:opacity .12s;z-index:2}
+.asset-card:hover .asset-add,.asset-add:focus-visible{opacity:1}
+.asset-add:hover{background:rgb(0 0 0 / .82)}
+
+/* While Gumbo edits, the chat stays usable above the lock that covers the rest of the editor. */
+.editor-layout.agent-driving .editor-assets{position:relative;z-index:44}
+
+/* Shortcuts sheet (?). */
+.shortcuts-backdrop{position:fixed;inset:0;z-index:120;background:rgb(0 0 0 / .32);display:grid;place-items:center}
+.shortcuts-sheet{width:min(720px,92vw);max-height:84vh;overflow:auto;background:var(--n1);color:var(--n85);border:1px solid var(--n8);border-radius:16px;box-shadow:0 24px 80px rgb(0 0 0 / .25);padding:20px 24px 24px}
+.shortcuts-sheet header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.shortcuts-sheet h2{font-size:17px;font-weight:500}
+.shortcuts-groups{display:grid;grid-template-columns:1fr 1fr;gap:6px 36px}
+.shortcuts-groups h3{font-size:11px;color:var(--n40);font-weight:500;margin:12px 0 4px}
+.shortcuts-groups p{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;padding:5px 0;color:var(--n70)}
+.shortcuts-groups kbd{font:11px Consolas,monospace;padding:2px 6px;border-radius:5px;background:var(--n5);color:var(--n80);margin-left:4px;white-space:nowrap}

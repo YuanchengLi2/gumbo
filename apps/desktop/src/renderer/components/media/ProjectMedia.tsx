@@ -12,8 +12,9 @@ const filters:{id:Filter;label:string}[]=[{id:'all',label:'All'},{id:'video',lab
 const clock=(sec:number)=>{if(sec<1)return sec.toFixed(1)+'s';const s=Math.round(sec);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 
 /** The project's media as a bin, like CapCut's: search, kinds, pictures with their length, a muted preview on hover. Click
- * to send a piece with the next message; drag it onto the timeline; drop files from the computer here to import them. */
-export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:(ids:string[])=>void;onImport:()=>void;onImportFiles?:(paths:string[])=>void;command:CommandFn}){
+ * to send a piece with the next message; drag it onto the timeline; drop files from the computer here to import them. In
+ * the editor layout (onAdd) a card's + puts it on the timeline at the playhead, as OpenCut's media panel does. */
+export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:(ids:string[])=>void;onImport:()=>void;onImportFiles?:(paths:string[])=>void;command:CommandFn;onAdd?:(assetId:string)=>void}){
  const [query,setQuery]=useState(''),[filter,setFilter]=useState<Filter>('all'),[dropping,setDropping]=useState(false);
  const assets=p.project.footage.assets.filter(a=>a.generated?.role!=='stem'),count=(f:Filter)=>f==='all'?assets.length:assets.filter(a=>groupOf(a)===f).length;
  const shown=assets.filter(a=>(filter==='all'||groupOf(a)===filter)&&a.filename.toLowerCase().includes(query.trim().toLowerCase()));
@@ -22,7 +23,7 @@ export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:
  return <div className={'project-media'+(dropping?' dropping':'')} onDragOver={e=>{if(files(e)){e.preventDefault();e.dataTransfer.dropEffect='copy';setDropping(true);}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDropping(false);}} onDrop={e=>{if(!files(e))return;e.preventDefault();setDropping(false);const paths=[...e.dataTransfer.files].map(file=>window.dream.mediaPath(file)).filter(Boolean);if(paths.length)p.onImportFiles?.(paths);}}>
   <div className="media-toolbar"><label className="media-search"><Search size={14}/><input aria-label="Search media" placeholder="Search media" value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="media-import" onClick={p.onImport}><Plus size={14}/>Import</button></div>
   {assets.length>0&&<div className="media-filters">{filters.filter(f=>f.id==='all'||count(f.id)>0).map(f=><button key={f.id} aria-pressed={filter===f.id} onClick={()=>setFilter(f.id)}>{f.label}<small>{count(f.id)}</small></button>)}</div>}
-  <div className="asset-grid">{shown.map(a=><AssetCard key={a.id} asset={a} project={p.project} selected={p.selected.includes(a.id)} onToggle={()=>toggle(a.id)} command={p.command}/>)}</div>
+  <div className="asset-grid">{shown.map(a=><AssetCard key={a.id} asset={a} project={p.project} selected={p.selected.includes(a.id)} onToggle={()=>toggle(a.id)} command={p.command} onAdd={p.onAdd&&(()=>p.onAdd!(a.id))}/>)}</div>
   {!assets.length&&<button className="media-empty" onClick={p.onImport}><Upload size={22}/><strong>Drop videos, images or audio here</strong><small>or click to import. Files are copied into this project.</small></button>}
   {assets.length>0&&!shown.length&&<p className="media-none">Nothing matches{query.trim()?` “${query.trim()}”`:''}.</p>}
   {p.selected.length>0&&<div className="media-selection"><span><strong>{p.selected.length} selected</strong> · sent with your next message</span><button onClick={()=>p.onSelect([])}>Clear</button></div>}
@@ -30,7 +31,7 @@ export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:
  </div>;
 }
 
-function AssetCard({asset:a,project,selected,onToggle,command}:{asset:Asset;project:ProjectState;selected:boolean;onToggle:()=>void;command:CommandFn}){
+function AssetCard({asset:a,project,selected,onToggle,command,onAdd}:{asset:Asset;project:ProjectState;selected:boolean;onToggle:()=>void;command:CommandFn;onAdd?:()=>void}){
  const [hover,setHover]=useState(false),group=groupOf(a),preview=hover&&a.kind==='video'&&!a.scene&&!a.missing&&(a.playback?.ready||a.status==='ready');
  const visual=a.scene?<span className="asset-graphic"><Sparkles size={18}/></span>
   :a.thumbnailPath||a.kind==='image'?<img src={'dream-media://'+a.id+'/'+(a.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>
@@ -45,6 +46,7 @@ function AssetCard({asset:a,project,selected,onToggle,command}:{asset:Asset;proj
    </div>
    <strong>{a.filename}</strong>
   </button>
+  {onAdd&&<button type="button" className="asset-add" aria-label={'Add '+a.filename+' to the timeline'} title="Add to the timeline at the playhead" onClick={onAdd}><Plus size={13}/></button>}
   <AssetState asset={a} project={project} command={command}/>
  </article>;
 }

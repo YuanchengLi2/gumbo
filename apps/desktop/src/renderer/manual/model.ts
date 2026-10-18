@@ -66,3 +66,15 @@ export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,ty
  ops.push({type:'set_transition',clipId,transition:{type:type as any,durationSec:duration},reason});return ops;
 }
 export function elementOps(t:TimelineDocument,component:string,time:number,layer=0):Op[]{return[...ensureDuration(t,time+3),{type:'add_item',item:{id:newId(),type:['punch_zoom','slow_push','shake'].includes(component)?'effect':'overlay',component,start:projectAnchor(time),durationSec:3,layer,params:{text:component==='lower_third'?'Your name':'Your title',x:.5,y:component==='lower_third'?.8:.5,fontSize:60,color:'#ffffff',amount:.1},reason},reason}];}
+
+/** Split at the playhead and remove one side, as OpenCut's Q and W do: the part before the playhead (left) or after it
+ * (right) of every selected block the playhead crosses, or of every unlocked block it crosses when nothing is selected. */
+export function splitRemove(t:TimelineDocument,f:FootageIndex,ids:string[],time:number,side:'left'|'right'):Op[]{
+ const crossing=manualItems(t,f).filter(i=>i.kind!=='caption'&&(ids.length?ids.includes(i.id):!t.trackSettings?.[i.track]?.locked)&&i.start+1/t.settings.fps<=time&&i.end-1/t.settings.fps>=time);
+ if(!crossing.length)return[];const split=splitItems(t,f,crossing.map(i=>i.id),time),after=apply(t,split,f);
+ // A split keeps the block's own id on the left part; the right part is the new block the split made.
+ const right=split.flatMap(o=>o.type==='split_clip'?[o.newClipId]:o.type==='add_item'?[o.item.id]:o.type==='add_music'?[o.music.id]:[]);
+ return[...split,...removeItems(after,f,side==='left'?crossing.map(i=>i.id):right)];
+}
+/** Everything on the timeline that can be selected and changed (captions are words of the speech, not blocks). */
+export const selectableIds=(t:TimelineDocument,f:FootageIndex)=>manualItems(t,f).filter(i=>i.kind!=='caption'&&!t.trackSettings?.[i.track]?.locked).map(i=>i.id);

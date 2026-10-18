@@ -35,6 +35,8 @@ export function ProjectPlayer(p:Props){
  useEffect(()=>{const handler=(event:Event)=>{const detail=(event as CustomEvent).detail,asset=p.project.footage.assets.find(a=>a.id===detail.assetId);useEditor.getState().setError('Audio could not play for '+(asset?.filename??'this clip')+'. '+(detail.message??'Retry audio preparation in Media.'));};window.addEventListener('dream-audio-error',handler);return()=>window.removeEventListener('dream-audio-error',handler);},[p.project.footage]);
 
  const clock=(frames:number)=>{const sec=Math.floor(frames/t.settings.fps);return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
+ // Frame-accurate, as an editor shows it: minutes, seconds and frames.
+ const timecode=(frames:number)=>{const fps=t.settings.fps,sec=Math.floor(frames/fps);return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0')+':'+String(frames%fps).padStart(2,'0');};
  const currentStep=p.project.experience?.steps?.findLast(step=>step.status==='running'),currentAction=p.project.experience?.activity?.events?.findLast(event=>event.kind==='action'&&event.status==='running');
  return <section className={'project-player '+(p.manual?'manual-player':'')+(full?' preview-fullscreen':'')}>
   <div className="preview-viewport" ref={viewport}>
@@ -47,9 +49,11 @@ export function ProjectPlayer(p:Props){
    {full&&<button className="icon-button fullscreen-exit" title="Exit fullscreen (Esc)" aria-label="Exit fullscreen" onClick={()=>fullscreen(false)}><Minimize size={18}/></button>}
   </div>
   <div className="transport">
-   <button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button>
-   <span className="time-current">{clock(p.frame)} <span>/ {clock(duration)}</span></span>
-   <input className="scrubber" aria-label="Preview position" type="range" min={0} max={duration-1} value={Math.min(p.frame,duration-1)} onChange={e=>seek(Number(e.target.value))}/>
+   {/* The editor's transport is OpenCut's: the timecode, then play in the middle; its timeline is the scrubber. Gumbo's
+       layout keeps play, the time and a scrubber. */}
+   {p.manual?<><span className="time-current timecode">{timecode(p.frame)} <span>/ {timecode(duration)}</span></span><span className="transport-gap"/><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="transport-gap"/></>
+    :<><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="time-current">{clock(p.frame)} <span>/ {clock(duration)}</span></span>
+   <input className="scrubber" aria-label="Preview position" type="range" min={0} max={duration-1} value={Math.min(p.frame,duration-1)} onChange={e=>seek(Number(e.target.value))}/></>}
    <button className="icon-button" aria-label={muted?'Unmute preview':'Mute preview'} aria-pressed={muted} onClick={()=>{const player=p.player.current;if(player?.isMuted())player.unmute();else player?.mute();}}>{muted?<VolumeX size={17}/>:<Volume2 size={17}/>}</button>
    <select className="ratio-picker" aria-label="Canvas ratio" disabled={p.working} value={canvasRatio(t.settings.width,t.settings.height)} onChange={e=>{const preset=canvasPresets.find(i=>i.ratio===e.target.value)!;void p.command({type:'apply',requestId:crypto.randomUUID(),expectedVersionId:p.project.versionId,label:'Change canvas ratio',ops:[{type:'set_project_settings',settings:{width:preset.width,height:preset.height},reason:'Change canvas ratio'}]});}}>
     {!canvasPresets.some(i=>i.ratio===canvasRatio(t.settings.width,t.settings.height))&&<option>{canvasRatio(t.settings.width,t.settings.height)}</option>}{canvasPresets.map(i=><option key={i.ratio}>{i.ratio}</option>)}

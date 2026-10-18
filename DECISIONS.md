@@ -692,3 +692,13 @@ This entry supersedes "The user picks the model in the composer; Auto sends smal
 ## October 17, 2026 — Auto runs only Claude Haiku 5.5 and GPT-6.1 Sol
 
 - Auto now chooses between two models: Claude Haiku 5.5 for light work and GPT-6.1 Sol for everything else, the hardest whole-video work and big plans included. Opus, like every other model, runs only when the user picks it. The router is shown only the light and strong tiers; a frontier tier or model it still names (an older prompt, a "still not fixed" climb) runs on Sol. Claude Sonnet 5.5 still stands in for Sol only when Sol cannot run (no OpenAI key on the gateway). Settings > AI says the same.
+
+## October 17, 2026 — A full manual editor, laid out as OpenCut's
+
+This entry supersedes "Manual UI is disabled while shared project/timeline code is retained" and the October 12 decision that dropped an OpenCut-style rearrangement.
+
+- The header has two layouts: Gumbo (the chat beside the player and timeline, as before) and Editor, modeled on OpenCut Classic's editor (github.com/opencut-app/opencut-classic, MIT, notice in resources/notices/OpenCut-LICENSE.txt): an assets panel with a rail of tabs (Gumbo's chat first, then media and the libraries), the preview with OpenCut's transport (timecode, play in the middle, view controls; the timeline is the scrubber), and a full-width timeline under them. Both layouts edit the same timeline, versions and undo history, so the agent's changes and hand edits show on the same blocks; the choice is remembered per viewer. Gumbo's layout is unchanged.
+- The code is written for Gumbo's stack, not pasted: the layout and tab set follow OpenCut's editor page and assets panel, the shortcuts follow its action defaults, and the timeline keeps the OpenCut interaction algorithms vendored on October 7.
+- Shortcuts are OpenCut's in both layouts: Space or K plays, J and L step a second, arrows a frame (Shift: five seconds, was one), Home and End; S or Ctrl+B splits, Q and W split and remove the left or right part, Delete, Ctrl+D, Ctrl+C and Ctrl+V (paste at the playhead), Ctrl+A, Esc, N toggles snapping (remembered; Alt still skips it once), + − and 0 zoom, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y. ? shows them all. There is still no button toolbar: the zoom slider is the only control on the timeline.
+- Track headers gain a lock beside mute and hide. Media cards in the editor have a + that puts the piece on the timeline at the playhead (video and photos on the main track, audio on music).
+- `pnpm dev -- <args>` passes the arguments to the app (for example `--remote-debugging-port`), so the running dev app can be driven from a script.
