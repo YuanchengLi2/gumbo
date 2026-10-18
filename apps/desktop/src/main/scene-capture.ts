@@ -22,6 +22,8 @@ const FRAME_RATE=240;
 export const SETTLE_MS=20;
 // How long a frame that changed the page may take to paint before the capture stops waiting for it.
 export const CHANGED_WAIT_MS=1000;
+// After asking a window that missed its paint to paint again, how long to wait for that paint.
+export const REPAINT_WAIT_MS=1500;
 
 let paintNumber=0;
 /** A window's paints: the latest picture and its number. Numbers count across every window, so a picture's number never
@@ -82,23 +84,32 @@ export async function sceneFrame(key:string,source:SceneSource,width:number,heig
  await entry.loaded;const id=++entry.sequence,before=entry.paints.number,printed=entry.logs.length;
  const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string;changed?:boolean};
  if(answer?.error)throw new Error(answer.error);
- // A frame that changed the page is waited for until its paint lands (a big drawing can take well past a few frames to
- // paint, and returning early handed back the picture before it: a fresh window's load, so the agent saw a scene's drawings
- // blank and spent a long edit "fixing" them). A frame that changed nothing gets a few frames' grace and is then the
- // picture already painted.
- if(entry.paints.number===before)await entry.paints.next(answer?.changed!==false?CHANGED_WAIT_MS:SETTLE_MS);
- // Still no paint of this frame: a window's first picture, or one that never painted, is captured instead.
- const latest=entry.paints.latest,painted=entry.paints.number!==before,lines=entry.logs.slice(printed).slice(-8),logs=lines.length?{logs:lines}:{};
- if(!latest||(!painted&&answer?.changed!==false&&since===undefined)){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:latest?.number??0,data:image.toBitmap(),...logs};}
+ const lines=entry.logs.slice(printed).slice(-8);
+ return{...await framePicture(entry,before,answer?.changed,since,frame),...(lines.length?{logs:lines}:{})};
+}
+/** The picture of a frame the scene has drawn. A frame that changed the page is waited for until its paint lands (a big
+ * drawing can take well past a few frames to paint, and returning early handed back the picture before it, so the agent
+ * saw a scene's drawings blank and spent a long edit "fixing" them). A frame that changed nothing gets a few frames' grace
+ * and is then the picture already painted. A window that missed its paint is asked to paint again; if it still does not,
+ * the frame fails with that reason. It used to be screenshotted instead, and an off-screen window's screenshot is solid
+ * black: the agent saw a paper card the player drew perfectly as an opaque black frame and rebuilt it again and again,
+ * and Export could have put that black frame in the video. */
+export async function framePicture(entry:{paints:Paints;window:{webContents:{invalidate():void}}},before:number,changed:boolean|undefined,since:number|undefined,frame:number):Promise<ScenePixels>{
+ if(entry.paints.number===before)await entry.paints.next(changed!==false?CHANGED_WAIT_MS:SETTLE_MS);
+ if(entry.paints.number===before&&(changed!==false||!entry.paints.latest)){entry.window.webContents.invalidate();await entry.paints.next(REPAINT_WAIT_MS);}
+ const latest=entry.paints.latest,painted=entry.paints.number!==before;
+ if(!latest||(!painted&&changed!==false))throw new Error(`its frame ${frame} was drawn but never painted, so there is no picture of it (an engine problem, not the scene's code; looking again usually works).`);
  const size=latest.image.getSize();
- return latest.number===since?{width:size.width,height:size.height,paint:latest.number,...logs}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap(),...logs};
+ return latest.number===since?{width:size.width,height:size.height,paint:latest.number}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap()};
 }
 export function closeScenes(){for(const {window} of windows.values())if(!window.isDestroyed())window.destroy();windows.clear();}
 /** One small still of a scene for the timeline: drawn in its own hidden window, which is closed straight after, and
  * returned as a JPEG data URL the width given. */
 export async function sceneStill(source:SceneSource,width:number,height:number,frame:number,fps:number,thumbWidth=240){
  const key='still:'+Math.random().toString(36).slice(2);
- try{await sceneFrame(key,source,width,height,frame,fps);const entry=windows.get(key)!,image=await entry.window.webContents.capturePage();
+ // The window's own painted picture of the frame (sceneFrame makes sure there is one); a screenshot of an off-screen
+ // window is solid black.
+ try{await sceneFrame(key,source,width,height,frame,fps);const image=windows.get(key)!.paints.latest!.image;
   return 'data:image/jpeg;base64,'+image.resize({width:thumbWidth,quality:'good'}).toJPEG(80).toString('base64');}
  finally{const entry=windows.get(key);if(entry&&!entry.window.isDestroyed())entry.window.destroy();windows.delete(key);}
 }

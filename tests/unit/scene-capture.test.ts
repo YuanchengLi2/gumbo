@@ -1,7 +1,7 @@
 import {describe,it,expect,vi} from 'vitest';
 import {createContext,runInContext} from 'node:vm';
 vi.mock('electron',()=>({BrowserWindow:class{}}));
-import {frameRequestScript,Paints} from '../../apps/desktop/src/main/scene-capture';
+import {frameRequestScript,Paints,framePicture} from '../../apps/desktop/src/main/scene-capture';
 
 /** A scene window's page: messages reach every listener in the order they were added, a tick after posting, as in a
  * browser, so the capture script hears its own requests. The scene starts listening for frame requests only when it
@@ -61,6 +61,18 @@ describe('scene window paints',()=>{
   at=Date.now();const before=paints.number;await paints.next(30);
   expect(Date.now()-at).toBeGreaterThanOrEqual(25);expect(paints.number).toBe(before);
  });
+ it('asks a window that missed its paint to paint again, and fails with the reason instead of a black screenshot',async()=>{
+  const picture=(name:string)=>({name,getSize:()=>({width:4,height:2}),toBitmap:()=>new Uint8Array(32)}) as never;
+  // The paint lands only when the window is told to paint again.
+  const paints=new Paints();let asked=0;const window={webContents:{invalidate:()=>{asked++;setTimeout(()=>paints.add(picture('drawn')),5);}}};
+  const before=paints.number,drawn=await framePicture({paints,window},before,true,undefined,138);
+  expect(asked).toBe(1);expect(drawn.data).toBeInstanceOf(Uint8Array);expect(drawn.paint).toBe(paints.number);
+  // A window that never paints gives an error naming the frame, never a picture.
+  const silent=new Paints();await expect(framePicture({paints:silent,window:{webContents:{invalidate:()=>{}}}},0,true,undefined,138)).rejects.toThrow(/frame 138 was drawn but never painted/);
+  // A frame that changed nothing is the picture already painted, without asking again.
+  let again=0;const still=new Paints();still.add(picture('held'));const held=await framePicture({paints:still,window:{webContents:{invalidate:()=>{again++;}}}},still.number,false,undefined,10);
+  expect(again).toBe(0);expect(held.paint).toBe(still.number);
+ },10000);
  it('numbers pictures across windows, so one never names another',()=>{
   const first=new Paints(),second=new Paints();first.add(image('a'));second.add(image('b'));
   expect(second.number).toBeGreaterThan(first.number);expect(new Paints().number).toBe(0);
