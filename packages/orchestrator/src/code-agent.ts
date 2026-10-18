@@ -21,7 +21,9 @@ export type Publication={versionId:string;assets:string[];processId?:string;unch
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
 export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;changedFiles?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
 type Checkpoint={startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
-const RESULT_LIMIT=24000;
+// Results are capped at 12,000 characters (about 4k tokens); a file read keeps up to 24,000, since the agent asked for
+// that file (the editing guides run to about 12,600) and reads longer ones in pages.
+const RESULT_LIMIT=12000,READ_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
 const PARALLEL_READS=new Set(['read_file','view_media','read_transcript','search','find_shots','listen']);
@@ -34,11 +36,11 @@ const modeNote=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: plan
 const inspected=(name:string,input:any,result:any)=>{if(Array.isArray(result?.media))return{media:result.media.slice(0,24)};const id=name==='view_media'?result?.assetId??result?.evidence?.assetId??input?.assetId:undefined;return id?{media:[{id,name:String(id),kind:result?.scene?'scene':String(result?.evidence?.metadata?.kind??'video')}]}:{};};
 // Every later call re-reads a result, so its text is capped: a string result becomes an excerpt with its receipt, and in a
 // result of text and images (a look at footage) the text blocks share the same budget. The full result stays archived.
-export const capText=(content:any,receipt:string)=>{
+export const capText=(content:any,receipt:string,limit=RESULT_LIMIT)=>{
  const note={receipt,instruction:'Use search or read_file with scope receipt for relevant details; full result is archived.'};
- if(typeof content==='string')return content.length>RESULT_LIMIT?JSON.stringify({excerpt:content.slice(0,RESULT_LIMIT-2000),...note}):content;
+ if(typeof content==='string')return content.length>limit?JSON.stringify({excerpt:content.slice(0,limit-2000),...note}):content;
  if(!Array.isArray(content))return content;
- let left=RESULT_LIMIT-2000,cut=false;
+ let left=limit-2000,cut=false;
  const blocks=content.map((b:any)=>{if(b?.type!=='text'||typeof b.text!=='string')return b;const text=b.text.slice(0,Math.max(0,left));left-=text.length;if(text.length<b.text.length)cut=true;return{...b,text};}).filter((b:any)=>b?.type!=='text'||b.text);
  return cut?[...blocks,{type:'text',text:JSON.stringify({truncated:true,...note})}]:content;
 };
@@ -241,7 +243,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
     }
    }else if(!result.error){checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};if(call.name==='finish'&&result.finished&&!checkpoint.outcome){const input:any=parseCodeTool('finish',call.input,readOnly,allowed);conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence:input.evidence}:{status:'blocked',summary:input.summary,evidence:input.evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;}}
    db.setMeta('workspace-receipt-summary:'+receiptKey,JSON.stringify({receipt:receiptKey,tool:call.name,path:call.input?.path,command:call.input?.command,status:result?.error?'failed':'complete',error:result?.error,publication:result?.publication?{versionId:result.publication.versionId,changes:result.publication.changes}:undefined,process:result?.process?{id:result.process.id,status:result.process.status,output:String(result.process.output??'').slice(-2000)}:undefined}));db.db.prepare('INSERT OR IGNORE INTO context_dirty VALUES(?,?)').run('execution',receiptKey);
-   const content=capText(result?.content??JSON.stringify(modelView(result)),receiptKey);checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
+   const content=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT);checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
    const outcome=checkpoint.outcome as EditOutcome|undefined;
    if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}if(role!=='worker')activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}
   }
