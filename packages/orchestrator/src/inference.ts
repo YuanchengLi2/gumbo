@@ -2,7 +2,8 @@ import {RunStream} from './run-stream';
 import {quietPurposes} from './intelligence';
 import {gzipSync,gunzipSync} from 'node:zlib';
 import {assertToolExchanges} from './tool-exchanges';
-import {budgetRequest} from './context-budget';
+import {budgetRequest,estimateTokens} from './context-budget';
+import {conversationBytes} from './conversation';
 import {readMessageStream} from '../../../supabase/functions/_shared/stream';
 import {providerSession,accountScope,type ProviderConnection} from './provider-session';
 import {engineBudgets,usageCost,promptTokens} from '@dream/config';
@@ -17,6 +18,12 @@ type Receipt={id:string;resume:number;attempt:number;capacity?:number;transientR
 type Input={model:string;system:string;messages:unknown[];tools:unknown[];turnId?:string;tool_choice?:unknown;purpose:string;max_tokens:number;profile?:unknown;phase?:string;cacheTtl?:'1h';taskBudget?:{total:number;remaining?:number}};
 type Dependencies={fetch?:typeof fetch;wait?:(ms:number,signal?:AbortSignal)=>Promise<void>;idleMs?:number};
 
+/** The share of the conversation's bytes to compact to: the share wanted, but at least enough that the latest exchange
+ * stays whole (compaction keeps it verbatim only while it is under half its target). */
+export function deepCompaction(messages:any[],wanted:number){
+ const lastAt=messages.findLastIndex((m:any)=>m.role==='assistant'),total=conversationBytes(messages),latest=lastAt<0?0:conversationBytes(messages.slice(lastAt));
+ return Math.min(1,Math.max(.05,wanted,latest*2.2/Math.max(1,total)));
+}
 const MAX_OUTPUT=engineBudgets.maxOutput,TRANSIENT_RETRIES=3,IDLE_MS=90_000,HARD_MS=20*60_000,HAIKU_HARD=engineBudgets.haikuHardInput;
 // Execution-side purposes hand a still-truncated response back to the agent; others report a split request.
 const AGENT_PURPOSES=['execution','worker','planning','answering'];
@@ -86,11 +93,19 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   db.setMeta(countKey,String(result.input_tokens));return result.input_tokens as number;
  };
  // The estimate is deliberately conservative, so it only decides whether to measure; compaction needs a real overrun.
+ // Each compaction rewrites the cached prefix, which is billed as new input, so it goes deep (to compactTo, about a third
+ // of the target) and at most once every compactGap calls unless a prompt passes 1.5 x the target: compacting to half the
+ // target left too little room once images and transcripts came in, and a run compacted again six calls later.
+ const callsKey=`context-calls:${input.turnId??'standalone'}:${scopeName}`,compactedKey=`context-compacted-call:${input.turnId??'standalone'}:${scopeName}`;
+ const call=saved?.response?Number(db.getMeta(callsKey)??0):Number(db.getMeta(callsKey)??0)+1;if(!saved?.response)db.setMeta(callsKey,String(call));
  if(!saved?.response&&needsCount())for(let pass=0;;pass++){
   const count=await measure();if(count<=budget.target)break;
   if(pass>=2){if(count>budget.limit)throw tooLarge();break;}
-  // Compact to half the target, so the following steps append to a stable, cached prefix instead of compacting again.
-  const before=JSON.stringify(budget.messages).length;budget=budgetRequest(db,budgetInput,Math.max(.2,budget.target/count*.5));
+  if(!pass&&call-Number(db.getMeta(compactedKey)??-1e9)<engineBudgets.compactGap&&count<=budget.target*1.5&&count<=budget.limit)break;
+  // The system prompt and tools stay; the conversation is cut so the whole prompt lands near compactTo.
+  const fixed=estimateTokens({system:input.system,tools:input.tools})*count/Math.max(1,budget.estimated),to=Math.min(engineBudgets.compactTo,budget.target/2);
+  // Never so deep that the latest exchange (the result the agent has just been given) would be summarized away.
+  const before=JSON.stringify(budget.messages).length;budget=budgetRequest(db,budgetInput,deepCompaction(budget.messages,(to-fixed)/Math.max(1,count-fixed)));db.setMeta(compactedKey,String(call));
   if(JSON.stringify(budget.messages).length>=before){if(count>budget.limit)throw tooLarge();break;}
   assertToolExchanges(budget.messages);session=providerSession(db,config,{...input,messages:budget.messages});wireInput={...input,max_tokens:initialCapacity,messages:session.messages};fingerprint=fingerprintOf(wireInput);key='inference:'+fingerprint;
  }

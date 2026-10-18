@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
-import {chatRequest,responsesRequest,providerModels} from '../../supabase/functions/dream-gateway/providers';
+import {chatRequest,responsesRequest,providerModels,promptCacheKey} from '../../supabase/functions/dream-gateway/providers';
 import {usageCost} from '../../supabase/functions/dream-gateway/inference-policy';
 import {usageCost as appCost} from '@dream/config';
 import {SSEDecoder,MessageAssembler} from '../../supabase/functions/_shared/stream';
@@ -31,6 +31,11 @@ it('translates the agent\'s requests for Chat Completions and the Responses API,
  expect(responses).toMatchObject({instructions:'You edit videos.',store:false,max_output_tokens:4096,reasoning:{effort:'high'}});
  expect(responses.input.map((i:any)=>i.type??i.role)).toEqual(['user','assistant','function_call','function_call_output','user']);
  expect(responses.tools).toEqual([{type:'function',name:'look',description:'Look at a frame',parameters:conversation.tools[0].input_schema,strict:false}]);
+ // One cache key per user and prompt start: a later request (another turn, other messages) reads what the first cached.
+ const key=(extra:object,user='user-1')=>responsesRequest({...conversation,model:'gpt-6.1-sol',turnId:'turn-1',...extra},providerModels['gpt-6.1-sol'],4096,user).prompt_cache_key;
+ expect(key({})).toBe(key({turnId:'turn-2',messages:[{role:'user',content:'Something else'}]}));
+ expect(key({})).not.toBe(key({},'user-2'));expect(key({})).not.toBe(key({system:'You write code.'}));expect(key({})).not.toBe(key({tools:[]}));
+ expect(key({})!.length).toBeLessThanOrEqual(64);expect(promptCacheKey({turnId:'turn-9'})).toBe('gumbo-turn-9');
 });
 
 it('streams a GPT tool call back as Anthropic events and bills it at GPT\'s own rates',async()=>{

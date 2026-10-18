@@ -79,8 +79,19 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
   ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{})};
 }
 
+/** Two 32-bit FNV-1a hashes as 16 hex characters: enough to tell prompt prefixes apart in a cache key. */
+const shortHash=(text:string)=>{let a=0x811c9dc5,b=0x01000193^0x9e3779b9;for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);a=Math.imul(a^c,0x01000193)>>>0;b=Math.imul(b^c,0x01000193)>>>0;}return a.toString(16).padStart(8,'0')+b.toString(16).padStart(8,'0');};
+/** OpenAI's cache key for a request: one per user and stable prompt start (the model, its instructions and tools), so a
+ * new request, or a worker that shares the prompt, reads the system prompt and tools from the cache its earlier requests
+ * wrote. It was the request id until October 18, so every request (and each worker) began cold: about 14k uncached
+ * tokens on the first call of each. Without a user, the request id as before. */
+export function promptCacheKey(body:any,user?:string){
+ if(!user)return body.turnId?'gumbo-'+String(body.turnId).slice(0,56):undefined;
+ return 'gumbo-'+shortHash(user)+'-'+shortHash(JSON.stringify([body.model,systemText(body.system),functionTools(body.tools)]));
+}
+
 /** An Anthropic Messages request as an OpenAI Responses request. Nothing is stored at OpenAI. */
-export function responsesRequest(body:any,model:ProviderModel,maxTokens:number){
+export function responsesRequest(body:any,model:ProviderModel,maxTokens:number,user?:string){
  const input:any[]=[];
  for(const m of body.messages as any[]){
   if(typeof m.content==='string'){input.push(m.role==='assistant'?{role:'assistant',content:m.content}:{role:'user',content:[{type:'input_text',text:m.content}]});continue;}
@@ -101,8 +112,9 @@ export function responsesRequest(body:any,model:ProviderModel,maxTokens:number){
  }
  const tools=functionTools(body.tools),effort=effortOf(body),instructions=systemText(body.system);
  return{model:body.model,...(instructions?{instructions}:{}),input,...(tools.length?{tools:tools.map(f=>({type:'function',...f,strict:false})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_output_tokens:maxTokens,stream:true,store:false,
-  // Every call of one request shares a cache key, so OpenAI routes them to the same cache and the growing prefix is read, not re-billed.
-  ...(body.turnId?{prompt_cache_key:'gumbo-'+String(body.turnId).slice(0,56)}:{}),...(effort?{reasoning:{effort}}:{})};
+  // Calls with the same user and prompt start share a cache key, so OpenAI routes them to the same cache: the growing
+  // prefix of one request, and the system prompt and tools of the next, are read, not re-billed.
+  ...(promptCacheKey(body,user)?{prompt_cache_key:promptCacheKey(body,user)}:{}),...(effort?{reasoning:{effort}}:{})};
 }
 
 /** Writes Anthropic streaming events: one text or tool_use block open at a time, then the stop reason and usage. */

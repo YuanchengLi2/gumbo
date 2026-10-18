@@ -732,3 +732,13 @@ This entry supersedes "Manual UI is disabled while shared project/timeline code 
 - While a new request is starting, the task dock shows no cost until that request's first call, instead of the previous request's total.
 - Typing in the chat box no longer re-renders the workspace: the draft lives in its own store (store/draft.ts) that only the box follows, and sending reads it. On the long Vietnam edit a keystroke took about 130 ms and now takes about 12 ms.
 - Timeline filmstrips are drawn off screen and shown as images. As canvases, each one became its own compositing layer once drawn; with a hundred clips the page re-layerized for about 20 ms every frame while anything animated (Gumbo's working indicators, the playhead), which made the whole app feel slow during an edit. Layers went from about 160 to under 50.
+- Later the same day: compaction stopped thrashing. A run of the Vietnam project (turn 201b5ae1, 44 GPT-6.1 Sol calls) compacted six times, twice only six calls apart: compacting to half the 60k target left too little room once images and transcripts came in, and each compaction re-billed about 15-25k tokens as new input. Compaction now cuts the conversation so the whole prompt lands near 20k (compactTo), at most once every 6 calls (compactGap) unless a prompt passes 90k, and never so deep that the latest exchange, the result the agent has just been given, is summarized away.
+- OpenAI's prompt cache was keyed to the request id, so every new request and each worker began cold (the Vietnam run's first call: 14.5k tokens, none cached; its worker's: 21.3k). The gateway now keys it to the user and the stable prompt start (model, instructions, tools), so a new request reads the system prompt and tools its earlier requests cached. Claude needed nothing: its cache follows the exact prefix and its first calls already read 15-17k. Nothing per request sits in the system prompt or tools; the per-request briefing and project state come after them. This takes effect when the gateway is deployed.
+- Replays (scripts/replay-cost.ts; "warm" assumes the system prompt and tools are cached at the start, as the new key allows for GPT and as Claude already had):
+
+| Run | Before Oct 18 (180k) | Morning (60k, to half) | Now (to 20k, gap 6) | Now, warm start |
+|---|---|---|---|---|
+| Vietnam "next" (201b5ae1, Sol, 44 calls) | $0.831 | $0.824 (5 compactions) | $0.737 (4) | $0.726 |
+| Vietnam recap (5f0681b2, Sol, 47 calls) | $0.706 | $0.624 (2) | $0.593 (1) | $0.585 |
+| Opus 5.5 run (28 calls) | $1.422 | $1.432 | $1.405 | (already warm) |
+| Sonnet 5.5 run (46 calls) | $1.219 | $1.138 | $1.138 | (already warm) |

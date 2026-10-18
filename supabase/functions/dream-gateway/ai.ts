@@ -61,7 +61,7 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
 /** A request for another provider's model: translated, sent, and its stream translated back into Anthropic events, then
  * streamed and accounted exactly like a Claude request. A non-streaming request reads the translated stream to the end. */
 async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;maxTokens:number;abort:AbortController;fetcher:typeof fetch;timeoutMs:number;requests?:RequestStore;key:string}){
- const model=providerModels[body.model],request=model.api==='responses'?responsesRequest(body,model,o.maxTokens):chatRequest(body,model,o.maxTokens);
+ const model=providerModels[body.model],request=model.api==='responses'?responsesRequest(body,model,o.maxTokens,userId):chatRequest(body,model,o.maxTokens);
  let response:Response;
  try{response=await o.fetcher(providerEndpoints[model.provider],{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${o.key}`},body:JSON.stringify(request),signal:AbortSignal.any([o.abort.signal,AbortSignal.timeout(o.timeoutMs)])});}
  catch{
