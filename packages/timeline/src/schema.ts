@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {KeyframeSchema} from './keyframes';
+import {TRANSITION_TYPES,DIRECTIONS} from './library';
 export const AnchorSchema = z.discriminatedUnion('kind',[
   z.object({kind:z.literal('word'),wordId:z.string(),clipId:z.string(),edge:z.enum(['start','end']),offsetSec:z.number().default(0)}),
   z.object({kind:z.literal('clip'),clipId:z.string(),at:z.union([z.literal('start'),z.literal('end'),z.number().nonnegative()]),offsetSec:z.number().default(0)}),
@@ -8,7 +9,7 @@ export const AnchorSchema = z.discriminatedUnion('kind',[
 export type Anchor=z.infer<typeof AnchorSchema>;
 export const AudioSchema=z.object({gainDb:z.number().min(-60).max(24).default(0),fadeInSec:z.number().nonnegative().default(.01),fadeOutSec:z.number().nonnegative().default(.01),mute:z.boolean().default(false)});
 export const FramingSchema=z.object({mode:z.enum(['fit','fill','face']).default('fit'),scale:z.number().min(.1).max(8).default(1),x:z.number().min(0).max(1).default(.5),y:z.number().min(0).max(1).default(.5),faceTrackId:z.string().optional(),rotation:z.number().min(-360).max(360).optional(),flipX:z.boolean().optional(),flipY:z.boolean().optional(),opacity:z.number().min(0).max(1).optional(),exposure:z.number().min(-2).max(2).optional(),contrast:z.number().min(0).max(3).optional(),saturation:z.number().min(0).max(3).optional(),temperature:z.number().min(-1).max(1).optional()});
-export const TransitionSchema=z.object({type:z.enum(['cut','crossfade','dip_to_black','whip','zoom_through','slide']),durationSec:z.number().nonnegative().max(3)});
+export const TransitionSchema=z.object({type:z.enum(TRANSITION_TYPES),durationSec:z.number().nonnegative().max(3),direction:z.enum(DIRECTIONS).optional().describe('Which way a wipe, slide or whip moves; left by default.')});
 export const ClipSchema=z.object({id:z.string(),assetId:z.string(),srcIn:z.number().nonnegative(),srcOut:z.number().positive(),speed:z.number().min(.25).max(4).default(1),holdSec:z.number().positive().optional(),framing:FramingSchema.optional(),keyframes:z.array(KeyframeSchema).optional(),audio:AudioSchema.default({gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false}),transitionIn:TransitionSchema.optional(),reason:z.string().default(''),beatId:z.string().optional()});
 export type SpineClip=z.infer<typeof ClipSchema>;
 export const ItemSchema=z.object({id:z.string(),type:z.enum(['broll','overlay','effect','sfx']),start:AnchorSchema,end:AnchorSchema.optional(),durationSec:z.number().positive().optional(),component:z.string(),params:z.record(z.string(),z.unknown()).default({}),source:z.object({assetId:z.string(),srcIn:z.number().nonnegative(),srcOut:z.number().positive()}).optional(),layer:z.number().int().nonnegative().default(0),keyframes:z.array(KeyframeSchema).optional(),reason:z.string().default('')});

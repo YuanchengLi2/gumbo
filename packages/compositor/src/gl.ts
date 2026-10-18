@@ -1,4 +1,4 @@
-import type {Frame,MediaLayer,Matrix,Rect,Grade,TextLayer} from './frame';
+import type {Frame,MediaLayer,Matrix,Rect,Grade,TextLayer,Mask,Fx} from './frame';
 import {paintText} from './paint';
 
 /** Pixels as Chromium paints them, blue first and premultiplied: a scene's frame from its window. They are uploaded as
@@ -15,15 +15,40 @@ const VERTEX=`#version 300 es
 in vec2 corner;uniform vec4 rect;uniform mat3 matrix;uniform vec2 view;uniform vec4 uv;out vec2 v_uv;
 void main(){vec2 p=rect.xy+corner*rect.zw;vec3 q=matrix*vec3(p,1.0);vec2 ndc=q.xy/view*2.0-1.0;gl_Position=vec4(ndc.x,-ndc.y,0.0,1.0);v_uv=uv.xy+corner*uv.zw;}`;
 /** The grade is CSS's filters in order, in sRGB as the player applied them: brightness 2^exposure, contrast about mid
- * grey, saturate with its luminance weights, then the white-balance colour matrix. Blur averages a 7x7 grid weighted as a
- * Gaussian whose deviation is the CSS blur radius. */
+ * grey, saturate with its luminance weights, hue-rotate, then the white-balance colour matrix; Gumbo's filters add a
+ * green-magenta tint, a teal-and-orange split tone and a fade that lifts the blacks. Blur averages a 7x7 grid weighted as
+ * a Gaussian whose deviation is the CSS blur radius. Effects work on the frame's own pixels (so the preview and Export,
+ * drawn at different sizes, look the same): bands shifted sideways, blocks, the colour channels pulled apart, a glow from
+ * the bright parts, a vignette, scan lines and grain. A mask keeps a rectangle or a circle of the layer (wipes, reveals). */
 const FRAGMENT=`#version 300 es
-precision highp float;in vec2 v_uv;uniform sampler2D picture;uniform float opacity;uniform int grades;uniform vec4 grade[4];uniform float blur;uniform vec2 texel;uniform vec4 fill;uniform bool solid;uniform bool bgra;out vec4 colour;
-vec3 graded(vec3 c,vec4 g){c*=exp2(g.x);c=(c-0.5)*g.y+0.5;float s=g.z;mat3 m=mat3(0.213+0.787*s,0.213-0.213*s,0.213-0.213*s,0.715-0.715*s,0.715+0.285*s,0.715-0.715*s,0.072-0.072*s,0.072-0.072*s,0.072+0.928*s);c=clamp(m*clamp(c,0.0,1.0),0.0,1.0);float k=clamp(g.w,-1.0,1.0);return clamp(c*vec3(1.0+0.25*k,1.0+0.04*k,1.0-0.25*k),0.0,1.0);}
-void main(){if(solid){colour=vec4(fill.rgb*fill.a*opacity,fill.a*opacity);return;}
- vec4 c;if(blur>0.0){vec4 sum=vec4(0.0);float total=0.0;for(int i=-3;i<=3;i++)for(int j=-3;j<=3;j++){vec2 o=vec2(float(i),float(j))*blur/1.5;float w=exp(-dot(o,o)/(2.0*blur*blur));sum+=texture(picture,clamp(v_uv+o*texel,0.0,1.0))*w;total+=w;}c=sum/total;}else c=texture(picture,v_uv);if(bgra)c=c.bgra;
- vec3 rgb=c.a>0.0?c.rgb/c.a:c.rgb;for(int i=0;i<4;i++){if(i>=grades)break;rgb=graded(rgb,grade[i]);}
- colour=vec4(rgb*c.a*opacity,c.a*opacity);}`;
+precision highp float;in vec2 v_uv;uniform sampler2D picture;uniform float opacity;uniform int grades;uniform vec4 grade[8];uniform float blur;uniform vec2 texel;uniform vec4 fill;uniform bool solid;uniform bool bgra;
+uniform vec2 canvas;uniform float frameScale;uniform vec2 frameSize;uniform int maskKind;uniform vec4 maskRect;uniform vec3 maskCircle;uniform vec4 fxA;uniform vec4 fxB;out vec4 colour;
+float hash(vec2 p){p=fract(p*vec2(123.34,456.21));p+=dot(p,p+45.32);return fract(p.x*p.y);}
+vec3 graded(vec3 c,vec4 g,vec4 h){c*=exp2(g.x);c=(c-0.5)*g.y+0.5;float s=g.z;mat3 m=mat3(0.213+0.787*s,0.213-0.213*s,0.213-0.213*s,0.715-0.715*s,0.715+0.285*s,0.715-0.715*s,0.072-0.072*s,0.072-0.072*s,0.072+0.928*s);c=clamp(m*clamp(c,0.0,1.0),0.0,1.0);
+ if(h.z!=0.0){float r=radians(h.z),a=cos(r),b=sin(r);mat3 q=mat3(0.213+0.787*a-0.213*b,0.213-0.213*a+0.143*b,0.213-0.213*a-0.787*b,0.715-0.715*a-0.715*b,0.715+0.285*a+0.140*b,0.715-0.715*a+0.715*b,0.072-0.072*a+0.928*b,0.072-0.072*a-0.283*b,0.072+0.928*a+0.072*b);c=clamp(q*c,0.0,1.0);}
+ float k=clamp(g.w,-1.0,1.0);c=clamp(c*vec3(1.0+0.25*k,1.0+0.04*k,1.0-0.25*k),0.0,1.0);
+ if(h.x!=0.0){float t=clamp(h.x,-1.0,1.0);c=clamp(c*vec3(1.0+0.1*t,1.0-0.12*t,1.0+0.1*t),0.0,1.0);}
+ if(h.w!=0.0){float l=dot(c,vec3(0.2126,0.7152,0.0722));c=mix(c,c*vec3(0.82,1.04,1.12),h.w*(1.0-l)*0.7);c=mix(c,c*vec3(1.12,1.0,0.84),h.w*l*0.7);c=clamp(c,0.0,1.0);}
+ if(h.y!=0.0)c=h.y*0.22+c*(1.0-h.y*0.3);
+ return clamp(c,0.0,1.0);}
+vec4 pick(vec2 uv){vec4 c=texture(picture,clamp(uv,0.0,1.0));if(bgra)c=c.bgra;return c;}
+vec4 soft(vec2 uv,float radius){vec4 sum=vec4(0.0);float total=0.0;for(int i=-3;i<=3;i++)for(int j=-3;j<=3;j++){vec2 o=vec2(float(i),float(j))*radius/1.5;float w=exp(-dot(o,o)/(2.0*radius*radius));sum+=pick(uv+o*texel)*w;total+=w;}return sum/total;}
+vec4 look(vec2 uv){return blur>0.0?soft(uv,blur):pick(uv);}
+void main(){vec2 fp=vec2(gl_FragCoord.x,canvas.y-gl_FragCoord.y)/frameScale;float m=1.0;
+ if(maskKind==1){vec2 d=min(fp-maskRect.xy,maskRect.xy+maskRect.zw-fp);m=clamp(min(d.x,d.y)*frameScale+0.5,0.0,1.0);}
+ else if(maskKind==2)m=clamp((maskCircle.z-distance(fp,maskCircle.xy))*frameScale+0.5,0.0,1.0);
+ if(solid){colour=vec4(fill.rgb*fill.a*opacity*m,fill.a*opacity*m);return;}
+ vec2 uv=v_uv;float seed=mod(fxB.w,97.0);
+ if(fxB.z>0.0){float band=floor(fp.y/(frameSize.y*0.045));if(hash(vec2(band,seed))>0.55)uv.x+=(hash(vec2(band+7.0,seed))-0.5)*fxB.z*frameSize.x*0.06*texel.x;}
+ if(fxB.y>1.0){vec2 cell=fxB.y*texel;uv=(floor(uv/cell)+0.5)*cell;}
+ vec4 c=look(uv);
+ if(fxA.w>0.0){vec2 o=vec2(fxA.w*texel.x,0.0);vec4 r=look(uv+o),b=look(uv-o);float a=max(c.a,max(r.a,b.a));vec3 u=vec3(r.a>0.0?r.r/r.a:0.0,c.a>0.0?c.g/c.a:0.0,b.a>0.0?b.b/b.a:0.0);c=vec4(u*a,a);}
+ vec3 rgb=c.a>0.0?c.rgb/c.a:c.rgb;for(int i=0;i<4;i++){if(i>=grades)break;rgb=graded(rgb,grade[i*2],grade[i*2+1]);}
+ if(fxA.z>0.0){vec4 g=soft(uv,10.0*frameSize.y/1080.0);vec3 gr=g.a>0.0?g.rgb/g.a:g.rgb;rgb+=max(gr-0.55,0.0)/0.45*fxA.z*0.9;}
+ if(fxA.x>0.0){vec2 q=(fp/frameSize-0.5)*vec2(frameSize.x/frameSize.y,1.0);rgb*=1.0-fxA.x*smoothstep(0.3,0.95,length(q)/max(0.5,0.5*frameSize.x/frameSize.y));}
+ if(fxB.x>0.0)rgb*=1.0-fxB.x*0.35*(0.5+0.5*cos(fp.y*1.5708));
+ if(fxA.y>0.0)rgb+=(hash(floor(fp/1.5)+seed*0.137)-0.5)*fxA.y*0.22;
+ rgb=clamp(rgb,0.0,1.0);float a=c.a*opacity*m;colour=vec4(rgb*a,a);}`;
 
 const parseColour=(css:string):[number,number,number,number]=>{
  const hex=/^#([0-9a-f]{3,8})$/i.exec(css.trim());if(hex){let h=hex[1];if(h.length<=4)h=h.split('').map(c=>c+c).join('');const n=(i:number)=>parseInt(h.slice(i,i+2),16)/255;return[n(0),n(2),n(4),h.length===8?n(6):1];}
@@ -40,7 +65,7 @@ export class Compositor{
   const gl=canvas.getContext('webgl2',{alpha:!!options.transparent,antialias:true,premultipliedAlpha:true,preserveDrawingBuffer:true}) as WebGL2RenderingContext|null;if(!gl)throw new Error('This computer cannot draw the video with its graphics card (WebGL2 is unavailable).');this.gl=gl;
   const shader=(type:number,source:string)=>{const s=gl.createShader(type)!;gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error('Shader: '+gl.getShaderInfoLog(s));return s;};
   const program=gl.createProgram()!;gl.attachShader(program,shader(gl.VERTEX_SHADER,VERTEX));gl.attachShader(program,shader(gl.FRAGMENT_SHADER,FRAGMENT));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw new Error('Program: '+gl.getProgramInfoLog(program));this.program=program;
-  for(const name of ['rect','matrix','view','uv','picture','opacity','grades','grade','blur','texel','fill','solid','bgra'])this.u[name]=gl.getUniformLocation(program,name);
+  for(const name of ['rect','matrix','view','uv','picture','opacity','grades','grade','blur','texel','fill','solid','bgra','canvas','frameScale','frameSize','maskKind','maskRect','maskCircle','fxA','fxB'])this.u[name]=gl.getUniformLocation(program,name);
   this.quad=gl.createVertexArray()!;gl.bindVertexArray(this.quad);const buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([0,0,1,0,0,1,1,1]),gl.STATIC_DRAW);
   const corner=gl.getAttribLocation(program,'corner');gl.enableVertexAttribArray(corner);gl.vertexAttribPointer(corner,2,gl.FLOAT,false,0,0);
   this.text=new OffscreenCanvas(1,1);this.textContext=this.text.getContext('2d')!;
@@ -55,25 +80,29 @@ export class Compositor{
    const size=picture as {videoWidth?:number;displayWidth?:number;width?:number;videoHeight?:number;displayHeight?:number;height?:number};entry.width=size.videoWidth||size.displayWidth||size.width||1;entry.height=size.videoHeight||size.displayHeight||size.height||1;}
   return entry;
  }
- private quadDraw(rect:Rect,matrix:Matrix,uv:Rect,opacity:number,frame:Frame,o:{fill?:[number,number,number,number];grades?:Grade[];blur?:number;texel?:[number,number];bgra?:boolean}={}){
+ private quadDraw(rect:Rect,matrix:Matrix,uv:Rect,opacity:number,frame:Frame,o:{fill?:[number,number,number,number];grades?:Grade[];blur?:number;texel?:[number,number];bgra?:boolean;mask?:Mask;fx?:Fx}={}){
   const gl=this.gl,u=this.u;gl.uniform4f(u.rect,rect.x,rect.y,rect.w,rect.h);gl.uniformMatrix3fv(u.matrix,false,[matrix[0],matrix[1],0,matrix[2],matrix[3],0,matrix[4],matrix[5],1]);gl.uniform2f(u.view,frame.width,frame.height);gl.uniform4f(u.uv,uv.x,uv.y,uv.w,uv.h);gl.uniform1f(u.opacity,opacity);
   gl.uniform1i(u.solid,o.fill?1:0);gl.uniform1i(u.bgra,o.bgra?1:0);if(o.fill)gl.uniform4f(u.fill,...o.fill);
-  const grades=(o.grades??[]).slice(0,4);gl.uniform1i(u.grades,grades.length);if(grades.length)gl.uniform4fv(u.grade,grades.flatMap(g=>[g.exposure,g.contrast,g.saturation,g.temperature]).concat(Array(16-grades.length*4).fill(0)));
-  gl.uniform1f(u.blur,o.blur??0);gl.uniform2f(u.texel,...(o.texel??[0,0]));gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  const grades=(o.grades??[]).slice(0,4);gl.uniform1i(u.grades,grades.length);if(grades.length)gl.uniform4fv(u.grade,grades.flatMap(g=>[g.exposure,g.contrast,g.saturation,g.temperature,g.tint??0,g.fade??0,g.hue??0,g.splitTone??0]).concat(Array(32-grades.length*8).fill(0)));
+  gl.uniform1f(u.blur,o.blur??0);gl.uniform2f(u.texel,...(o.texel??[0,0]));
+  const m=o.mask;gl.uniform1i(u.maskKind,!m?0:m.kind==='rect'?1:2);if(m?.kind==='rect')gl.uniform4f(u.maskRect,m.rect.x,m.rect.y,m.rect.w,m.rect.h);if(m?.kind==='circle')gl.uniform3f(u.maskCircle,m.cx,m.cy,m.r);
+  const fx=o.fx;gl.uniform4f(u.fxA,fx?.vignette??0,fx?.grain??0,fx?.glow??0,fx?.split??0);gl.uniform4f(u.fxB,fx?.scan??0,fx?.pixel??0,fx?.jitter??0,fx?.seed??0);
+  gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
  }
  /** Draws a frame. Layers whose picture is not available yet are skipped (the player shows the last picture it had). */
  draw(frame:Frame,source:PictureSource){
   const gl=this.gl,width=this.canvas.width,height=this.canvas.height,scale=width/frame.width;
   gl.viewport(0,0,width,height);gl.useProgram(this.program);gl.bindVertexArray(this.quad);gl.enable(gl.BLEND);gl.blendFunc(gl.ONE,gl.ONE_MINUS_SRC_ALPHA);
+  gl.uniform2f(this.u.canvas,width,height);gl.uniform1f(this.u.frameScale,scale);gl.uniform2f(this.u.frameSize,frame.width,frame.height);
   if(frame.background==='transparent')gl.clearColor(0,0,0,0);else{const [r,g,b]=parseColour(frame.background);gl.clearColor(r,g,b,1);}gl.clear(gl.COLOR_BUFFER_BIT);gl.activeTexture(gl.TEXTURE0);gl.uniform1i(this.u.picture,0);
   const full={x:0,y:0,w:frame.width,h:frame.height},none:Matrix=[1,0,0,1,0,0];
   for(let n=0;n<frame.layers.length;n++){const layer=frame.layers[n];
-   if(layer.kind==='fill'){if(layer.opacity>0)this.quadDraw(layer.rect,layer.transform,{x:0,y:0,w:1,h:1},layer.opacity,frame,{fill:parseColour(layer.color)});continue;}
+   if(layer.kind==='fill'){if(layer.opacity>0)this.quadDraw(layer.rect,layer.transform,{x:0,y:0,w:1,h:1},layer.opacity,frame,{fill:parseColour(layer.color),mask:layer.mask});continue;}
    if(layer.kind==='media'){if(layer.opacity<=0||!layer.rect.w||!layer.rect.h)continue;const picture=source(layer);if(!picture)continue;
     // Video and scene layers each keep one texture; stills are uploaded once. A video's picture is uploaded every frame (an
     // element or decoder may reuse the object); a scene's only when it is a new picture (the same one while it holds still).
     const live=layer.media==='video'||layer.media==='scene',entry=this.texture(live?layer.media+':'+layer.key:'still:'+layer.assetId+':'+(layer.frameIndex??0),picture,layer.media!=='video');
-    this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h],bgra:entry.bgra});continue;}
+    this.quadDraw(layer.rect,layer.transform,layer.uv,layer.opacity,frame,{grades:layer.grades,blur:layer.blur,texel:[layer.uv.w/layer.rect.w,layer.uv.h/layer.rect.h],bgra:entry.bgra,mask:layer.mask,fx:layer.fx});continue;}
    // Consecutive text layers are painted together on one canvas the size of the output, then drawn over the frame.
    const run:TextLayer[]=[];while(n<frame.layers.length&&frame.layers[n].kind==='text')run.push(frame.layers[n++] as TextLayer);n--;
    if(this.text.width!==width||this.text.height!==height){this.text.width=width;this.text.height=height;}

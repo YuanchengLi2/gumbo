@@ -9,6 +9,15 @@ export const sceneUrl=(a:Asset)=>`dream-engine://app/scene/${encodeURIComponent(
 export const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
 type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;playing:boolean;request:number;lastUsed:number;error?:string};
 
+/** A layer's mask (frame pixels) as a clip-path on its box: the frame point is taken back through the layer's transform, so
+ * a wipe or a circle reveal crops a scene where the compositor crops footage. */
+export function maskPath(layer:Pick<MediaLayer,'mask'|'transform'|'rect'>){
+ const mask=layer.mask;if(!mask)return '';const [a,b,c,d,e,f]=layer.transform,det=a*d-b*c||1e-9;
+ const local=(x:number,y:number)=>[(d*(x-e)-c*(y-f))/det-layer.rect.x,(-b*(x-e)+a*(y-f))/det-layer.rect.y];
+ if(mask.kind==='rect'){const r=mask.rect;return 'polygon('+[[r.x,r.y],[r.x+r.w,r.y],[r.x+r.w,r.y+r.h],[r.x,r.y+r.h]].map(([x,y])=>local(x,y).map(v=>v.toFixed(2)+'px').join(' ')).join(',')+')';}
+ const [x,y]=local(mask.cx,mask.cy);return `circle(${(mask.r/Math.sqrt(Math.abs(det))).toFixed(2)}px at ${x.toFixed(2)}px ${y.toFixed(2)}px)`;
+}
+
 export class SceneLayers{
  private live=new Map<string,Live>();private alert=document.createElement('div');
  constructor(private container:HTMLElement){
@@ -44,7 +53,7 @@ export class SceneLayers{
    scene??=this.open(layer.key,asset);scene.lastUsed=now;
    if(this.container.children[order]!==scene.wrap)this.container.insertBefore(scene.wrap,this.container.children[order]??this.alert);
    const m=layer.transform,k=scale,cw=layer.rect.w/Math.max(1e-9,layer.uv.w),ch=layer.rect.h/Math.max(1e-9,layer.uv.h);
-   Object.assign(scene.wrap.style,{display:'block',width:layer.rect.w+'px',height:layer.rect.h+'px',opacity:String(layer.opacity),transform:`matrix(${m[0]*k},${m[1]*k},${m[2]*k},${m[3]*k},${m[4]*k},${m[5]*k}) translate(${layer.rect.x}px,${layer.rect.y}px)`});
+   Object.assign(scene.wrap.style,{display:'block',width:layer.rect.w+'px',height:layer.rect.h+'px',opacity:String(layer.opacity),transform:`matrix(${m[0]*k},${m[1]*k},${m[2]*k},${m[3]*k},${m[4]*k},${m[5]*k}) translate(${layer.rect.x}px,${layer.rect.y}px)`,clipPath:maskPath(layer)});
    Object.assign(scene.iframe.style,{left:-layer.uv.x*cw+'px',top:-layer.uv.y*ch+'px',transform:`scale(${cw/asset.width},${ch/asset.height})`});
    const frame=layer.frameIndex??0;if(frame!==scene.frame||playing!==scene.playing){scene.frame=frame;scene.playing=playing;this.send(scene);}
   });

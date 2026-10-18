@@ -42,7 +42,8 @@ it('uses upstream range and additive selection semantics',()=>{const range=selec
 it('keeps canvas presets and transforms durable and supplies real transition handles',()=>{
  const t=timeline();t.spine[0].srcIn=0;t.spine[0].srcOut=20;t.spine[1].srcIn=0;t.spine[1].srcOut=20;
  const transitioned=processBatch(t,transitionOps(t,footage,'b','crossfade'),footage,undefined,{snapToSpeech:false}).timeline;
- expect(transitioned.spine[0].srcOut).toBeCloseTo(19.85);expect(transitioned.spine[1].srcIn).toBeCloseTo(.15);
+ // The library's cross dissolve lasts half a second: each side gives a quarter second of handle.
+ expect(transitioned.spine[1].transitionIn?.durationSec).toBe(.5);expect(transitioned.spine[0].srcOut).toBeCloseTo(19.75);expect(transitioned.spine[1].srcIn).toBeCloseTo(.25);
  for(const preset of canvasPresets){const changed=apply(transitioned,[{type:'set_project_settings',settings:{width:preset.width,height:preset.height},reason:'Ratio'}],footage);expect(changed.settings.width/changed.settings.height).toBeCloseTo(preset.width/preset.height);}
  const style=clipStyle({mode:'fit',scale:1.2,x:.2,y:.7,rotation:90,flipX:true,opacity:.5,exposure:1,contrast:1.2,saturation:.8});expect(style.objectFit).toBe('contain');expect(style.transform).toContain('rotate(90deg)');expect(style.transform).toContain('scaleX(-1)');expect(style.filter).toContain('brightness(2)');
 });

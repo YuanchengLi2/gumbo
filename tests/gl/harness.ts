@@ -17,6 +17,16 @@ const pixel=(gl:WebGL2RenderingContext,x:number,y:number)=>{const out=new Uint8A
   // Twice the frame's size drawn at half: the canvas is 200x100, the frame 400x200.
   scaled:{width:400,height:200,background:'#000000',layers:[media({rect:{x:0,y:0,w:400,h:200}}) as any]},
   text:{width:200,height:100,background:'#000000',layers:[{kind:'text',key:'t',component:'lower_third',text:'Hi',x:.5,y:.5,rotation:0,scale:1,opacity:1,color:'#ffffff',background:'#00ff00',fontSize:20,fontWeight:500} as any]},
+  // Wipes and reveals: only the mask's rectangle or circle of the layer is drawn.
+  maskRect:{width:200,height:100,background:'#000000',layers:[media({mask:{kind:'rect',rect:{x:100,y:0,w:100,h:100}}}) as any]},
+  maskCircle:{width:200,height:100,background:'#000000',layers:[media({mask:{kind:'circle',cx:100,cy:50,r:20}}) as any]},
+  // Filters: a 120° hue turn takes red to green; a full fade lifts the blacks and dims the whites.
+  hue:{width:200,height:100,background:'#000000',layers:[media({grades:[{exposure:0,contrast:1,saturation:1,temperature:0,hue:120}]}) as any]},
+  fade:{width:200,height:100,background:'#000000',layers:[media({grades:[{exposure:0,contrast:1,saturation:1,temperature:0,fade:1}]}) as any]},
+  // Effects: the channels pulled 30 px apart near the red/blue edge, a vignette, and 80 px blocks.
+  split:{width:200,height:100,background:'#000000',layers:[media({fx:{split:30}}) as any]},
+  vignette:{width:200,height:100,background:'#000000',layers:[media({fx:{vignette:1}}) as any]},
+  pixel:{width:200,height:100,background:'#000000',layers:[media({fx:{pixel:80}}) as any]},
  };
  c.draw(frames[name],()=>pic);
  return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50)};

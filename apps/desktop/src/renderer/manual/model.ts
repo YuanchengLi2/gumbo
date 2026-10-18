@@ -1,4 +1,4 @@
-import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,KEYFRAME_PROPS,type Keyframe,type KeyframeProp,type Op,type TimelineDocument} from '@dream/timeline';
+import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,KEYFRAME_PROPS,transitionInfo,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument} from '@dream/timeline';
 // Placement helpers live in @dream/timeline so the assistant timeline's drag-and-drop shares them.
 export {newId,projectAnchor,ensureDuration,addAsset};
 import type {FootageIndex} from '@dream/footage';
@@ -34,7 +34,8 @@ export function manualItems(t:TimelineDocument,f:FootageIndex):Item[]{const r=re
  ...r.music.map(m=>({look:'music' as const,id:m.id,kind:'music' as const,track:'music:'+(m.layer??0),start:m.timelineStart,end:m.timelineEnd,label:assets.get(m.assetId)??m.id,assetId:m.assetId})),
  ...(t.captions?r.words.map(w=>({look:'caption' as const,id:w.id,kind:'caption' as const,track:'captions',start:w.start,end:w.end,label:w.text})):[])
 ];}
-export function removeItems(t:TimelineDocument,f:FootageIndex,ids:string[]):Op[]{const selected=new Set(ids),items=manualItems(t,f).filter(i=>selected.has(i.id)),ops:Op[]=[];const clips=items.filter(i=>i.kind==='clip').map(i=>i.id);if(clips.length)ops.push({type:'delete_clips',clipIds:clips,reason});for(const i of items){if(i.kind==='item')ops.push({type:'remove_item',itemId:i.id,reason});if(i.kind==='music')ops.push({type:'remove_music',musicId:i.id,reason});if(i.kind==='caption'){const w=resolve(t,f).words.find(w=>w.id===i.id)!;ops.push({type:'update_caption_overrides',overrides:[{wordId:w.wordId,clipId:w.clipId,hidden:true}],reason});}}return ops;}
+export function removeItems(t:TimelineDocument,f:FootageIndex,ids:string[]):Op[]{const selected=new Set(ids),items=manualItems(t,f).filter(i=>selected.has(i.id)),ops:Op[]=[];
+ for(const id of ids){const clipId=transitionClip(id);if(clipId&&!selected.has(clipId)&&t.spine.some(c=>c.id===clipId&&c.transitionIn))ops.push({type:'set_transition',clipId,transition:null,reason});}const clips=items.filter(i=>i.kind==='clip').map(i=>i.id);if(clips.length)ops.push({type:'delete_clips',clipIds:clips,reason});for(const i of items){if(i.kind==='item')ops.push({type:'remove_item',itemId:i.id,reason});if(i.kind==='music')ops.push({type:'remove_music',musicId:i.id,reason});if(i.kind==='caption'){const w=resolve(t,f).words.find(w=>w.id===i.id)!;ops.push({type:'update_caption_overrides',overrides:[{wordId:w.wordId,clipId:w.clipId,hidden:true}],reason});}}return ops;}
 export function splitItems(t:TimelineDocument,f:FootageIndex,ids:string[],time:number):Op[]{const items=manualItems(t,f).filter(i=>(!ids.length||ids.includes(i.id))&&i.start+1/t.settings.fps<=time&&i.end-1/t.settings.fps>=time),ops:Op[]=[];for(const i of items){const offset=Math.round((time-i.start)*t.settings.fps)/t.settings.fps;if(i.kind==='clip')ops.push({type:'split_clip',clipId:i.id,atSec:offset,newClipId:newId(),reason});else if(i.kind==='music'){const m=t.music.find(m=>m.id===i.id)!;ops.push({type:'update_music',musicId:i.id,changes:{srcOut:m.srcIn+offset},reason},{type:'add_music',music:{...m,id:newId(),srcIn:m.srcIn+offset,start:projectAnchor(time)},reason});}else if(i.kind==='item'){const item=t.attached.find(a=>a.id===i.id)!,right={...item,id:newId(),start:projectAnchor(time),end:undefined,durationSec:i.end-time,...(item.source&&f.assets.find(a=>a.id===item.source!.assetId)?.kind!=='image'?{source:{...item.source,srcIn:item.source.srcIn+offset}}:{})};ops.push({type:'update_item',clearEnd:true,itemId:i.id,changes:{durationSec:offset,end:undefined,...(item.source&&f.assets.find(a=>a.id===item.source!.assetId)?.kind!=='image'?{source:{...item.source,srcOut:item.source.srcIn+offset}}:{})},reason},{type:'add_item',item:right,reason});}}return ops;}
 export function trimItems(t:TimelineDocument,f:FootageIndex,ids:string[],side:'left'|'right',delta:number):Op[]{const items=manualItems(t,f).filter(i=>ids.includes(i.id)&&i.kind!=='caption');const members=items.map(i=>{const clip=t.spine.find(c=>c.id===i.id),item=t.attached.find(c=>c.id===i.id),music=t.music.find(c=>c.id===i.id),asset=f.assets.find(a=>a.id===i.assetId),sourceIn=clip?.srcIn??item?.source?.srcIn??music?.srcIn??0,speed=clip?.speed??1,sourceOut=clip?.srcOut??item?.source?.srcOut??music?.srcOut??0;return{elementId:i.id,trackId:i.track,startTime:(i.kind==='clip'?sourceIn/speed:i.start)*TPS,duration:(i.end-i.start)*TPS,trimStart:sourceIn*TPS,trimEnd:Math.max(0,(asset?.durationSec??0)-sourceOut)*TPS,sourceDuration:asset&&asset.kind!=='image'?asset.durationSec*TPS:undefined,retime:speed!==1?{speed}:undefined,leftNeighborBound:null,rightNeighborBound:null};});
  const resized=computeGroupResize({members,side,deltaTime:delta*TPS,fps:{numerator:t.settings.fps,denominator:1}}),ops:Op[]=[];
@@ -52,19 +53,30 @@ export function moveItems(t:TimelineDocument,f:FootageIndex,ids:string[],delta:n
 }
 export function duplicateItems(t:TimelineDocument,f:FootageIndex,ids:string[],at?:number,target=t):Op[]{const selected=manualItems(t,f).filter(i=>ids.includes(i.id)&&i.kind!=='caption');if(!selected.length)return[];const offset=(at??Math.max(...selected.map(i=>i.end)))-Math.min(...selected.map(i=>i.start)),ops:Op[]=[];const insertTime=at??Math.max(...selected.map(i=>i.end)),resolved=resolve(target,f),crossing=selected.some(i=>i.kind==='clip')?resolved.clips.find(c=>insertTime>c.start+1/target.settings.fps&&insertTime<c.end-1/target.settings.fps):undefined;let position=resolved.clips.findIndex(c=>c.start>=insertTime);if(position<0)position=target.spine.length;if(crossing){position=resolved.clips.indexOf(crossing)+1;ops.push({type:'split_clip',clipId:crossing.id,atSec:insertTime-crossing.start,newClipId:newId(),reason});}let extra=0;for(const i of selected){if(i.kind==='clip'){const clip=t.spine.find(c=>c.id===i.id)!;ops.push({type:'insert_clip',position:position+extra++,clip:{...structuredClone(clip),id:newId()},reason});}else if(i.kind==='item'){const item=t.attached.find(a=>a.id===i.id)!;ops.push({type:'add_item',item:{...structuredClone(item),id:newId(),start:projectAnchor(i.start+offset),end:undefined,durationSec:i.end-i.start},reason});}else{const music=t.music.find(m=>m.id===i.id)!;ops.push({type:'add_music',music:{...structuredClone(music),id:newId(),start:projectAnchor(i.start+offset)},reason});}}if(selected.some(i=>i.kind!=='clip'))ops.push(...ensureDuration(target,Math.max(...selected.filter(i=>i.kind!=='clip').map(i=>i.end+offset))));return ops;}
 
-export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string):Op[]{
- const index=t.spine.findIndex(c=>c.id===clipId),clip=t.spine[index];if(!clip)throw new Error('Select a video clip.');
+/** A transition into a clip from the library, centred on its cut. Video on either side needs footage past the cut for half
+ * the transition (a handle): when a clip has none left there, it is trimmed back by what is missing. Photos and graphics
+ * hold their picture, so they need none. */
+export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string,durationSec?:number,direction?:Direction):Op[]{
+ const index=t.spine.findIndex(c=>c.id===clipId),clip=t.spine[index];if(!clip)throw new Error('Select a clip on the main track.');
  if(type==='cut')return[{type:'set_transition',clipId,transition:null,reason}];
- if(index<1)throw new Error('Transitions go between two clips. Select the second clip.');
- const before=t.spine[index-1],assets=new Map(f.assets.map(a=>[a.id,a])),a=assets.get(before.assetId)!,b=assets.get(clip.assetId)!;
- if(a.kind!=='video'||b.kind!=='video')throw new Error('This transition needs two video clips.');
- const duration=.3,half=duration/2,ops:Op[]=[];
- const outgoing=Math.max(0,half-(a.durationSec-before.srcOut)/before.speed),incoming=Math.max(0,half-clip.srcIn/clip.speed);
- if((before.srcOut-before.srcIn)/before.speed<=outgoing+1/t.settings.fps||(clip.srcOut-clip.srcIn)/clip.speed<=incoming+1/t.settings.fps)throw new Error('These clips are too short for this transition.');
+ if(index<1)throw new Error('Transitions go between two clips. Put this one on the cut before a clip.');
+ const before=t.spine[index-1],assets=new Map(f.assets.map(a=>[a.id,a])),a=assets.get(before.assetId),b=assets.get(clip.assetId);
+ if(!a||!b||a.kind==='audio'||b.kind==='audio')throw new Error('Transitions go between two clips with a picture.');
+ const info=transitionInfo(type);if(!info)throw new Error('Unknown transition: '+type);
+ const duration=Math.max(2/t.settings.fps,Math.min(3,durationSec??clip.transitionIn?.durationSec??info.durationSec)),half=duration/2,ops:Op[]=[];
+ const footage=(x:typeof a)=>x.kind==='video'&&!x.scene&&!x.sequence;
+ const outgoing=footage(a)&&!before.holdSec?Math.max(0,half-(a.durationSec-before.srcOut)/before.speed):0,incoming=footage(b)&&!clip.holdSec?Math.max(0,half-clip.srcIn/clip.speed):0;
+ const length=(c:typeof clip)=>c.holdSec??(c.srcOut-c.srcIn)/c.speed;
+ if(length(before)<=outgoing+half+1/t.settings.fps||length(clip)<=incoming+half+1/t.settings.fps)throw new Error('These clips are too short for a transition this long.');
  if(outgoing>0)ops.push({type:'trim_clip',clipId:before.id,srcOut:before.srcOut-outgoing*before.speed,reason});
  if(incoming>0)ops.push({type:'trim_clip',clipId,srcIn:clip.srcIn+incoming*clip.speed,reason});
- ops.push({type:'set_transition',clipId,transition:{type:type as any,durationSec:duration},reason});return ops;
+ ops.push({type:'set_transition',clipId,transition:{type:info.id,durationSec:Math.round(duration*1000)/1000,...(info.directional?{direction:direction??clip.transitionIn?.direction??'left'}:{})},reason});return ops;
 }
+/** The cut nearest a time on the main track: the clip that starts there (never the first). */
+export function nearestCut(t:TimelineDocument,f:FootageIndex,time:number){const clips=resolve(t,f).clips.slice(1);let best:typeof clips[number]|undefined;for(const c of clips)if(!best||Math.abs(c.start-time)<Math.abs(best.start-time))best=c;return best;}
+/** Transitions are selected as `transition:<clip id>`, the clip they lead into. */
+export const transitionId=(clipId:string)=>'transition:'+clipId;
+export const transitionClip=(id:string)=>id.startsWith('transition:')?id.slice(11):undefined;
 export function elementOps(t:TimelineDocument,component:string,time:number,layer=0):Op[]{return[...ensureDuration(t,time+3),{type:'add_item',item:{id:newId(),type:['punch_zoom','slow_push','shake'].includes(component)?'effect':'overlay',component,start:projectAnchor(time),durationSec:3,layer,params:{text:component==='lower_third'?'Your name':'Your title',x:.5,y:component==='lower_third'?.8:.5,fontSize:60,color:'#ffffff',amount:.1},reason},reason}];}
 
 /** Split at the playhead and remove one side, as OpenCut's Q and W do: the part before the playhead (left) or after it

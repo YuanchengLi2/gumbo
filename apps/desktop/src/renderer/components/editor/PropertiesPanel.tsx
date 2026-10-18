@@ -1,8 +1,8 @@
 import React,{useMemo} from 'react';
-import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick} from 'lucide-react';
-import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
+import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick,ChevronsRight} from 'lucide-react';
+import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
-import {itemLook,reason,ensureDuration,setKeyframe} from '../../manual/model';
+import {itemLook,reason,ensureDuration,setKeyframe,transitionOps,transitionClip} from '../../manual/model';
 export {setKeyframe};
 import {Section,NumberField,ChoiceField,Segmented,ToggleField,ColorField,TextField,type Live,type KeyState} from './fields';
 
@@ -14,7 +14,6 @@ import {Section,NumberField,ChoiceField,Segmented,ToggleField,ColorField,TextFie
 type Props={project:ProjectState;timeline:TimelineDocument;frame:number;selected:string[];locked:boolean;lockedReason:string;
  onApply:(ops:Op[],label:string,version?:string)=>Promise<unknown>;onPreview:(t:TimelineDocument|null)=>void;onError:(text:string)=>void};
 
-const TRANSITION_NAMES:Record<string,string>={cut:'None (cut)',crossfade:'Cross dissolve',dip_to_black:'Dip to black',whip:'Whip pan',zoom_through:'Zoom in',slide:'Slide'};
 const EFFECT_NAMES:Record<string,string>={punch_zoom:'Zoom punch',slow_push:'Slow push',shake:'Shake',grade:'Filter'};
 const clock=(sec:number)=>`${Math.floor(sec/60)}:${(sec%60).toFixed(1).padStart(4,'0')}`;
 const half=(fps:number)=>.5/fps;
@@ -32,9 +31,11 @@ export function PropertiesPanel(p:Props){
  const id=p.selected.length===1?p.selected[0]:undefined;
  if(p.selected.length>1)return <aside className="editor-properties" aria-label="Properties"><div className="prop-empty"><MousePointerClick size={18}/><p>{p.selected.length} items selected</p><small>Select one to change its properties. Delete, split and duplicate work on all of them.</small></div></aside>;
 
- const clip=id?shown.clips.find(c=>c.id===id):undefined,item=id?shown.items.find(i=>i.id===id):undefined,music=id?shown.music.find(m=>m.id===id):undefined,word=id?shown.words.find(w=>w.id===id):undefined;
+ const cutInto=id?transitionClip(id):undefined,clip=id&&!cutInto?shown.clips.find(c=>c.id===id):undefined,item=id?shown.items.find(i=>i.id===id):undefined,music=id?shown.music.find(m=>m.id===id):undefined,word=id?shown.words.find(w=>w.id===id):undefined;
  let body:React.ReactNode,title='Project',icon=<Settings2 size={14}/>;
- if(clip){const asset=f.assets.find(a=>a.id===clip.assetId);title=asset?.filename??'Clip';icon=<Film size={14}/>;body=<ClipProperties {...{p,clip,base,resolvedBase,edit,now,time,fps,disabled}}/>;}
+ if(cutInto){const into=shown.clips.find(c=>c.id===cutInto);title=transitionInfo(into?.transitionIn?.type??'')?.name??'Transition';icon=<ChevronsRight size={14}/>;
+  body=<><p className="prop-note">Into {f.assets.find(a=>a.id===into?.assetId)?.filename??'the next clip'} at {clock(into?.start??0)}</p><TransitionFields {...{p,base,clipId:cutInto,edit,now,disabled}}/></>;}
+ else if(clip){const asset=f.assets.find(a=>a.id===clip.assetId);title=asset?.filename??'Clip';icon=<Film size={14}/>;body=<ClipProperties {...{p,clip,base,resolvedBase,edit,now,time,fps,disabled}}/>;}
  else if(item){const look=itemLook(item,f);title=look==='text'?'Text':look==='effect'?EFFECT_NAMES[item.component]??item.component.replaceAll('_',' '):look==='filter'?'Filter':look==='sfx'?'Sound effect':f.assets.find(a=>a.id===item.source?.assetId)?.filename??'Overlay';
   icon=look==='text'?<Type size={14}/>:look==='effect'?<Sparkles size={14}/>:look==='filter'?<SlidersHorizontal size={14}/>:look==='sfx'?<AudioLines size={14}/>:<Layers size={14}/>;
   body=<ItemProperties {...{p,item,look,base,edit,now,time,fps,disabled}}/>;}
@@ -81,7 +82,6 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
  const value=(prop:KeyframeProp)=>shownKeys[prop]??a.value(prop);
  const num=(prop:KeyframeProp,label:string,min:number,max:number,step:number,o:{unit?:string;scale?:number;offset?:number}={})=><NumberField key={prop} label={label} value={value(prop)-(o.offset??0)} min={min} max={max} step={step} unit={o.unit} scale={o.scale} disabled={disabled} keyframe={a.keyframe(prop,label)} {...edit<number>('Change '+label.toLowerCase(),v=>a.make(prop,v+(o.offset??0)))}/>;
  const index=base.spine.findIndex(c=>c.id===raw.id),video=asset?.kind==='video'&&!asset.scene;
- const transition=raw.transitionIn,setTransition=(next:NonNullable<typeof transition>|null):Op[]=>[{type:'set_transition',clipId:raw.id,transition:next,reason}];
  return <>
   <p className="prop-note">{asset?.kind==='image'?'Photo':asset?.scene?'Motion graphic':'Video'} · {clock(clip.start)}–{clock(clip.end)}{video?` · source ${clock(raw.srcIn)}–${clock(raw.srcOut)}`:''}</p>
   <Section title="Transform">{num('scale','Scale',.1,4,.01,{unit:'%',scale:100})}{num('x','Position X',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('y','Position Y',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('rotation','Rotation',-180,180,1,{unit:'°'})}{num('opacity','Opacity',0,1,.01,{unit:'%',scale:100})}
@@ -96,10 +96,21 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
    <ToggleField label="Mute" value={clip.audio.mute} disabled={disabled} onChange={v=>now([{type:'set_clip_audio',clipId:raw.id,audio:{mute:v},reason}],v?'Mute clip':'Unmute clip')}/>
    <NumberField label="Fade in" value={clip.audio.fadeInSec} min={0} max={5} step={.05} unit="s" disabled={disabled} {...edit<number>('Change clip fade',v=>[{type:'set_clip_audio',clipId:raw.id,audio:{fadeInSec:v},reason}])}/>
    <NumberField label="Fade out" value={clip.audio.fadeOutSec} min={0} max={5} step={.05} unit="s" disabled={disabled} {...edit<number>('Change clip fade',v=>[{type:'set_clip_audio',clipId:raw.id,audio:{fadeOutSec:v},reason}])}/></Section>}
-  {index>0&&<Section title="Transition in">
-   <ChoiceField label="Type" value={transition?.type??'cut'} disabled={disabled} options={Object.entries(TRANSITION_NAMES).map(([id,name])=>({id,name}))} onChange={type=>now(setTransition(type==='cut'?null:{...transition,type:type as any,durationSec:transition?.durationSec??.5}),'Change transition')}/>
-   {transition&&transition.type!=='cut'&&<NumberField label="Duration" value={transition.durationSec} min={.1} max={2} step={.05} unit="s" disabled={disabled} {...edit<number>('Change transition length',v=>setTransition({...transition,durationSec:v}))}/>}</Section>}
+  {index>0&&<TransitionFields {...{p,base,clipId:raw.id,edit,now,disabled}}/>}
  </>;
+}
+
+/** A cut's transition: which one, how long, and which way it goes; None makes it a cut again. Changing the length trims
+ * the clips when they need more footage past the cut, as adding it does. */
+function TransitionFields({p,base,clipId,edit,now,disabled}:Omit<Common,'time'|'fps'>&{clipId:string}){
+ const f=p.project.footage,shown=p.timeline.spine.find(c=>c.id===clipId)?.transitionIn,current=base.spine.find(c=>c.id===clipId)?.transitionIn,info=transitionInfo(shown?.type??'');
+ const make=(type:string,durationSec?:number,direction?:Direction)=>transitionOps(base,f,clipId,type,durationSec,direction);
+ return <Section title="Transition">
+  <ChoiceField label="Type" value={shown?.type??'cut'} disabled={disabled} options={[{id:'cut',name:'None (cut)'},...TRANSITIONS.map(t=>({id:t.id,name:t.name}))]} onChange={type=>{try{now(make(type,type==='cut'?undefined:current&&current.type!=='cut'?current.durationSec:undefined),type==='cut'?'Remove transition':'Change transition');}catch(error){p.onError((error as Error).message);}}}/>
+  {shown&&shown.type!=='cut'&&<NumberField label="Duration" value={shown.durationSec} min={.1} max={2} step={.05} unit="s" disabled={disabled} {...edit<number>('Change transition length',v=>make(shown.type,v,shown.direction))}/>}
+  {shown&&info?.directional&&<Segmented label="Direction" value={shown.direction??'left'} disabled={disabled} options={DIRECTIONS.map(d=>({id:d,name:d[0].toUpperCase()+d.slice(1)}))} onChange={d=>{try{now(make(shown.type,shown.durationSec,d),'Change transition direction');}catch(error){p.onError((error as Error).message);}}}/>}
+  {info&&<p className="prop-hint">{info.about}</p>}
+ </Section>;
 }
 
 function ItemProperties({p,item,look,base,edit,now,time,fps,disabled}:Common&{item:ResolvedItem;look:ReturnType<typeof itemLook>}){

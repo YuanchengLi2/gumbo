@@ -27,7 +27,7 @@ it('draws a clip at its source time with its framing, keyframes, effects and gra
  expect(m.transform[0]).toBeCloseTo(1.4);const [x,y]=centre(m);expect(x).toBeCloseTo(540);expect(y).toBeCloseTo(960+.1*1920);
 });
 
-it('crossfades over black between two video clips and fades a dip in from the composition background',()=>{
+it('crossfades over black between two video clips, and dips through black centred on the cut',()=>{
  const t=vertical([clip('a','tall',0,4),clip('b','wide',0,4,{transitionIn:{type:'crossfade',durationSec:1}}),clip('c','tall',5,8,{transitionIn:{type:'dip_to_black',durationSec:1}})]);
  const p=prepare({timeline:t,footage:footage()});
  // The window runs from 3.5 s to 4.5 s; at 4 s the incoming clip is about half in, on black.
@@ -35,7 +35,10 @@ it('crossfades over black between two video clips and fades a dip in from the co
  const [out,into]=media(mid.layers);expect(out).toMatchObject({assetId:'tall',opacity:1});expect(into.assetId).toBe('wide');expect(into.opacity).toBeGreaterThan(.45);expect(into.opacity).toBeLessThan(.55);
  // The incoming clip starts at its in point (it cannot start before 0) and the outgoing one runs past its out point.
  expect(into.time).toBeCloseTo(.5);expect(out.time).toBeCloseTo(4);
- const dip=frameAt(p,8+1/30*3);expect(media(dip.layers)[0].opacity).toBeCloseTo(3/15);expect((dip.layers[0] as FillLayer).opacity).toBeCloseTo(3/15);
+ // The dip runs from 7.5 s to 8.5 s: the outgoing clip goes to black over the first half, the incoming one comes up from it.
+ const smooth=(x:number)=>x*x*(3-2*x),before=frameAt(p,7.5+5/30),after=frameAt(p,8+3/30);
+ expect(media(before.layers)[0].assetId).toBe('wide');expect((before.layers.at(-1) as FillLayer)).toMatchObject({kind:'fill',color:'#000000'});expect((before.layers.at(-1) as FillLayer).opacity).toBeCloseTo(smooth(10/29));
+ expect(media(after.layers)[0]).toMatchObject({assetId:'tall',opacity:1,time:5-.5+18/30});expect((after.layers.at(-1) as FillLayer).opacity).toBeCloseTo(smooth((1-18/29)*2));
  expect(frameAt(p,8.6).layers.every(l=>(l as any).opacity===1)).toBe(true);
 });
 
@@ -62,4 +65,19 @@ it('always fills the project frame on the main track: no letterbox, no zoom out,
  expect(media.rect).toEqual({x:0,y:0,w:1080,h:1920});expect(media.uv.w).toBeLessThan(1);
  // No zoom below 1 and no shift: at scale 1 there is no room to move.
  expect(media.transform).toEqual([1,0,0,1,0,0]);
+});
+
+it('draws the library transitions: wipes and reveals as masks, directions, a glitch, and photos as well as footage',()=>{
+ const t=(type:string,extra:object={},second='wide')=>prepare({timeline:vertical([clip('a','tall',0,4),clip('b',second,0,4,{...(second==='logo'?{holdSec:4}:{}),transitionIn:{type,durationSec:1,...extra}})]),footage:footage()});
+ // At 4 s the window (3.5-4.5 s, 30 frames) is 15/29 of the way through.
+ const k=15/29,W=1080,H=1920,mid=(p:ReturnType<typeof t>)=>media(frameAt(p,4).layers);
+ const [,wiped]=mid(t('wipe',{direction:'right'}));expect(wiped.mask?.kind).toBe('rect');expect((wiped.mask as any).rect.w).toBeCloseTo(W*k);expect((wiped.mask as any).rect.x).toBe(0);
+ const [,left]=mid(t('wipe'));expect((left.mask as any).rect.x).toBeCloseTo(W*(1-k));
+ const [,iris]=mid(t('iris'));expect(iris.mask).toMatchObject({kind:'circle',cx:W/2,cy:H/2});
+ const [out,up]=mid(t('slide',{direction:'up'}));expect(out.transform[5]).toBeCloseTo(-k*H);expect(up.transform[5]).toBeCloseTo((1-k)*H);expect(up.transform[4]).toBeCloseTo(0);
+ const glitch=mid(t('glitch'));expect(glitch).toHaveLength(1);expect(glitch[0].fx?.split).toBeGreaterThan(10);
+ const white=frameAt(t('dip_to_white'),3.6).layers.at(-1) as FillLayer;expect(white).toMatchObject({kind:'fill',color:'#ffffff'});
+ // A photo on one side of the cut takes part too: it holds its picture through the window.
+ const photo=mid(t('crossfade',{},'logo'));expect(photo.map(m=>m.assetId)).toEqual(['tall','logo']);expect(photo[1].opacity).toBeCloseTo(k);
+ expect(mid(t('blur'))[0].blur).toBeGreaterThan(20);
 });

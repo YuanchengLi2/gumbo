@@ -106,3 +106,63 @@
 .preview-selection circle{cursor:grab}
 .preview-selection line{stroke:#fff}
 .preview-guide{stroke:#fff;stroke-dasharray:6 6;filter:drop-shadow(0 0 1px rgb(0 0 0 / .9))}
+
+/* Libraries (transitions, effects, filters, text, stickers): tiles that play what they do, dragged onto the timeline or clicked. */
+.library{padding:14px 14px 24px;overflow-y:auto;flex:1;min-height:0}
+.library-hint{font-size:11px;color:var(--n40);line-height:1.5;margin:2px 2px 12px}
+.library h4{font-size:11px;font-weight:600;color:var(--n48);margin:14px 2px 8px}
+.library-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:12px 10px}
+.library-tile{display:flex;flex-direction:column;gap:6px;align-items:stretch;text-align:left;border-radius:9px;padding:0;color:var(--n70);cursor:pointer}
+.library-tile:disabled{cursor:not-allowed}
+.library-tile:hover:not(:disabled) .library-name{color:var(--n90)}
+.library-tile[aria-pressed=true]>span:first-child{outline:2px solid var(--n80);outline-offset:2px}
+.library-name{font-size:11px;padding:0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.library-tile>span:first-child{border-radius:8px;overflow:hidden}
+
+/* Transition demos: shot A (dark) gives way to shot B (light) the way the transition does it, on a loop. */
+.transition-demo{position:relative;display:block;aspect-ratio:16/10;background:#000;isolation:isolate}
+.transition-demo i{position:absolute;inset:0;display:grid;place-items:center;font:600 15px/1 system-ui,sans-serif;font-style:normal}
+.transition-demo .shot-a{background:linear-gradient(135deg,#3a3a3a,#1c1c1c);color:#bbb}
+.transition-demo .shot-b{background:linear-gradient(135deg,#e9e9e9,#bdbdbd);color:#333;opacity:0}
+.library-tile:not(:hover) .transition-demo *{animation-play-state:paused!important}
+.library-tile:not(:hover) .transition-demo .shot-b{animation:none!important;opacity:1!important;transform:none!important;filter:none!important;clip-path:polygon(62% 0,100% 0,100% 100%,38% 100%)!important}
+.library-tile:not(:hover) .transition-demo .shot-a{animation:none!important}
+.demo-crossfade .shot-b{animation:demo-fade 1.6s ease-in-out infinite}
+.demo-dip_to_black .shot-a{animation:demo-dip-out 1.6s infinite}.demo-dip_to_black .shot-b{animation:demo-dip-in 1.6s infinite}
+.demo-dip_to_white{background:#fff}.demo-dip_to_white .shot-a{animation:demo-dip-out 1.6s infinite}.demo-dip_to_white .shot-b{animation:demo-dip-in 1.6s infinite}
+.demo-flash .shot-b{animation:demo-fade 1.6s infinite}.demo-flash:after{content:'';position:absolute;inset:0;background:#fff;opacity:0;animation:demo-flash 1.6s infinite}
+.demo-wipe .shot-b{opacity:1;animation:demo-wipe 1.6s ease-in-out infinite}
+.demo-slide .shot-a{animation:demo-slide-a 1.6s ease-in-out infinite}.demo-slide .shot-b{opacity:1;animation:demo-slide-b 1.6s ease-in-out infinite}
+.demo-whip .shot-a{animation:demo-whip-a 1.6s ease-in infinite}.demo-whip .shot-b{opacity:1;animation:demo-whip-b 1.6s ease-out infinite}
+.demo-zoom_through .shot-a{animation:demo-zoom-a 1.6s ease-in infinite}.demo-zoom_through .shot-b{animation:demo-zoom-b 1.6s ease-out infinite}
+.demo-zoom_out .shot-a{animation:demo-shrink-a 1.6s ease-in-out infinite}.demo-zoom_out .shot-b{animation:demo-shrink-b 1.6s ease-in-out infinite}
+.demo-blur .shot-a{animation:demo-blur-a 1.6s infinite}.demo-blur .shot-b{animation:demo-blur-b 1.6s infinite}
+.demo-spin .shot-a{animation:demo-spin-a 1.6s ease-in infinite}.demo-spin .shot-b{animation:demo-spin-b 1.6s ease-out infinite}
+.demo-iris .shot-b{opacity:1;animation:demo-iris 1.6s ease-in-out infinite}
+.demo-glitch .shot-a{animation:demo-glitch-a 1.6s steps(1) infinite}.demo-glitch .shot-b{animation:demo-glitch-b 1.6s steps(1) infinite}
+@keyframes demo-fade{0%,25%{opacity:0}75%,100%{opacity:1}}
+@keyframes demo-dip-out{0%,20%{opacity:1}50%,100%{opacity:0}}
+@keyframes demo-dip-in{0%,50%{opacity:0}80%,100%{opacity:1}}
+@keyframes demo-flash{0%,35%{opacity:0}50%{opacity:.95}70%,100%{opacity:0}}
+@keyframes demo-wipe{0%,20%{clip-path:inset(0 0 0 100%)}80%,100%{clip-path:inset(0 0 0 0)}}
+@keyframes demo-slide-a{0%,20%{transform:none}80%,100%{transform:translateX(-100%)}}
+@keyframes demo-slide-b{0%,20%{transform:translateX(100%)}80%,100%{transform:none}}
+@keyframes demo-whip-a{0%,30%{transform:none;filter:none}55%,100%{transform:translateX(-100%);filter:blur(3px)}}
+@keyframes demo-whip-b{0%,45%{transform:translateX(100%);filter:blur(3px)}70%,100%{transform:none;filter:none}}
+@keyframes demo-zoom-a{0%,25%{transform:none;opacity:1}55%,100%{transform:scale(1.6);opacity:0}}
+@keyframes demo-zoom-b{0%,45%{transform:scale(1.6);opacity:0}75%,100%{transform:none;opacity:1}}
+@keyframes demo-shrink-a{0%,25%{transform:none;opacity:1}70%,100%{transform:scale(.6);opacity:0}}
+@keyframes demo-shrink-b{0%,30%{transform:scale(1.25);opacity:0}75%,100%{transform:none;opacity:1}}
+@keyframes demo-blur-a{0%,20%{filter:none}50%{filter:blur(4px)}100%{filter:blur(4px)}}
+@keyframes demo-blur-b{0%,30%{opacity:0;filter:blur(4px)}50%{filter:blur(4px)}80%,100%{opacity:1;filter:none}}
+@keyframes demo-spin-a{0%,25%{transform:none;opacity:1}55%,100%{transform:rotate(90deg) scale(1.8);opacity:0}}
+@keyframes demo-spin-b{0%,45%{transform:rotate(-90deg) scale(1.8);opacity:0}75%,100%{transform:none;opacity:1}}
+@keyframes demo-iris{0%,20%{clip-path:circle(0 at 50% 50%)}80%,100%{clip-path:circle(75% at 50% 50%)}}
+@keyframes demo-glitch-a{0%{transform:none}35%{transform:translateX(6px);filter:hue-rotate(90deg)}42%{transform:translateX(-5px)}50%,100%{opacity:0}}
+@keyframes demo-glitch-b{0%,50%{opacity:0}50.1%{opacity:1;transform:translateX(5px)}58%{transform:translateX(-4px)}66%,100%{transform:none;opacity:1}}
+
+/* Transitions on the timeline: a small mark over the cut, as wide as the transition. */
+.ai-stage .transition-mark{position:absolute;top:50%;height:20px;margin-top:-10px;border-radius:6px;background:rgb(255 255 255 / .92);color:#111;display:flex;align-items:center;justify-content:center;gap:3px;font-size:9px;font-weight:600;z-index:6;cursor:pointer;box-shadow:0 1px 3px rgb(0 0 0 / .35);min-width:16px;overflow:hidden;white-space:nowrap}
+.ai-stage .transition-mark.selected{background:#111;color:#fff;box-shadow:0 0 0 2px #fff,0 1px 4px rgb(0 0 0 / .4)}
+.ai-stage .transition-mark.leaving{opacity:.4}
+.ai-stage .cut-target{position:absolute;top:2px;bottom:2px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--n90);z-index:7;pointer-events:none;box-shadow:0 0 0 2px rgb(255 255 255 / .7)}

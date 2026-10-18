@@ -3,6 +3,7 @@ import type {TimelineDocument} from './schema';
 import type {Op} from './ops';
 import {resolve} from './resolve';
 import {canvasRatio} from './canvas';
+import {TRANSITIONS} from './library';
 
 /** One change a request made, as a card can show it: what it was, where it sits on the timeline, the details, and the
  * operations that undo it alone (against the timeline the request left). Ids name the clip, element or audio it touched. */
@@ -14,7 +15,7 @@ const same=(a:unknown,b:unknown)=>JSON.stringify(a??null)===JSON.stringify(b??nu
 const reason='Undo this change';
 const components:Record<string,string>={title_card:'title card',lower_third:'lower third',circle_highlight:'highlight',callout_arrow:'arrow',counter:'counter',progress_bar:'progress bar',text:'text',
  punch_zoom:'punch zoom',slow_push:'slow push',shake:'shake',grade:'colour grade',source_layer:'overlay'};
-const transitions:Record<string,string>={cut:'cut',crossfade:'cross dissolve',dip_to_black:'dip to black',whip:'whip',zoom_through:'zoom through',slide:'slide'};
+const transitions:Record<string,string>={cut:'cut',...Object.fromEntries(TRANSITIONS.map(t=>[t.id,t.name.toLowerCase()]))};
 const without=<T extends {id:string}>(value:T)=>{const {id:_,...rest}=value;return rest;};
 
 export function timelineChangeList(before:TimelineDocument,after:TimelineDocument,options:{name:(assetId:string)=>string;footage?:FootageIndex}):TimelineChange[]{

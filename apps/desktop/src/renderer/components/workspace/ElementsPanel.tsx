@@ -1,7 +1,7 @@
 import React,{useMemo,useState} from 'react';
 import {Film,Type,Sparkles,Layers,Wand2,SlidersHorizontal,AudioLines,Music2,Captions,ArrowRightLeft,X} from 'lucide-react';
 import type {ProjectState} from '@dream/project-db';
-import type {Op} from '@dream/timeline';
+import {TRANSITIONS,type Op} from '@dream/timeline';
 import {manualItems,removeItems,reason as manualReason,type Item,type Look} from '../../manual/model';
 import {useEditorActions} from './editor-actions';
 
@@ -14,7 +14,7 @@ const groups:[string,typeof Film,(i:Item)=>boolean][]=[
  ['Overlays and B-roll',Layers,i=>i.look==='overlay'],['Effects',Wand2,i=>i.look==='effect'],['Filters',SlidersHorizontal,i=>i.look==='filter'],
  ['Sound effects',AudioLines,i=>i.look==='sfx'],['Music and voice',Music2,i=>i.kind==='music']];
 const clock=(sec:number)=>`${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
-const transitionNames:Record<string,string>={crossfade:'Cross dissolve',dip_to_black:'Dip to black',whip:'Whip',zoom_through:'Zoom through',slide:'Slide'};
+const transitionNames:Record<string,string>=Object.fromEntries(TRANSITIONS.map(t=>[t.id,t.name]));
 
 export function ElementsPanel({project,selected}:{project:ProjectState;selected:string[]}){
  const actions=useEditorActions(),[mine,setMine]=useState(false),t=project.timeline,f=project.footage;
@@ -24,7 +24,7 @@ export function ElementsPanel({project,selected}:{project:ProjectState;selected:
   const by=(id:string):Row['by']=>reasons.get(id)===manualReason?'you':'gumbo';
   const out:{title:string;Icon:typeof Film;rows:Row[]}[]=groups.map(([title,Icon,match])=>({title,Icon,rows:items.filter(i=>i.kind!=='caption'&&match(i)).map(i=>({id:i.id,focus:i.id,label:i.label,start:i.start,end:i.end,by:by(i.id),remove:removeItems(t,f,[i.id])}))}));
   const clips=items.filter(i=>i.kind==='clip');
-  out.splice(1,0,{title:'Transitions',Icon:ArrowRightLeft,rows:t.spine.flatMap(c=>{const tr=c.transitionIn;if(!tr||tr.type==='cut')return[];const at=clips.find(i=>i.id===c.id);return[{id:'transition:'+c.id,focus:c.id,label:`${transitionNames[tr.type]??tr.type} into ${at?.label??'clip'}`,start:at?.start??0,end:(at?.start??0)+tr.durationSec,by:by(c.id),remove:[{type:'set_transition',clipId:c.id,transition:null,reason:manualReason}]}];})});
+  out.splice(1,0,{title:'Transitions',Icon:ArrowRightLeft,rows:t.spine.flatMap(c=>{const tr=c.transitionIn;if(!tr||tr.type==='cut')return[];const at=clips.find(i=>i.id===c.id);return[{id:'transition:'+c.id,focus:'transition:'+c.id,label:`${transitionNames[tr.type]??tr.type} into ${at?.label??'clip'}`,start:at?.start??0,end:(at?.start??0)+tr.durationSec,by:by(c.id),remove:[{type:'set_transition',clipId:c.id,transition:null,reason:manualReason}]}];})});
   const words=items.filter(i=>i.kind==='caption');
   if(words.length)out.push({title:'Captions',Icon:Captions,rows:[{id:'captions',focus:words[0].id,label:`${words.length} words of captions`,start:words[0].start,end:words.at(-1)!.end,by:'gumbo',remove:[{type:'set_captions',captions:null,reason:manualReason}]}]});
   return out.map(s=>({...s,rows:mine?s.rows.filter(r=>r.by==='gumbo'):s.rows})).filter(s=>s.rows.length);
