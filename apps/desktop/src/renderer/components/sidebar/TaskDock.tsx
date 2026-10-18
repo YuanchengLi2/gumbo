@@ -23,7 +23,8 @@ export function TaskDock({project}:{project:ProjectState}){
  let tasks:WorkTask[]=project.experience?.activity?.tasks??[];
  if(workflow.success)tasks=workflow.data.plan.steps.map((step,index)=>({id:step.id,title:step.title,evidence:[],status:workflow.data.completed.some(c=>c.stepId===step.id)?'complete':index===workflow.data.cursor?(active?'running':'paused'):'pending'}));
  tasks=tasks.map(task=>({...task,title:editingTask(task.title)})).map(task=>task.status==='running'&&!active?{...task,status:'paused'}:task);
- const turnId=project.experience?.turnId,usage=useEditor(s=>s.usage),rows:UsageRow[]=usage&&usage.turnId===turnId?usage.rows:[];
+ // A request just sent has cost nothing yet: until its own first call, the last request's total is not shown as its own.
+ const turnId=project.experience?.turnId,usage=useEditor(s=>s.usage),rows:UsageRow[]=usage&&!pending&&usage.turnId===turnId?usage.rows:[];
  // Totals saved with the request load once; live ai.usage events keep them current while it runs.
  useEffect(()=>{if(!turnId)return;let current=true;void window.dream.command({type:'turn_usage',turnId}).then((result:any)=>{if(current&&result?.rows&&useEditor.getState().usage?.turnId!==turnId)useEditor.getState().setUsage({turnId,rows:result.rows.map((r:any)=>({owner:r.owner,model:r.model,calls:r.calls,cost:r.cost??0,prompt:r.prompt??0,output:r.output??0,ms:r.ms??0}))});}).catch(()=>{});return()=>{current=false;};},[turnId]);
  const cost=rows.reduce((n,r)=>n+r.cost,0),owners=[...new Set(rows.map(r=>r.owner))].map(owner=>{const mine=rows.filter(r=>r.owner===owner),title=owner==='main'?undefined:events.find(e=>e.id===owner)?.text;return{owner,label:owner==='main'?'Gumbo':title?editingTask(title):'Helper',models:[...new Set(mine.map(r=>modelName(r.model)))].join(' + '),calls:mine.reduce((n,r)=>n+r.calls,0),cost:mine.reduce((n,r)=>n+r.cost,0),tokens:mine.reduce((n,r)=>n+r.prompt+r.output,0),ms:mine.reduce((n,r)=>n+r.ms,0)};});

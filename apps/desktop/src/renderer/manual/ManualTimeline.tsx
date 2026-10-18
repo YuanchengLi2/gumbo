@@ -1,4 +1,5 @@
 import {transitionOps,elementOps,clipLooks,nearestCut,transitionId,libraryOps,type LibraryDrop} from './model';
+import {usePlayhead} from '../store/playhead';
 import {transitionInfo} from '@dream/timeline';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {Volume2,VolumeX,Eye,EyeOff,Lock,LockOpen,ZoomIn,Film,Layers,Music2,Type,AudioLines,Sparkles,SlidersHorizontal,Captions,Clapperboard,ChevronsRight,Smile} from 'lucide-react';
@@ -18,6 +19,8 @@ import {TICKS_PER_SECOND as TPS} from './opencut/compat';
 import {useEditor} from '../store/editor';
 import {typing} from './shortcuts';
 
+/** The playhead follows the player frame by frame on its own, so playing does not re-render the timeline (see playhead.ts). */
+function PlayheadLine({left,fps,pps}:{left:number;fps:number;pps:number}){const frame=usePlayhead(s=>s.frame);return <div className="manual-playhead" style={{left:left+frame/fps*pps}}><span/></div>;}
 type Props={project:ProjectState;frame:number;selected:string[];disabled:boolean;lockedReason?:string;onSelect:(ids:string[])=>void;onSeek:(frame:number)=>void;onApply:(ops:Op[],label:string,version?:string)=>Promise<unknown>;onPreview:(t:TimelineDocument|null)=>void;onSplit:()=>void;onDuplicate:()=>void;onDelete:()=>void;onError:(text:string)=>void;draft?:{timeline?:TimelineDocument;assets?:import('@dream/footage').Asset[]}|null;live?:boolean;label?:string;onHistory?:()=>void;onAttach?:(ids:string[])=>void};
 type KeySession={id:string;n:number;keys:Keyframe[];x:number;time:number;start:number;end:number;clock:(time:number)=>number;project:ProjectState;ops:Op[];moved:boolean};
 type Session={item:Item;side:'move'|'left'|'right';x:number;y:number;scrollLeft:number;ids:string[];project:ProjectState;ops:Op[];moved:boolean};
@@ -112,7 +115,7 @@ export function ManualTimeline(p:Props){
    </div>;})}
   </div>
  </div>)}
- <div className="manual-playhead" style={{left:labelWidth+p.frame/fps*pps}}><span/></div>{snapAt!==null&&<div className="manual-snap" style={{left:labelWidth+snapAt*pps}}/>}{cut!==null&&<div className="cut-target" style={{left:labelWidth+cut*pps,top:tops[tracks.indexOf('video')],height:trackHeight('video')}}/>}{marquee&&<div className="manual-marquee" style={marquee}/>}
+ <PlayheadLine left={labelWidth} fps={fps} pps={pps}/>{snapAt!==null&&<div className="manual-snap" style={{left:labelWidth+snapAt*pps}}/>}{cut!==null&&<div className="cut-target" style={{left:labelWidth+cut*pps,top:tops[tracks.indexOf('video')],height:trackHeight('video')}}/>}{marquee&&<div className="manual-marquee" style={marquee}/>}
  </div></div>
  {menu&&<div className="clip-menu" role="menu" aria-label={`Actions for ${menu.item.label}`} style={{left:Math.min(menu.x,window.innerWidth-210),top:Math.min(menu.y,window.innerHeight-200)}}>
   {([['Split at playhead','Ctrl+B',p.onSplit,menu.item.kind!=='caption'&&menu.item.start<p.frame/fps&&p.frame/fps<menu.item.end],['Duplicate','Ctrl+D',p.onDuplicate,menu.item.kind!=='caption'],['Delete','Del',p.onDelete,true],['Move playhead to start','',()=>p.onSeek(Math.round(menu.item.start*fps)),true],['Move playhead to end','',()=>p.onSeek(Math.max(0,Math.round(menu.item.end*fps)-1)),true]] as const).map(([label,keys,run,enabled])=>

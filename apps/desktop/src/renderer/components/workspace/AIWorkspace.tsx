@@ -1,4 +1,5 @@
 import {ComputerAccessPrompt} from '../files/ComputerAccessPrompt';
+import {usePlayhead} from '../../store/playhead';
 import {useEditor,stopRun} from '../../store/editor';
 import {Conversation} from '../chat/Conversation';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
@@ -56,35 +57,36 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  const recentSteps=[...(p.project.experience?.activity?.events??[])].filter(e=>e.kind==='action'&&e.tool!=='finish').sort((a,b)=>a.sequence-b.sequence).slice(-4);
  const run=(make:()=>Op[],label:string)=>{if(locked){p.onError(lockedReason);return;}try{void applyOps(make(),label);}catch(error){p.onError((error as Error).message);}};
  const remove=()=>run(()=>removeItems(t,f,p.selected),'Delete selection');
- const split=()=>run(()=>splitItems(t,f,p.selected.length?p.selected:manualItems(t,f).filter(i=>!t.trackSettings?.[i.track]?.locked).map(i=>i.id),p.frame/t.settings.fps),'Split at playhead');
+ const split=()=>run(()=>splitItems(t,f,p.selected.length?p.selected:manualItems(t,f).filter(i=>!t.trackSettings?.[i.track]?.locked).map(i=>i.id),now()),'Split at playhead');
  const duplicate=()=>run(()=>duplicateItems(t,f,p.selected),'Duplicate selection');
- const time=p.frame/t.settings.fps;
+ // Read when used: while playing the workspace does not re-render, so its frame is where playback started.
+ const now=()=>usePlayhead.getState().frame/t.settings.fps;
  // Editing keys after OpenCut's (manual/shortcuts.ts): S or Ctrl+B splits, Q and W split and remove a side, Ctrl+C and
  // Ctrl+V copy and paste at the playhead, Ctrl+A selects everything, ? lists them all.
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(typing(e)||document.querySelector('.dialog-backdrop'))return;const mod=e.ctrlKey||e.metaKey,k=e.key.toLowerCase(),plain=!mod&&!e.altKey&&!e.shiftKey;
   if((e.key==='Delete'||e.key==='Backspace')&&p.selected.length){e.preventDefault();remove();}
   else if(mod&&k==='b'||plain&&k==='s'){e.preventDefault();split();}
-  else if(plain&&(k==='q'||k==='w')){e.preventDefault();run(()=>splitRemove(t,f,p.selected,time,k==='q'?'left':'right'),k==='q'?'Split and remove left':'Split and remove right');}
+  else if(plain&&(k==='q'||k==='w')){e.preventDefault();run(()=>splitRemove(t,f,p.selected,now(),k==='q'?'left':'right'),k==='q'?'Split and remove left':'Split and remove right');}
   else if(mod&&k==='d'&&p.selected.length){e.preventDefault();duplicate();}
   else if(mod&&k==='c'&&p.selected.length&&!window.getSelection()?.toString()){e.preventDefault();clipboard.current={ids:[...p.selected],timeline:t};}
-  else if(mod&&k==='v'&&clipboard.current){e.preventDefault();const copied=clipboard.current;run(()=>duplicateItems(copied.timeline,f,copied.ids,time,t),'Paste');}
+  else if(mod&&k==='v'&&clipboard.current){e.preventDefault();const copied=clipboard.current;run(()=>duplicateItems(copied.timeline,f,copied.ids,now(),t),'Paste');}
   else if(mod&&k==='a'){e.preventDefault();p.onSelect(selectableIds(t,f));}
   else if(e.key==='?'){e.preventDefault();setHelp(v=>!v);}};
   window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[t,f,p.selected,p.frame,locked]);
  // A transition clicked in the library goes on the selected cut, into the selected clip, or on the cut nearest the playhead.
- const addTransition=(type:string)=>{const one=p.selected.length===1?p.selected[0]:undefined,picked=one?transitionClip(one)??(t.spine.findIndex(c=>c.id===one)>0?one:undefined):undefined,clipId=picked??nearestCut(t,f,time)?.id;
+ const addTransition=(type:string)=>{const one=p.selected.length===1?p.selected[0]:undefined,picked=one?transitionClip(one)??(t.spine.findIndex(c=>c.id===one)>0?one:undefined):undefined,clipId=picked??nearestCut(t,f,now())?.id;
   if(!clipId){p.onError('Transitions go on a cut between two clips on the main track.');return;}run(()=>transitionOps(t,f,clipId,type),'Add transition');p.onSelect([transitionId(clipId)]);};
  // A library piece clicked: text and stickers at the playhead; an effect over the selected clip and a filter on its own
  // picture (else both at the playhead for three seconds). What it added is selected, ready for the properties panel.
  const addPiece=(drop:LibraryDrop)=>{if(locked){p.onError(lockedReason);return;}const one=p.selected.length===1?p.selected[0]:undefined,clip=one&&t.spine.some(c=>c.id===one)?one:undefined;
-  try{const ops=libraryOps(t,f,drop,time,(drop.kind==='effect'||drop.kind==='filter')&&clip?{clipId:clip,onClip:drop.kind==='filter'}:{}),added=ops.find(o=>o.type==='add_item');
+  try{const ops=libraryOps(t,f,drop,now(),(drop.kind==='effect'||drop.kind==='filter')&&clip?{clipId:clip,onClip:drop.kind==='filter'}:{}),added=ops.find(o=>o.type==='add_item');
    // Text and stickers come in with an animation, so at their first frame there is nothing to see yet: the playhead moves to
    // where the entrance has finished, showing what was added with its handles, as CapCut plays a template once.
    void applyOps(ops,'Add '+drop.kind).then(()=>{if(added?.type!=='add_item')return;p.onSelect([added.item.id]);
-    if(drop.kind==='text'||drop.kind==='sticker'){const fps=t.settings.fps,sec=entranceSec(added.item.params,added.item.durationSec??3,drop.kind==='sticker');if(sec>0)p.onSeek(Math.round((time+sec)*fps)+1);}});}catch(error){p.onError((error as Error).message);}};
+    if(drop.kind==='text'||drop.kind==='sticker'){const fps=t.settings.fps,sec=entranceSec(added.item.params,added.item.durationSec??3,drop.kind==='sticker');if(sec>0)p.onSeek(Math.round((now()+sec)*fps)+1);}});}catch(error){p.onError((error as Error).message);}};
  const chooseCaptions=(style:string|null)=>run(()=>[{type:'set_captions',captions:style?{style:style as 'clean',params:t.captions?.params??{},overrides:t.captions?.overrides??[]}:null,reason:manualReason}],style?'Caption style':'Turn captions off');
  // The editor's + on a media card: video and photos join the main track at the playhead, audio goes to music.
- const addMedia=(assetId:string)=>{const asset=f.assets.find(a=>a.id===assetId);if(!asset)return;run(()=>addAsset(t,f,assetId,asset.kind==='audio'?'music:0':'video',Math.round(time*t.settings.fps)/t.settings.fps),'Add media');};
+ const addMedia=(assetId:string)=>{const asset=f.assets.find(a=>a.id===assetId);if(!asset)return;run(()=>addAsset(t,f,assetId,asset.kind==='audio'?'music:0':'video',Math.round(now()*t.settings.fps)/t.settings.fps),'Add media');};
  // Sending always jumps to the newest message; after that the chat follows new output while you are at the bottom.
  useLayoutEffect(()=>{if(pending&&pending.requestId!==sent.current){sent.current=pending.requestId;follow.current=true;setFollowing(true);}if(follow.current&&scroll.current)scroll.current.scrollTop=scroll.current.scrollHeight;},[pending?.requestId,commentary,p.project.messages.length,p.project.experience?.steps,p.project.experience?.activity?.events,p.project.aiStatus,p.project.experience?.fileWait?.proposal?.id,p.project.taskPlan,p.project.outline,p.tab,layout]);
  // Content that grows on its own (a streaming note, an image loading, a table filling in) stays pinned to the bottom too.

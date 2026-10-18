@@ -1,4 +1,5 @@
 import {editingActivity,editingTask} from '../../editing-language';
+import {usePlayhead} from '../../store/playhead';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {EngineView,type PlayerRef} from '../../engine/EngineView';
 import {resolve,canvasPresets,canvasRatio,type TimelineDocument} from '@dream/timeline';
@@ -8,6 +9,10 @@ import {useEditor} from '../../store/editor';
 import {GumboMark} from '../home/HomeScreen';
 import type {CommandFn} from '../../hooks/useProjectSession';
 
+/** The time and scrubber follow the player frame by frame on their own, so playing re-renders only them (see playhead.ts). */
+function Live({format}:{format:(frame:number)=>string}){return <>{format(usePlayhead(s=>s.frame))}</>;}
+function LiveScrubber({duration,onSeek}:{duration:number;onSeek:(frame:number)=>void}){const frame=usePlayhead(s=>s.frame);
+ return <input className="scrubber" aria-label="Preview position" type="range" min={0} max={duration-1} value={Math.min(frame,duration-1)} onChange={e=>onSeek(Number(e.target.value))}/>;}
 type Props={project:ProjectState;timeline?:TimelineDocument;player:React.RefObject<PlayerRef|null>;frame:number;playing:boolean;onFrame:(frame:number)=>void;onPlaying:(value:boolean)=>void;command:CommandFn;working?:boolean;manual?:boolean;onImport?:()=>void;
  /** Drawn over the picture: the editor's selection handles. */
  overlay?:React.ReactNode};
@@ -53,9 +58,9 @@ export function ProjectPlayer(p:Props){
   <div className="transport">
    {/* The editor's transport is OpenCut's: the timecode, then play in the middle; its timeline is the scrubber. Gumbo's
        layout keeps play, the time and a scrubber. */}
-   {p.manual?<><span className="time-current timecode">{timecode(p.frame)} <span>/ {timecode(duration)}</span></span><span className="transport-gap"/><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="transport-gap"/></>
-    :<><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="time-current">{clock(p.frame)} <span>/ {clock(duration)}</span></span>
-   <input className="scrubber" aria-label="Preview position" type="range" min={0} max={duration-1} value={Math.min(p.frame,duration-1)} onChange={e=>seek(Number(e.target.value))}/></>}
+   {p.manual?<><span className="time-current timecode"><Live format={timecode}/> <span>/ {timecode(duration)}</span></span><span className="transport-gap"/><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="transport-gap"/></>
+    :<><button className="icon-button" aria-label={p.playing?'Pause':'Play'} disabled={!r.durationInFrames} onClick={()=>{try{p.player.current?.toggle();}catch(error){useEditor.getState().setError('Preview playback failed: '+(error as Error).message);}}}>{p.playing?<Pause size={18}/>:<Play size={18} fill="currentColor"/>}</button><span className="time-current"><Live format={clock}/> <span>/ {clock(duration)}</span></span>
+   <LiveScrubber duration={duration} onSeek={seek}/></>}
    <button className="icon-button" aria-label={muted?'Unmute preview':'Mute preview'} aria-pressed={muted} onClick={()=>{const player=p.player.current;if(player?.isMuted())player.unmute();else player?.mute();}}>{muted?<VolumeX size={17}/>:<Volume2 size={17}/>}</button>
    <select className="ratio-picker" aria-label="Canvas ratio" disabled={p.working} value={canvasRatio(t.settings.width,t.settings.height)} onChange={e=>{const preset=canvasPresets.find(i=>i.ratio===e.target.value)!;void p.command({type:'apply',requestId:crypto.randomUUID(),expectedVersionId:p.project.versionId,label:'Change canvas ratio',ops:[{type:'set_project_settings',settings:{width:preset.width,height:preset.height},reason:'Change canvas ratio'}]});}}>
     {!canvasPresets.some(i=>i.ratio===canvasRatio(t.settings.width,t.settings.height))&&<option>{canvasRatio(t.settings.width,t.settings.height)}</option>}{canvasPresets.map(i=><option key={i.ratio}>{i.ratio}</option>)}
