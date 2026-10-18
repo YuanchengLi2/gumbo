@@ -767,6 +767,7 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 
 /* Privacy: plain statements. */
 .privacy section{padding:16px 0;border-top:1px solid var(--n7)}
+.privacy-switch{display:flex;align-items:flex-start;justify-content:space-between;gap:24px}
 .privacy h3{margin:0 0 6px;font-size:13.5px;font-weight:600;color:var(--n100)}
 .privacy section p{margin:0;font-size:13px;line-height:1.6;color:var(--n65);max-width:640px}
 

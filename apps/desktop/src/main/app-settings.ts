@@ -9,8 +9,8 @@ const file=()=>join(app.getPath('userData'),'settings.json');
 export function loadSettings():AppSettings{try{return AppSettingsSchema.parse(JSON.parse(readFileSync(file(),'utf8')));}catch{return AppSettingsSchema.parse({});}}
 export function saveSettings(patch:unknown):AppSettings{
  // A change names only what changed (one profile field, the switched-off providers); the whole is validated after merging.
- const current=loadSettings(),change=(patch&&typeof patch==='object'?patch:{}) as {profile?:object;disabledProviders?:unknown};
- const next=AppSettingsSchema.parse({profile:{...current.profile,...change.profile},disabledProviders:change.disabledProviders??current.disabledProviders});
+ const current=loadSettings(),change=(patch&&typeof patch==='object'?patch:{}) as {profile?:object;disabledProviders?:unknown;improve?:unknown};
+ const next=AppSettingsSchema.parse({profile:{...current.profile,...change.profile},disabledProviders:change.disabledProviders??current.disabledProviders,improve:change.improve??current.improve});
  const temporary=file()+'.partial';writeFileSync(temporary,JSON.stringify(next,null,2));renameSync(temporary,file());return next;
 }
 export const settingsEnv=(s:AppSettings)=>({DREAM_CREATOR_PROFILE:JSON.stringify(s.profile),DREAM_DISABLED_PROVIDERS:s.disabledProviders.join(',')});

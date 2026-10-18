@@ -43,7 +43,9 @@ export type Command=z.input<typeof CommandSchema>;
  * it routes every request. */
 export const AppSettingsSchema=z.object({
  profile:z.object({name:z.string().max(80).default(''),makes:z.string().max(300).default(''),style:z.string().max(2000).default('')}).default({name:'',makes:'',style:''}),
- disabledProviders:z.array(z.enum(['openai','google','deepseek'])).default([])
+ disabledProviders:z.array(z.enum(['openai','google','deepseek'])).default([]),
+ // Helping improve Gumbo: an edit that goes wrong sends its log by itself (renderer/improve.ts). Unset until asked.
+ improve:z.boolean().optional()
 });
 export type AppSettings=z.infer<typeof AppSettingsSchema>;
 /** What Usage shows: spend from the gateway's records, across every computer the account uses. */

@@ -13,8 +13,8 @@ import {onboarded,markOnboarded,saveAnswers,sendAnswers,accountAnswers,restoreAn
  * edited, how you found Gumbo, the plans (Free to carry on with), and requests to start from, fitted to the answers. The
  * answers go to Settings > Profile, which the agent reads with every request, and to the account (profile.ts). An account
  * that answered on another computer skips the questions. A test run never sees it unless it asks (RuntimeStatus). */
-type Step='welcome'|'account'|'name'|'makes'|'experience'|'heard'|'plan'|'ready';
-const progress:Step[]=['name','makes','experience','heard','plan'];
+type Step='welcome'|'account'|'name'|'makes'|'experience'|'heard'|'improve'|'plan'|'ready';
+const progress:Step[]=['name','makes','experience','heard','improve','plan'];
 
 export function OnboardingLayer(){
  const [step,setStep]=useState<Step|null>(null),[answers,setAnswers]=useState<OnboardingAnswers>({name:'',makes:[]}),[returning,setReturning]=useState(false);
@@ -37,14 +37,16 @@ export function OnboardingLayer(){
  useEffect(()=>{if(step!=='account')return;
   return window.dream.onEvent(event=>{if(event.type==='account.signed_in'){signInFinished(true);void signedInNext();}if(event.type==='account.error'){setSignInUrl(null);setError(String((event.payload as {message?:string})?.message??'Sign-in failed.'));}});},[step]);
  const openSignIn=async()=>{setBusy(true);setError(null);try{const result=await window.dream.command<{url:string}>({type:'account',action:'browser'});setSignInUrl(result.url);}catch(e){setError((e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,''));}finally{setBusy(false);}};
- const answered=async(next:OnboardingAnswers)=>{setAnswers(next);await saveAnswers(next);setStep(signedIn&&b?.payments&&b.plan==='free'?'plan':'ready');};
+ const answered=async(next:OnboardingAnswers)=>{setAnswers(next);await saveAnswers(next);setStep('improve');};
+ // Helping improve Gumbo (renderer/improve.ts): kept in settings.json, changed any time in Settings > Privacy.
+ const improve=async(on:boolean)=>{await window.dream.saveSettings({improve:on} as never).catch(()=>{});setStep(signedIn&&b?.payments&&b.plan==='free'?'plan':'ready');};
 
  const name=useRef<HTMLInputElement>(null);useEffect(()=>{if(step==='name')name.current?.focus();},[step]);
  // The app underneath can't be reached (Tab, a screen reader) while the onboarding is up.
  useEffect(()=>{const root=document.getElementById('root');if(!root||!step)return;root.inert=true;return()=>{root.inert=false;};},[!!step]);
  if(!step)return null;
  const toggle=(id:MakeId)=>setAnswers(a=>({...a,makes:a.makes.includes(id)?a.makes.filter(m=>m!==id):[...a.makes,id]}));
- const previous:Partial<Record<Step,Step>>={account:'welcome',name:signedIn?'welcome':'account',makes:'name',experience:'makes',heard:'experience',plan:'heard'};
+ const previous:Partial<Record<Step,Step>>={account:'welcome',name:signedIn?'welcome':'account',makes:'name',experience:'makes',heard:'experience',improve:'heard',plan:'improve'};
  const at=progress.indexOf(step),first=answers.name.trim().split(/\s+/)[0];
  const pick=(text:string)=>{window.dispatchEvent(new CustomEvent('gumbo:prompt',{detail:text}));finish();};
 
@@ -94,6 +96,15 @@ export function OnboardingLayer(){
     <p>It helps us find more people like you.</p>
     <div className="onboarding-chips" role="radiogroup" aria-label="How you heard about Gumbo">{sources.map(([id,label])=><button key={id} type="button" role="radio" aria-checked={answers.heard===id} onClick={()=>void answered({...answers,heard:id})}>{label}</button>)}</div>
     <button type="button" className="onboarding-skip" onClick={()=>void answered({name:answers.name,makes:answers.makes,...(answers.experience?{experience:answers.experience}:{})})}>Skip</button>
+   </>}
+
+   {step==='improve'&&<>
+    <h1>Help make Gumbo better?</h1>
+    <p>When an edit goes wrong (an error, a stop, or a long and costly run), Gumbo can send us that edit's log so we can fix it: the steps it took, your request and the code it wrote. Never your footage. You can change this any time in Settings, under Privacy.</p>
+    <div className="onboarding-options" role="radiogroup" aria-label="Help improve Gumbo">
+     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(true)}><b>Yes, send logs when something goes wrong</b><span>Helps us fix the problems you hit.</span><ArrowRight size={15}/></button>
+     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(false)}><b>No thanks</b><span>You can still send a log yourself from any edit.</span><ArrowRight size={15}/></button>
+    </div>
    </>}
 
    {step==='plan'&&b&&<>
