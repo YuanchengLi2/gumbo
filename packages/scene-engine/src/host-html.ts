@@ -18,7 +18,11 @@ export function engineCsp(sources:readonly string[]){
 export function engineHostHtml(config:HostConfig,options:{runtimeBase:string;sceneBase:string;cspSources:readonly string[]}){
  const chunks=CHUNKS.filter(chunk=>chunk==='core'||config.chunks.includes(chunk)) as Chunk[];
  const csp=engineCsp(options.cspSources),runtime=options.runtimeBase.replace(/\/$/,''),scene=options.sceneBase.replace(/\/$/,'');
- const background=config.transparent?'transparent':'#000';
+ // A scene's page is always see-through: what a scene does not draw shows what is under it (the footage, or the main
+ // track's dark fill). A scene not declared transparent used to get a black page, so a full-screen card that faded itself
+ // out before its clip ended (its own duration shorter than the clip) went to a black screen in the player, in Export and
+ // in what the agent saw, which then rebuilt the card again and again. A scene that wants a background draws it.
+ const background='transparent';
  const html=`<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${attr(csp)}"><link rel="stylesheet" href="${attr(runtime+'/fonts.css')}"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:${background}}*{box-sizing:border-box}#root{position:absolute;left:0;top:0;width:${Math.round(config.width)}px;height:${Math.round(config.height)}px;overflow:hidden}</style><script type="application/json" id="dream-scene-config">${json(config)}</script></head><body><div id="root"></div>${chunks.map(chunk=>`<script src="${attr(`${runtime}/${chunk}.js`)}"></script>`).join('')}<script src="${attr(scene+'/bundle.js')}"></script></body></html>`;
  return{html,csp};
 }

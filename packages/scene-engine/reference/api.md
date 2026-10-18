@@ -29,7 +29,7 @@ Scenes, music, sound effects and media your code produces are declared in `outpu
 
 - Size and frame rate default to the project's; set `width`, `height` or `fps` only to differ.
 - `props` are passed to the component, so one component can serve many shots with different props.
-- `transparent: true` gives the scene no background, for overlays placed on `attached` above footage.
+- Scenes have no background: what a scene does not draw shows the footage under it. A full-screen card draws its own. Keep fades inside the clip.
 - Media your programs make (stabilized, cleaned, converted, generated) goes under `output/` with kind `video`, `audio` or `image`, and is placed like any source.
 - `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
 
@@ -247,7 +247,7 @@ export default function Product(){
 
 ## Example: overlay on footage
 
-Declared with `"transparent": true` and placed in `attached` above a clip:
+Placed in `attached` above a clip (the footage shows wherever the scene does not draw):
 
 ```tsx
 import {AbsoluteFill,useCurrentFrame,interpolate} from 'remotion';
