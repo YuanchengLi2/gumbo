@@ -117,6 +117,7 @@ tbody tr.req:hover{background:var(--raised)}
 .money form input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line-strong);border-radius:8px;padding:5px 8px}
 .money form .err{color:var(--bad);font-size:12px}
 @media (max-width:980px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:minmax(0,1fr)}.grid2>.card{margin-bottom:16px}}
+.waitinvite{display:flex;gap:8px}.waitinvite input{min-width:0;width:220px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit;font:inherit}#waitfilter{margin:10px 0 8px}.waitask{max-width:420px;white-space:normal;color:var(--muted)}
 @media (max-width:560px){.wrap{padding:16px 16px 48px}.controls{margin-left:0}.bar{grid-template-columns:86px minmax(0,1fr) 72px}.tile .v{font-size:22px}}
 </style>
 </head>
@@ -144,6 +145,13 @@ tbody tr.req:hover{background:var(--raised)}
   </div>
  </header>
  <div id="notices"></div>
+ <section class="card">
+  <div class="cardhead"><div><h2>Waitlist</h2><div class="sub" id="waitsub">People who joined on usegumbo.app. Email the ones you pick the download link, then press Invite: their account can use the AI and pay.</div></div>
+   <form class="right waitinvite" id="inviteform"><input type="email" id="inviteemail" placeholder="Invite any email" aria-label="Invite an email" required><button class="btn" type="submit">Invite</button></form></div>
+  <div class="seg" role="group" aria-label="Show" id="waitfilter"><button data-w="waiting" aria-pressed="true">Waiting</button><button data-w="invited">Invited</button><button data-w="all">All</button></div>
+  <div class="s err" id="waiterr" role="alert"></div>
+  <div class="scroll" id="waitlist"></div>
+ </section>
  <section class="tiles" id="tiles"></section>
  <section class="card">
   <h2>Money left</h2><div class="sub">In each API account. DeepSeek is read live; the others show the balance from their billing page minus what Gumbo spent since.</div>
@@ -175,7 +183,7 @@ const LIVE='https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/
 const local=/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname),API=local&&new URLSearchParams(location.search).get('api')||LIVE;
 const PROVIDERS=['Anthropic','OpenAI','Google','DeepSeek','Groq','Other'];
 const COLOR={Anthropic:'var(--s1)',OpenAI:'var(--s2)',Google:'var(--s3)',DeepSeek:'var(--s4)',Groq:'var(--s5)',Other:'var(--s0)'};
-const state={range:'all',account:'',kind:'Request',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null,editing:null};
+const state={range:'all',account:'',kind:'Request',hidden:new Set(),sort:{key:'at',dir:-1},open:new Set(),limit:60,showDayTable:false,data:null,editing:null,wait:'waiting'};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const usd=n=>{n=n||0;if(n===0)return '$0';if(Math.abs(n)<.01)return '$'+n.toFixed(4);if(Math.abs(n)<1)return '$'+n.toFixed(3);if(Math.abs(n)<100)return '$'+n.toFixed(2);return '$'+Math.round(n).toLocaleString();};
@@ -307,7 +315,23 @@ function money(){
   try{const data=await fetchData({setBalance:{provider:form.dataset.p,usd:value}});state.editing=null;show(data);}
   catch(error){for(const el of form.elements)el.disabled=false;if(error.status===401||error.status===429)lock(error.message);else $('moneyerr').textContent=error.message;}};
 }
-function render(){if(!state.data)return;const v=view();tiles(v);money();legend(v);daily(v);providers(v);accounts(v);models(v);requests(v);problems(v);}
+// The waitlist: newest first. Waiting = not invited yet; Invited = invited, with whether they have signed up.
+function waitlist(){
+ const rows=(state.data.waitlist??[]).filter(w=>state.wait==='all'||(state.wait==='waiting'?!w.invited:!!w.invited));
+ const all=state.data.waitlist??[],waiting=all.filter(w=>!w.invited).length;
+ $('waitsub').textContent=`${int(all.length)} joined · ${int(waiting)} waiting · ${int(all.length-waiting)} invited. Email the ones you pick the download link, then press Invite: their account can use the AI and pay.`;
+ const status=w=>!w.invited?'<span class="muted">Waiting</span>':w.signedUp?(w.access?'Signed up':'Signed up, no access'):'Invited, not signed up yet';
+ $('waitlist').innerHTML=rows.length?`<table><thead><tr><th>Email</th><th>First ask</th><th>Joined</th><th>Status</th><th></th></tr></thead><tbody>${rows.map(w=>`<tr><td style="white-space:nowrap"><a href="mailto:${esc(w.email)}">${esc(w.email)}</a></td><td class="waitask">${esc(w.firstAsk)||'<span class="muted">–</span>'}</td><td style="white-space:nowrap">${when(w.joined)}</td><td style="white-space:nowrap">${status(w)}</td><td>${w.invited?'':`<button class="btn" data-invite="${esc(w.email)}">Invite</button>`}</td></tr>`).join('')}</tbody></table>`:`<div class="empty">${state.wait==='waiting'?'Nobody is waiting.':'Nobody here yet.'}</div>`;
+ for(const btn of $('waitlist').querySelectorAll('[data-invite]'))btn.onclick=()=>invite(btn.dataset.invite,btn);
+}
+async function invite(email,control){
+ if(control)control.disabled=true;$('waiterr').textContent='';
+ try{show(await fetchData({invite:email}));return true;}
+ catch(error){if(control)control.disabled=false;if(error.status===401||error.status===429)lock(error.message);else $('waiterr').textContent=error.message;return false;}
+}
+$('inviteform').onsubmit=async e=>{e.preventDefault();const input=$('inviteemail');if(await invite(input.value.trim()))input.value='';};
+for(const btn of $('waitfilter').querySelectorAll('button'))btn.onclick=()=>{state.wait=btn.dataset.w;for(const b of $('waitfilter').querySelectorAll('button'))b.setAttribute('aria-pressed',String(b===btn));waitlist();};
+function render(){if(!state.data)return;const v=view();waitlist();tiles(v);money();legend(v);daily(v);providers(v);accounts(v);models(v);requests(v);problems(v);}
 
 // The password is kept for this tab only, so Refresh works; Lock, or closing the tab, forgets it.
 const remembered={get(){try{return sessionStorage.getItem('dashboard')||'';}catch{return '';}},set(v){try{v?sessionStorage.setItem('dashboard',v):sessionStorage.removeItem('dashboard');}catch{}}};

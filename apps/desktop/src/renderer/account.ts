@@ -3,11 +3,12 @@ import {useEffect,useState} from 'react';
 /** Who is signed in, for the parts of the app that need Gumbo AI. The app opens and edits by hand without an account;
  * anything that asks the AI first asks for sign-in (requireSignIn), which shows the sign-in dialog and carries on once
  * the user is signed in. */
-export type AccountStatus={signedIn:boolean;email:string;plan?:string;status?:string};
+/** waitlisted: signed in, but not invited from the paid beta's waitlist yet, so edits are refused. */
+export type AccountStatus={signedIn:boolean;email:string;plan?:string;status?:string;waitlisted?:boolean};
 let current:AccountStatus|null=null;const listeners=new Set<()=>void>();
 const notify=()=>listeners.forEach(l=>l());
 export async function refreshAccount():Promise<AccountStatus>{
- try{const info=await window.dream.command<any>({type:'account',action:'get'});current={signedIn:!!info?.signedIn,email:String(info?.email??''),plan:info?.plan===undefined?undefined:String(info.plan),status:info?.status};}
+ try{const info=await window.dream.command<any>({type:'account',action:'get'});current={signedIn:!!info?.signedIn,email:String(info?.email??''),plan:info?.plan===undefined?undefined:String(info.plan),status:info?.status,waitlisted:!!info?.signedIn&&info?.beta_access===false};}
  catch{current=current??{signedIn:false,email:''};}
  notify();return current!;
 }

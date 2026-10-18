@@ -9,6 +9,7 @@ import {ProfileMenu} from '../settings/SettingsMenu';
 import {SidebarUpgrade} from '../billing/Upgrade';
 import {useBilling,billingReady} from '../../billing';
 import {useCreatorName} from '../../profile';
+import {useAccount} from '../../account';
 
 /** The Gumbo mark, as on usegumbo.app: a paprika bowl with a play button in it and steam rising. The steam takes the text
  * colour, so the mark reads on light and dark; the bowl is the app's one brand colour. */
@@ -32,6 +33,7 @@ const ideas:[typeof Film,string,string][]=[
  * pictures. The top strip of both is the window's drag area, and the window's own controls sit on the main side. */
 export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;onProjectAction:(project:ProjectSummary,action:ProjectAction)=>Promise<void>;busy:boolean}){
  const name=useCreatorName().split(/\s+/)[0],permission=useEditor(s=>s.permission),model=useEditor(s=>s.model),working=useWorking(),billing=useBilling(),plan=billingReady(billing)&&billing.plan!=='free'?billing.planName:'';
+ const waitlisted=!!useAccount()?.waitlisted;
  // The sidebar's width is the user's: dragged at its edge, kept on this computer.
  const [side,setSide]=React.useState(()=>{try{return Math.min(420,Math.max(200,Number(localStorage.getItem('gumbo-sidebar-width'))||240));}catch{return 240;}});
  const resize=(e:React.PointerEvent)=>{e.preventDefault();const startX=e.clientX,start=side;let last=start;
@@ -65,6 +67,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <div className="home-drag" aria-hidden="true"/>
    <section className="fig-hero">
     <h1>What are we cooking today{name?`, ${name}`:''}?</h1>
+    {waitlisted&&<p className="home-waitlist" role="status">You're on the waitlist. We'll email you when your spot opens, and then you can start editing.</p>}
     <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} busy={p.busy} permission={permission} onPermission={useEditor.getState().setPermission} model={model} onModel={useEditor.getState().setModel}/>
     <div className="fig-ideas">{ideas.map(([Icon,label,prompt])=><button key={label} onClick={()=>p.onChange(prompt)}><Icon size={14}/>{label}</button>)}</div>
    </section>

@@ -1262,6 +1262,7 @@ const orders=[
 
 // The prompt bars: type an edit; Gumbo answers by asking where to send your invite.
 // No server: the invite request opens an email with the request and address filled in.
+const WAITLIST='https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/waitlist-join';
 const ideas=['Cut every um…','Draw our route on a map…','Make it feel like the 90s…','Three Shorts from my talk…','Make the logo smaller…','Make it better…'];
 document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
  const form=ask.querySelector('form'),box=ask.querySelector('textarea'),reply=ask.querySelector('.reply');
@@ -1273,11 +1274,16 @@ document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
  form.addEventListener('submit',e=>{e.preventDefault();const idea=box.value.trim();if(!idea){box.focus();return;}
   reply.innerHTML='';const p=document.createElement('p');p.innerHTML='Gumbo can take that order. It\'s in early access, so leave your email and we\'ll send an invite to ask for <strong></strong> yourself.';
   p.querySelector('strong').textContent='“'+idea.replace(/[.…\s]+$/,'')+'”';
-  const f=document.createElement('form');f.innerHTML='<input type="email" required placeholder="you@example.com" aria-label="Your email"><button class="btn" type="submit">Get my invite</button>';
-  const note=document.createElement('small');note.textContent='Opens an email to the Gumbo team with your request filled in.';
-  f.addEventListener('submit',ev=>{ev.preventDefault();const email=f.querySelector('input').value.trim();
-   location.href='mailto:yuanchengli612@gmail.com?subject='+encodeURIComponent('Gumbo early access')+'&body='+encodeURIComponent(`I'd ask for: ${idea}\nMy email: ${email}`);
-   note.textContent='Thanks! Send the email that just opened and you\'re on the list.';});
+  // Joins the waitlist (the gateway's waitlist-join): the email and this first request. The hidden website field is
+  // left empty by people and filled by bots, which the gateway then ignores.
+  const f=document.createElement('form');f.innerHTML='<input type="email" required placeholder="you@example.com" aria-label="Your email" autocomplete="email"><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0"><button class="btn" type="submit">Join the waitlist</button>';
+  const note=document.createElement('small');note.textContent='We\'ll email you when your spot opens. No spam.';
+  f.addEventListener('submit',async ev=>{ev.preventDefault();const email=f.querySelector('input[type=email]').value.trim(),button=f.querySelector('button');
+   button.disabled=true;note.textContent='Saving your spot…';
+   try{const response=await fetch(WAITLIST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,firstAsk:idea,source:n===0?'top':'bottom',website:f.querySelector('[name=website]').value}),credentials:'omit'});
+    const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'Something went wrong. Try again in a moment.');
+    f.remove();note.textContent='You\'re on the list! We\'ll email you when your spot opens.';note.classList.add('done');}
+   catch(error){button.disabled=false;note.textContent=error.message;}});
   reply.append(p,f,note);reply.classList.add('on');f.querySelector('input').focus();});
 });
 

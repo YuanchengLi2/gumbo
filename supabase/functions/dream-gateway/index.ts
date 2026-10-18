@@ -9,6 +9,7 @@ import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
 import {handleReport,supabaseReportPorts} from './reports.ts';
+import {handleWaitlistJoin,supabaseWaitlistPorts,WAITLISTED} from './waitlist.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
@@ -33,13 +34,18 @@ Deno.serve(async(req)=>{
   if(!await verifyStripeSignature(payload,req.headers.get('stripe-signature'),config.webhookSecret))return json({error:'Invalid signature'},400);
   try{const event=JSON.parse(payload),note=await handleStripeEvent(event,supabaseBillingPorts(db),config);console.log(`Stripe ${event.type} ${event.id}: ${note}`);return json({received:true});}
   catch(error){console.error('Stripe webhook failed',error);return json({error:(error as Error).message},500);}}
+ // The waitlist on usegumbo.app (waitlist.ts): no account needed.
+ if(action==='waitlist-join'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleWaitlistJoin(body,address,supabaseWaitlistPorts(db));return json(result.body,result.status);}
  if(action==='login-start'&&req.method==='POST'){const body=await req.json();const email=String(body.email??'').trim().toLowerCase();const {data}=await db.from('dream_invites').select('email').eq('email',email).maybeSingle();return data?json({allowed:true}):json({error:'Use the email address on your beta invitation.'},403);}
  if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('title,object_key').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,60);return error?json({error:'Video unavailable'},404):json({title:data.title,url:signed.signedUrl});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
  const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
+ // The paid beta: what costs money (the AI, transcription, media search, sharing, checkout) is for accounts invited from
+ // the waitlist. Anyone can sign in and see where they stand.
+ if(['ai','count-tokens','transcribe','media-search','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
- if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest').eq('id',user.id).single();return json(data);}
+ if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access').eq('id',user.id).single();return json(data);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
  if(action==='usage'){const since=new Date(Date.now()-30*86_400_000);
   const {data:rows}=await db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000);
