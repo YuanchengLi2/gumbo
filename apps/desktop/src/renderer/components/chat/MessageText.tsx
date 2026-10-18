@@ -83,7 +83,8 @@ function render(blocks:Block[],key:string,cursor:boolean):React.ReactNode[]{
  });
 }
 
-export function MessageText({text,streaming=false}:{text:string;streaming?:boolean}){
+// Parsed and drawn again only when its text changes, so a streaming note does not re-parse every note above it.
+export const MessageText=React.memo(function MessageText({text,streaming=false}:{text:string;streaming?:boolean}){
  const blocks=parse(text.replace(/\r\n?/g,'\n').trim().split('\n'));
  return <div className="message-prose">{render(blocks,'b',streaming)}{streaming&&!blocks.length&&caret}</div>;
-}
+});

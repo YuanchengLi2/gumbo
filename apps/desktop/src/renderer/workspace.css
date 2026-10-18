@@ -192,7 +192,7 @@
 .ai-workspace .run-event-details summary,.ai-workspace .run-group>summary,.ai-workspace .run-task>summary{cursor:pointer}
 .ai-workspace .run-event-details summary::-webkit-details-marker,.ai-workspace .run-group>summary::-webkit-details-marker,.ai-workspace .run-task>summary::-webkit-details-marker,.ai-workspace .turn-work>summary::-webkit-details-marker{display:none}
 .ai-workspace .stream-action>span,.ai-workspace .run-event-details summary>span,.ai-workspace .run-group>summary>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ai-workspace .stream-action>svg,.ai-workspace .run-event-details summary>svg,.ai-workspace .run-group>summary>svg,.ai-workspace .run-task>summary>svg{flex:none;color:var(--side-faint)}
+.ai-workspace .stream-action>svg,.ai-workspace .run-event-details summary>svg,.ai-workspace .run-group>summary>svg,.ai-workspace .run-task>summary>svg,.ai-workspace .stream-action>.spin,.ai-workspace .run-event-details summary>.spin,.ai-workspace .run-group>summary>.spin,.ai-workspace .run-task>summary>.spin{flex:none;color:var(--side-faint)}
 .ai-workspace .run-event-details summary:hover,.ai-workspace .run-group>summary:hover,.ai-workspace .run-task>summary:hover{color:var(--n65)}
 .ai-workspace .run-group>summary>small{flex:none;font-size:11.5px;color:var(--side-faint)}
 .ai-workspace .run-disclosure{flex:none;margin-left:2px;color:var(--side-faint);opacity:0;transition:transform .15s,opacity .15s}
@@ -201,17 +201,19 @@
 .ai-workspace .run-event-details ul{margin:2px 0 6px 20px;padding:0 0 0 12px;font-size:12px;line-height:1.6;color:var(--side-muted)}
 .ai-workspace .run-group-items{padding:2px 0 4px 20px}
 .ai-workspace .run-event.failed .stream-action,.ai-workspace .run-event.interrupted .stream-action,.ai-workspace .run-group.failed>summary,.ai-workspace .run-task.failed>summary{color:#b1584a}
-.ai-workspace .run-event.failed svg,.ai-workspace .run-group.failed>summary>svg,.ai-workspace .run-task.failed>summary>svg{color:#c97a6c}
+.ai-workspace .run-event.failed svg,.ai-workspace .run-group.failed>summary>svg,.ai-workspace .run-task.failed>summary>svg,.ai-workspace .run-group.failed>summary>.spin,.ai-workspace .run-task.failed>summary>.spin{color:#c97a6c}
 .ai-workspace .stream-action .spin,.ai-workspace .run-group>summary .spin,.ai-workspace .run-task>summary .spin,.ai-workspace .run-event-details summary .spin{color:var(--side-accent)}
 /* A worker's task: its title, what it is doing now, and its own steps indented under a hairline. */
 .ai-workspace .run-task>summary{align-items:flex-start;color:var(--n68)}
-.ai-workspace .run-task>summary>svg{margin-top:2px}
+.ai-workspace .run-task>summary>svg,.ai-workspace .run-task>summary>.spin{margin-top:2px}
 .ai-workspace .run-task-title{display:flex;flex-direction:column;gap:1px;min-width:0}
 .ai-workspace .run-task-live{font-size:11.5px;color:var(--side-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-workspace .run-task-body{display:flex;flex-direction:column;gap:0;margin:2px 0 6px 6px;padding-left:13px;border-left:1px solid var(--side-line)}
 .ai-workspace .run-task-body .run-progress{font-size:12.5px;color:var(--n65);margin:2px 0 6px}
 /* Live words shimmer, as Cursor's do. */
-.ai-workspace .shimmer{background:linear-gradient(90deg,var(--n56) 0%,var(--n56) 35%,var(--n20) 50%,var(--n56) 65%,var(--n56) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gumbo-shimmer 1.8s linear infinite}
+/* A moving gradient repaints the whole page on the main thread each time it moves; stepping it 15 times a second
+   instead of every frame keeps typing and scrolling responsive while Gumbo works. */
+.ai-workspace .shimmer{background:linear-gradient(90deg,var(--n56) 0%,var(--n56) 35%,var(--n20) 50%,var(--n56) 65%,var(--n56) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gumbo-shimmer 1.8s steps(27) infinite}
 @keyframes gumbo-shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
 .ai-workspace .run-working{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12.5px;color:var(--side-muted)}
 .ai-workspace .run-progress+.run-working{margin-top:0}
@@ -240,9 +242,9 @@
 .ai-workspace .task-dock-toggle{width:100%;display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid var(--side-line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--n3);font-size:12px;text-align:left;color:var(--n65)}
 .ai-workspace .task-dock-toggle>span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ai-workspace .task-dock-toggle small{flex:none;font-size:11px;color:var(--side-faint);font-variant-numeric:tabular-nums}
-.ai-workspace .task-dock-toggle>svg{flex:none;color:var(--side-faint);transition:transform .15s}
-.ai-workspace .task-dock-toggle>svg:first-child{color:#5aa47a}
-.ai-workspace .task-dock.working .task-dock-toggle>svg:first-child{color:var(--side-accent)}
+.ai-workspace .task-dock-toggle>svg,.ai-workspace .task-dock-toggle>.spin{flex:none;color:var(--side-faint);transition:transform .15s}
+.ai-workspace .task-dock-toggle>svg:first-child,.ai-workspace .task-dock-toggle>.spin:first-child{color:#5aa47a}
+.ai-workspace .task-dock.working .task-dock-toggle>svg:first-child,.ai-workspace .task-dock.working .task-dock-toggle>.spin:first-child{color:var(--side-accent)}
 .ai-workspace .task-dock-toggle>svg.expanded{transform:rotate(180deg)}
 .ai-workspace .task-window{position:absolute;bottom:calc(100% + 6px);left:-10px;right:-10px;max-height:300px;overflow:auto;padding:10px 12px;background:var(--n0);border:1px solid var(--side-line);border-radius:10px;box-shadow:0 10px 30px #0000001c;z-index:30}
 .ai-workspace .task-window header{display:flex;justify-content:space-between;align-items:baseline;margin:2px 0 6px;font-size:11px;color:var(--side-muted)}
@@ -253,9 +255,9 @@
 .ai-workspace .task-window li{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:12px;color:var(--n65)}
 .ai-workspace .task-window li span{flex:1;min-width:0}
 .ai-workspace .task-window li small{font-size:10.5px;color:var(--side-faint)}
-.ai-workspace .task-window li>svg{flex:none;color:var(--side-faint)}
-.ai-workspace .task-window li.complete{color:var(--side-faint)}.ai-workspace .task-window li.complete>svg{color:#5aa47a}
-.ai-workspace .task-window li.running>svg{color:var(--side-accent)}
+.ai-workspace .task-window li>svg,.ai-workspace .task-window li>.spin{flex:none;color:var(--side-faint)}
+.ai-workspace .task-window li.complete{color:var(--side-faint)}.ai-workspace .task-window li.complete>svg,.ai-workspace .task-window li.complete>.spin{color:#5aa47a}
+.ai-workspace .task-window li.running>svg,.ai-workspace .task-window li.running>.spin{color:var(--side-accent)}
 .ai-workspace .task-window li.failed,.ai-workspace .task-window li.interrupted{color:#b1584a}
 .ai-workspace .task-window-activity li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ai-workspace .task-window-usage li{flex-wrap:wrap;row-gap:1px}.ai-workspace .task-window-usage li>span small{font-size:10.5px;color:var(--side-faint)}.ai-workspace .task-window-usage li>small{font-variant-numeric:tabular-nums}
@@ -323,7 +325,7 @@
 .home-recents h2{margin:0 10px 4px;font-size:11.5px;font-weight:500;color:var(--n40)}
 .home-recents button{display:block;height:31px;line-height:31px;font-size:13px;color:var(--n65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-recents button.missing{opacity:.5}
-.home-recents button{display:flex;align-items:center;gap:8px}.home-recents button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.home-recents button>svg{flex:none;color:var(--paprika)}
+.home-recents button{display:flex;align-items:center;gap:8px}.home-recents button>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.home-recents button>svg,.home-recents button>.spin{flex:none;color:var(--paprika)}
 .fig-home .project-working{position:absolute;left:7px;top:7px;display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:999px;background:rgb(0 0 0 / .72);color:#fff;font-size:11px;font-weight:500}
 .home-side-foot{margin-top:auto;padding-top:8px;border-top:1px solid var(--n7)}
 .fig-home-main{position:relative;min-width:0;overflow:auto;padding:0 40px 64px}
@@ -542,17 +544,17 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 
 /* The task bar stays small; its window opens on click as one card. */
 .task-dock-toggle{background:var(--n3);border-color:var(--n8);color:var(--n65)}
-.task-dock-toggle>svg:first-child{color:var(--n46)}.task-dock.working .task-dock-toggle>svg:first-child{color:var(--n100)}
+.task-dock-toggle>svg:first-child,.task-dock-toggle>.spin:first-child{color:var(--n46)}.task-dock.working .task-dock-toggle>svg:first-child,.task-dock.working .task-dock-toggle>.spin:first-child{color:var(--n100)}
 .task-window{left:0;right:0;bottom:calc(100% + 8px);max-height:340px;padding:14px 16px;border:1px solid var(--n10);border-radius:14px;background:var(--chrome);box-shadow:0 18px 50px rgb(0 0 0 / .14),0 2px 6px rgb(0 0 0 / .05)}
 .task-window header strong{color:var(--n100);font-size:12px}
 .task-window li{font-size:12.5px;color:var(--n74);padding:4px 0}
-.task-window li.complete>svg{color:var(--n100)}.task-window li.running>svg{color:var(--n100)}
+.task-window li.complete>svg,.task-window li.complete>.spin{color:var(--n100)}.task-window li.running>svg,.task-window li.running>.spin{color:var(--n100)}
 .task-window-side{border-left-color:var(--n7)}
 .task-window-cost{color:var(--n46)}
 
 /* While Gumbo edits, the picture itself says so: a soft blue wash and a slow light sweep over the video, which keeps
    playing underneath so the edit can be watched as it lands. */
-.ai-stage.agent-driving .preview-viewport::after{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;border-radius:10px;background:radial-gradient(ellipse at center,rgb(61 123 255 / 0) 45%,rgb(61 123 255 / .2) 100%),linear-gradient(105deg,rgb(255 255 255 / 0) 30%,rgb(255 255 255 / .16) 50%,rgb(255 255 255 / 0) 70%);background-size:100% 100%,250% 100%;animation:agent-sweep 2.8s linear infinite}
+.ai-stage.agent-driving .preview-viewport::after{content:'';position:absolute;inset:0;z-index:6;pointer-events:none;border-radius:10px;background:radial-gradient(ellipse at center,rgb(61 123 255 / 0) 45%,rgb(61 123 255 / .2) 100%),linear-gradient(105deg,rgb(255 255 255 / 0) 30%,rgb(255 255 255 / .16) 50%,rgb(255 255 255 / 0) 70%);background-size:100% 100%,250% 100%;animation:agent-sweep 2.8s steps(42) infinite}
 @keyframes agent-sweep{from{background-position:0 0,130% 0}to{background-position:0 0,-130% 0}}
 @media(prefers-reduced-motion:reduce){.ai-stage.agent-driving .preview-viewport::after{animation:none}}
 /* Text that sits on a picture (clip labels over frames, length badges, the export cover) stays white on a dark scrim in
@@ -648,7 +650,7 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .agent-activity li i{width:7px;height:7px;border-radius:50%;background:#6f8fd6;align-self:center}
 .agent-activity li.complete i{background:#7fd3a2}.agent-activity li.failed i{background:#f09a8c}
 .agent-activity li.live{color:#fff}.agent-activity li.live i{background:#5b95ff;box-shadow:0 0 0 3px rgb(91 149 255 / .3);animation:breathe 1.2s infinite}
-.agent-activity li.live span{background:linear-gradient(100deg,#fff 30%,#9cc0ff 50%,#fff 70%);background-size:250% 100%;background-clip:text;-webkit-text-fill-color:transparent;animation:cook 2s linear infinite}
+.agent-activity li.live span{background:linear-gradient(100deg,#fff 30%,#9cc0ff 50%,#fff 70%);background-size:250% 100%;background-clip:text;-webkit-text-fill-color:transparent;animation:cook 2s steps(30) infinite}
 .agent-activity code{grid-column:2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:11px/1.4 ui-monospace,"Cascadia Mono",Consolas,monospace;color:#a9c4ff}
 /* Fullscreen preview: the viewport covers the window (itself fullscreen) on black, and the picture is fitted to it at its
    own shape by the same sizing as the normal preview. */

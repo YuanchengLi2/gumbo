@@ -1,5 +1,5 @@
 import {editingChanges} from './editing-language';
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useMemo,useRef,useState} from 'react';
 
 import type {PlayerRef} from './engine/EngineView';
 
@@ -50,7 +50,9 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  const [signIn,setSignIn]=useState(false);// A request picked in the onboarding or the welcome to a plan goes into the home screen's box.
  useEffect(()=>{const prompt=(e:Event)=>{setHomeInput(String((e as CustomEvent).detail??''));s.setRoute('home');};window.addEventListener('gumbo:prompt',prompt);return()=>window.removeEventListener('gumbo:prompt',prompt);},[]);
  useEffect(()=>{const open=()=>setSignIn(true);window.addEventListener('dream:sign-in',open);return()=>window.removeEventListener('dream:sign-in',open);},[]);
- const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',duration=project?resolve(project.timeline,project.footage).durationSec:0;
+ const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',timeline=project?.timeline,footage=project?.footage;
+ // Worked out once per edit: while Gumbo streams, the window draws again for every word.
+ const duration=useMemo(()=>timeline&&footage?resolve(timeline,footage).durationSec:0,[timeline,footage]);
 
  useTheme();
  function seek(frame:number){const current=useEditor.getState().project;if(!current)return;const n=Math.max(0,Math.min(Math.max(1,resolve(current.timeline,current.footage).durationInFrames)-1,frame));s.setFrame(n);player.current?.seekTo(n);}

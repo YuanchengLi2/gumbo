@@ -7,7 +7,7 @@ export function WorkflowProgress({workflow,active}:{workflow:WorkflowState;activ
   const done=workflow.completed.some(receipt=>receipt.stepId===step.id),current=index===workflow.cursor;
   const status=done?'complete':current?(active?'running':'blocked'):'pending';
   return <div key={step.id} className={`plan-step workflow-step ${status}`}><div className="step-line">
-   {done?<span className="completed-icon"><Check size={12}/></span>:status==='running'?<LoaderCircle size={17} className="spin"/>:status==='blocked'?<AlertCircle size={17}/>:<Circle size={17}/>}
+   {done?<span className="completed-icon"><Check size={12}/></span>:status==='running'?<i className="spin"><LoaderCircle size={17}/></i>:status==='blocked'?<AlertCircle size={17}/>:<Circle size={17}/>}
    <span>{step.title}</span><small>{done?'Complete':status==='blocked'?(workflow.status==='waiting_for_permission'?'Needs permission':'Paused'):status==='pending'?'Queued':'In progress'}</small>
   </div>{current&&!done&&<p>{workflow.blocked?.status==='blocked'?workflow.blocked.nextAction:step.acceptance}</p>}</div>;
  })}</div>;

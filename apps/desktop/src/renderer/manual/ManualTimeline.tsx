@@ -18,6 +18,7 @@ import {resolveTimelineSnap} from './opencut/timeline/snapping/resolve';
 import {TICKS_PER_SECOND as TPS} from './opencut/compat';
 import {useEditor} from '../store/editor';
 import {typing} from './shortcuts';
+import {sameProps} from '../memo';
 
 /** The playhead follows the player frame by frame on its own, so playing does not re-render the timeline (see playhead.ts). */
 function PlayheadLine({left,fps,pps}:{left:number;fps:number;pps:number}){const frame=usePlayhead(s=>s.frame);return <div className="manual-playhead" style={{left:left+frame/fps*pps}}><span/></div>;}
@@ -28,7 +29,7 @@ const labelWidth=56;
 const laneHeight=(track:string)=>track==='video'?52:/^(effects|filters|text|stickers|captions)/.test(track)?24:30,laneGap=4;
 // A block's kind at a glance, as in CapCut.
 const lookIcon=(look?:string)=>look==='effect'?<Sparkles size={11} className="clip-look-icon"/>:look==='filter'?<SlidersHorizontal size={11} className="clip-look-icon"/>:look==='text'?<Type size={11} className="clip-look-icon"/>:look==='graphic'?<Clapperboard size={11} className="clip-look-icon"/>:look==='sticker'?<Smile size={11} className="clip-look-icon"/>:null;
-export function ManualTimeline(p:Props){
+function TimelineView(p:Props){
  const scroller=useRef<HTMLDivElement>(null),session=useRef<Session|null>(null),box=useRef<{x:number;y:number;ids:string[];add:boolean}|null>(null),anchor=useRef<string|null>(null),blocked=useRef<{x:number;y:number}|null>(null),keySession=useRef<KeySession|null>(null);
  const snap=useEditor(s=>s.snapping),[zoom,setZoom]=useState(1),[snapAt,setSnapAt]=useState<number|null>(null),[view,setView]=useState({left:0,top:0,width:900}),[marquee,setMarquee]=useState<{left:number;top:number;width:number;height:number}|null>(null),[preview,setPreview]=useState<TimelineDocument|null>(null);
  const timeline=preview??p.draft?.timeline??p.project.timeline,footage=useMemo(()=>p.draft?.assets?.length?{...p.project.footage,assets:[...p.project.footage.assets,...p.draft.assets]}:p.project.footage,[p.draft?.assets,p.project.footage]),fps=timeline.settings.fps,items=useMemo(()=>manualItems(timeline,footage),[timeline,footage]),r=useMemo(()=>resolve(timeline,footage),[timeline,footage]),duration=Math.max(5,r.durationSec);
@@ -123,3 +124,5 @@ export function ManualTimeline(p:Props){
  </div>}
  </section>;
 }
+/** Draws again only when the edit, the selection or its own props change, not for each word Gumbo streams. */
+export const ManualTimeline=React.memo(TimelineView,sameProps(['timeline','footage','versionId']));

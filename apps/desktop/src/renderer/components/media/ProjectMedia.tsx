@@ -55,9 +55,9 @@ function AssetCard({asset:a,project,selected,onToggle,command,onAdd}:{asset:Asse
 function AssetState({asset:a,project,command}:{asset:Asset;project:ProjectState;command:CommandFn}){
  if(a.missing)return <div className="asset-state warn"><AlertCircle size={11}/>Source missing<button onClick={async()=>{const paths=await window.dream.pickMedia();if(paths[0])await command({type:'relink',assetId:a.id,path:paths[0]});}}>Relink</button></div>;
  if(a.status==='failed')return <div className="asset-state warn"><AlertCircle size={11}/>Couldn’t prepare<button onClick={()=>command({type:'retry',assetId:a.id,step:'analysis'})}>Retry</button></div>;
- if(!(a.playback?.ready||a.status==='ready'))return <div className="asset-state"><LoaderCircle size={11} className="spin"/>Preparing…</div>;
+ if(!(a.playback?.ready||a.status==='ready'))return <div className="asset-state"><i className="spin"><LoaderCircle size={11}/></i>Preparing…</div>;
  const speech=a.hasAudio?project.jobs.find(j=>j.assetId===a.id&&j.step==='transcription'):undefined;
- if(speech&&(speech.status==='running'||speech.status==='queued'))return <div className="asset-state"><LoaderCircle size={11} className="spin"/>Transcribing{speech.percent?` ${Math.round(speech.percent)}%`:'…'}</div>;
+ if(speech&&(speech.status==='running'||speech.status==='queued'))return <div className="asset-state"><i className="spin"><LoaderCircle size={11}/></i>Transcribing{speech.percent?` ${Math.round(speech.percent)}%`:'…'}</div>;
  if(speech&&speech.status!=='complete')return <div className="asset-state warn" title={speech.error??undefined}><AlertCircle size={11}/>Speech {speech.status==='interrupted'?'paused':'unavailable'}<button onClick={()=>command({type:'retry',assetId:a.id,step:'transcription'})}>Retry</button></div>;
  return null;
 }

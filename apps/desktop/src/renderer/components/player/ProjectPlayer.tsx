@@ -1,4 +1,3 @@
-import {editingActivity,editingTask} from '../../editing-language';
 import {usePlayhead} from '../../store/playhead';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
 import {EngineView,type PlayerRef} from '../../engine/EngineView';
@@ -8,15 +7,18 @@ import {Play,Pause,Maximize,Minimize,Film,Volume2,VolumeX} from 'lucide-react';
 import {useEditor} from '../../store/editor';
 import {GumboMark} from '../home/HomeScreen';
 import type {CommandFn} from '../../hooks/useProjectSession';
+import {sameProps} from '../../memo';
 
 /** The time and scrubber follow the player frame by frame on their own, so playing re-renders only them (see playhead.ts). */
 function Live({format}:{format:(frame:number)=>string}){return <>{format(usePlayhead(s=>s.frame))}</>;}
 function LiveScrubber({duration,onSeek}:{duration:number;onSeek:(frame:number)=>void}){const frame=usePlayhead(s=>s.frame);
  return <input className="scrubber" aria-label="Preview position" type="range" min={0} max={duration-1} value={Math.min(frame,duration-1)} onChange={e=>onSeek(Number(e.target.value))}/>;}
 type Props={project:ProjectState;timeline?:TimelineDocument;player:React.RefObject<PlayerRef|null>;frame:number;playing:boolean;onFrame:(frame:number)=>void;onPlaying:(value:boolean)=>void;command:CommandFn;working?:boolean;manual?:boolean;onImport?:()=>void;
+ /** What Gumbo is doing, shown while it edits an empty canvas. */
+ status?:string;
  /** Drawn over the picture: the editor's selection handles. */
  overlay?:React.ReactNode};
-export function ProjectPlayer(p:Props){
+function PlayerView(p:Props){
  const t=p.timeline??p.project.timeline,r=useMemo(()=>resolve(t,p.project.footage),[t,p.project.footage]);
  const [engine,setEngine]=useState<PlayerRef|null>(null);
  const viewport=useRef<HTMLDivElement>(null),[size,setSize]=useState({width:0,height:0}),[muted,setMuted]=useState(false),[full,setFull]=useState(false);
@@ -44,14 +46,13 @@ export function ProjectPlayer(p:Props){
  const clock=(frames:number)=>{const sec=Math.floor(frames/t.settings.fps);return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
  // Frame-accurate, as OpenCut shows it: hours, minutes, seconds and frames.
  const timecode=(frames:number)=>{const fps=t.settings.fps,sec=Math.floor(frames/fps),two=(n:number)=>String(n).padStart(2,'0');return two(Math.floor(sec/3600))+':'+two(Math.floor(sec/60)%60)+':'+two(sec%60)+':'+two(frames%fps);};
- const currentStep=p.project.experience?.steps?.findLast(step=>step.status==='running'),currentAction=p.project.experience?.activity?.events?.findLast(event=>event.kind==='action'&&event.status==='running');
  return <section className={'project-player '+(p.manual?'manual-player':'')+(full?' preview-fullscreen':'')}>
   <div className="preview-viewport" ref={viewport}>
    <div className="preview-frame" style={{width:size.width||'100%',height:size.height||'100%',aspectRatio:t.settings.width+'/'+t.settings.height}}>
     {r.durationInFrames>0?<><EngineView ref={p.player} timeline={t} footage={p.project.footage} clickToPlay={!p.overlay} onReady={setEngine}/>{p.overlay}</>:p.working?null:<div className="preview-empty"><Film size={30}/><h3>Your canvas is ready</h3><p>Add media or describe the video you want to make.</p></div>}
     {/* One state at a time: while Gumbo works on an empty edit, only "Gumbo is editing" shows (it has no background, so the
         empty canvas's message showed through it). */}
-    {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Gumbo is editing"><GumboMark/><strong>Gumbo is editing</strong><span className="editing-status">{currentAction?editingActivity(currentAction):currentStep?editingTask(currentStep.label):'Putting your ideas in motion'}</span></div>}
+    {p.working&&!r.durationInFrames&&<div className="preview-working" role="status" aria-label="Gumbo is editing"><GumboMark/><strong>Gumbo is editing</strong><span className="editing-status">{p.status}</span></div>}
    </div>
    {full&&<button className="icon-button fullscreen-exit" title="Exit fullscreen (Esc)" aria-label="Exit fullscreen" onClick={()=>fullscreen(false)}><Minimize size={18}/></button>}
   </div>
@@ -69,4 +70,5 @@ export function ProjectPlayer(p:Props){
   </div>
  </section>;
 }
-
+/** Draws again only when the edit or its own props change, not for each word Gumbo streams. */
+export const ProjectPlayer=React.memo(PlayerView,sameProps(['timeline','footage','versionId','meta']));

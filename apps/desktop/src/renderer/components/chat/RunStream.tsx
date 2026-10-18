@@ -5,6 +5,7 @@ import type {PublicActivity} from '@dream/contracts';
 import type {Asset} from '@dream/footage';
 import {MessageText} from './MessageText';
 import {ScenePeek} from './ScenePeek';
+import {sameItems} from '../../memo';
 
 // Notes read as prose; consecutive actions fold into one row; each worker task is a row holding its own notes and actions.
 type Item={kind:'prose';event:PublicActivity}|{kind:'actions';events:PublicActivity[]}|{kind:'task';event:PublicActivity};
@@ -17,7 +18,7 @@ const Assets=React.createContext<Asset[]>([]);
 // As in Cursor, each step shows what kind of thing it did; a live step's words shimmer, a failed one turns red.
 const tools:Record<string,typeof FileText>={read_file:FileText,list_files:FileText,read_transcript:FileText,search:Search,web_search:Globe,fetch_url:Globe,write_file:PencilLine,edit_file:PencilLine,propose_file_changes:PencilLine,run_command:Wand2,bundle_scene:Wand2,publish_project:Clapperboard,view_media:Eye,check_outputs:ScanEye,update_tasks:ListChecks,set_project_title:Type,remember_decision:Bookmark,delegate:Users};
 function StepIcon({event,running}:{event:PublicActivity;running:boolean}){
- if(running&&live(event.status))return <LoaderCircle size={13} className="spin"/>;
+ if(running&&live(event.status))return <i className="spin"><LoaderCircle size={13}/></i>;
  if(['failed','interrupted'].includes(event.status))return <AlertCircle size={13}/>;
  const Icon=event.tool?tools[event.tool]:undefined;return Icon?<Icon size={13}/>:<Dot size={13}/>;
 }
@@ -50,17 +51,18 @@ function DraftStrip({drafts}:{drafts:NonNullable<PublicActivity['drafts']>}){
  return <div className={'stream-media'+(drafts.length===1?' single':'')}>{drafts.slice(0,3).map(draft=>{const asset={id:'draft_'+draft.hash,filename:draft.name,kind:'video',durationSec:draft.durationInFrames/draft.fps,fps:draft.fps,width:draft.width,height:draft.height,originalPath:'',fingerprint:draft.hash,scene:{format:'engine',revisionId:draft.hash.padEnd(64,'0'),durationInFrames:draft.durationInFrames}} as unknown as Asset;
   return <figure key={draft.hash} className="stream-thumb" title={draft.name}><ScenePeek asset={asset} src={`dream-engine://app/draft/${draft.hash}/index.html`}/><figcaption>Draft · {draft.name}</figcaption></figure>;})}</div>;
 }
-function Action({event,running}:{event:PublicActivity;running:boolean}){
+// Steps and notes draw again only when they change: a long run has hundreds, and each streamed word re-drew them all.
+const Action=React.memo(function Action({event,running,media=true}:{event:PublicActivity;running:boolean;media?:boolean}){
  const changes=editingChanges(event.changes??[]),text=editingActivity(event),icon=<StepIcon event={event} running={running}/>,shimmer=running&&live(event.status);
- return <div className={'run-event '+event.status} data-event-id={event.id}>{changes.length?<details className="run-event-details"><summary>{icon}<span className={shimmer?'shimmer':''}>{text}</span><ChevronRight className="run-disclosure" size={12}/></summary><ul>{changes.map((change,n)=><li key={n}>{change}</li>)}</ul></details>:<div className="stream-action">{icon}<span className={shimmer?'shimmer':''}>{text}</span></div>}{!!event.media?.length&&<MediaStrip media={event.media}/>}{!!event.drafts?.length&&<DraftStrip drafts={event.drafts}/>}</div>;
-}
+ return <div className={'run-event '+event.status} data-event-id={event.id}>{changes.length?<details className="run-event-details"><summary>{icon}<span className={shimmer?'shimmer':''}>{text}</span><ChevronRight className="run-disclosure" size={12}/></summary><ul>{changes.map((change,n)=><li key={n}>{change}</li>)}</ul></details>:<div className="stream-action">{icon}<span className={shimmer?'shimmer':''}>{text}</span></div>}{media&&!!event.media?.length&&<MediaStrip media={event.media}/>}{!!event.drafts?.length&&<DraftStrip drafts={event.drafts}/>}</div>;
+});
 
-function Actions({events,running}:{events:PublicActivity[];running:boolean}){
+const Actions=React.memo(function Actions({events,running}:{events:PublicActivity[];running:boolean}){
  if(events.length===1)return <Action event={events[0]} running={running}/>;
  const current=running?events.findLast(e=>live(e.status)):undefined,shown=current??events.at(-1)!,status=current?current.status:events.some(e=>e.status==='failed')?'failed':events.every(e=>e.status==='complete')?'complete':shown.status,media=events.flatMap(e=>e.media??[]);
  // Folded steps keep their pictures visible; the list itself opens on demand.
- return <div className="run-group-block"><details className={'run-group '+status}><summary><StepIcon event={{...shown,status}} running={running}/><span className={current?'shimmer':''}>{editingActivity(shown)}</span><small>{events.length} steps</small><ChevronRight className="run-disclosure" size={12}/></summary><div className="run-group-items">{events.map(event=><Action key={event.id} event={{...event,media:undefined}} running={running}/>)}</div></details>{!!media.length&&<MediaStrip media={media}/>}</div>;
-}
+ return <div className="run-group-block"><details className={'run-group '+status}><summary><StepIcon event={{...shown,status}} running={running}/><span className={current?'shimmer':''}>{editingActivity(shown)}</span><small>{events.length} steps</small><ChevronRight className="run-disclosure" size={12}/></summary><div className="run-group-items">{events.map(event=><Action key={event.id} event={event} media={false} running={running}/>)}</div></details>{!!media.length&&<MediaStrip media={media}/>}</div>;
+},(a,b)=>a.running===b.running&&sameItems(a.events,b.events));
 
 function Task({event,all,running}:{event:PublicActivity;all:PublicActivity[];running:boolean}){
  const children=all.filter(e=>e.parent===event.id),shown=children.filter(e=>!hidden(e)),thinking=children.findLast(e=>e.kind==='reasoning'&&live(e.status)),latest=shown.at(-1),working=running&&live(event.status);

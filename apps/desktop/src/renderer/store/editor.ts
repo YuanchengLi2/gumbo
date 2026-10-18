@@ -39,8 +39,10 @@ export function mergeProjectDelta(update:{projectId:string;baseSequence?:number;
 export function mergeRunEvents(previous:PublicActivity[]=[],incoming:PublicActivity[]=[]){const byId=new Map(previous.map(e=>[e.id,e]));for(const event of incoming){const old=byId.get(event.id);if(!old||(event.revision??0)>=(old.revision??0))byId.set(event.id,event);}return[...byId.values()].sort((a,b)=>a.sequence-b.sequence);}
 function mergeActivitySnapshots(previous:ProjectState,incoming:ProjectState):ProjectState{
  const old=previous.experience,current=incoming.experience;
- if(old?.turnId===current?.turnId&&old?.activity&&current?.activity)incoming={...incoming,experience:{...current,activity:{...current.activity,events:mergeRunEvents(old.activity.events,current.activity.events)}}};
- const prior=new Map(previous.messages.filter(m=>m.activity).map(m=>[m.id,m.activity]));return{...incoming,messages:incoming.messages.map(m=>m.activity&&prior.has(m.id)?{...m,activity:{...m.activity,events:mergeRunEvents(prior.get(m.id)?.events,m.activity.events)}}:m)};
+ if(old?.turnId===current?.turnId&&old?.activity&&current?.activity&&old.activity.events!==current.activity.events)incoming={...incoming,experience:{...current,activity:{...current.activity,events:mergeRunEvents(old.activity.events,current.activity.events)}}};
+ // Messages that did not change keep their objects, so the chat's finished turns are not drawn again for every update.
+ if(incoming.messages===previous.messages)return incoming;
+ const prior=new Map(previous.messages.map(m=>[m.id,m]));return{...incoming,messages:incoming.messages.map(m=>{const before=prior.get(m.id);return m===before||!m.activity||!before?.activity?m:{...m,activity:{...m.activity,events:mergeRunEvents(before.activity.events,m.activity.events)}};})};
 }
 export function acceptRunActivity(turnId:string,event:PublicActivity){const store=useEditor.getState(),project=store.project;if(!project||project.experience?.turnId!==turnId)return;const activity=project.experience.activity??{steps:[],status:project.aiStatus,changes:[]};store.setProject({...project,experience:{...project.experience,activity:{...activity,events:mergeRunEvents(activity.events,[event])}}});}
 

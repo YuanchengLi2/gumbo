@@ -42,7 +42,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
  const [menu,setMenu]=React.useState<MenuAt|null>(null),[showArchived,setShowArchived]=React.useState(false);
  const options=(project:ProjectSummary)=>(e:React.MouseEvent)=>{e.preventDefault();setMenu({project,x:e.clientX,y:e.clientY});};
  const live=p.projects.filter(x=>!x.archived),pinned=live.filter(x=>x.pinned),recent=live.filter(x=>!x.pinned),archived=p.projects.filter(x=>x.archived);
- const item=(project:ProjectSummary)=><button type="button" key={project.id} className={(project.missing?'missing ':'')+(menu?.project.id===project.id?'menu-open':'')} title={project.name} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}><span>{project.name}</span>{working.has(project.id)&&<Loader2 size={13} className="spin" aria-label="Gumbo is editing"/>}</button>;
+ const item=(project:ProjectSummary)=><button type="button" key={project.id} className={(project.missing?'missing ':'')+(menu?.project.id===project.id?'menu-open':'')} title={project.name} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}><span>{project.name}</span>{working.has(project.id)&&<i className="spin"><Loader2 size={13} aria-label="Gumbo is editing"/></i>}</button>;
  // A new video starts in the box: it is cleared and focused.
  const newVideo=()=>{p.onChange('');requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.fig-home .home-composer textarea')?.focus());};
  return <div className="home-screen fig-home" style={{'--side-width':`${side}px`} as React.CSSProperties}>
@@ -71,7 +71,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <section className="fig-recent" aria-label="Your projects">
     <header><h2>Your projects</h2>{live.length>0&&<span>{live.length}</span>}</header>
     {live.length?<div className="fig-project-grid">{[...pinned,...recent].map(project=><button className={'project-card'+(project.missing?' missing':'')} key={project.id} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}>
-     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}{working.has(project.id)&&<span className="project-working"><Loader2 size={12} className="spin"/>Editing</span>}{project.pinned&&!working.has(project.id)&&<span className="project-pin" title="Pinned"><Pin size={11}/></span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
+     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}{working.has(project.id)&&<span className="project-working"><i className="spin"><Loader2 size={12}/></i>Editing</span>}{project.pinned&&!working.has(project.id)&&<span className="project-pin" title="Pinned"><Pin size={11}/></span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
      <strong>{project.name}</strong><small>{updated(project)}</small>
     </button>)}</div>:<div className="fig-empty"><GumboMark/><div><strong>Your first edit starts above.</strong><p>Add your clips, say what you want, and Gumbo cuts it on a real timeline. Projects are saved here automatically.</p></div></div>}
    </section>

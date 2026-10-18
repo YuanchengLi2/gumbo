@@ -1,4 +1,5 @@
 import {editingChanges} from '../../editing-language';
+import {SendLog} from './SendLog';
 import {RunStream,clock} from './RunStream';
 import React from 'react';
 import {ChevronRight} from 'lucide-react';
@@ -6,14 +7,15 @@ import type {ProjectState,Message,TurnActivity} from '@dream/project-db';
 import type {PublicActivity} from '@dream/contracts';
 import {MessageText} from './MessageText';
 import {ChangeCards} from './ChangeCards';
-import {SendLog} from './SendLog';
-import {useEditor} from '../../store/editor';
+import {useEditor,type LiveCommentary} from '../../store/editor';
 import {MediaTile} from '../media/MediaTile';
 import type {SelectionRef} from '@dream/timeline';
+import type {Asset} from '@dream/footage';
+import {sameItems} from '../../memo';
 
 // Attached media and the timeline selection sent with a message show as media tiles, not names.
-function UserMessage({text,assetIds,selection,project}:{text:string;assetIds?:string[];selection?:SelectionRef[];project:ProjectState}){
- const asset=(id?:string)=>id?project.footage.assets.find(a=>a.id===id):undefined;
+function UserMessage({text,assetIds,selection,assets}:{text:string;assetIds?:string[];selection?:SelectionRef[];assets:Asset[]}){
+ const asset=(id?:string)=>id?assets.find(a=>a.id===id):undefined;
  return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div></article>;
 }
 
@@ -29,32 +31,42 @@ function workedFor(messages:Message[],events:PublicActivity[]){
  return clock(total);
 }
 
+type Group={id:string;turnId?:string;messages:Message[]};
+type TurnProps={group:Group;activity?:TurnActivity;running:boolean;commentary:LiveCommentary[];assets:Asset[];refresh:string;startedAt?:string};
+const none:LiveCommentary[]=[];
+
 export function Conversation({project}:{project:ProjectState}){
- const commentary=useEditor(s=>s.commentary),pending=useEditor(s=>s.pending),groups:{id:string;turnId?:string;messages:Message[]}[]=[],byTurn=new Map<string,typeof groups[number]>();
+ const commentary=useEditor(s=>s.commentary),pending=useEditor(s=>s.pending),groups:Group[]=[],byTurn=new Map<string,Group>();
  for(const message of project.messages){const key=message.turnId??message.id;let group=byTurn.get(key);if(!group){group={id:key,turnId:message.turnId,messages:[]};byTurn.set(key,group);groups.push(group);}group.messages.push(message);}
  // A just-sent message is shown at once; until the run picks it up, the previous turn is no longer the live one.
- const waiting=!!pending;
+ const waiting=!!pending,assets=project.footage.assets;
  return <div className="messages conversation">{groups.map(group=>{
- const current=group.turnId===project.experience?.turnId,stored=group.messages.find(m=>m.activity)?.activity,activity:TurnActivity|undefined=current?project.experience?.activity??stored:stored;
- const running=current&&project.aiStatus==='running'&&!waiting,assistants=group.messages.filter(m=>m.role==='assistant'),updates=assistants.filter(m=>(m.report as any)?.kind==='commentary'),last=assistants.filter(m=>(m.report as any)?.kind!=='commentary').at(-1);
- let events:PublicActivity[]=activity?.events?.map(e=>({...e}))??[...(activity?.steps??[]).map((s,i)=>({id:s.id??s.label,sequence:i,kind:'action' as const,text:s.label,status:s.status})),...updates.map((m,i)=>({id:(m.report as any).requestId??m.id,sequence:(activity?.steps.length??0)+i,kind:'commentary' as const,text:m.text,status:'complete'}))];
- if(current)for(const update of commentary.filter(c=>c.turnId===group.turnId)){const found=events.find(e=>e.id===update.requestId);if(found){found.text=update.text;found.status=update.status;}else events.push({id:update.requestId,sequence:events.length,kind:'commentary',text:update.text,status:update.status});}
+ const current=group.turnId===project.experience?.turnId,stored=group.messages.find(m=>m.activity)?.activity;
+ return <Turn key={group.id} group={group} activity={current?project.experience?.activity??stored:stored} running={current&&project.aiStatus==='running'&&!waiting} commentary={current?commentary.filter(c=>c.turnId===group.turnId):none} assets={assets} refresh={current?project.versionId:'done'} startedAt={current?project.experience?.runStartedAt:undefined}/>;
+ })}
+ {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} assets={assets}/><div className="assistant-turn"><RunStream events={[]} running startedAt={pending.createdAt}/></div></section>}
+ </div>;
+}
+
+// A turn draws again only when its own messages or activity change: finished turns stay as they are while a new one streams.
+const Turn=React.memo(function Turn({group,activity,running,commentary,assets,refresh,startedAt}:TurnProps){
+ const assistants=group.messages.filter(m=>m.role==='assistant'),updates=assistants.filter(m=>(m.report as any)?.kind==='commentary'),last=assistants.filter(m=>(m.report as any)?.kind!=='commentary').at(-1);
+ // The saved events are shared, not copied, so steps that did not change are not drawn again; a live note replaces its own.
+ let events:PublicActivity[]=activity?.events?[...activity.events]:[...(activity?.steps??[]).map((s,i)=>({id:s.id??s.label,sequence:i,kind:'action' as const,text:s.label,status:s.status})),...updates.map((m,i)=>({id:(m.report as any).requestId??m.id,sequence:(activity?.steps.length??0)+i,kind:'commentary' as const,text:m.text,status:'complete'}))];
+ for(const update of commentary){const n=events.findIndex(e=>e.id===update.requestId);if(n>=0)events[n]={...events[n],text:update.text,status:update.status};else events.push({id:update.requestId,sequence:events.length,kind:'commentary',text:update.text,status:update.status});}
  // The closing note streams like any other note and hands over to the formatted answer once it is saved, so text never blinks out.
  const answered=!running&&!!last?.text;
  events=events.flatMap(e=>e.kind==='terminal'?answered||!e.text.trim()?[]:[{...e,kind:'commentary' as const}]:[e]).filter(e=>e.status!=='discarded'&&!(e.kind==='commentary'&&answered&&e.text.trim()===last!.text.trim())).sort((a,b)=>a.sequence-b.sequence);
  // While it works the stream is open; once done it folds into one line above the answer, as in Cursor.
  const count=steps(events),shown=events.some(e=>e.kind==='action'&&e.tool!=='finish'||e.kind==='commentary'&&e.text.trim()),time=workedFor(group.messages,events),stopped=['interrupted','failed'].includes(activity?.status??'');
  const changes=!running?editingChanges(activity?.changes??[]):[];
- return <section className="conversation-turn" key={group.id} data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} selection={m.selection} project={project}/>)}
+ return <section className="conversation-turn" data-turn={group.turnId}>{group.messages.filter(m=>m.role==='user').map(m=><UserMessage key={m.id} text={m.text} assetIds={m.assetIds} selection={m.selection} assets={assets}/>)}
  {(events.length>0||last||running)&&<div className="assistant-turn">
- {running?<RunStream events={events} running assets={project.footage.assets} startedAt={project.experience?.runStartedAt}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={project.footage.assets}/></details>}
+ {running?<RunStream events={events} running assets={assets} startedAt={startedAt}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={assets}/></details>}
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
  {(()=>{const pills=changes.length>0?<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>:null;
   // Edits show as change cards; a request that only touched files keeps its short summary.
-  return !running&&group.turnId&&changes.length?<ChangeCards turnId={group.turnId} refresh={current?project.versionId:'done'} fallback={pills}/>:pills;})()}
+  return !running&&group.turnId&&changes.length?<ChangeCards turnId={group.turnId} refresh={refresh} fallback={pills}/>:pills;})()}
  {!running&&group.turnId&&count>0&&<SendLog turnId={group.turnId}/>}
  </div>}</section>;
- })}
- {pending&&<section className="conversation-turn pending" data-pending={pending.requestId}><UserMessage text={pending.text} assetIds={pending.assetIds} selection={pending.selection} project={project}/><div className="assistant-turn"><RunStream events={[]} running startedAt={pending.createdAt}/></div></section>}
- </div>;
-}
+},(a,b)=>a.activity===b.activity&&a.running===b.running&&a.assets===b.assets&&a.refresh===b.refresh&&a.startedAt===b.startedAt&&a.group.id===b.group.id&&sameItems(a.group.messages,b.group.messages)&&sameItems(a.commentary,b.commentary));

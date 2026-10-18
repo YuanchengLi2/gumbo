@@ -12,7 +12,7 @@ const step=(e:PublicActivity)=>(e.kind==='action'||e.kind==='changes')&&e.tool!=
 const money=(usd:number)=>usd<.01?`$${usd.toFixed(3)}`:`$${usd.toFixed(2)}`;
 const tokens=(n:number)=>n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${Math.round(n/1e3)}K`:String(n);
 const seconds=(ms:number)=>{const s=Math.round(ms/1000);return s<60?`${s}s`:`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;};
-function Icon({status}:{status:string}){return status==='complete'?<Check size={14}/>:live(status)?<LoaderCircle size={14} className="spin"/>:status==='paused'?<Pause size={14}/>:['failed','interrupted'].includes(status)?<AlertCircle size={14}/>:<Circle size={14}/>;}
+function Icon({status}:{status:string}){return status==='complete'?<Check size={14}/>:live(status)?<i className="spin"><LoaderCircle size={14}/></i>:status==='paused'?<Pause size={14}/>:['failed','interrupted'].includes(status)?<AlertCircle size={14}/>:<Circle size={14}/>;}
 
 /** Monitors the latest request above the composer: what it is doing now, how long it has run, and its tasks. */
 export function TaskDock({project}:{project:ProjectState}){
@@ -35,7 +35,7 @@ export function TaskDock({project}:{project:ProjectState}){
  const now=active?steps.findLast(e=>live(e.status)):undefined,label=working?now?editingActivity(now):pending||!steps.length?'Understanding your request':'Thinking':current?.title??'All tasks complete';
  const toggle=(value:boolean)=>setExpanded(value);
  return <div ref={dock} className={'task-dock'+(working?' working':'')} onKeyDown={e=>{if(e.key==='Escape'){toggle(false);e.stopPropagation();}}}>
- <button className="task-dock-toggle" aria-label="Tasks" aria-expanded={expanded} aria-controls="dream-task-window" onClick={()=>toggle(!expanded)}>{working?<LoaderCircle size={13} className="spin"/>:<Check size={13}/>}<span>{label}</span><small>{[working?elapsed:'',rows.length?money(cost):'',tasks.length?`${completed}/${tasks.length}`:''].filter(Boolean).join(' · ')}</small><ChevronUp size={15} className={expanded?'expanded':''}/></button>
+ <button className="task-dock-toggle" aria-label="Tasks" aria-expanded={expanded} aria-controls="dream-task-window" onClick={()=>toggle(!expanded)}>{working?<i className="spin"><LoaderCircle size={13}/></i>:<Check size={13}/>}<span>{label}</span><small>{[working?elapsed:'',rows.length?money(cost):'',tasks.length?`${completed}/${tasks.length}`:''].filter(Boolean).join(' · ')}</small><ChevronUp size={15} className={expanded?'expanded':''}/></button>
  {expanded&&<section id="dream-task-window" className="task-window" aria-label="Tasks in progress">
   {/* Tasks are the main column, with what the request has cost at its top right; the latest activity runs beside them. */}
   <div className="task-window-main">
@@ -45,7 +45,7 @@ export function TaskDock({project}:{project:ProjectState}){
   </div>
   <div className="task-window-side">
    <header><strong>Latest activity</strong><span>{working?'Running · '+elapsed:steps.length?'Finished':'Nothing yet'}</span></header>
-   <ol className="task-window-activity">{steps.slice(-6).map(e=><li key={e.id} className={live(e.status)&&active?'running':e.status}><Icon status={live(e.status)&&!active?'paused':e.status}/><span>{editingActivity(e)}</span></li>)}{!steps.length&&<li className="pending"><LoaderCircle size={14} className={working?'spin':''}/><span>{working?'Understanding your request':'No activity yet'}</span></li>}</ol>
+   <ol className="task-window-activity">{steps.slice(-6).map(e=><li key={e.id} className={live(e.status)&&active?'running':e.status}><Icon status={live(e.status)&&!active?'paused':e.status}/><span>{editingActivity(e)}</span></li>)}{!steps.length&&<li className="pending">{working?<i className="spin"><LoaderCircle size={14}/></i>:<LoaderCircle size={14}/>}<span>{working?'Understanding your request':'No activity yet'}</span></li>}</ol>
   </div>
  </section>}
  </div>;
