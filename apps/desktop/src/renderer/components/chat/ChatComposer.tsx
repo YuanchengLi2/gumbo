@@ -4,8 +4,8 @@ import {MediaTile} from '../media/MediaTile';
 import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown,Wand2,Cpu} from 'lucide-react';
 import type {Permission,ModelChoice} from '../../store/editor';
 import {shortcutHints} from '../../shortcuts';
-import {modelCatalog,providerLabels,typicalCost} from '@dream/config';
-import {useProviders,available,shortLabel} from '../../models';
+import {modelInfo,providerLabels,typicalCost} from '@dream/config';
+import {useProviders,available,shortLabel,pickable,ROUX} from '../../models';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
 type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
 
@@ -42,16 +42,17 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
 const tierWord:Record<string,string>={frontier:'Most capable',strong:'Balanced',light:'Fast'};
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
- const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- // Each model's price as a typical request's credits, so a pick away from Auto is made knowing it.
- const row=(choice:ModelChoice,name:string,note:string,ready=true,cost?:{credits:number})=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}</span><span className="model-note">{note}</span><span className="model-cost" title={cost?`About ${cost.credits} credits for a typical request`:undefined} aria-label={cost?`About ${cost.credits} credits for a typical request`:undefined}>{cost?`~${cost.credits} credits`:''}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
+ const groups=(['anthropic','openai','google'] as const).map(provider=>({provider,models:pickable.filter(m=>m.provider===provider)})).filter(g=>g.models.length);
+ // Each model's price as $ to $$$$$ (a typical request's credits on hover): Roux 1 is $, every other model costs more.
+ const signs=(cost:string)=>cost.length<2?'$$':cost,roux=modelInfo('deepseek-flash');
+ const row=(choice:ModelChoice,name:string,note:string,ready=true,cost?:{signs:string;credits:number},recommended=false)=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}{recommended&&<em className="model-recommended">Recommended</em>}</span><span className="model-note">{note}</span><span className="model-cost" title={cost?`About ${cost.credits} credits for a typical request`:undefined} aria-label={cost?`About ${cost.credits} credits for a typical request`:undefined}>{cost?.signs}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover model-picker" role="menu" aria-label="Model">
-   {row('auto','Auto','Picks for each request')}
+   {row('auto',ROUX,'Gumbo’s own model',true,{signs:'$',credits:roux?Math.max(1,Math.round(typicalCost(roux)*100)):3},true)}
    {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <React.Fragment key={g.provider}>
     <div className="model-group-name">{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</div>
-    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers),{credits:Math.max(1,Math.round(typicalCost(m)*100))}))}
+    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers),{signs:signs(m.cost),credits:Math.max(1,Math.round(typicalCost(m)*100))}))}
    </React.Fragment>;})}
   </div>}
  </div>;

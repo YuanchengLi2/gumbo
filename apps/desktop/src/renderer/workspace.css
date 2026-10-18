@@ -855,8 +855,9 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .model-row:hover:not(:disabled){background:var(--n5)}.model-row:disabled{opacity:.4;cursor:default}
 .model-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.model-row.selected .model-name{font-weight:600}
 .model-note{font-size:11.5px;color:var(--n46);white-space:nowrap}
+.model-recommended{margin-left:7px;padding:1px 6px;border-radius:999px;background:var(--n8);color:var(--n76);font-size:10.5px;font-style:normal;font-weight:600;vertical-align:1px}
 .home-waitlist{margin:-6px 0 16px;font-size:13.5px;color:var(--n56);text-align:center}
-.model-cost{font-size:11px;color:var(--n40);font-variant-numeric:tabular-nums;min-width:64px;text-align:right;white-space:nowrap}
+.model-cost{font-size:11px;color:var(--n40);letter-spacing:.5px;font-variant-numeric:tabular-nums;min-width:40px;text-align:right;white-space:nowrap}
 .model-check{display:grid;place-items:center;color:var(--n100)}
 
 /* Working: the "Gumbo is editing" placeholder is the mark alone on no background, and the glow holds still. The cursor
