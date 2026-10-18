@@ -76,7 +76,11 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
  }
  const tools=functionTools(body.tools),effort=effortOf(body);
  return{model:body.model,messages,...(tools.length?{tools:tools.map(f=>({type:'function',function:f})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_tokens:maxTokens,stream:true,stream_options:{include_usage:true},
-  ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{})};
+  ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{}),
+  // DeepSeek thinks at high effort on every call unless told otherwise (its levels are low, high and max), which made
+  // routine edits several times slower than on GPT-6.1 Sol. Gumbo's effort for the request sets it: low and medium think
+  // lightly, high fully, xhigh at most.
+  ...(model.provider==='deepseek'&&effort?{reasoning_effort:effort==='xhigh'?'max':effort==='high'?'high':'low'}:{})};
 }
 
 /** Two 32-bit FNV-1a hashes as 16 hex characters: enough to tell prompt prefixes apart in a cache key. */
