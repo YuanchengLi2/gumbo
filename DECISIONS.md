@@ -1,5 +1,13 @@
 # Dream decisions
 
+## October 18, 2026 — Onboarding, plans and the welcome to a plan, after Claude's
+
+- The first time Gumbo opens on a computer it shows Claude-style onboarding, one question per screen: welcome, account (or "Skip for now": editing by hand needs none), what to call you, what you make, how much you have edited, how you found Gumbo, the plans (Free to carry on with), and starter requests fitted to the answers. Computers that saw the old welcome skip it, and so do test runs (DREAM_HEADLESS) unless DREAM_ONBOARDING asks for it.
+- The name and what you make go into Settings > Profile, which the agent already reads with every request. All the answers go to the account (`dream_profiles`, gateway `profile`), so a second computer skips the questions. Answers given before sign-in wait locally and are sent at sign-in. Privacy says so.
+- The plans show as Claude's do: Free (while it is yours), Pro, and Max with a 5x/20x switch. Moving between paid plans still goes through Stripe's confirm page, which starts the change right away and charges only the difference.
+- The welcome to a plan opens when the account's plan actually goes up, not when Stripe's window says "subscribed". So it also covers Pro to Max through the portal, and it waits for the webhook. The first plan a computer sees for an account is only remembered. A first purchase gets three screens (what's yours, three habits that save credits, starter requests); a bigger plan gets the first screen only.
+- Public sources describe Claude's signup and plan screens but not its post-purchase screen; that screen follows Claude's pattern, not a documented copy.
+
 ## October 9, 2026 — Opus orchestrates, Haiku works; every message is routed
 
 - Every message is a new request. The "Continue saved request" option and the resume card are gone. After a stop, the router decides whether a message continues the stopped request (`continue`) or starts a new one. A request for something to read (a script, ideas, feedback) is a reply, not an edit.

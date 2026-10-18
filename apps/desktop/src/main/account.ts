@@ -42,6 +42,9 @@ export class Account {
  /** A Stripe page to pay on (Checkout for a plan or credits, or the portal to manage the plan): its address. */
  /** Tokens over the last year (Settings > Profile). */
  async activity(){if(!this.signedIn())return null;const response=await fetch(`${this.gateway()}/activity`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Activity is unavailable.');return body;}
+ /** The onboarding's answers, kept with the account (the gateway's profiles.ts): read back on another computer so they
+  * are not asked again, and saved when someone finishes them. unavailable when the gateway is older than profiles. */
+ async profile(answers?:unknown){if(!this.signedIn())return null;const auth={Authorization:`Bearer ${await this.token()}`};const response=await fetch(`${this.gateway()}/profile`,answers?{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:JSON.stringify(answers)}:{headers:auth});if(response.status===404||response.status===405)return{unavailable:true};const body=await response.json().catch(()=>({})) as any;if(!response.ok)throw new Error(body.error??'Your answers could not be saved.');return body;}
  async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number;flow?:string}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
  signout(){this.generation++;this.clear();return {signedIn:false};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}

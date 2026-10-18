@@ -9,6 +9,7 @@ import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
+import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
@@ -48,6 +49,8 @@ Deno.serve(async(req)=>{
   if(error)return json({error:error.message},500);return json(tokenActivity(rows??[],new Date()));}
  // The plan, the credits left and what is on offer (billing.ts).
  if(action==='billing'){try{return json(await billingSummary(user.id,supabaseBillingPorts(db),stripeConfig(name=>Deno.env.get(name))));}catch(error){return json({error:(error as Error).message},500);}}
+ // The onboarding's answers (profiles.ts): read back by the app on another computer, saved below when they are given.
+ if(action==='profile'&&req.method==='GET'){try{return json(await readProfile(user.id,supabaseProfilePorts(db)));}catch(error){return json({error:(error as Error).message},500);}}
  if(req.method!=='POST')return json({error:'Method not allowed'},405);
  try{
   if(action==='transcribe'){const result=await handleTranscription(req,user.id,{db,key:Deno.env.get('GROQ_API_KEY')});return json(result.body,result.status);}
@@ -62,6 +65,7 @@ Deno.serve(async(req)=>{
   // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).
   if(action==='billing-checkout'||action==='billing-portal'){const config=stripeConfig(name=>Deno.env.get(name));if(!config)return json({error:'Paying is not set up on the gateway yet.'},503);
    try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config,fetch,body.flow==='cancel'?{cancel:true}:undefined):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
+  if(action==='profile'){const result=await saveProfile(body,user.id,supabaseProfilePorts(db));return json(result.body,result.status);}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
   if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000))});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
   if(action==='share-create'){

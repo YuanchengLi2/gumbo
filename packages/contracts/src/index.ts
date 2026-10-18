@@ -10,6 +10,15 @@ import type {ProjectState} from '@dream/project-db';
 import {OpSchema} from '@dream/timeline';
 export const OutlineSchema=z.object({goal:z.string(),targetDurationSec:z.number().positive(),beats:z.array(z.object({id:z.string(),purpose:z.string(),targetSec:z.number().positive(),sources:z.array(z.object({assetId:z.string(),srcIn:z.number(),srcOut:z.number()}))})).min(1),style:z.string().default('launch')});
 export type Outline=z.infer<typeof OutlineSchema>;
+/** What a new user tells Gumbo when it first opens (the onboarding): what to call them, what they make, how much they have
+ * edited, and how they found Gumbo. The gateway's profiles.ts keeps the same ids. */
+export const ONBOARDING={
+ makes:['youtube','shorts','podcasts','vlogs','gaming','business','tutorials','personal','other'],
+ experience:['new','some','pro'],
+ heard:['youtube','tiktok','x','reddit','friend','search','other']
+} as const;
+export const OnboardingAnswersSchema=z.object({name:z.string().max(80).default(''),makes:z.array(z.enum(ONBOARDING.makes)).max(ONBOARDING.makes.length).default([]),experience:z.enum(ONBOARDING.experience).optional(),heard:z.enum(ONBOARDING.heard).optional()});
+export type OnboardingAnswers=z.infer<typeof OnboardingAnswersSchema>;
 export const CommandSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('state')}),z.object({type:z.literal('turn_usage'),turnId:z.string().min(1)}),z.object({type:z.literal('turn_changes'),turnId:z.string().min(1)}),z.object({type:z.literal('ai_providers')}),z.object({type:z.literal('activity_page'),turnId:z.string().min(1),before:z.number().int().optional(),limit:z.number().int().min(1).max(500).default(200)}),z.object({type:z.literal('scene_error'),assetId:z.string().max(200).optional(),revisionId:z.string().max(100).optional(),draft:z.string().max(100).optional(),message:z.string().min(1).max(4000),stack:z.string().max(16000).optional()}),z.object({type:z.literal('file_diff'),path:z.string().min(1).max(2000),beforeHash:z.string().max(200).optional(),afterHash:z.string().max(200).optional(),maxChars:z.number().int().min(1000).max(400000).default(120000)}),z.object({type:z.literal('history_page'),kind:z.enum(['messages','versions']),before:z.number().int().optional(),limit:z.number().int().min(1).max(100).default(50)}),z.object({type:z.literal('library_page'),kind:z.enum(['audio','visual']),before:z.number().int().optional(),limit:z.number().int().min(1).max(50).default(20)}),z.object({type:z.literal('create'),folder:z.string(),name:z.string(),initialRequest:InitialRequestSchema.optional()}),z.object({type:z.literal('open'),folder:z.string()}),
  z.object({type:z.literal('import'),paths:z.array(z.string()).min(1),copy:z.boolean().default(false)}),
@@ -24,7 +33,7 @@ export const CommandSchema=z.discriminatedUnion('type',[
  z.object({type:z.literal('library_list')}),z.object({type:z.literal('library_get'),revisionId:z.string()}),
  z.object({type:z.literal('generation_cancel'),requestId:z.string()}),z.object({type:z.literal('generation_resume'),requestId:z.string()}),
  z.object({type:z.literal('relink'),assetId:z.string(),path:z.string()}),z.object({type:z.literal('collect'),folder:z.string()}),
- z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage','browser','billing','checkout','portal','activity']),email:z.string().max(320).optional(),password:z.string().optional(),plan:z.enum(['pro','max','max20']).optional(),packs:z.number().int().min(1).max(10).optional(),flow:z.enum(['cancel']).optional()}),
+ z.object({type:z.literal('retry'),assetId:z.string(),step:z.enum(['analysis','proxy','thumbnail','playback_audio','waveform','transcription','audio_features','loudness']).optional()}),z.object({type:z.literal('account'),action:z.enum(['get','signin','signout','usage','browser','billing','checkout','portal','activity','profile']),email:z.string().max(320).optional(),password:z.string().optional(),plan:z.enum(['pro','max','max20']).optional(),packs:z.number().int().min(1).max(10).optional(),flow:z.enum(['cancel']).optional(),profile:OnboardingAnswersSchema.optional()}),
  z.object({type:z.literal('config'),supabaseUrl:z.string().url(),anonKey:z.string()}),
  z.object({type:z.literal('models'),action:z.enum(['install','cancel']),id:z.string()})
 ]);
@@ -49,7 +58,9 @@ export type BillingSummary={plan:PlanId;planName:string;status:string|null;cance
  topup:{credits:number;priceUsd:number;maxPacks:number};payments:boolean;portal:boolean};
 export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:string;turnId?:string};
 export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;paths?:string[];error?:string;phase?:string;warnings?:string[]};
-export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number;version?:string;projectsFolder?:string;logsFolder?:string};
+/** automated: a test or script drives this copy (DREAM_HEADLESS), so first-run screens such as the onboarding stay away;
+ * onboarding: DREAM_ONBOARDING asks for the onboarding even on a computer that has been through it. */
+export type RuntimeStatus={automated?:boolean;onboarding?:boolean;ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper:boolean;models:boolean;platform:string;memoryGb:number;version?:string;projectsFolder?:string;logsFolder?:string};
 export interface DreamDesktop {
  setTheme(theme:'light'|'dark',color?:string,choice?:'light'|'dark'|'system'):Promise<void>;
  projects():Promise<ProjectSummary[]>;

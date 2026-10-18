@@ -1,0 +1,67 @@
+/* The onboarding: the first time Gumbo opens, one question a screen over everything, centred like Claude's. Black and white;
+   the bowl is the only colour. The top strip still moves the window. */
+.onboarding{position:fixed;inset:0;z-index:2200;display:flex;flex-direction:column;overflow:auto;background:var(--chrome);color:var(--n87);-webkit-app-region:no-drag}
+.onboarding-drag{position:fixed;top:0;left:0;right:0;height:40px;-webkit-app-region:drag}
+.onboarding-progress{position:fixed;top:0;left:0;right:0;z-index:1;height:3px;background:var(--n6)}
+.onboarding-progress i{display:block;height:100%;background:var(--n100);transition:width .3s ease}
+.onboarding-back{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:9px;font-size:13px;color:var(--n56);-webkit-app-region:no-drag}
+.onboarding-back:hover{background:var(--n5);color:var(--n100)}
+.onboarding-back.corner{position:fixed;top:48px;left:20px;z-index:1}
+.onboarding-body{position:relative;width:min(560px,calc(100vw - 48px));margin:auto;padding:80px 0 56px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.onboarding-body form{display:contents}
+.onboarding-body>.gumbo-mark{width:60px;height:60px;margin-bottom:18px}
+.onboarding-body h1{width:max-content;max-width:calc(100vw - 48px);margin:0 0 10px;font:400 40px/1.12 Georgia,"Times New Roman",serif;letter-spacing:-.6px;color:var(--n100)}
+.onboarding-body form>p,.onboarding-body>p{margin:0 0 28px;max-width:440px;font-size:14.5px;line-height:1.55;color:var(--n56)}
+.onboarding-body h2{align-self:flex-start;margin:0 0 10px;font-size:13px;font-weight:600;color:var(--n100)}
+.onboarding-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:200px;height:44px;margin-top:8px;padding:0 22px;border-radius:12px;background:var(--n100);color:var(--chrome);font-size:14.5px;font-weight:600}
+.onboarding-primary:hover:not(:disabled){opacity:.86}.onboarding-primary:disabled{opacity:.28;cursor:default}
+.onboarding-skip{margin-top:18px;font-size:13px;color:var(--n46);text-decoration:underline;text-underline-offset:3px}.onboarding-skip:hover{color:var(--n100)}
+.onboarding-input{width:100%;max-width:400px;height:52px;margin-bottom:20px;padding:0 16px;border:1px solid var(--n12);border-radius:12px;background:var(--n1);font-size:17px;color:var(--n100);text-align:center;outline:none}
+.onboarding-input:focus{border-color:var(--n46)}
+.onboarding-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:24px}
+.onboarding-chips button{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 16px;border:1px solid var(--n10);border-radius:999px;font-size:13.5px;color:var(--n76)}
+.onboarding-chips button:hover{border-color:var(--n32);color:var(--n100)}
+.onboarding-chips button[aria-pressed=true],.onboarding-chips button[aria-checked=true]{border-color:var(--n100);background:var(--n100);color:var(--chrome)}
+.onboarding-options{display:flex;flex-direction:column;gap:10px;width:100%;max-width:440px}
+.onboarding-options button{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:15px 46px 15px 18px;border:1px solid var(--n10);border-radius:14px;text-align:left}
+.onboarding-options button:hover,.onboarding-options button[aria-checked=true]{border-color:var(--n100)}
+.onboarding-options b{font-size:14.5px;font-weight:600;color:var(--n100)}.onboarding-options span{font-size:13px;color:var(--n56)}
+.onboarding-options svg{position:absolute;top:50%;right:16px;transform:translateY(-50%);color:var(--n40)}
+.onboarding-waiting{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--n65)}
+.onboarding-waiting button{margin-left:4px;font-size:13px;color:var(--n56);text-decoration:underline;text-underline-offset:3px}
+.onboarding-error{margin:0 0 14px;font-size:13px;color:#c4433a}.onboarding-note{margin:14px 0 0;font-size:12.5px;color:var(--n46)}
+.onboarding-body.step-plan{width:min(880px,calc(100vw - 48px))}.onboarding-plans{width:100%;text-align:left}
+.onboarding-body.step-ready{width:min(640px,calc(100vw - 48px))}.onboarding-body.step-ready .welcome-prompts{width:100%;text-align:left}
+
+/* Claude's plan cards: Max's two sizes on a switch in its card. */
+.upgrade-plan-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.upgrade-size{display:inline-flex;padding:2px;border-radius:8px;background:var(--n5)}
+.upgrade-size button{height:24px;padding:0 9px;border-radius:6px;font-size:12px;font-weight:600;color:var(--n56)}
+.upgrade-size button[aria-checked=true]{background:var(--chrome);color:var(--n100);box-shadow:0 1px 2px rgb(0 0 0 / .12)}
+
+/* The welcome to a plan: what it gives, how to make credits go further, and requests to start from. */
+.welcome-backdrop{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .5);backdrop-filter:blur(4px)}
+.welcome-window{position:relative;width:min(600px,100%);max-height:calc(100vh - 48px);overflow:auto;padding:34px 30px 22px;border:1px solid var(--n9);border-radius:22px;background:var(--chrome);color:var(--n87);box-shadow:0 30px 90px rgb(0 0 0 / .35)}
+.welcome-window>header{text-align:center;margin-bottom:22px}
+.welcome-window h2{margin:0 0 8px;font:400 34px/1.1 Georgia,"Times New Roman",serif;letter-spacing:-.4px;color:var(--n100)}
+.welcome-window>header p{margin:0 auto;max-width:440px;font-size:14px;line-height:1.5;color:var(--n56)}
+.plan-welcome-badge{width:68px;height:68px;margin:0 auto 12px;border-radius:50%;display:grid;place-items:center;background:rgb(226 85 42 / .12)}
+.plan-welcome-badge .gumbo-mark{width:40px;height:40px}
+.plan-welcome-plan{display:inline-block;margin-bottom:12px;padding:3px 11px;border-radius:999px;background:var(--paprika);color:#fff8ee;font-size:11.5px;font-weight:600;letter-spacing:.2px}
+.plan-welcome-gives,.welcome-steps{list-style:none;margin:0 0 22px;padding:0;display:grid;gap:10px}
+.plan-welcome-gives li,.welcome-steps li{display:flex;gap:12px;padding:14px 16px;border:1px solid var(--n8);border-radius:14px}
+.plan-welcome-gives svg{flex:none;margin-top:1px;color:var(--paprika)}
+.plan-welcome-gives b,.welcome-steps b{display:block;font-size:14px;font-weight:600;color:var(--n100)}
+.plan-welcome-gives span,.welcome-steps p{display:block;margin:3px 0 0;font-size:12.5px;line-height:1.5;color:var(--n56)}
+.welcome-step-icon{width:34px;height:34px;flex:none;border-radius:10px;display:grid;place-items:center;background:var(--n5);color:var(--n100)}
+.welcome-prompts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:22px}
+.welcome-prompts button{position:relative;display:flex;flex-direction:column;gap:5px;padding:13px 32px 13px 14px;border:1px solid var(--n9);border-radius:12px;text-align:left}
+.welcome-prompts button:hover{border-color:var(--n32);background:var(--n3)}
+.welcome-prompts b{display:flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--n100)}
+.welcome-prompts span{font-size:12px;line-height:1.45;color:var(--n56)}
+.welcome-prompts button>svg{position:absolute;top:13px;right:12px;color:var(--n40)}
+.welcome-window>footer{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.welcome-window .onboarding-primary{min-width:160px;margin-top:0}
+.welcome-dots{display:flex;gap:6px;margin-right:auto}.welcome-dots i{width:6px;height:6px;border-radius:50%;background:var(--n14)}.welcome-dots i.on{background:var(--n100)}
+@media(max-width:760px){.welcome-prompts{grid-template-columns:1fr}.onboarding-body h1{font-size:32px}.onboarding-back.corner{top:44px;left:8px}}
+@media(prefers-reduced-motion:reduce){.onboarding-progress i{transition:none}}

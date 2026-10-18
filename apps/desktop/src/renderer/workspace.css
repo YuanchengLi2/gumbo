@@ -776,7 +776,7 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .upgrade-window h2{margin:0 0 8px;font:400 34px/1.1 Georgia,"Times New Roman",serif;letter-spacing:-.5px;color:var(--n100)}
 .upgrade-window>header p{margin:0 auto;max-width:460px;font-size:14px;line-height:1.5;color:var(--n56)}
 .upgrade-loading{text-align:center;color:var(--n46)}
-.upgrade-plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.upgrade-plans{display:grid;grid-template-columns:repeat(var(--plan-count,3),minmax(0,1fr));gap:12px}
 .upgrade-plan{position:relative;display:flex;flex-direction:column;padding:20px 18px 18px;border:1px solid var(--n9);border-radius:14px;background:var(--n1)}
 .upgrade-plan.featured{border-color:var(--n100)}.upgrade-plan.current{border-color:var(--paprika)}
 .upgrade-tag{position:absolute;top:-10px;left:18px;padding:2px 9px;border-radius:999px;background:var(--n100);color:var(--chrome);font-size:11px;font-weight:600}
@@ -842,23 +842,6 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 @keyframes sign-in-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.sign-in-spinner{animation:none}}
 
-/* The welcome: what the plan gives, three steps, and requests to start from. */
-.welcome-backdrop{position:fixed;inset:0;z-index:2100;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .5);backdrop-filter:blur(4px)}
-.welcome-window{position:relative;width:min(640px,100%);max-height:calc(100vh - 48px);overflow:auto;padding:32px 30px 24px;border:1px solid var(--n9);border-radius:22px;background:var(--chrome);color:var(--n87);box-shadow:0 30px 90px rgb(0 0 0 / .35)}
-.welcome-window>header{text-align:center;margin-bottom:22px}.welcome-window>header .gumbo-mark{width:48px;height:48px;margin-bottom:10px}
-.welcome-window h2{margin:0 0 8px;font:400 34px/1.1 Georgia,"Times New Roman",serif;color:var(--n100)}
-.welcome-window>header p{margin:0 auto;max-width:440px;font-size:14px;line-height:1.5;color:var(--n56)}
-.welcome-steps{list-style:none;margin:0 0 22px;padding:0;display:grid;gap:10px}
-.welcome-steps li{display:flex;gap:12px;padding:12px 14px;border:1px solid var(--n8);border-radius:14px}
-.welcome-step-icon{width:34px;height:34px;flex:none;border-radius:10px;display:grid;place-items:center;background:rgb(226 85 42 / .14);color:var(--paprika)}
-.welcome-steps b{font-size:13.5px;font-weight:600;color:var(--n100)}.welcome-steps p{margin:2px 0 0;font-size:12.5px;line-height:1.45;color:var(--n56)}
-.welcome-window h3{margin:0 0 10px;font-size:13px;font-weight:600;color:var(--n100)}
-.welcome-prompts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:20px}
-.welcome-prompts button{position:relative;display:flex;flex-direction:column;gap:4px;padding:12px 30px 12px 14px;border:1px solid var(--n9);border-radius:12px;text-align:left}
-.welcome-prompts button:hover{border-color:var(--n25);background:var(--n3)}
-.welcome-prompts b{font-size:13px;font-weight:600;color:var(--n100)}.welcome-prompts span{font-size:12px;line-height:1.45;color:var(--n56)}
-.welcome-prompts svg{position:absolute;top:12px;right:12px;color:var(--n40)}
-.welcome-window>footer{display:flex;justify-content:center}
 
 
 /* The model picker: a plain list. */

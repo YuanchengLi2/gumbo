@@ -23,8 +23,8 @@ import {useChatShortcuts} from './shortcuts';
 import {useTheme} from './theme';
 import {ProfileMenu,SettingsLayer} from './components/settings/SettingsMenu';
 import {UpgradeLayer} from './components/billing/Upgrade';
-import {WelcomeLayer,openWelcome,welcomedBefore} from './components/billing/Welcome';
-import {useAccount} from './account';
+import {WelcomeLayer} from './components/billing/Welcome';
+import {OnboardingLayer} from './components/onboarding/Onboarding';
 
 
 
@@ -47,11 +47,8 @@ function LayoutSwitch({locked}:{locked:boolean}){const layout=useEditor(s=>locke
    {id==='gumbo'?<span className="layout-switch-mark"><GumboMark/></span>:closed?<Lock size={14}/>:<Scissors size={14}/>}{id==='gumbo'?'Gumbo':'Editor'}</button>;})}</div>;}
 
 export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),setInput=setDraft,[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
- const [signIn,setSignIn]=useState(false);// A request picked in the welcome goes into the home screen's box; a new plan opens the welcome, and so does a first sign-in.
- useEffect(()=>{const prompt=(e:Event)=>{setHomeInput(String((e as CustomEvent).detail??''));s.setRoute('home');};window.addEventListener('gumbo:prompt',prompt);
-  const off=window.dream.onEvent(raw=>{const event=raw as {type?:string;payload?:{status?:string}};if(event.type==='billing.returned'&&event.payload?.status==='subscribed')openWelcome('plan');});
-  return()=>{window.removeEventListener('gumbo:prompt',prompt);off();};},[]);
- const signedIn=useAccount()?.signedIn;useEffect(()=>{if(signedIn&&!welcomedBefore())openWelcome('first');},[signedIn]);
+ const [signIn,setSignIn]=useState(false);// A request picked in the onboarding or the welcome to a plan goes into the home screen's box.
+ useEffect(()=>{const prompt=(e:Event)=>{setHomeInput(String((e as CustomEvent).detail??''));s.setRoute('home');};window.addEventListener('gumbo:prompt',prompt);return()=>window.removeEventListener('gumbo:prompt',prompt);},[]);
  useEffect(()=>{const open=()=>setSignIn(true);window.addEventListener('dream:sign-in',open);return()=>window.removeEventListener('dream:sign-in',open);},[]);
  const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',duration=project?resolve(project.timeline,project.footage).durationSec:0;
 
@@ -91,7 +88,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
 
  {s.error&&<div className="error-toast" role="alert"><p>{s.error}</p><button aria-label="Dismiss error" onClick={()=>s.setError(null)}><X size={17}/></button></div>}
 
- <SettingsLayer/><UpgradeLayer/><WelcomeLayer/>
+ <SettingsLayer/><UpgradeLayer/><WelcomeLayer/><OnboardingLayer/>
  {signIn&&<SignInDialog onClose={()=>setSignIn(false)}/>}
  {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
 

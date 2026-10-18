@@ -7,6 +7,7 @@ import {refreshProviders} from '../../models';
 import {useAccount,requireSignIn,signedOut} from '../../account';
 import {UsagePage,PlanPage} from './BillingPages';
 import {ProfileActivity} from './ProfileActivity';
+import {profileChanged} from '../../profile';
 
 /** Settings as a page of its own, laid out as Claude's: sections in a sidebar on the left, the chosen one on the right, as
  * plain rows (a label, what it does, its control). Profile shows your token activity and what the AI knows about you
@@ -80,6 +81,7 @@ function Privacy(){
   <section><h3>What stays on your computer</h3><p>Your projects, footage, music and exports. Gumbo keeps them in your Projects folder and never uploads them to store them.</p></section>
   <section><h3>What Gumbo sends to edit</h3><p>When you ask for an edit, Gumbo sends the AI what that request needs: your message, the project's timeline, and words and frames from your footage. It goes through Gumbo's service to the AI provider that runs the request (Anthropic, OpenAI, Google or DeepSeek) and is not used to train their models.</p></section>
   <section><h3>Your account</h3><p>Your email, your plan, and a record of each AI request (which model, how many tokens, what it cost) so your credits and usage add up. Not what you said or showed.</p></section>
+  <section><h3>Your welcome answers</h3><p>What you told Gumbo when it first opened: your name, what you make, how much you've edited and how you found Gumbo. They're kept with your account so another computer doesn't ask again, and they tell us who Gumbo is for.</p></section>
   <section><h3>Payments</h3><p>Stripe handles every payment. Your card goes to Stripe, never to Gumbo.</p></section>
   <section><h3>Crash reports</h3><p>If Gumbo crashes, the report is saved on this computer and not sent anywhere.</p></section>
   <p className="settings-note">Questions, or want your account deleted? Email privacy@usegumbo.app.</p>
@@ -101,7 +103,7 @@ export function SettingsPage(p:{onClose:()=>void;initial?:SettingsSection}){
  // Settings); an open dropdown in Settings keeps its own Esc.
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(e.key!=='Escape'||e.target instanceof Element&&e.target.closest('select'))return;e.preventDefault();e.stopPropagation();p.onClose();};window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);},[p.onClose]);
  useEffect(()=>{panel.current?.scrollTo({top:0});},[section]);
- const save=async(patch:Partial<AppSettings>)=>{try{setSettings(await window.dream.saveSettings(patch));if(patch.disabledProviders)await refreshProviders();}catch(e){setError((e as Error).message);}};
+ const save=async(patch:Partial<AppSettings>)=>{try{setSettings(await window.dream.saveSettings(patch));if(patch.profile)profileChanged();if(patch.disabledProviders)await refreshProviders();}catch(e){setError((e as Error).message);}};
  const title=sections.find(([id])=>id===section)![1];
  return <div className="settings-page" role="dialog" aria-modal="true" aria-label="Settings">
   <nav className="settings-nav" aria-label="Settings sections">

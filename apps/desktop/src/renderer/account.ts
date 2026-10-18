@@ -17,6 +17,8 @@ export function useAccount(){
   const off=window.dream.onEvent(event=>{if(event.type==='account.signed_in')void refreshAccount();});return()=>{listeners.delete(update);off();};},[]);
  return value;
 }
+/** The account as last asked, without asking again (undefined before the first answer). */
+export const accountNow=()=>current??undefined;
 /** Marks the account signed out here (after Sign out), without asking the service again. */
 export function signedOut(){current={signedIn:false,email:''};notify();}
 
