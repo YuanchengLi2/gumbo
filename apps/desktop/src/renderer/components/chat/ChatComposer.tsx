@@ -43,15 +43,15 @@ const tierWord:Record<string,string>={frontier:'Most capable',strong:'Balanced',
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
  const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- // Each model's price, as $ to $$$$$ with a typical request's credits on hover, so a pick away from Auto is made knowing it.
- const row=(choice:ModelChoice,name:string,note:string,ready=true,cost?:{signs:string;credits:number})=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}</span><span className="model-note">{note}</span><span className="model-cost" title={cost?`About ${cost.credits} credits for a typical request`:undefined} aria-label={cost?`About ${cost.credits} credits for a typical request`:undefined}>{cost?.signs}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
+ // Each model's price as a typical request's credits, so a pick away from Auto is made knowing it.
+ const row=(choice:ModelChoice,name:string,note:string,ready=true,cost?:{credits:number})=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}</span><span className="model-note">{note}</span><span className="model-cost" title={cost?`About ${cost.credits} credits for a typical request`:undefined} aria-label={cost?`About ${cost.credits} credits for a typical request`:undefined}>{cost?`~${cost.credits} credits`:''}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover model-picker" role="menu" aria-label="Model">
    {row('auto','Auto','Picks for each request')}
    {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <React.Fragment key={g.provider}>
     <div className="model-group-name">{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</div>
-    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers),{signs:m.cost,credits:Math.max(1,Math.round(typicalCost(m)*100))}))}
+    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers),{credits:Math.max(1,Math.round(typicalCost(m)*100))}))}
    </React.Fragment>;})}
   </div>}
  </div>;

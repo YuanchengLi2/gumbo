@@ -4,7 +4,6 @@ export function toolActivity(name:string|undefined,input:any):string|undefined{
  input=input&&typeof input==='object'?input:{};
  if(typeof input.progress==='string'&&input.progress.trim())return input.progress.trim();
  const command=String(input.command??'');
- if(name==='delegate'&&Array.isArray(input.tasks))return input.tasks.length===1?String(input.tasks[0]?.title??'Assigning the edit'):`Working on ${input.tasks.length} parts in parallel`;
  const generic:Record<string,string>={remember_decision:'Remembering your editing preference',set_project_title:'Naming project',list_files:'Checking project materials',search:'Searching project context',read_file:'Reviewing the edit',write_file:'Creating the edit',edit_file:'Refining the edit',fetch_url:'Reading a web page',web_search:'Searching the web',import_media:'Importing media',run_command:/\b(?:npm (?:install|ci|rebuild)|pip install)\b/.test(command)?'Preparing editing tools':'Preparing the edit',bundle_scene:'Preparing the scene',check_outputs:'Previewing the scene',import_resources:'Bringing in files',read_transcript:'Reading the transcript',publish_project:'Updating the preview',view_media:'Inspecting media',update_tasks:'Updating tasks',propose_file_changes:typeof input.title==='string'&&input.title.trim()?input.title.trim():'Preparing file changes',finish:'Completing the request'};
  if(name==='listen')return input.target==='preview'?'Listening to the edit':'Listening to the sound';
  if(name==='find_shots')return input.query?`Searching your footage for “${String(input.query).slice(0,60)}”`:'Going through your footage';
@@ -26,7 +25,6 @@ export function toolDetail(name:string|undefined,input:any,partial=''):string|un
  if(['read_file','write_file','edit_file'].includes(name??''))return input?.path;
  if(name==='view_media')return input?.path??input?.assetId;
  if(name==='web_search'||name==='find_media'&&input?.online)return String(input?.query??'').slice(0,200)||undefined;
- if(name==='delegate'&&Array.isArray(input?.tasks))return input.tasks.map((t:any)=>t?.title).filter(Boolean).join('\n').slice(0,2000)||undefined;
  return undefined;
 }
 export function fileChanges(proposal:FileProposal):string[]{return proposal.changes.slice(0,proposal.completed).map(({operation:op,exists})=>{

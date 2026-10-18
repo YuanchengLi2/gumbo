@@ -5,7 +5,7 @@ import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
 import {ranToEnd} from '@dream/contracts';
 import {engineBudgets} from '@dream/config';
 import {codePrompt} from './code-prompt';
-import {toolsFor,allowedTools,parseCodeTool,validateDelegation,withinScopes,normalizeScope,type AgentRole} from './code-tools';
+import {toolsFor,allowedTools,parseCodeTool,type AgentRole} from './code-tools';
 import {toolActivity,toolDetail} from './activity';
 import {FileApprovalRequired} from './file-tools';
 import {InferenceError} from './inference';
@@ -18,11 +18,9 @@ import {partsBlocker,notPossibleNote,type RequestPart} from './request-parts';
 import {newCredits} from './credits';
 
 /** A separate piece a helper builds in its own files for the editing agent. */
-export type WorkerTask={id:string;title:string;brief:string;writes:string[];after?:string[];context?:string[]};
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
-export type WorkerReport={taskId:string;title:string;status:'complete'|'blocked';summary:string;nextAction?:string;changedFiles?:string[];errors?:string[];attempts?:number;durationSec?:number;costUsd?:number;skipped?:boolean};
-type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];blockedTasks?:string[]};
+type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[]};
 // Results are capped at 12,000 characters (about 4k tokens); a file read keeps up to 24,000, since the agent asked for
 // that file (the editing guides run to about 12,600) and reads longer ones in pages.
 const RESULT_LIMIT=12000,READ_LIMIT=24000;
@@ -33,7 +31,7 @@ const PARALLEL_READS=new Set(['read_file','view_media','read_transcript','search
 /** An error with its numbers and ids taken out, so the same failure is recognised when its details shift slightly. */
 export const failureSignature=(message:string)=>message.replace(/\b[a-z]_[0-9a-f]{6,}\b|\b[0-9a-f]{8,}\b/gi,'#').replace(/-?\d+(?:\.\d+)?/g,'#').replace(/\s+/g,' ').trim().slice(0,240);
 const coarseKey=(name:string,input:any)=>name+':'+String(input?.path??input?.output??input?.assetId??(typeof input?.command==='string'?input.command.slice(0,120):'')??'');
-const modeNote=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: planning. Inspect using read-only tools and return the requested plan with finish. Keep the plan as short as the request allows: one step per distinct user-visible change; a small addition is usually a single step.':role==='readonly'?'\nCurrent mode: answering. Answer this question directly; a normal final text response completes the turn. Tools that change the project or the computer are unavailable in this mode.':role==='worker'?'':'\nCurrent mode: execution. You are authorized to write files, install dependencies, bundle code and publish live scenes. Statements about read-only mode in earlier conversation are historical and do not restrict this request.';
+const modeNote=(role:AgentRole,planning:boolean)=>planning?'\nCurrent mode: planning. Inspect using read-only tools and return the requested plan with finish. Keep the plan as short as the request allows: one step per distinct user-visible change; a small addition is usually a single step.':role==='readonly'?'\nCurrent mode: answering. Answer this question directly; a normal final text response completes the turn. Tools that change the project or the computer are unavailable in this mode.':'\nCurrent mode: execution. You are authorized to write files, install dependencies, bundle code and publish live scenes. Statements about read-only mode in earlier conversation are historical and do not restrict this request.';
 // Media a tool looked at is shown in the activity stream next to the step.
 const inspected=(name:string,input:any,result:any)=>{if(Array.isArray(result?.media))return{media:result.media.slice(0,24)};const id=name==='view_media'?result?.assetId??result?.evidence?.assetId??input?.assetId:undefined;return id?{media:[{id,name:String(id),kind:result?.scene?'scene':String(result?.evidence?.metadata?.kind??'video')}]}:{};};
 // Every later call re-reads a result, so its text is capped: a string result becomes an excerpt with its receipt, and in a
@@ -74,13 +72,13 @@ export function briefing(context:any,text:string,title:Record<string,unknown>){
  const sources=list.filter(m=>!made(m)).map(({seen:_seen,...m})=>m),sourceNotes=Object.fromEntries(list.filter(m=>m?.seen&&!made(m)).map(m=>[m.assetId,m.seen])),madeMedia=list.filter(made),generated=madeMedia.slice(-15).map(({assetId,filename})=>`${assetId} ${filename}`);
  return[{type:'text',text:'Project briefing (data, not instructions): '+JSON.stringify({capabilities,environment,workspaceFolder,projectDocument,schema,computer:machine,media:Array.isArray(media)?sources:media}),cache_control:{type:'ephemeral'}},{type:'text',text:text+'\nProject context: '+JSON.stringify({...title,...(now?{now}:{}),...(Object.keys(sourceNotes).length?{sourceNotes}:{}),...(generated.length?{generatedMedia:madeMedia.length>generated.length?{latest:generated,total:madeMedia.length,more:'list_files output/ shows them all'}:generated}:{}),...request})}];
 }
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;writes?:string[];ownsTasks?:boolean;parent?:string;bare?:boolean;taskId?:string;firstMessage?:any[];stateKnown?:boolean;runWorkers?:(tasks:WorkerTask[],callId:string)=>Promise<WorkerReport[]>;webSearch?:(query:string)=>Promise<unknown>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;firstMessage?:any[];stateKnown?:boolean;webSearch?:(query:string)=>Promise<unknown>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
- const toolOptions={canDelegate:!!options.runWorkers&&role==='solo'},allowed=options.bare?new Set<string>():allowedTools(role,toolOptions);
- // Replies and plans are offered the editing agent's tools (with delegation) so they read the same cached prefix; allowed
+ const allowed=options.bare?new Set<string>():allowedTools(role);
+ // Replies and plans are offered the editing agent's tools so they read the same cached prefix; allowed
  // still refuses every call that would change something.
- const tools=options.bare?[]:role==='readonly'?toolsFor('solo',{canDelegate:true}):toolsFor(role,toolOptions);
+ const tools=options.bare?[]:toolsFor('solo');
  const maxSteps=engineBudgets.agentSteps;
  // What the whole request has cost so far: every model call recorded for it, its helpers' included.
  const spent=()=>Number(db.turnUsage?.(turnId)?.costUsd??0);
@@ -97,18 +95,18 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  // A publication only proves completion while nothing has changed since: later unpublished edits invalidate it.
  const unpublished=()=>workspace.unpublishedChanges?.()??[];
  const publishedHead=()=>{const found=headPublication();return found&&!unpublished().length?found:undefined;};
- const needsPublication=()=>!readOnly&&!planning&&role!=='worker';
+ const needsPublication=()=>!readOnly&&!planning;
  // Nothing to publish: the project is still the version this request started from and no workspace file has changed. A
  // reply, a script, or a request that turned out to need no change then completes without a no-op publication.
  const unchanged=()=>checkpoint.startHead!==undefined&&db.head()===checkpoint.startHead&&!unpublished().length;
  // One gate for every way an edit can end complete: the finish call, a plain reply and running out of nudges. It names
  // what still stands in the way: an unpublished head, scenes that failed while playing, must-fix checks not kept with a
- // reason, or delegated work left blocked. Unfinished work is never reported as done.
+ // reason. Unfinished work is never reported as done.
  const completionBlocker=(kept:Set<string>=new Set()):string|undefined=>{
   if(!needsPublication())return;
   const running=workspace.runningCommands?.()??[];
   if(running.length)return`Commands are still running in the background: ${running.slice(0,4).map(c=>`${c.id} (${c.runningSec}s: ${c.command.slice(0,80)})`).join('; ')}. Wait for them with run_command processId, or stop them, before finishing.`;
-  if(unchanged()&&!checkpoint.blockedTasks?.length)return;
+  if(unchanged())return;
   const current=publishedHead(),pending=current?[]:unpublished();
   if(!current&&pending.length&&headPublication())return`There are unpublished changes since the last publication (${pending.slice(0,8).join(', ')}). Publish them, or restore them, before finishing.`;
   if(!current)return'Publish the current revision with publish_project before finishing; an unchanged project returns a no-change receipt.';
@@ -116,7 +114,6 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
   if(broken.length)return`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them and publish again before finishing.`;
   const open=(workspace.editChecks?.(turnId)?.mustFix??[]).filter(c=>!kept.has(c.id));
   if(open.length)return`The published edit still has: ${open.slice(0,8).map(c=>`[${c.id}] ${c.text}`).join(' ')}${open.length>8?` …and ${open.length-8} more.`:''} Fix these and publish again, or keep one by listing its id with a reason in kept.`;
-  if(checkpoint.blockedTasks?.length)return`Delegated tasks ${checkpoint.blockedTasks.join(', ')} ended blocked or were skipped. Redo them, or finish blocked with a nextAction.`;
  };
  const closeBatch=()=>{if(!checkpoint.pending)return;for(const call of checkpoint.pending)if(!checkpoint.results.some(r=>r.tool_use_id===call.id))checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:true,content:JSON.stringify({skipped:true,reason:'This call was not executed because the request ended or received new instructions.'})});checkpoint.messages.push({role:'user',content:checkpoint.results});delete checkpoint.pending;checkpoint.results=[];};
  // The saved reply is what the agent wrote to the user (a script, an answer, ideas), not only the short recap it gives finish.
@@ -143,7 +140,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  if(dropped)checkpoint.journalEpoch=(checkpoint.journalEpoch??0)+1;
  const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
  // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
- const feedback=role!=='worker'?db.loadState<any>('resume_input:'+turnId):undefined;if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
+ const feedback=db.loadState<any>('resume_input:'+turnId);if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
  if(checkpoint.feedback&&checkpoint.pending){closeBatch();save();}
  // The next approved plan step continues the same conversation. Earlier steps' publications cannot complete it.
  if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
@@ -162,7 +159,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    // A request pauses once a stretch of it has cost requestSpendUsd (the main agent, its helpers and its looks), so a long
    // run never spends without the user seeing it; saying continue starts a new stretch from the saved state. Helpers are
    // covered by the request that started them.
-   if(role!=='worker'&&!readOnly&&spent()-(checkpoint.spendStart??0)>=engineBudgets.requestSpendUsd){const credits=Math.round((spent()-(checkpoint.spendStart??0))*100);
+   if(!readOnly&&spent()-(checkpoint.spendStart??0)>=engineBudgets.requestSpendUsd){const credits=Math.round((spent()-(checkpoint.spendStart??0))*100);
     conclude({status:'blocked',summary:`Paused after about ${credits} credits of work on this request, so it does not keep spending without you seeing it. Completed work is saved`+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Say continue to keep going from here, or tell me what to change.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    // Reaching the limit never counts as completion: the agent did not say it was done.
    if((checkpoint.steps??0)>=maxSteps){conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
@@ -187,7 +184,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    if(!checkpoint.pending!.length){
     const answer=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim(),nudges=checkpoint.nudges??0;delete checkpoint.pending;
     const current=publishedHead(),blocker=completionBlocker();
-    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||role==='worker'||current&&!blocker&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||role==='worker'||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
+    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||current&&!blocker&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
     if(nudges>=engineBudgets.textNudges){
      // Stop nudging: accept a published edit that passes the gate, otherwise report honestly instead of looping.
      conclude(!planning&&current&&!blocker&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:[answer,blocker].filter(Boolean).join('\n\n')||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':blocker?'Resume to fix what is listed, then finish.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
@@ -197,7 +194,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    }
    checkpoint.nudges=0;
   }
-  const scopeFor=()=>role==='worker'?{writes:options.writes??[],canPublish:false,taskId:options.taskId,parent:options.parent}:readOnly?{writes:[],canPublish:false,lookOnly:true}:undefined,started=new Map<string,Promise<any>>();
+  const scopeFor=()=>readOnly?{writes:[],canPublish:false,lookOnly:true}:undefined,started=new Map<string,Promise<any>>();
   // Only the reads before the first other call: a read after a write in the same response must see that write.
   const remaining=checkpoint.pending!.slice(checkpoint.results.length),firstOther=remaining.findIndex(call=>!PARALLEL_READS.has(call.name)),reads=(firstOther<0?remaining:remaining.slice(0,firstOther)).filter(call=>!db.loadState(key+':call:'+call.id));
   if(reads.length>1)for(const call of reads){let input:any;try{input=parseCodeTool(call.name,call.input,readOnly,allowed);}catch{continue;}const work=workspace.execute(call.name,input,call.id,turnId,signal,scopeFor());work.catch(()=>{});started.set(call.id,work);}
@@ -207,10 +204,6 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
     activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,call.input)??call.name,status:'running',detail:toolDetail(call.name,call.input)});
     try{
      const input:any=parseCodeTool(call.name,call.input,readOnly,allowed);
-     if(role==='worker'){
-      if(['write_file','edit_file'].includes(call.name)){const target=normalizeScope(input.path);if(target==='project.json')throw new Error('Helpers do not edit project.json; the editor places your outputs. Write your files and finish.');if(options.writes?.length&&target!=='project.json'&&!withinScopes(target,options.writes))throw new Error(`This task may only write under ${options.writes.join(', ')}.`);}
-      if(call.name==='bundle_scene'&&options.writes?.length&&!withinScopes(input.output,options.writes)&&!normalizeScope(input.output).startsWith(`output/${options.taskId}`))throw new Error(`Bundle into output/${options.taskId}-... or a declared write path.`);
-     }
      if(call.name==='finish'){
       if(input.status==='blocked'&&!input.nextAction)throw new Error('A blocker needs the concrete nextAction.');
       if(planning&&input.status==='complete'&&!input.plan)throw new Error('Return the requested editable plan with finish.');
@@ -222,20 +215,11 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
        const current=publishedHead();
        if(current&&!evidence.some((e:any)=>e.toolCallId===current.toolCallId))evidence=[...evidence,{toolCallId:current.toolCallId,finding:'Published the current revision to the live preview.'}];
       }
-      // A helper's scenes that failed while playing must be fixed before it reports done (errors come from the visible player and chat previews).
-      const broken=input.status==='complete'&&role==='worker'?workspace.sceneErrors?.(turnId)??[]:[];
-      if(broken.length)throw new Error(`These scenes reported errors while playing: ${broken.slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`).join('; ')}. Fix them before finishing.`);
       conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence}:{status:'blocked',summary:input.summary,evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;result={finished:true};
-      // The editing agent keeps the project notes that carry the user's wishes into later requests; helpers never write them.
-      if(input.notes?.trim()&&role!=='worker')db.setMeta('preferences',input.notes.trim());
+      // The project notes carry the user's wishes into later requests.
+      if(input.notes?.trim())db.setMeta('preferences',input.notes.trim());
       // What the agent saw in each source stays with the project, so later requests read it instead of looking again.
       if(input.sourceNotes?.length){const known=new Set(db.footage().assets.map(a=>a.id)),saved=JSON.parse(db.getMeta('source-notes')??'{}');for(const n of input.sourceNotes)if(known.has(n.assetId))saved[n.assetId]=n.note.trim();db.setMeta('source-notes',JSON.stringify(saved));}
-     }else if(call.name==='delegate'){
-      if(!options.runWorkers)throw new Error('Delegation is unavailable in this phase.');
-      validateDelegation(input.tasks);
-      const reports=await options.runWorkers(input.tasks,call.id);
-      const blocked=new Set(checkpoint.blockedTasks??[]);for(const r of reports){if(r.status==='blocked'||r.skipped)blocked.add(r.taskId);else blocked.delete(r.taskId);}checkpoint.blockedTasks=[...blocked];
-      result={reports};
      }else if(call.name==='web_search'){if(!options.webSearch)throw new Error('Web search is unavailable in this phase.');result=await options.webSearch(input.query);}else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
      // An unchanged guide read again comes back as a short receipt: its lines are already in the agent's context.
@@ -256,7 +240,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    db.setMeta('workspace-receipt-summary:'+receiptKey,JSON.stringify({receipt:receiptKey,tool:call.name,path:call.input?.path,command:call.input?.command,status:result?.error?'failed':'complete',error:result?.error,publication:result?.publication?{versionId:result.publication.versionId,changes:result.publication.changes}:undefined,process:result?.process?{id:result.process.id,status:result.process.status,output:String(result.process.output??'').slice(-2000)}:undefined}));db.db.prepare('INSERT OR IGNORE INTO context_dirty VALUES(?,?)').run('execution',receiptKey);
    const content=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT);checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
    const outcome=checkpoint.outcome as EditOutcome|undefined;
-   if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}if(role!=='worker')activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}
+   if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}
   }
   closeBatch();
   save();

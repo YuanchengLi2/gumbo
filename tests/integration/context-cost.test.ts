@@ -25,14 +25,14 @@ it('keeps the editing agent\'s fixed prefix small: the project and scene referen
 });
 
 it('gives the model types and choices, not validation limits, which parsing still enforces (a number past its bounds is moved to the bound)',()=>{
- const tools=JSON.stringify(toolsFor('solo',{canDelegate:true}));
+ const tools=JSON.stringify(toolsFor('solo'));
  expect(tools).not.toContain('maxLength');expect(tools).not.toContain('$schema');expect(tools).toContain('"enum"');
  expect(parseCodeTool('list_files',{offset:-1}).offset).toBe(0);expect(()=>parseCodeTool('list_files',{offset:'first'})).toThrow('offset');expect(parseCodeTool('set_project_title',{title:'x'.repeat(200)}).title).toHaveLength(80);
  expect(toolsFor('solo').find(t=>t.name==='view_media')!.input_schema.properties).toHaveProperty('detail');
 });
 
 it('offers replies the editing agent\'s exact tools, so both read one cached prefix, while replies still cannot change anything',()=>{
- const editing=allowedTools('solo',{canDelegate:true}),reply=allowedTools('readonly');
+ const editing=allowedTools('solo'),reply=allowedTools('readonly');
  expect(reply.has('write_file')).toBe(false);expect(reply.has('publish_project')).toBe(false);expect(reply.has('read_file')).toBe(true);expect(editing.has('write_file')).toBe(true);
  expect(()=>parseCodeTool('run_command',{command:'dir'},true,reply)).toThrow('unavailable');
 });

@@ -4,12 +4,8 @@ import {TaskUpdateSchema,TaskPlanSchema,FileOperationSchema} from '@dream/contra
 import {DecisionInput} from './project-memory';
 import {engineBudgets} from '@dream/config';
 const path=z.string().min(1).max(2000);
-// A helper builds one separate piece (a scene, a score, generated media) in its own files. after: tasks in the same call
-// that must finish first; context: workspace files attached verbatim to the brief.
-const WorkerTask=z.object({id:z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/),title:z.string().trim().min(1).max(120),brief:z.string().min(1).max(24000),writes:z.array(z.string().min(1).max(300)).min(1).max(20),after:z.array(z.string()).max(8).default([]),context:z.array(z.string().min(1).max(300)).max(12).default([])});
 export const codeSchemas={
  remember_decision:DecisionInput,
- delegate:z.object({tasks:z.array(WorkerTask).min(1).max(8)}),
  set_project_title:z.object({title:z.string().trim().min(1).max(80)}),
  list_files:z.object({path:z.string().default('.'),scope:z.enum(['workspace','computer']).default('workspace'),version:z.string().optional(),offset:z.number().int().nonnegative().default(0),cursor:z.string().optional()}),
  find_media:z.object({when:z.enum(['today','yesterday','this_week','last_7_days']).optional(),from:z.string().max(40).optional(),to:z.string().max(40).optional(),kinds:z.array(z.enum(['video','image','audio'])).max(3).optional(),folders:z.array(z.string().min(1).max(2000)).max(20).optional(),query:z.string().max(200).optional(),online:z.enum(['music','sound','footage','image']).optional(),minDurationSec:z.number().nonnegative().optional(),sort:z.enum(['captured','modified','name']).default('captured'),limit:z.number().int().min(1).max(200).default(100)}),
@@ -36,12 +32,11 @@ export const codeSchemas={
 export type ToolName=keyof typeof codeSchemas;
 /** solo: the editing agent that owns a request. worker: a helper building one separate piece in its
  * own files. readonly: replies and plans. */
-export type AgentRole='solo'|'worker'|'readonly';
+export type AgentRole='solo'|'readonly';
 const descriptions:Record<ToolName,string>={
  find_media:"Find photos, videos and audio on the user's computer by capture time (when, or from/to ISO dates), in the usual media folders and memory cards unless folders are given; imports nothing; needs computer access. online with query searches free-to-use libraries instead; import_media path online:<id> downloads a result with its license.",
  import_media:"Import up to 100 files from the user's computer in one call. Already imported files are reused. Returns asset IDs, capture times and durations at once; playback copies and transcripts continue in the background. Files on this computer are linked in place; files on removable drives are copied.",
  remember_decision:'Save a lasting editing preference the user stated. text quotes their instruction verbatim; sourceId is their message ID. Never store assumptions, your suggestions or media contents. supersedes replaces an earlier decision in the same scope.',
- delegate:`Have helpers build separate pieces in parallel (a scene, a score, generated media). A helper writes only its own files and never edits project.json or publishes; you place its outputs and publish. Only for independent pieces that take real work; do everything else yourself. Up to 8 tasks, ${engineBudgets.maxWorkers} at once. Each brief stands alone (helpers cannot see this conversation): goal, files to write, the output declarations you will place, visual and audio specifics. writes: path prefixes per task (disjoint for tasks that can run together); after: tasks that must finish first; context: workspace files attached to the brief.`,
  set_project_title:'Give the project a short descriptive title. User-chosen titles are kept.',
  list_files:'Browse the workspace or approved computer folders.',
  search:'Search authored code, transcripts, project decisions and history, or approved computer files. A workspace path searches that file or folder. Read results before relying on them.',
@@ -65,19 +60,16 @@ const descriptions:Record<ToolName,string>={
 const writeTools=new Set<ToolName>(['import_media','write_file','edit_file','run_command','bundle_scene','check_outputs','import_resources','publish_project']);
 const sideEffects=new Set<ToolName>([...writeTools,'remember_decision','set_project_title','update_tasks','propose_file_changes']);
 // These carry their own user-facing wording; every other tool takes a short progress label.
-const unlabeled=new Set<string>(['finish','delegate']);
+const unlabeled=new Set<string>(['finish']);
 // advanced: legacy HTML scene bundling (bundle_scene); off unless DREAM_AGENT_ADVANCED_TOOLS=1 or a caller asks for it.
-export type ToolOptions={canDelegate?:boolean;advanced?:boolean};
+export type ToolOptions={advanced?:boolean};
 export function allowedTools(role:AgentRole,options:ToolOptions={}):Set<ToolName>{
  const advanced=options.advanced??process.env.DREAM_AGENT_ADVANCED_TOOLS==='1';
  const all=(Object.keys(codeSchemas) as ToolName[]).filter(name=>name!=='bundle_scene'||advanced);
  // Replies may unpack the user's archives and folders to look at them (a script for drawings sent as a .zip); the copy goes
  // to a scratch folder outside the project's files.
- if(role==='readonly')return new Set(all.filter(n=>(!sideEffects.has(n)||n==='import_resources')&&n!=='delegate'));
- // A helper builds its piece in its own files: it never delegates, publishes, edits the project's settings or memory, or
- // changes the user's computer.
- if(role==='worker')return new Set(all.filter(n=>!['delegate','update_tasks','set_project_title','remember_decision','publish_project','propose_file_changes','import_media'].includes(n)));
- return new Set(all.filter(n=>n!=='delegate'||options.canDelegate));
+ if(role==='readonly')return new Set(all.filter(n=>(!sideEffects.has(n)||n==='import_resources')));
+ return new Set(all);
 }
 // The model sees types, choices, defaults and required fields; length and count limits are enforced when an input is
 // parsed (over-long prose is shortened), so they are left out of what every call carries.
@@ -121,23 +113,9 @@ const clampNumbers=(value:any,schema:any):any=>{
 /** Input problems as plain lines: the field, what is wrong, and the accepted values when there is a choice. */
 export function inputErrors(name:string,error:z.ZodError){return`The ${name} input is not valid: `+error.issues.slice(0,6).map(i=>`${i.path.join('.')||'input'}: ${(i as any).values?`must be one of ${(i as any).values.map((v:unknown)=>JSON.stringify(v)).join(', ')}`:i.message}`).join('; ')+'.';}
 export function parseCodeTool(name:string,input:unknown,readOnly=false,allowed?:Set<string>){
- if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&(sideEffects.has(name as ToolName)||name==='delegate')))throw new Error('This capability is unavailable in the current phase.');
+ if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&sideEffects.has(name as ToolName)))throw new Error('This capability is unavailable in the current phase.');
  const schema=codeSchemas[name as ToolName],json=z.toJSONSchema(schema,{target:'draft-7',io:'input'});const result=(looseInputs[name]??schema).safeParse(clampNumbers(trimProse(normalizeOptionalNulls(unquote(input,json),json),json),json));if(!result.success)throw new Error(inputErrors(name,result.error));const parsed:any=result.data;
  const progress=!unlabeled.has(name)&&input&&typeof input==='object'?(input as any).progress:undefined;return progress==null?parsed:{...parsed,progress:z.string().trim().min(1).max(200).parse(progress)};
-}
-/** A delegate call is a task graph of helpers. Helpers never write project.json or the whole workspace, tasks that may run
- * at the same time (neither ordered after the other) need disjoint writes, and dependencies name tasks in the call and form
- * no cycle. */
-export function validateDelegation(tasks:z.input<typeof WorkerTask>[]){
- const ids=new Set(tasks.map(t=>t.id));if(ids.size!==tasks.length)throw new Error('Task IDs must be unique.');
- for(const t of tasks){for(const d of t.after??[])if(!ids.has(d)||d===t.id)throw new Error(`Task ${t.id}: after must name other tasks in this call (${d} is not one).`);
-  for(const w of t.writes??[]){const path=normalizeScope(w);if(path==='project.json'||path===''||path==='.')throw new Error(`Task ${t.id}: helpers write their own files; you edit project.json and publish, and no task may claim the whole workspace.`);}}
- // Transitive predecessors; a task reaching itself is a cycle.
- const before=new Map<string,Set<string>>(),byId=new Map(tasks.map(t=>[t.id,t]));
- const reach=(id:string,trail:string[]):Set<string>=>{if(trail.includes(id))throw new Error(`Tasks ${[...trail,id].join(' -> ')} depend on each other in a cycle.`);const known=before.get(id);if(known)return known;const all=new Set<string>();for(const d of byId.get(id)!.after??[]){all.add(d);for(const x of reach(d,[...trail,id]))all.add(x);}before.set(id,all);return all;};
- for(const t of tasks)reach(t.id,[]);
- const ordered=(a:string,b:string)=>before.get(a)!.has(b)||before.get(b)!.has(a);
- for(const a of tasks)for(const b of tasks){if(a===b||ordered(a.id,b.id))continue;for(const x of a.writes??[])for(const y of b.writes??[]){const p=normalizeScope(x),q=normalizeScope(y);if(p===q||p.startsWith(q+'/'))throw new Error(`Tasks ${a.id} and ${b.id} can run at the same time but have overlapping writes (${p}, ${q}); separate them or order one after the other.`);}}
 }
 export const normalizeScope=(path:string)=>path.replaceAll('\\','/').replace(/^\.\//,'').replace(/\/+$/,'');
 export function withinScopes(path:string,scopes:string[]){const target=normalizeScope(path);return scopes.some(scope=>{const s=normalizeScope(scope);return target===s||target.startsWith(s+'/');});}

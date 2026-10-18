@@ -24,7 +24,7 @@ const document=(root:string)=>JSON.parse(readFileSync(join(root,'Workspace/proje
 const signal=()=>new AbortController().signal;
 
 it('edits only through project.json: no timeline actions for any role',()=>{
- for(const role of ['solo','worker','readonly'] as const)expect([...allowedTools(role,{canDelegate:true})]).not.toContain('edit_timeline');
+ for(const role of ['solo','readonly'] as const)expect([...allowedTools(role)]).not.toContain('edit_timeline');
  expect(allowedTools('solo').has('write_file')).toBe(true);expect(allowedTools('solo').has('publish_project')).toBe(true);
 });
 
@@ -89,23 +89,6 @@ it('never reports an edit with must-fix checks as done when the agent just stops
  }finally{db.close();}
 },60_000);
 
-it('never reports an edit as done when a delegated task ended blocked and the agent keeps replying instead of finishing',async()=>{
- const {root,db,ws}=await fixture();try{
-  const doc=document(root);doc.timeline.spine=[clip('a',2.2,4)];
-  let step=0;
-  const result=await codeAgent({db,workspace:ws,turnId:'turn',text:'Trim the opening and add a title scene',model:models.agent,signal:signal(),publish:()=>{},
-   runWorkers:async(tasks:any[])=>tasks.map(t=>({taskId:t.id,title:t.title,status:'blocked',summary:'The scene failed to compile.'})),
-   infer:async()=>{
-    step++;
-    if(step===1)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'write',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}}]};
-    if(step===2)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'publish',name:'publish_project',input:{}}]};
-    if(step===3)return{stop_reason:'tool_use',content:[{type:'tool_use',id:'delegate',name:'delegate',input:{tasks:[{id:'title',title:'Title scene',brief:'b',writes:['src/title']}]}}]};
-    return{stop_reason:'end_turn',content:[{type:'text',text:'Trimmed the opening.'}]};
-   }} as any);
-  expect(result.outcome.status).toBe('blocked');expect(result.outcome.summary).toContain('Delegated tasks title ended blocked');
-  expect((result.outcome as any).nextAction).toContain('fix');
- }finally{db.close();}
-},60_000);
 
 it('caps the text of every result, including a look at footage that mixes text and images',()=>{
  const look=[{type:'text',text:'x'.repeat(30_000)},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:'img'}},{type:'text',text:'y'.repeat(5_000)}];

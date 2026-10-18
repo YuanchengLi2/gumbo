@@ -7,7 +7,7 @@ import {copyFileSync,existsSync,mkdtempSync,rmSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {codePrompt,workerPrompt} from '../packages/orchestrator/src/code-prompt';
+import {codePrompt} from '../packages/orchestrator/src/code-prompt';
 import {toolsFor,type AgentRole} from '../packages/orchestrator/src/code-tools';
 
 const textTokens=(chars:number)=>chars/4;
@@ -28,8 +28,8 @@ const imagesIn=(block:any):number=>block?.type==='image'?blockTokens(block):bloc
 
 export function fixedPrefix(){
  // Replies and plans are sent the editing agent's tools, so they share its prefix.
- const size=(system:string,role:AgentRole)=>{const tools=JSON.stringify(toolsFor(role,{canDelegate:role==='solo'}));return{system:Math.round(textTokens(system.length)),tools:Math.round(textTokens(tools.length))};};
- return{editing:size(codePrompt,'solo'),helper:size(workerPrompt,'worker')};
+ const size=(system:string,role:AgentRole)=>{const tools=JSON.stringify(toolsFor(role));return{system:Math.round(textTokens(system.length)),tools:Math.round(textTokens(tools.length))};};
+ return{editing:size(codePrompt,'solo')};
 }
 
 export function anatomy(folder:string){

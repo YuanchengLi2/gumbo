@@ -7,7 +7,6 @@ import {models} from '@dream/config';
 import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
 import {codeAgent} from '../../packages/orchestrator/src/code-agent';
 import {Director} from '../../packages/orchestrator/src/code-director';
-import {validateDelegation} from '../../packages/orchestrator/src/code-tools';
 import {budgetRequest} from '../../packages/orchestrator/src/context-budget';
 import {infer,requestBody} from '../../packages/orchestrator/src/inference';
 import {assertToolExchanges} from '../../packages/orchestrator/src/tool-exchanges';
@@ -18,34 +17,6 @@ const scene=(label:string)=>`<div id="t">${label}</div><script>window.renderFram
 const toolUse=(id:string,name:string,input:any)=>({content:[{type:'tool_use',id,name,input}],stop_reason:'tool_use',usage:{}});
 const resultOf=(messages:any[],id:string)=>{for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&b.tool_use_id===id)return b;};
 
-it('lets the editing agent run helpers in parallel within disjoint write scopes, then place their scenes and publish itself',async()=>{
- const db=fixture(),ws=workspaceFor(db);let arrived=0,release!:()=>void;const barrier=new Promise<void>(resolve=>release=resolve);
- const seen:Record<string,any[]>={};let agentCalls=0;const helperCalls:Record<string,number>={};
- try{
-  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,ws);
-  director.inference=async(_model,_system,messages:any,_tools,_turn,_force,purpose='execution')=>{
-   if(purpose==='routing')return{content:[{type:'text',text:JSON.stringify({route:'local',intelligence:'sonnet',complexity:'normal',reason:'Two new scenes',approvalQuote:null})}],stop_reason:'end_turn',usage:{}};
-   if(purpose==='execution'){agentCalls++;
-    if(agentCalls===1)return toolUse('parallel','delegate',{tasks:[{id:'title',title:'Build the title card',brief:'Write src/title/scene.html.',writes:['src/title']},{id:'outro',title:'Build the outro',brief:'Write src/outro/scene.html.',writes:['src/outro']}]});
-    if(agentCalls===2){expect(JSON.stringify(resultOf(messages,'parallel'))).toContain('Wrote the title');const doc=JSON.parse(readFileSync(join(ws.root,'project.json'),'utf8'));doc.outputs=['title','outro'].map(id=>({id,path:`src/${id}/scene.html`,kind:'scene',width:640,height:360,fps:30,durationInFrames:60}));doc.timeline.spine=['title','outro'].map(id=>({id,assetId:'output:'+id,srcIn:0,srcOut:2,speed:1,audio:{mute:true},reason:'Scene'}));return{content:[{type:'tool_use',id:'doc',name:'write_file',input:{path:'project.json',content:JSON.stringify(doc)}},{type:'tool_use',id:'pub',name:'publish_project',input:{}}],stop_reason:'tool_use',usage:{}};}
-    return{content:[{type:'tool_use',id:'done',name:'finish',input:{status:'complete',summary:'Added the title and outro.'}}],stop_reason:'tool_use',usage:{}};}
-   const head=messages[0].content,brief=(typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text).split('\n')[0],task=brief.includes('title card')?'title':'outro',n=helperCalls[task]=(helperCalls[task]??0)+1;seen[task]=messages;
-   if(n===1){arrived++;if(arrived===2)release();await barrier;return{content:[{type:'tool_use',id:task+'-json',name:'write_file',input:{path:'project.json',content:'{}'}},{type:'tool_use',id:task+'-stray',name:'write_file',input:{path:'src/shared.js',content:'x'}},{type:'tool_use',id:task+'-write',name:'write_file',input:{path:`src/${task}/scene.html`,content:scene(task)}}],stop_reason:'tool_use',usage:{}};}
-   return{content:[{type:'tool_use',id:task+'-finish',name:'finish',input:{status:'complete',summary:`Wrote the ${task} scene at src/${task}/scene.html.`}}],stop_reason:'tool_use',usage:{}};
-  };
-  await director.message('Add a title card and an outro');
-  expect(db.getMeta('ai_status')).toBe('complete');expect(arrived).toBe(2);
-  for(const task of ['title','outro']){expect(resultOf(seen[task],task+'-json').content).toContain('Helpers do not edit project.json');expect(resultOf(seen[task],task+'-stray').content).toContain(`only write under src/${task}`);expect(readFileSync(join(ws.root,`src/${task}/scene.html`),'utf8')).toBe(scene(task));}
-  expect(db.timeline().spine.map(c=>c.id)).toEqual(['title','outro']);expect(db.footage().assets.filter(a=>a.scene)).toHaveLength(2);
- }finally{db.close();}
-});
-it('rejects unsafe parallel delegations before any helper starts',()=>{
- const task=(id:string,writes:string[])=>({id,title:id,brief:'b',writes});
- expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/a/inner'])])).toThrow('overlapping');
- expect(()=>validateDelegation([task('a',['project.json']),task('b',['src/b'])])).toThrow('project.json');
- expect(()=>validateDelegation([task('a',['.'])])).toThrow('whole workspace');
- expect(()=>validateDelegation([task('a',['src/a']),task('b',['src/ab'])])).not.toThrow();
-});
 it('inlines local script and stylesheet references at publication and rejects external ones',async()=>{
  const db=fixture(),ws=workspaceFor(db);try{
   await ws.initialize();mkdirSync(join(ws.root,'src/intro'),{recursive:true});
@@ -84,8 +55,6 @@ it('stops at the step limit and after bounded nudges instead of looping',async()
   const script='SCENE 1. Ooga. '.repeat(30).trim();let calls=0;
   const answered=await codeAgent({...base,phase:'script',infer:async()=>calls++===0?{content:[{type:'text',text:script}],stop_reason:'end_turn',usage:{}}:toolUse('f','finish',{status:'complete',summary:'Done.'})});
   expect(answered.outcome).toMatchObject({status:'complete',summary:script});expect(calls).toBe(2);
-  let worker=0;const report=await codeAgent({...base,phase:'worker',role:'worker',infer:async()=>{worker++;return{content:[{type:'text',text:'Wrote src/intro/scene.html.'}],stop_reason:'end_turn',usage:{}};}});
-  expect(worker).toBe(1);expect(report.outcome).toMatchObject({status:'complete',summary:'Wrote src/intro/scene.html.'});
  }finally{db.close();}
 });
 

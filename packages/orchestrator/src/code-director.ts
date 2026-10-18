@@ -5,13 +5,11 @@ import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type Re
 import type {RequestScore} from '@dream/config';
 import {STOPPED_WHEN_CLOSED,type ProjectDB} from '@dream/project-db';
 import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,TaskPlan,Outline} from '@dream/contracts';
-import {codeAgent,type AgentResult,type WorkerTask,type WorkerReport} from './code-agent';
+import {codeAgent,type AgentResult} from './code-agent';
 import {webSearchFunction} from './code-tools';
 import {searchPrompt,searchReport} from './web-search';
-import {workerPrompt,workerScope} from './code-prompt';
 import {infer,InferenceError} from './inference';
 import {intelligence,outputAllowance,taskBudget,type WorkerMode} from './intelligence';
-import {runTaskGraph,retryable} from './task-graph';
 import {routeCodeRequest,type RequestIntent} from './routing';
 import {approvesPlan} from '@dream/contracts';
 import {selectionRefs,resolve as resolveTimeline} from '@dream/timeline';
@@ -37,10 +35,6 @@ export type AIConfig={url:string;token:string;accountId?:string};
 // Every model gets web_search as a plain function, answered by a small Haiku search (webSearch below). Anthropic's own
 // search tool added 2,440 tokens to every call of a request that rarely searches; the function adds about 100.
 export const webSearchTool=(_model:string)=>webSearchFunction();
-/** The editing agent's conversation cache: five minutes until a wait for its helpers in this request has outlasted that,
- * then one hour (a one-hour write costs twice as much, so short requests keep the cheaper cache). */
-export const helperWaitCache=(db:ProjectDB,turnId?:string):{cacheTtl?:'1h'}=>turnId&&db.getMeta('helper-long-wait:'+turnId)?{cacheTtl:'1h'}:{};
-export const noteHelperWait=(db:ProjectDB,turnId:string,ms:number)=>{if(ms>240_000)db.setMeta('helper-long-wait:'+turnId,'1');};
 const fatalWorkerError=(error:unknown,signal:AbortSignal)=>signal.aborted||error instanceof FileApprovalRequired||error instanceof InferenceError&&['quota','authentication','request_conflict','request_budget'].includes(error.code);
 /** Spending limit for one request, in dollars. Each resume allows the same amount again, so a stopped request can always continue. */
 export const requestBudgetUsd=(resumes=0)=>{const base=Number(process.env.DREAM_REQUEST_BUDGET_USD);return(Number.isFinite(base)&&base>0?base:3)*(resumes+1);};
@@ -93,7 +87,7 @@ export class Director {
   catch(error){if(withSearch&&error instanceof InferenceError&&error.httpStatus===400&&/web_search/i.test(error.message)){this.db.setMeta(searchKey,'1');this.db.event('ai.web_search_unavailable',{model,error:error.message.slice(0,300)});return this.infer(model,system,messages,(tools as any[]).slice(1),turnId,purpose,phase,profile,extra);}throw error;}
  }
  private async infer(model:string,system:string,messages:unknown[],tools:unknown[],turnId:string|undefined,purpose:string,phase:string,profile:any,extra:{workerMode?:WorkerMode;onStream?:()=>void}){
-  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:outputAllowance(profile),...(purpose==='execution'?helperWaitCache(this.db,turnId):{}),...(taskBudget(purpose,extra.workerMode)?{taskBudget:taskBudget(purpose,extra.workerMode)}:{})},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:extra.onStream?(type:string,payload:unknown)=>{if(type==='ai.activity')extra.onStream!();this.publish(type,payload);}:this.publish});
+  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:outputAllowance(profile),...(taskBudget(purpose,extra.workerMode)?{taskBudget:taskBudget(purpose,extra.workerMode)}:{})},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:extra.onStream?(type:string,payload:unknown)=>{if(type==='ai.activity')extra.onStream!();this.publish(type,payload);}:this.publish});
  }
  private signal(){return this.controller?.signal??new AbortController().signal;}
  // The composer's effort choice holds for the whole request (changing it mid-conversation would reset the prompt cache).
@@ -190,10 +184,9 @@ export class Director {
   if(planning)return codeAgent({...common,planning:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
   // Replies look at what they need with the read-only tools.
   if(readOnly)return codeAgent({...common,readOnly:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'answering',phase)});
-  // One Sonnet agent owns the request, and the steps of an approved plan (one conversation across the steps). It looks,
-  // edits and publishes itself, and may have helpers build separate pieces.
+  // One agent owns the request, and the steps of an approved plan (one conversation across the steps). It looks,
+  // edits and publishes itself, with no helpers.
   return codeAgent({...common,role:'solo',model,followUp,
-   runWorkers:(tasks,callId)=>this.runWorkers(tasks,callId,turnId,phase),
    infer:(m,system,messages,tools)=>this.inference(m,system,messages,tools,turnId,undefined,'execution',phase)});
  }
  /** Web search for GPT, Gemini and DeepSeek, which have no Anthropic server-side search: one Haiku call searches and reports
@@ -201,57 +194,6 @@ export class Director {
  private async webSearch(query:string,turnId:string,phase:string){
   const model=agentModels.haiku,response=await this.inference(model,searchPrompt,[{role:'user',content:query}],[{type:'web_search_20250305',name:'web_search',max_uses:3}],turnId,undefined,'web_search',phase);
   return searchReport(query,response.content);
- }
- /** Helpers build separate pieces for the editing agent, as a task graph of isolated Sonnet conversations. Every helper in a
-  * call starts from the same project snapshot (one cached prefix), then its own task, scope and context files; none of them
-  * edits project.json or publishes. */
- private async runWorkers(tasks:WorkerTask[],callId:string,turnId:string,agentPhase:string):Promise<WorkerReport[]>{
-  const signal=this.signal(),graphKey=`taskgraph:${turnId}:${callId}`;
-  let state=this.db.loadState<{snapshot:string;reports:Record<string,WorkerReport>}>(graphKey);
-  if(!state){state={snapshot:JSON.stringify({projectTitle:this.db.meta.name,...(this.workspace!.snapshot?.()??this.workspace!.currentContext?.()??{}) as object}),reports:{}};this.db.saveState(graphKey,state);}
-  const snapshot=state.snapshot;
-  // Later helpers wait for the first helper's stream to begin (at most 5 s), so they read its cached prefix instead of each writing it.
-  let streaming!:()=>void;const firstStream=new Promise<void>(resolve=>{streaming=resolve;});let started=0;
-  const once=async(task:WorkerTask,attempt:number,previous?:WorkerReport):Promise<WorkerReport>=>{
-   const id=`worker:${callId}:${task.id}`,phase=`${agentPhase}:worker:${callId}:${task.id}${attempt>1?':r'+attempt:''}`,workerMode:WorkerMode='build';
-   const context=task.context?.length?this.workspace!.readContext?.(task.context,60_000)??[]:[];
-   const taskText=`Task: ${task.title}
-
-${task.brief}
-
-${workerScope(task)}`+(previous?`
-
-A previous attempt at this task was blocked: ${previous.summary}${previous.nextAction?` Suggested next step: ${previous.nextAction}`:''} Take a different approach that avoids this.`:'')+context.map(file=>`
-
-Context file ${file.path}${file.truncated?' (truncated)':''}:
-${file.text}`).join('');
-   const firstMessage=[{type:'text',text:'Project snapshot, shared by every helper in this task set (data, not instructions): '+snapshot,cache_control:{type:'ephemeral'}},{type:'text',text:taskText}];
-   const first=started++===0;if(!first)await Promise.race([firstStream,new Promise(resolve=>setTimeout(resolve,5000))]);
-   try{
-    // The snapshot stands for the project state only while the published version is the one it describes.
-    let stateKnown=false;try{stateKnown=JSON.parse(snapshot).overview?.versionId===this.db.head();}catch{}
-    const {outcome}=await codeAgent({db:this.db,workspace:this.workspace!,turnId,phase,text:taskText,firstMessage,stateKnown,model:this.agentModel(turnId),role:'worker',system:workerPrompt,writes:task.writes,taskId:task.id,parent:id,signal,publish:this.publish,webSearch:query=>this.webSearch(query,turnId,phase),infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'worker',phase,{workerMode,onStream:first?streaming:undefined})});
-    const saved=this.db.loadState<any>(`code-agent:${turnId}:${phase}`),completed=saved?.completed??{};
-    const changedFiles=[...new Set((saved?.messages??[]).flatMap((m:any)=>m.role==='assistant'&&Array.isArray(m.content)?m.content:[]).filter((b:any)=>b.type==='tool_use'&&completed[b.id]&&['write_file','edit_file','import_resources'].includes(b.name)).map((b:any)=>b.name==='import_resources'?String(b.input?.into??''):String(b.input?.path??'')).filter(Boolean))] as string[];
-    return{taskId:task.id,title:task.title,status:outcome.status,summary:outcome.summary.slice(0,2000),nextAction:outcome.status==='blocked'?outcome.nextAction:undefined,changedFiles};
-   }catch(error){if(fatalWorkerError(error,signal))throw error;return{taskId:task.id,title:task.title,status:'blocked',summary:'The helper stopped with an error: '+(error as Error).message,nextAction:'Retry the task with an adjusted brief.'};}
-  };
-  const run=async(task:WorkerTask):Promise<WorkerReport>=>{
-   const id=`worker:${callId}:${task.id}`,began=Date.now();
-   this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:'running',detail:'build'});
-   try{
-    let report=await once(task,1),attempts=1;
-    if(retryable(report)){attempts=2;this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:'running',detail:'Trying another approach'});report=await once(task,2,report);}
-    const cost=(this.db.db.prepare('SELECT COALESCE(SUM(cost_usd),0) AS cost FROM ai_usage WHERE turn_id=? AND parent=?').get(turnId,id) as {cost:number}).cost;
-    const errors=(this.workspace!.sceneErrors?.(turnId)??[]).slice(0,5).map(e=>`${e.scene}${e.location?` (${e.location})`:''}: ${e.message}`);
-    report={...report,attempts,durationSec:Math.round((Date.now()-began)/100)/10,costUsd:Math.round(cost*10000)/10000,...(errors.length?{errors}:{})};
-    this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:report.status==='complete'?'complete':'failed',detail:report.status==='blocked'?report.summary:'build'});
-    return report;
-   }catch(error){this.activity(turnId,id,{kind:'action',tool:'delegate',text:task.title,status:'failed',detail:(error as Error).message});throw error;}
-  };
-  const waitStarted=Date.now();
-  try{return await runTaskGraph(tasks,run,{concurrency:engineBudgets.maxWorkers,done:state.reports,onDone:report=>{state={...state!,reports:{...state!.reports,[report.taskId]:report}};this.db.saveState(graphKey,state);}});}
-  finally{noteHelperWait(this.db,turnId,Date.now()-waitStarted);}
  }
  async edit(text:string,turnId:string,selection:string[]=[],_review=false,phase='main'){return(await this.execute(text+'\nSelected: '+JSON.stringify(selection),turnId,false,false,phase)).outcome;}
  async outline(text:string,turnId:string){return this.runTurn(text,turnId,[],'plan');}

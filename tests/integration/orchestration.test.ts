@@ -58,32 +58,6 @@ it('answers a request for a script after a stop as a new turn, and continues the
  }finally{db.close();}
 });
 
-it('lets the editing agent have helpers build separate pieces in parallel, which write only their own files and never publish; the agent integrates and publishes',async()=>{
- const db=fixture(),calls:Call[]=[];let agentCalls=0;try{
-  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspaceFor(db));
-  director.inference=async(model,_system,messages,tools=[],_turn,_force,purpose='execution',phase='main')=>{
-   const head=(messages as any)[0].content,first=typeof head==='string'?head:head.filter((b:any)=>b.type==='text').at(-1).text;calls.push({purpose,model,phase,tools:(tools as any[]).map(t=>t.name),messages:first});
-   if(purpose==='routing')return route({route:'local',intelligence:'sonnet'});
-   if(purpose==='execution'){agentCalls++;
-    if(agentCalls===1)return toolUse('assign','delegate',{tasks:[{id:'intro',title:'Build the intro',brief:'Write the intro scene.',writes:['src/intro']},{id:'outro',title:'Build the outro',brief:'Write the outro scene.',writes:['src/outro']}]});
-    if(agentCalls===2){expect(JSON.stringify(messages)).toContain('Wrote src/intro/scene.tsx');return toolUse('pub','publish_project',{});}
-    return toolUse('done','finish',{status:'complete',summary:'Built the intro and outro and placed them.'});}
-   const done=JSON.stringify(messages).includes('tool_result'),piece=first.includes('Build the intro')?'intro':'outro';
-   if(done)return toolUse('built-'+piece,'finish',{status:'complete',summary:`Wrote src/${piece}/scene.tsx; declare {"id":"${piece}","path":"src/${piece}/scene.tsx","kind":"scene","durationInFrames":90}.`});
-   // A helper that tries to place its scene itself is told the editor does that.
-   return{content:[{type:'tool_use',id:'tl-'+piece,name:'write_file',input:{path:'project.json',content:'{}'}},{type:'tool_use',id:'w-'+piece,name:'write_file',input:{path:`src/${piece}/scene.tsx`,content:'export default()=>null;'}}],stop_reason:'tool_use',usage:{}};
-  };
-  await director.message('Make an intro and an outro for my video');expect(db.getMeta('ai_status')).toBe('complete');
-  const agent=calls.find(c=>c.purpose==='execution')!,helpers=calls.filter(c=>c.purpose==='worker');
-  expect(agent.model).toBe(models.agent);expect(agent.tools).toEqual(expect.arrayContaining(['delegate','write_file','publish_project']));
-  expect(helpers.length).toBeGreaterThanOrEqual(4);expect(helpers.every(c=>c.model===models.agent)).toBe(true);
-  for(const name of ['publish_project','delegate','propose_file_changes','import_media'])expect(helpers[0].tools).not.toContain(name);
-  expect(helpers[0].messages).toContain('Do not edit project.json and do not publish');
-  const refused=db.loadState<any>(`code-agent:${pending(db)}:main:worker:assign:intro`)?.messages.flatMap((m:any)=>Array.isArray(m.content)?m.content:[]).find((b:any)=>b.type==='tool_result'&&b.tool_use_id==='tl-intro');
-  expect(String(refused?.content)).toContain('Helpers do not edit project.json');
-  const rows=(db.turnActivity(pending(db))?.events??[]).filter(e=>e.parent==='worker:assign:intro');expect(rows.length).toBeGreaterThan(0);
- }finally{db.close();}
-});
 
 it('tells a repeatedly failing edit to diagnose, then ends it as blocked on the third identical failure, on Sonnet alone',async()=>{
  const db=fixture(),calls:Call[]=[];try{
@@ -103,12 +77,6 @@ it('tells a repeatedly failing edit to diagnose, then ends it as blocked on the 
  }finally{db.close();}
 });
 
-it('keeps the editing agent on the five-minute cache until a wait for its helpers outlasts it',async()=>{
- const {helperWaitCache,noteHelperWait}=await import('../../packages/orchestrator/src/code-director');const db=fixture();try{
-  expect(helperWaitCache(db,'turn')).toEqual({});noteHelperWait(db,'turn',180_000);expect(helperWaitCache(db,'turn')).toEqual({});
-  noteHelperWait(db,'turn',300_000);expect(helperWaitCache(db,'turn')).toEqual({cacheTtl:'1h'});expect(helperWaitCache(db,'other')).toEqual({});
- }finally{db.close();}
-});
 
 it('runs the whole request on the model the user picked, and keeps it there',async()=>{
  const db=fixture(),calls:Call[]=[];try{

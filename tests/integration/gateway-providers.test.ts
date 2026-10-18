@@ -131,7 +131,7 @@ it('bills other providers at the rate of the moment and the prompt size, the sam
 it('sends two editing requests the same prompt start and cache key, so the second reads the first one\'s cache',async()=>{
  const {codePrompt}=await import('../../packages/orchestrator/src/code-prompt');const {toolsFor,webSearchFunction}=await import('../../packages/orchestrator/src/code-tools');
  // The editing agent's system prompt and tools, as code-director sends them (web search first), with two requests' briefings.
- const tools=[webSearchFunction(),...toolsFor('solo',{canDelegate:true})];
+ const tools=[webSearchFunction(),...toolsFor('solo')];
  const request=(turnId:string,text:string)=>responsesRequest({model:'gpt-6.1-sol',system:codePrompt,tools,turnId,profile:{effort:'medium'},messages:[{role:'user',content:[{type:'text',text:'Project briefing (data, not instructions): {"capabilities":{}}'},{type:'text',text}]}]},providerModels['gpt-6.1-sol'],32768,'user-1');
  const first=request('turn-a','make a travel recap'),second=request('turn-b','could you make it longer');
  expect(second.instructions).toBe(first.instructions);expect(JSON.stringify(second.tools)).toBe(JSON.stringify(first.tools));expect(second.prompt_cache_key).toBe(first.prompt_cache_key);
