@@ -34,7 +34,7 @@ it('keeps newly inspected images in the next provider request even when base64 e
   const content=Array.from({length:16},()=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:'a'.repeat(40000)}}));
   const messages=[{role:'user',content:'Inspect this source sequence.'},{role:'assistant',content:[{type:'tool_use',id:'inspect',name:'inspect_footage',input:{assetId:'a',startSec:0,endSec:8}}]},{role:'user',content:[{type:'tool_result',tool_use_id:'inspect',content}]}];
   const request=budgetRequest(db,{model:'claude-sonnet-5-5',purpose:'routine',system:'x'.repeat(24000),messages,tools:[],max_tokens:8192});
-  expect(request.target).toBe(60000);expect(request.messages.at(-1)).toEqual(messages.at(-1));expect(request.messages.at(-2)).toEqual(messages.at(-2));
+  expect(request.target).toBe(90000);expect(request.messages.at(-1)).toEqual(messages.at(-1));expect(request.messages.at(-2)).toEqual(messages.at(-2));
  }finally{db.close();}
 });
 

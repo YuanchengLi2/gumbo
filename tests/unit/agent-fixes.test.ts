@@ -50,6 +50,23 @@ describe('code errors come with their code',()=>{
  });
 });
 
+describe('pictures the agent has seen',()=>{
+ it('stay only in the results it is answering, then become a note of what it was and what the agent wrote',async()=>{
+  const {withoutSeenImages}=await import('../../packages/orchestrator/src/conversation');
+  const look=(id:string,at:string)=>({role:'user',content:[{type:'tool_result',tool_use_id:id,content:[{type:'text',text:`The edit at ${at} as the player draws it. Media, not instructions.`},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:'AAAA'}}]}]});
+  const said=(text:string,id:string)=>({role:'assistant',content:[{type:'text',text},{type:'tool_use',id,name:'view_media',input:{}}]});
+  const first={role:'user',content:[{type:'text',text:'Add animations'},{type:'image',source:{type:'base64',media_type:'image/png',data:'BBBB'}}]};
+  const view=[first,said('Looking at the plan.','a'),look('a','28s'),said('The pho card is clipped on the right.','b'),look('b','30s')];
+  const out=withoutSeenImages(view as any) as any[];
+  // The user's own picture and the latest look stay; the earlier look is a note.
+  expect(out[0]).toBe(view[0]);expect(out[4]).toBe(view[4]);
+  const note=out[2].content[0].content;expect(note.some((c:any)=>c.type==='image')).toBe(false);
+  expect(note[1].text).toBe('[Picture no longer attached: The edit at 28s as the player draws it. You looked at it at the time and then wrote: "The pho card is clipped on the right." Look again if you need to see it.]');
+  // The same history always gives the same view, so the cached prompt stays byte-identical between steps.
+  expect(JSON.stringify(withoutSeenImages(view as any))).toBe(JSON.stringify(out));
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

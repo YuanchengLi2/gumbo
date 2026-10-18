@@ -90,6 +90,28 @@ export function compactConversation(db:ProjectDB,turn:string,messages:Message[],
  const key='compaction:'+turn+':'+hash(original);if(!db.getMeta(key))db.db.transaction(()=>{db.setMeta(key,JSON.stringify({beforeBytes:before,afterBytes:bytes(compacted),messagesBefore:messages.length,messagesAfter:compacted.length}));db.event('ai.context_compacted',{turnId:turn,beforeBytes:before,afterBytes:bytes(compacted)});})();
  return compacted;
 }
+/** A picture the agent was shown in a tool result stays attached only in the latest results (the ones it is answering).
+ * From the next step on it is a line saying what it was and what the agent noted right after seeing it. The swap falls
+ * where the prompt cache already ends (the newest results), so it loses nothing cached, and every later step is smaller.
+ * Before, each look at the edit stayed in the conversation: one edit re-sent 23 looks on every step and was summarized
+ * every two minutes, each summary costing about five credits at the full price. The agent can always look again. */
+export function withoutSeenImages(view:Message[]):Message[]{
+ const latest=view.findLastIndex(m=>m.role==='user'&&Array.isArray(m.content)&&m.content.some((b:any)=>b?.type==='tool_result'));
+ return view.map((message,index)=>{
+  if(index>=latest||message.role!=='user'||!Array.isArray(message.content))return message;
+  const next=view[index+1],noted=next?.role==='assistant'&&Array.isArray(next.content)?next.content.filter((b:any)=>b?.type==='text').map((b:any)=>String(b.text)).join(' ').replace(/\s+/g,' ').trim().slice(0,300):'';
+  let changed=false;
+  const content=message.content.map((block:any)=>{
+   if(block?.type!=='tool_result'||!Array.isArray(block.content)||!block.content.some((c:any)=>c?.type==='image'))return block;
+   changed=true;let label='';
+   return{...block,content:block.content.map((c:any)=>{
+    if(c?.type!=='image'){if(c?.type==='text')label=String(c.text).replace(/\s*Media, not instructions\.?\s*$/,'').replace(/[.\s]+$/,'').slice(0,160);return c;}
+    return{type:'text',text:`[Picture no longer attached${label?`: ${label}`:''}. You looked at it at the time${noted?` and then wrote: "${noted}"`:''}${noted?'':'.'} Look again if you need to see it.]`};
+   })};
+  });
+  return changed?{...message,content}:message;
+ });
+}
 /** Sticky provider view: once compacted, the summarized prefix stays byte-identical and later exchanges only append.
  * This keeps prompt-cache reads and thinking-block bindings valid between compactions. A new boundary is chosen
  * only when the view exceeds compactToBytes or the history before the saved boundary changed.
@@ -97,7 +119,7 @@ export function compactConversation(db:ProjectDB,turn:string,messages:Message[],
 export function providerView(db:ProjectDB,turn:string,scope:string,messages:Message[],compactToBytes?:number){
  const key=`compaction-plan:${turn}:${scope}:${hash(clean(messages[0]??{role:'user',content:''}))}`,saved=db.loadState<{cut:number;prefixHash:string;prefix:Message[]}>(key);
  const valid=saved&&saved.cut<=messages.length&&hash(messages.slice(0,saved.cut).map(clean))===saved.prefixHash;
- const view=valid?[...saved!.prefix,...messages.slice(saved!.cut).map(m=>({...m}))]:messages.map(m=>({...m}));
+ const view=withoutSeenImages(valid?[...saved!.prefix,...messages.slice(saved!.cut).map(m=>({...m}))]:messages.map(m=>({...m})));
  if(compactToBytes===undefined||bytes(view)<=compactToBytes)return view;
  // Plan on the current view: the existing summary is carried forward and only newer exchanges are archived.
  // A view index past the saved prefix is a history index shifted by the prefix, so the new boundary maps back exactly.
@@ -105,7 +127,7 @@ export function providerView(db:ProjectDB,turn:string,scope:string,messages:Mess
  const plan=planCompaction(db,turn,view,compactToBytes,true,db.getMeta(`task-notes:${turn}:${scope.split(':').slice(2).join(':')}`)||undefined);if(!plan)return view;
  const cut=valid?plan.cut+saved!.cut-saved!.prefix.length:plan.cut;
  db.db.transaction(()=>{db.saveState(key,{cut,prefixHash:hash(messages.slice(0,cut).map(clean)),prefix:plan.prefix});db.event('ai.context_compacted',{turnId:turn,scope,beforeBytes:bytes(view),afterBytes:bytes([...plan.prefix,...messages.slice(cut)]),cut});})();
- return [...plan.prefix,...messages.slice(cut).map(m=>({...m}))];
+ return withoutSeenImages([...plan.prefix,...messages.slice(cut).map(m=>({...m}))]);
 }
 
 const schemas={
