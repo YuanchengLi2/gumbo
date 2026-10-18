@@ -27,10 +27,15 @@ export async function inspectMedia(db:ProjectDB,input:{path?:string;assetId?:str
  if(input.assetId&&!asset)throw new Error('Unknown project asset.');
  const path=asset?(asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath):workspacePath(join(db.folder,'Workspace'),input.path??'');
  if(!existsSync(path))throw new Error('Media file is missing.');
- const meta=asset??await probe(path,ffprobe),start=Math.max(0,input.startSec??0),end=Math.min(meta.durationSec,input.endSec??(asset&&!input.motion?meta.durationSec:start+(input.motion?4:30)));
+ const meta=asset??await probe(path,ffprobe);let start=Math.max(0,input.startSec??0),end=Math.min(meta.durationSec,input.endSec??(asset&&!input.motion?meta.durationSec:start+(input.motion?4:30)));
+ // A range past the end of the media (or empty) looks at the nearest valid stretch instead of failing, and says so.
+ let adjusted:string|undefined;
+ if(end<=start&&meta.durationSec>0){const asked=`${(input.startSec??0).toFixed(2)}-${(input.endSec??start).toFixed(2)}s`,span=Math.max(.5,Math.min((input.endSec??start+1)-(input.startSec??0),meta.durationSec));
+  if(start>=meta.durationSec){end=meta.durationSec;start=Math.max(0,end-span);}else end=Math.min(meta.durationSec,start+span);
+  adjusted=`Asked for ${asked}, outside this ${meta.durationSec.toFixed(2)} s media; showing ${start.toFixed(2)}-${end.toFixed(2)}s instead.`;}
  if(end<=start)throw new Error('Choose a positive media range.');
  const coverage=asset?db.loadState('speech-coverage:'+asset.id):undefined,words=asset?db.footage().words.filter(w=>w.assetId===asset.id&&w.end>start&&w.start<end).slice(0,300):[];
- const content:any[]=[];let audio:any;
+ const content:any[]=adjusted?[{type:'text',text:adjusted}]:[];let audio:any;
  if(meta.hasAudio&&(input.audio||meta.kind==='audio')){
   const audioPath=asset?.audioPath&&existsSync(asset.audioPath)?asset.audioPath:path;
   const log=await new Promise<string>((resolve,reject)=>{const child=spawn(ffmpeg,['-hide_banner','-i',audioPath,'-ss',String(start),'-t',String(end-start),'-vn','-af','silencedetect=noise=-45dB:d=0.2,astats=metadata=0:reset=0,ebur128=peak=true','-f','null','-'],{windowsHide:true,signal});let out='';child.stderr.on('data',b=>{out=(out+b.toString()).slice(-64000);});child.on('error',reject);child.on('close',code=>code===0?resolve(out):reject(new Error(out.slice(-2000))));});

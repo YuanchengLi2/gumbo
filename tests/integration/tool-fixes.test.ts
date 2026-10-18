@@ -41,3 +41,12 @@ it('samples a long look at footage more coarsely instead of refusing it',async()
   await inspectMedia(db,{assetId:'v',startSec:70,endSec:75,motion:true},'ffmpeg','ffprobe',new AbortController().signal);expect(asked.at(-1)).toBe('motion');
  }finally{db.close();}
 });
+
+it('looks at the nearest valid stretch when asked for a range past the end of the media, and says so',async()=>{
+ const db=fixture();try{
+  const file=join(db.folder,'clip.mp4');writeFileSync(file,'video');db.saveAsset(AssetSchema.parse({id:'v',filename:'Clip.mp4',kind:'video',originalPath:file,durationSec:30,fingerprint:'v'}));
+  const asked:{startSec:number;endSec:number}[]=[];db.inspectSource=async request=>{asked.push({startSec:request.startSec,endSec:request.endSec});return{assetId:'v',fingerprint:'v',startSec:request.startSec,endSec:request.endSec,sampleIntervalSec:1,coverage:'fixture',frames:[]};};
+  const look=await inspectMedia(db,{assetId:'v',startSec:31,endSec:33},'ffmpeg','ffprobe',new AbortController().signal);
+  expect(asked.at(-1)).toEqual({startSec:28,endSec:30});expect(JSON.stringify(look.content)).toContain('Asked for 31.00-33.00s, outside this 30.00 s media; showing 28.00-30.00s instead.');
+ }finally{db.close();}
+});

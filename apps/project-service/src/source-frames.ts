@@ -15,7 +15,14 @@ export function frameTimes(start:number,end:number,fps:number,detail:'normal'|'m
 // A still image has one frame, and seeking into it (even -ss 0) skips that frame, so ffmpeg wrote nothing and every .jpg the
 // agent's code made "could not be decoded". Stills and the very start are read without a seek.
 const still=/\.(?:png|jpe?g|webp|bmp|gif|tiff?)$/i;
-export function jpeg(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){return new Promise<Buffer>((resolve,reject)=>{
+/** A frame as JPEG. A time at or just past the last frame decodes nothing (the stream ends before it), so a frame that
+ * cannot be decoded is taken a quarter and then a whole second earlier: a look at the end of a clip shows its last
+ * frames instead of failing (on October 18 such failures each cost the agent a step). */
+export async function jpeg(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){
+ let last:unknown;for(const at of [time,time-.25,time-1]){if(at<0&&at!==time)break;try{return await jpegAt(ffmpeg,path,Math.max(0,at),signal,max);}catch(error){if(signal?.aborted)throw error;last=error;}}
+ throw last;
+}
+function jpegAt(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){return new Promise<Buffer>((resolve,reject)=>{
  const seek=time>.001&&!still.test(path)?['-ss',String(time-.001)]:[];
  const child=spawn(ffmpeg,['-v','error','-threads','1',...seek,'-i',path,'-frames:v','1','-vf',`scale=w='min(${max},iw)':h='min(${max},ih)':force_original_aspect_ratio=decrease`,'-threads','1','-q:v','4','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{windowsHide:true,signal});let size=0;const chunks:Buffer[]=[];let error='';
  const timer=setTimeout(()=>child.kill(),30000);child.stdout.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>3_000_000)child.kill();else chunks.push(chunk);});child.stderr.on('data',chunk=>error=(error+chunk.toString()).slice(-1200));child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);const bytes=Buffer.concat(chunks);if(signal?.aborted)reject(new DOMException('Source inspection canceled','AbortError'));else if(code||bytes.length<4||bytes[0]!==255||bytes[1]!==216)reject(new Error('Source frame could not be decoded. '+error));else resolve(bytes);});
@@ -28,7 +35,7 @@ export function sourceInspector(db:ProjectDB,ffmpeg:string,authorize?:(paths:str
  const source=asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath;
  if(!existsSync(source))throw new Error('Relink the missing source before inspecting its visual evidence.');
  await authorize?.([source],signal);
- if(request.startSec>=asset.durationSec)throw new Error('The source range starts after the end of this asset.');
+ if(request.startSec>=asset.durationSec){const span=Math.max(.5,Math.min(request.endSec-request.startSec,asset.durationSec));request.startSec=Math.max(0,asset.durationSec-span);request.endSec=asset.durationSec;}
  if(request.detail==='preview'&&asset.kind==='video'){
   const endSec=Math.min(request.endSec,asset.durationSec),cacheKey='keyframes:v1:'+asset.fingerprint+':'+request.startSec+':'+endSec;
   const saved=db.getMeta(cacheKey);if(saved){const cached=JSON.parse(db.blobs.get(saved));if(cached.fingerprint===asset.fingerprint&&cached.frames?.length)return cached;}

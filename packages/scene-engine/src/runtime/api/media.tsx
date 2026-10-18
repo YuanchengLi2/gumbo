@@ -3,13 +3,15 @@ import {useCurrentFrame,useVideoConfig} from 'remotion';
 import {track} from '../pending';
 import {live,subscribeLive} from '../live';
 
-type Props=React.VideoHTMLAttributes<HTMLVideoElement>&{src:string;startFrom?:number;trimBefore?:number;playbackRate?:number;volume?:number;muted?:boolean;loop?:boolean};
+type Props=React.VideoHTMLAttributes<HTMLVideoElement>&{src:string;startAt?:number;startFrom?:number;trimBefore?:number;playbackRate?:number;volume?:number;muted?:boolean;loop?:boolean};
 
-/** A video that shows exactly the frame for the current scene time. startFrom/trimBefore are in frames (Remotion
- * semantics). Scenes are silent: sound belongs on the timeline. */
-export function SourceVideo({src,startFrom,trimBefore,playbackRate=1,volume:_volume,muted:_muted,loop,style,...rest}:Props){
+/** A video that shows exactly the frame for the current scene time. startAt is the source second the scene's first frame
+ * shows; startFrom/trimBefore are the same in the scene's frames (Remotion semantics). Seconds need no frame rate: a
+ * 60 fps source in a 30 fps scene, offset by the source's own rate, showed the wrong moments (October 18). Scenes are
+ * silent: sound belongs on the timeline. */
+export function SourceVideo({src,startAt,startFrom,trimBefore,playbackRate=1,volume:_volume,muted:_muted,loop,style,...rest}:Props){
  const frame=useCurrentFrame(),{fps}=useVideoConfig(),ref=useRef<HTMLVideoElement>(null),playing=useSyncExternalStore(subscribeLive,()=>live.playing);
- const offset=(trimBefore??startFrom??0)/fps,time=offset+frame/fps*playbackRate;
+ const offset=startAt??(trimBefore??startFrom??0)/fps,time=offset+frame/fps*playbackRate;
  useLayoutEffect(()=>{
   const video=ref.current;if(!video)return;
   // Playing live in the preview: the video plays at its rate and is only put back when it drifts a third of a second,

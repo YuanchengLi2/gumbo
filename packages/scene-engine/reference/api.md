@@ -130,7 +130,7 @@ Text is an `overlay` with `component` `"text"` and `params.text`; a sticker is a
 | `asset(id)` / `useAsset(id)` | URL of an imported project asset (image, video, audio) by asset ID. |
 | `resource(path)` / `staticFile(path)` | URL of a file in the workspace `resources/` folder, e.g. `resource('logos/brand.svg')`. Importing a file (`import logo from './logo.png'`) also gives its URL. |
 | `useJson(path)`, `useText(path)` | Read a JSON or text file from `resources/` (the frame waits for it). |
-| `<SourceVideo src={asset(id)} startFrom={frames} />` | Video showing exactly the frame for the scene's time (Remotion's `Video`/`OffthreadVideo` map to this). Silent: sound belongs on the timeline. |
+| `<SourceVideo src={asset(id)} startAt={seconds} />` | Video showing exactly the frame for the scene's time, from source second `startAt` (`startFrom` takes the same in scene frames; Remotion's `Video`/`OffthreadVideo` map to this). Silent: sound belongs on the timeline. |
 | `<FitText>` | Text that fills its parent box at the largest size that fits, wrapping as needed. It cannot overflow. Props: `fontFamily`, `fontWeight`, `maxFontSize`, `minFontSize`, `lineHeight`, `align`, `verticalAlign`, how the text looks (`color`, `textShadow`, `WebkitTextStroke`, `letterSpacing`, `textTransform`, `fontStyle`, `textDecoration`), and `style` for any other CSS. A prop it does not take comes back as a scene error. |
 | `<SafeArea inset={0.05}>` | Full-frame flex column inset from the edges; keeps content clear of crops. |
 | `fonts`, `loadFont(family, weight)` | Bundled families: Inter, Roboto, Montserrat, Poppins, Oswald, Bebas Neue, Playfair Display, Lora, Space Grotesk, JetBrains Mono, Press Start 2P. Use them by name in CSS. |
