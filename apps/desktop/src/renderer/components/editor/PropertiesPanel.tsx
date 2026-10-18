@@ -1,6 +1,6 @@
 import React,{useMemo} from 'react';
-import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick,ChevronsRight} from 'lucide-react';
-import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
+import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick,ChevronsRight,Smile} from 'lucide-react';
+import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,EFFECTS,effectInfo,FILTERS,TEXT_STYLES,textStyle,STICKERS,stickerInfo,FONTS,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import {itemLook,reason,ensureDuration,setKeyframe,transitionOps,transitionClip} from '../../manual/model';
 export {setKeyframe};
@@ -14,7 +14,6 @@ import {Section,NumberField,ChoiceField,Segmented,ToggleField,ColorField,TextFie
 type Props={project:ProjectState;timeline:TimelineDocument;frame:number;selected:string[];locked:boolean;lockedReason:string;
  onApply:(ops:Op[],label:string,version?:string)=>Promise<unknown>;onPreview:(t:TimelineDocument|null)=>void;onError:(text:string)=>void};
 
-const EFFECT_NAMES:Record<string,string>={punch_zoom:'Zoom punch',slow_push:'Slow push',shake:'Shake',grade:'Filter'};
 const clock=(sec:number)=>`${Math.floor(sec/60)}:${(sec%60).toFixed(1).padStart(4,'0')}`;
 const half=(fps:number)=>.5/fps;
 export function PropertiesPanel(p:Props){
@@ -36,8 +35,8 @@ export function PropertiesPanel(p:Props){
  if(cutInto){const into=shown.clips.find(c=>c.id===cutInto);title=transitionInfo(into?.transitionIn?.type??'')?.name??'Transition';icon=<ChevronsRight size={14}/>;
   body=<><p className="prop-note">Into {f.assets.find(a=>a.id===into?.assetId)?.filename??'the next clip'} at {clock(into?.start??0)}</p><TransitionFields {...{p,base,clipId:cutInto,edit,now,disabled}}/></>;}
  else if(clip){const asset=f.assets.find(a=>a.id===clip.assetId);title=asset?.filename??'Clip';icon=<Film size={14}/>;body=<ClipProperties {...{p,clip,base,resolvedBase,edit,now,time,fps,disabled}}/>;}
- else if(item){const look=itemLook(item,f);title=look==='text'?'Text':look==='effect'?EFFECT_NAMES[item.component]??item.component.replaceAll('_',' '):look==='filter'?'Filter':look==='sfx'?'Sound effect':f.assets.find(a=>a.id===item.source?.assetId)?.filename??'Overlay';
-  icon=look==='text'?<Type size={14}/>:look==='effect'?<Sparkles size={14}/>:look==='filter'?<SlidersHorizontal size={14}/>:look==='sfx'?<AudioLines size={14}/>:<Layers size={14}/>;
+ else if(item){const look=itemLook(item,f);title=look==='text'?'Text':look==='sticker'?stickerInfo(item.params.sticker)?.name??'Sticker':look==='effect'?effectInfo(item.component)?.name??item.component.replaceAll('_',' '):look==='filter'?'Filter':look==='sfx'?'Sound effect':f.assets.find(a=>a.id===item.source?.assetId)?.filename??'Overlay';
+  icon=look==='sticker'?<Smile size={14}/>:look==='text'?<Type size={14}/>:look==='effect'?<Sparkles size={14}/>:look==='filter'?<SlidersHorizontal size={14}/>:look==='sfx'?<AudioLines size={14}/>:<Layers size={14}/>;
   body=<ItemProperties {...{p,item,look,base,edit,now,time,fps,disabled}}/>;}
  else if(music){title=f.assets.find(a=>a.id===music.assetId)?.filename??'Music';icon=<Music2 size={14}/>;const m=base.music.find(x=>x.id===music.id)!;
   const set=(changes:Partial<typeof m>)=>[{type:'update_music' as const,musicId:m.id,changes,reason}];
@@ -88,7 +87,11 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
    <ToggleField label="Flip horizontally" value={!!shownFraming.flipX} disabled={disabled} onChange={v=>now([{type:'set_framing',clipId:raw.id,framing:{...framing,flipX:v},reason}],'Flip clip')}/>
    <ToggleField label="Flip vertically" value={!!shownFraming.flipY} disabled={disabled} onChange={v=>now([{type:'set_framing',clipId:raw.id,framing:{...framing,flipY:v},reason}],'Flip clip')}/>
    <p className="prop-hint">The main track always fills the frame: it moves only as far as its zoom allows.</p></Section>
-  <Section title="Adjust">{num('exposure','Exposure',-2,2,.05)}{num('contrast','Contrast',0,2,.01,{unit:'%',scale:100})}{num('saturation','Saturation',0,2,.01,{unit:'%',scale:100})}{num('temperature','Temperature',-1,1,.01,{scale:100})}</Section>
+  <Section title="Filter"><ChoiceField label="Filter" value={shownFraming.filter??''} disabled={disabled} options={FILTER_OPTIONS} onChange={v=>now([{type:'set_framing',clipId:raw.id,framing:{...framing,filter:v||undefined,filterIntensity:v?framing.filterIntensity??1:undefined},reason}],v?'Add filter':'Remove filter')}/>
+   {shownFraming.filter&&<NumberField label="Intensity" value={shownFraming.filterIntensity??1} min={0} max={1} step={.01} unit="%" scale={100} disabled={disabled} {...edit<number>('Change filter intensity',v=>[{type:'set_framing',clipId:raw.id,framing:{...framing,filterIntensity:v},reason}])}/>}</Section>
+  <Section title="Adjust">{num('exposure','Exposure',-2,2,.05)}{num('contrast','Contrast',0,2,.01,{unit:'%',scale:100})}{num('saturation','Saturation',0,2,.01,{unit:'%',scale:100})}{num('temperature','Temperature',-1,1,.01,{scale:100})}
+   <NumberField label="Tint" value={shownFraming.tint??0} min={-1} max={1} step={.01} scale={100} disabled={disabled} {...edit<number>('Change tint',v=>[{type:'set_framing',clipId:raw.id,framing:{...framing,tint:v},reason}])}/>
+   <NumberField label="Fade" value={shownFraming.fade??0} min={0} max={1} step={.01} unit="%" scale={100} disabled={disabled} {...edit<number>('Change fade',v=>[{type:'set_framing',clipId:raw.id,framing:{...framing,fade:v},reason}])}/></Section>
   {asset?.kind==='image'?<Section title="Duration"><NumberField label="Duration" value={clip.holdSec??clip.end-clip.start} min={.2} max={120} step={.1} unit="s" disabled={disabled} {...edit<number>('Change duration',v=>[{type:'set_clip_hold',clipId:raw.id,holdSec:Math.max(1/fps,Math.round(v*fps)/fps),reason}])}/></Section>
    :<Section title="Speed"><NumberField label="Speed" value={clip.speed} min={.25} max={4} step={.05} unit="×" disabled={disabled} {...edit<number>('Change speed',v=>[{type:'set_speed',clipId:raw.id,speed:v,reason}])}/></Section>}
   {asset?.hasAudio&&<Section title="Sound">
@@ -123,27 +126,53 @@ function ItemProperties({p,item,look,base,edit,now,time,fps,disabled}:Common&{it
  const num=(prop:KeyframeProp,label:string,min:number,max:number,step:number,o:{unit?:string;scale?:number;offset?:number}={})=><NumberField key={prop} label={label} value={value(prop)-(o.offset??0)} min={min} max={max} step={step} unit={o.unit} scale={o.scale} disabled={disabled} keyframe={a.keyframe(prop,label)} {...edit<number>('Change '+label.toLowerCase(),v=>a.make(prop,v+(o.offset??0)))}/>;
  const param=(key:string,label:string,fallback:number,min:number,max:number,step:number,o:{unit?:string;scale?:number}={})=><NumberField key={key} label={label} value={Number(shownParams[key]??fallback)} min={min} max={max} step={step} unit={o.unit} scale={o.scale} disabled={disabled} {...edit<number>('Change '+label.toLowerCase(),v=>setParams({[key]:v}))}/>;
  const transform=<Section title="Transform">{num('x','Position X',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('y','Position Y',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('scale','Scale',.05,4,.01,{unit:'%',scale:100})}{num('rotation','Rotation',-180,180,1,{unit:'°'})}{num('opacity','Opacity',0,1,.01,{unit:'%',scale:100})}</Section>;
+ const filter=<Section title="Filter"><ChoiceField label="Filter" value={String(shownParams.filter??'')} disabled={disabled} options={FILTER_OPTIONS} onChange={v=>now(setParams({filter:v||undefined,filterIntensity:v?Number(params.filterIntensity??1):undefined}),v?'Add filter':'Remove filter')}/>
+  {typeof shownParams.filter==='string'&&param('filterIntensity','Intensity',1,0,1,.01,{unit:'%',scale:100})}</Section>;
  const adjust=<Section title="Adjust">{num('exposure','Exposure',-2,2,.05)}{num('contrast','Contrast',0,2,.01,{unit:'%',scale:100})}{num('saturation','Saturation',0,2,.01,{unit:'%',scale:100})}{num('temperature','Temperature',-1,1,.01,{scale:100})}</Section>;
  const timing=<Section title="Timing">
   <NumberField label="Starts at" value={item.timelineStart} min={0} max={Math.max(60,item.timelineEnd+30)} step={1/fps} unit="s" disabled={disabled} {...edit<number>('Move element',v=>[{type:'update_item',itemId:raw.id,clearEnd:true,changes:{start:projectAnchor(Math.round(v*fps)/fps),end:undefined,durationSec:item.timelineEnd-item.timelineStart},reason}])}/>
   <NumberField label="Duration" value={item.timelineEnd-item.timelineStart} min={1/fps} max={600} step={1/fps} unit="s" disabled={disabled} {...edit<number>('Change element length',v=>[{type:'update_item',itemId:raw.id,clearEnd:true,changes:{start:projectAnchor(item.timelineStart),end:undefined,durationSec:Math.max(1/fps,Math.round(v*fps)/fps),...(raw.source&&f.assets.find(x=>x.id===raw.source!.assetId)?.kind!=='image'?{source:{...raw.source,srcOut:raw.source.srcIn+Math.max(1/fps,v)}}:{})},reason},...ensureDuration(base,0)])}/></Section>;
  if(look==='text'){
-  const component=raw.component;
-  return <><Section title="Text"><TextField label="Text" multiline value={String(shownParams.text??'')} disabled={disabled} {...edit<string>('Edit text',v=>setParams({text:v}))}/>
-   <ChoiceField label="Kind" value={['title_card','lower_third'].includes(component)?component:'text'} disabled={disabled} options={[{id:'text',name:'Text'},{id:'lower_third',name:'Lower third'},{id:'title_card',name:'Title card'}]} onChange={v=>now([{type:'update_item',itemId:raw.id,changes:{component:v},reason}],'Change text kind')}/>
-   {param('fontSize','Size',60,10,300,1,{unit:'px'})}
-   <ColorField label="Colour" value={String(shownParams.color??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change text colour',v=>setParams({color:v??'#ffffff'}))}/>
-   <ColorField label="Background" allowNone value={String(shownParams.background??'')} disabled={disabled} {...edit<string|undefined>('Change text background',v=>setParams({background:v}))}/></Section>{transform}{timing}</>;}
- if(look==='effect')return <><Section title="Effect">{param('amount','Amount',raw.component==='punch_zoom'?.15:raw.component==='slow_push'?.08:.1,0,raw.component==='shake'?.5:.4,.01,{unit:'%',scale:100})}</Section>{timing}</>;
- if(look==='filter')return <><Section title="Adjust">{param('exposure','Exposure',0,-2,2,.05)}{param('contrast','Contrast',1,0,2,.01,{unit:'%',scale:100})}{param('saturation','Saturation',1,0,2,.01,{unit:'%',scale:100})}{param('temperature','Temperature',0,-1,1,.01,{scale:100})}</Section>{timing}</>;
+  // A styled text shows its style's values under its own; changing one makes it the text's own.
+  const component=raw.component,style=textStyle(params.style),eff={...(style?.params??{}),...shownParams} as Record<string,any>;
+  const value=(key:string,fallback:number)=>Number(eff[key]??fallback),number=(key:string,label:string,fallback:number,min:number,max:number,step:number,o:{unit?:string;scale?:number}={})=><NumberField key={key} label={label} value={value(key,fallback)} min={min} max={max} step={step} unit={o.unit} scale={o.scale} disabled={disabled} {...edit<number>('Change '+label.toLowerCase(),v=>setParams({[key]:v}))}/>;
+  const colour=(key:string,label:string,fallback:string,none=false)=><ColorField key={key} label={label} allowNone={none} value={String(eff[key]??fallback)} disabled={disabled} {...edit<string|undefined>('Change '+label.toLowerCase(),v=>setParams({[key]:v??(none?'':fallback)}))}/>;
+  const choice=(key:string,label:string,options:readonly {id:string;name:string}[],fallback:string)=><ChoiceField key={key} label={label} value={String(eff[key]??fallback)} disabled={disabled} options={options} onChange={v=>now(setParams({[key]:key==='fontWeight'?Number(v):v}),'Change '+label.toLowerCase())}/>;
+  return <><Section title="Text"><TextField label="Text" bare multiline value={String(shownParams.text??'')} disabled={disabled} {...edit<string>('Edit text',v=>setParams({text:v}))}/>
+   <ChoiceField label="Style" value={style?.id??''} disabled={disabled} options={[{id:'',name:'None'},...TEXT_STYLES.map(t=>({id:t.id,name:t.name}))]} onChange={v=>{const keep=Object.fromEntries(Object.entries(params).filter(([key])=>['text','x','y','scale','rotation','opacity'].includes(key)));now([{type:'update_item',itemId:raw.id,changes:{component:'text',params:{...keep,...(v?{style:v}:{})}},reason}],'Change text style');}}/>
+   <ChoiceField label="Kind" value={['title_card','lower_third'].includes(component)?component:'text'} disabled={disabled} options={[{id:'text',name:'Text'},{id:'lower_third',name:'Lower third'},{id:'title_card',name:'Title card'}]} onChange={v=>now([{type:'update_item',itemId:raw.id,changes:{component:v},reason}],'Change text kind')}/></Section>
+   <Section title="Font">{choice('fontFamily','Font',FONTS.map(f=>({id:f,name:f})),'Arial')}{number('fontSize','Size',60,10,300,1,{unit:'px'})}
+    {choice('fontWeight','Weight',[{id:'400',name:'Regular'},{id:'500',name:'Medium'},{id:'600',name:'Semibold'},{id:'700',name:'Bold'},{id:'900',name:'Black'}],'500')}
+    <ToggleField label="Italic" value={!!eff.italic} disabled={disabled} onChange={v=>now(setParams({italic:v}),'Change italic')}/><ToggleField label="Capitals" value={!!eff.uppercase} disabled={disabled} onChange={v=>now(setParams({uppercase:v}),'Change capitals')}/>
+    {number('letterSpacing','Letter spacing',0,-5,40,.5,{unit:'px'})}{colour('color','Colour','#ffffff')}</Section>
+   <Section title="Look">{colour('stroke','Outline','',true)}{eff.stroke&&number('strokeWidth','Outline width',6,1,30,.5,{unit:'px'})}{colour('shadow','Shadow','',true)}{eff.shadow&&eff.shadow!=='transparent'&&<>{number('shadowBlur','Shadow blur',12,0,60,1,{unit:'px'})}{number('shadowY','Shadow drop',2,-40,40,1,{unit:'px'})}</>}
+    {colour('glow','Glow','',true)}{eff.glow&&number('glowSize','Glow size',24,2,80,1,{unit:'px'})}{colour('background','Background','',true)}{eff.background&&<>{number('padding','Padding',18,0,80,1,{unit:'px'})}{number('radius','Corners',8,0,60,1,{unit:'px'})}</>}</Section>
+   <Section title="Animation">{choice('animation','In',named(TEXT_ANIMATIONS,ANIMATION_NAMES),style?'fade':'none')}{choice('animationOut','Out',named(OUT_ANIMATIONS,ANIMATION_NAMES),'none')}{choice('loop','Loop',named(LOOP_ANIMATIONS,ANIMATION_NAMES),'none')}</Section>
+   {transform}{timing}</>;}
+ if(look==='sticker'){const sticker=stickerInfo(shownParams.sticker),choice=(key:string,label:string,options:readonly {id:string;name:string}[],fallback:string)=><ChoiceField key={key} label={label} value={String(shownParams[key]??fallback)} disabled={disabled} options={options} onChange={v=>now(setParams({[key]:v}),'Change '+label.toLowerCase())}/>;
+  return <><Section title="Sticker"><ChoiceField label="Sticker" value={sticker?.id??''} disabled={disabled} options={STICKERS.map(s=>({id:s.id,name:s.name}))} onChange={v=>now(setParams({sticker:v,color:undefined,accent:undefined}),'Change sticker')}/>
+   <ColorField label="Colour" value={String(shownParams.color??sticker?.color??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change sticker colour',v=>setParams({color:v}))}/>
+   <ColorField label="Accent" value={String(shownParams.accent??sticker?.accent??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change sticker accent',v=>setParams({accent:v}))}/>
+   {sticker?.id==='speech'&&<TextField label="Words" value={String(shownParams.text??'')} disabled={disabled} {...edit<string>('Edit sticker words',v=>setParams({text:v}))}/>}</Section>
+   <Section title="Animation">{choice('animation','In',named(TEXT_ANIMATIONS.filter(a=>a!=='typewriter'),ANIMATION_NAMES),'pop')}{choice('animationOut','Out',named(OUT_ANIMATIONS,ANIMATION_NAMES),'none')}{choice('loop','Loop',named(LOOP_ANIMATIONS,ANIMATION_NAMES),sticker?.loop??'none')}</Section>{transform}{timing}</>;}
+ if(look==='effect'){const info=effectInfo(raw.component);return <><Section title="Effect">{(info?.params??[{key:'amount',label:'Amount',min:0,max:1,step:.01,default:.5,unit:'%',scale:100}]).map(x=>param(x.key,x.label,x.default,x.min,x.max,x.step,{unit:x.unit,scale:x.scale}))}
+  {info?.group==='look'&&<Segmented label="Changes" value={shownParams.apply==='all'?'all':'main'} disabled={disabled} options={[{id:'main',name:'Main track'},{id:'all',name:'Everything'}]} onChange={v=>now(setParams({apply:v==='all'?'all':undefined}),'Change what the effect changes')}/>}
+  {info&&<p className="prop-hint">{info.about}</p>}</Section>{timing}</>;}
+ if(look==='filter')return <><Section title="Filter"><ChoiceField label="Filter" value={String(shownParams.preset??'')} disabled={disabled} options={FILTER_OPTIONS} onChange={v=>now(setParams({preset:v||undefined}),'Change filter')}/>
+  {typeof shownParams.preset==='string'&&param('intensity','Intensity',1,0,1,.01,{unit:'%',scale:100})}
+  <Segmented label="Changes" value={shownParams.apply==='all'?'all':'main'} disabled={disabled} options={[{id:'main',name:'Main track'},{id:'all',name:'Everything'}]} onChange={v=>now(setParams({apply:v==='all'?'all':undefined}),'Change what the filter changes')}/></Section>
+  <Section title="Adjust">{param('exposure','Exposure',0,-2,2,.05)}{param('contrast','Contrast',1,0,2,.01,{unit:'%',scale:100})}{param('saturation','Saturation',1,0,2,.01,{unit:'%',scale:100})}{param('temperature','Temperature',0,-1,1,.01,{scale:100})}{param('tint','Tint',0,-1,1,.01,{scale:100})}{param('fade','Fade',0,0,1,.01,{unit:'%',scale:100})}</Section>{timing}</>;
  if(look==='sfx')return <><Section title="Sound">{param('gainDb','Volume',-9,-40,12,.5,{unit:' dB'})}</Section>{timing}</>;
  const asset=f.assets.find(x=>x.id===raw.source?.assetId);
  return <>{transform}{raw.source&&<Section title="Fit"><Segmented label="Fit" value={shownParams.fit==='cover'?'cover':'contain'} disabled={disabled} options={[{id:'contain',name:'Whole picture'},{id:'cover',name:'Fill frame'}]} onChange={v=>now(setParams({fit:v}),'Change fit')}/></Section>}
-  {look==='overlay'&&adjust}
+  {look==='overlay'&&<>{filter}{adjust}</>}
   {asset?.hasAudio&&<Section title="Sound"><ToggleField label="Play its sound" value={shownParams.mute===false} disabled={disabled} onChange={v=>now(setParams({mute:!v}),v?'Play overlay sound':'Mute overlay')}/>{shownParams.mute===false&&param('gainDb','Volume',-9,-40,12,.5,{unit:' dB'})}</Section>}
   {timing}</>;
 }
 
+const FILTER_OPTIONS=[{id:'',name:'None'},...FILTERS.map(f=>({id:f.id,name:f.name}))];
+const named=(list:readonly string[],names:Record<string,string>={})=>list.map(id=>({id,name:names[id]??id[0].toUpperCase()+id.slice(1).replaceAll('_',' ')}));
+const ANIMATION_NAMES={none:'None',slide_up:'Slide up',slide_down:'Slide down',typewriter:'Typewriter'};
 const CAPTION_STYLES=[{id:'off',name:'Off'},{id:'clean',name:'Clean'},{id:'karaoke',name:'Karaoke'},{id:'word_pop',name:'Word pop'},{id:'emphasis',name:'Emphasis'}] as const;
 function CaptionSettings({p,base,edit,now,disabled}:Omit<Common,'time'|'fps'>){
  const c=base.captions,shown=p.timeline.captions,set=(params:Record<string,unknown>)=>c?[{type:'set_captions' as const,captions:{...c,params:{...c.params,...params}},reason}]:[];

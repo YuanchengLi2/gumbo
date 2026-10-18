@@ -46,7 +46,7 @@ A clip in `spine` plays seconds `srcIn` to `srcOut` of its source; clips play on
 
 - `speed` 0.25 to 4 (sound keeps its pitch). An image clip lasts `holdSec`.
 - `framing.mode`: `fit` shows the whole picture (letterboxed when its shape differs from the frame), `fill` covers the frame and crops the overflow. `x` and `y` (0 to 1) choose which part shows when the picture does not exactly fit the frame. `scale` zooms about the centre of the frame. To show one region (a corner, a face, a speaker box), zoom with `scale` and place it with keyframe `x` and `y` (below), or write a scene that shows the asset at the size and place you want.
-- `framing` also takes `rotation`, `flipX`, `flipY`, `opacity`, and the grade: `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged), `temperature` (-1 cool to 1 warm).
+- `framing` also takes `rotation`, `flipX`, `flipY`, `opacity`, and the grade: `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged), `temperature` (-1 cool to 1 warm), `tint` (-1 green to 1 magenta), `fade` (0 to 1, lifted blacks), and a `filter` preset (below) with `filterIntensity` (0 to 1), applied before the rest of the grade.
 - `transitionIn` leads into the clip, centred on the cut (`durationSec` up to 3): `crossfade`, `dip_to_black`, `dip_to_white`, `flash`, `wipe`, `slide`, `whip`, `zoom_through` (zoom in), `zoom_out`, `blur`, `spin`, `iris` (circle reveal), `glitch`, or `cut`. `wipe`, `slide` and `whip` take `direction` (`left`, `right`, `up`, `down`; default `left`). Video on both sides needs `durationSec / 2` of footage past each side of the cut; photos and scenes hold their picture.
 - `captions` (optional, on the timeline): `style` `clean`, `karaoke`, `word_pop` or `emphasis`; captions follow the speech heard: unmuted clips and music items at -10 dB or louder; `params.sources` (ids) picks exactly.
 
@@ -86,20 +86,33 @@ The `timeline` has `spine` (clips that play one after another and set the video'
 - An attached item needs `type` (`overlay`, `broll`, `effect` or `sfx`), `component` (`"source"` when it plays an asset), `source`, a `start` anchor and a length: `durationSec`, or an `end` anchor.
 - Anchors: `{"kind":"project","at":"start","offsetSec":5}` (`at` is `"start"` or `"end"`); `{"kind":"clip","clipId":"shot2","at":"start","offsetSec":0}` (`at` is `"start"`, `"end"` or seconds into the clip; it follows the clip if the clip moves); `{"kind":"word","wordId":"...","clipId":"...","edge":"start"}` (lands on a spoken word).
 - A music item needs `srcIn`, `srcOut` and a `start` anchor; `gainDb` defaults to -18 and music ducks under speech automatically.
-- Overlay `params`: `x` and `y` (0 to 1, the center), `scale`, `rotation`, `opacity`, `fit` (`"cover"` or `"contain"`).
+- Overlay `params`: `x` and `y` (0 to 1, the center), `scale`, `rotation`, `opacity`, `fit` (`"cover"` or `"contain"`), and a `filter` with `filterIntensity`.
 
 ## Effects on footage (built in)
 
-An attached item of `type` `"effect"` changes every clip under it while it lasts; it needs no scene code and no `source`. Anything beyond these: keyframes, or a scene.
+An attached item of `type` `"effect"` changes the main-track clips under it while it lasts (`"apply":"all"` in `params` also changes overlay footage and photos); it needs no scene code and no `source`. Anything beyond these: keyframes, or a scene. Every `amount` is 0 to 1 unless given.
 
 ```json
 {"id":"push1","type":"effect","component":"slow_push","start":{"kind":"clip","clipId":"shot2","at":"start"},"end":{"kind":"clip","clipId":"shot2","at":"end"},"params":{"amount":0.08}}
 ```
 
-- `slow_push`: a slow zoom in across each clip it covers (a Ken Burns move); `amount` is the extra scale by the end of the clip, 0.05 to 0.15.
-- `punch_zoom`: holds the picture zoomed in by `amount` (0.1 to 0.25), for emphasis on a beat or a line.
-- `shake`: camera shake of strength `amount` (0.05 to 0.3), for an impact moment.
-- `grade`: a colour layer over every clip it covers, with `exposure` (-2 to 2), `contrast` and `saturation` (1 leaves them unchanged) and `temperature` (-1 cool to 1 warm). Use it to grade a stretch of several clips at once; for one clip, set the grade in the clip's `framing`.
+- Motion: `slow_push` (a slow zoom in across each clip, a Ken Burns move; `amount` is the extra scale by the clip's end, 0.05 to 0.15), `pull_out` (the same, zooming out), `punch_zoom` (holds the picture zoomed in by `amount`, 0.1 to 0.25), `zoom_pulse` (pulses in and out by `amount` at `rate` beats a second, for music), `shake` (camera shake, 0.05 to 0.3).
+- Looks: `blur`, `vignette`, `glow`, `grain`, `vhs`, `glitch`, `rgb_split`, `pixelate`, `letterbox` (cinema bars).
+- `grade`: a colour layer over every clip it covers: a `preset` filter with `intensity` (0 to 1), and/or `exposure`, `contrast`, `saturation`, `temperature`, `tint`, `fade`. Use it to grade a stretch of several clips at once; for one clip, set the grade in the clip's `framing`.
+- Filter presets (for `framing.filter`, an overlay's `params.filter` or a grade's `preset`): `warm`, `cool`, `vivid`, `cinematic`, `teal_orange`, `golden`, `vintage`, `faded`, `matte`, `moody`, `pastel`, `neon`, `retro`, `mono`, `noir`, `sepia`.
+
+## Text and stickers (built in)
+
+Text is an `overlay` with `component` `"text"` and `params.text`; a sticker is an `overlay` with `component` `"sticker"` and `params.sticker`. Neither needs a scene; use a scene for anything they cannot do.
+
+```json
+{"id":"title1","type":"overlay","component":"text","start":{"kind":"project","at":"start","offsetSec":1},"durationSec":3,"layer":0,"params":{"text":"Day one","style":"bold_title","y":0.3}}
+```
+
+- `style` is a ready look; the text's own `params` override it: `basic`, `bold_title`, `outline`, `neon`, `label`, `highlight`, `subtitle`, `typewriter`, `pop`, `retro`, `elegant`, `handwritten`, `comic`.
+- Text `params`: `x`, `y` (0 to 1, the centre; text defaults to 0.8), `scale`, `rotation`, `opacity`, `fontFamily` (`Arial`, `Arial Black`, `Segoe UI`, `Impact`, `Georgia`, `Times New Roman`, `Courier New`, `Trebuchet MS`, `Verdana`, `Segoe Script`, `Comic Sans MS`), `fontSize` (px of a 1080p frame), `fontWeight`, `italic`, `uppercase`, `letterSpacing`, `color`, `stroke` and `strokeWidth` (an outline), `shadow`, `shadowBlur`, `shadowX`, `shadowY`, `glow` and `glowSize`, `background` with `padding` and `radius` (a box).
+- Animations (text and stickers): `animation` in (`none`, `fade`, `pop`, `slide_up`, `slide_down`, `zoom`, `typewriter`), `animationSec` (0.4), `animationOut` (`none`, `fade`, `pop`, `slide_down`, `zoom`), `loop` while it shows (`none`, `pulse`, `wiggle`, `float`, `bounce`, `spin`).
+- Stickers: `star`, `heart`, `sparkle`, `burst`, `ring`, `lightning`, `fire`, `sun`, `cloud`, `music`, `confetti`, `crown`, `smile`, `laugh`, `love`, `wow`, `cool`, `wink`, `sad`, `angry`, `arrow`, `check`, `cross`, `pin`, `play`, `speech` (with `text` inside), `new`. Sticker `params`: `x`, `y` (0.5), `size` (px; 30% of the frame's short side), `scale`, `rotation`, `color`, `accent`, and the animations (default: pop in).
 
 ## Available imports (no install needed)
 

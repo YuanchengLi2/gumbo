@@ -13,10 +13,12 @@ import {OutOfCredits} from '../billing/Upgrade';
 import {GumboMark} from '../home/HomeScreen';
 import {ProjectPlayer} from '../player/ProjectPlayer';
 import {ManualTimeline} from '../../manual/ManualTimeline';
-import {removeItems,splitItems,duplicateItems,manualItems,splitRemove,selectableIds,addAsset,transitionOps,nearestCut,transitionClip,transitionId} from '../../manual/model';
+import {removeItems,splitItems,duplicateItems,manualItems,splitRemove,selectableIds,addAsset,transitionOps,nearestCut,transitionClip,transitionId,libraryOps,reason as manualReason,type LibraryDrop} from '../../manual/model';
 import {TransitionsView} from '../editor/library/TransitionsView';
+import {EffectsView,FiltersView,TextView,StickersView,CaptionsView} from '../editor/library/LibraryViews';
 import {AssetsPanel} from '../editor/AssetsPanel';
 import {PropertiesPanel} from '../editor/PropertiesPanel';
+import {entranceSec} from '@dream/compositor';
 import {PreviewHandles} from '../editor/PreviewHandles';
 import {ShortcutsHelp} from '../editor/ShortcutsHelp';
 import {typing} from '../../manual/shortcuts';
@@ -72,6 +74,15 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  // A transition clicked in the library goes on the selected cut, into the selected clip, or on the cut nearest the playhead.
  const addTransition=(type:string)=>{const one=p.selected.length===1?p.selected[0]:undefined,picked=one?transitionClip(one)??(t.spine.findIndex(c=>c.id===one)>0?one:undefined):undefined,clipId=picked??nearestCut(t,f,time)?.id;
   if(!clipId){p.onError('Transitions go on a cut between two clips on the main track.');return;}run(()=>transitionOps(t,f,clipId,type),'Add transition');p.onSelect([transitionId(clipId)]);};
+ // A library piece clicked: text and stickers at the playhead; an effect over the selected clip and a filter on its own
+ // picture (else both at the playhead for three seconds). What it added is selected, ready for the properties panel.
+ const addPiece=(drop:LibraryDrop)=>{if(locked){p.onError(lockedReason);return;}const one=p.selected.length===1?p.selected[0]:undefined,clip=one&&t.spine.some(c=>c.id===one)?one:undefined;
+  try{const ops=libraryOps(t,f,drop,time,(drop.kind==='effect'||drop.kind==='filter')&&clip?{clipId:clip,onClip:drop.kind==='filter'}:{}),added=ops.find(o=>o.type==='add_item');
+   // Text and stickers come in with an animation, so at their first frame there is nothing to see yet: the playhead moves to
+   // where the entrance has finished, showing what was added with its handles, as CapCut plays a template once.
+   void applyOps(ops,'Add '+drop.kind).then(()=>{if(added?.type!=='add_item')return;p.onSelect([added.item.id]);
+    if(drop.kind==='text'||drop.kind==='sticker'){const fps=t.settings.fps,sec=entranceSec(added.item.params,added.item.durationSec??3,drop.kind==='sticker');if(sec>0)p.onSeek(Math.round((time+sec)*fps)+1);}});}catch(error){p.onError((error as Error).message);}};
+ const chooseCaptions=(style:string|null)=>run(()=>[{type:'set_captions',captions:style?{style:style as 'clean',params:t.captions?.params??{},overrides:t.captions?.overrides??[]}:null,reason:manualReason}],style?'Caption style':'Turn captions off');
  // The editor's + on a media card: video and photos join the main track at the playhead, audio goes to music.
  const addMedia=(assetId:string)=>{const asset=f.assets.find(a=>a.id===assetId);if(!asset)return;run(()=>addAsset(t,f,assetId,asset.kind==='audio'?'music:0':'video',Math.round(time*t.settings.fps)/t.settings.fps),'Add media');};
  // Sending always jumps to the newest message; after that the chat follows new output while you are at the bottom.
@@ -89,10 +100,11 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  if(editor){
   // OpenCut's layout: assets (with Gumbo's chat as the first tab), preview and properties over a full-width timeline.
   const drag=(set:(n:number)=>void,key:string,value:(e:React.PointerEvent<HTMLDivElement>,box:DOMRect)=>number,min:number,max:number)=>({onPointerDown:(e:React.PointerEvent<HTMLDivElement>)=>e.currentTarget.setPointerCapture(e.pointerId),onPointerMove:(e:React.PointerEvent<HTMLDivElement>)=>{if(!e.currentTarget.hasPointerCapture(e.pointerId))return;const n=Math.max(min,Math.min(max,value(e,e.currentTarget.closest('.editor-layout')!.getBoundingClientRect())));set(n);localStorage.setItem(key,String(n));}});
-  const tabs:SidebarTab[]=['chat','media','transitions','elements'],tab=tabs.includes(p.tab)?p.tab:'media';
+  const tabs:SidebarTab[]=['chat','media','text','stickers','effects','transitions','filters','captions','elements'],tab=tabs.includes(p.tab)?p.tab:'media';
+  const selectedClip=p.selected.length===1?t.spine.find(c=>c.id===p.selected[0]):undefined;
   return <EditorActionsContext.Provider value={editorActions}><div className="ai-workspace editor-workspace"><section ref={stage} className={'ai-stage editor-layout'+(driving?' agent-driving':'')} style={{'--assets-width':`${assetsWidth}%`,'--properties-width':`${propsWidth}%`,'--timeline-height':`${editorTimeline}%`} as React.CSSProperties}>{cursorView}
    <div className="editor-top with-properties">
-    <AssetsPanel tab={tab} onTab={p.onTab} tabs={tabs}>{tab==='chat'?<div className="editor-chat">{chatView}{composer}</div>:tab==='elements'?elementsView:tab==='transitions'?<TransitionsView disabled={locked} onApply={addTransition}/>:<div className="sidebar-scroll"><ProjectMedia project={p.project} selected={p.attachments} onSelect={p.onAttachments} onImport={p.onImport} onImportFiles={paths=>void p.importFiles(paths).catch(error=>p.onError((error as Error).message))} command={p.command} onAdd={locked?undefined:addMedia}/></div>}</AssetsPanel>
+    <AssetsPanel tab={tab} onTab={p.onTab} tabs={tabs}>{tab==='chat'?<div className="editor-chat">{chatView}{composer}</div>:tab==='elements'?elementsView:tab==='transitions'?<TransitionsView disabled={locked} onApply={addTransition}/>:tab==='text'?<TextView disabled={locked} onAdd={addPiece}/>:tab==='stickers'?<StickersView disabled={locked} onAdd={addPiece}/>:tab==='effects'?<EffectsView disabled={locked} onAdd={addPiece}/>:tab==='filters'?<FiltersView disabled={locked} onAdd={addPiece} current={selectedClip?.framing?.filter}/>:tab==='captions'?<CaptionsView disabled={locked} current={t.captions?.style} onChoose={chooseCaptions}/>:<div className="sidebar-scroll"><ProjectMedia project={p.project} selected={p.attachments} onSelect={p.onAttachments} onImport={p.onImport} onImportFiles={paths=>void p.importFiles(paths).catch(error=>p.onError((error as Error).message))} command={p.command} onAdd={locked?undefined:addMedia}/></div>}</AssetsPanel>
     <div className="editor-resizer" role="separator" aria-label="Resize assets" {...drag(setAssetsWidth,'dream-editor-assets',(e,box)=>(e.clientX-box.left)/box.width*100,16,45)}/>
     <div className="editor-preview">{playerView}</div>
     <div className="editor-resizer" role="separator" aria-label="Resize properties" {...drag(setPropsWidth,'dream-editor-properties',(e,box)=>(box.right-e.clientX)/box.width*100,16,40)}/>

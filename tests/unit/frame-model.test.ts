@@ -81,3 +81,45 @@ it('draws the library transitions: wipes and reveals as masks, directions, a gli
  const photo=mid(t('crossfade',{},'logo'));expect(photo.map(m=>m.assetId)).toEqual(['tall','logo']);expect(photo[1].opacity).toBeCloseTo(k);
  expect(mid(t('blur'))[0].blur).toBeGreaterThan(20);
 });
+
+const piece=(id:string,type:string,component:string,params:object,o:{start?:number;durationSec?:number;layer?:number}={})=>({id,type,component,start:{kind:'project',at:'start',offsetSec:o.start??0},durationSec:o.durationSec??4,layer:o.layer??0,params,reason:''});
+it('draws the library effects and filters: looks on the main track, overlays only when asked, bars, motion and graded presets',()=>{
+ const overlay={...piece('o','overlay','overlay',{}),source:{assetId:'logo',srcIn:0,srcOut:4}};
+ const t=(attached:object[],framing?:object)=>prepare({timeline:vertical([clip('a','tall',0,4,framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...framing}}:{})],{attached:[...attached,overlay] as any}),footage:footage()});
+ // A vignette changes the main track, not the overlay above it, unless it says apply: all.
+ let [main,over]=media(frameAt(t([piece('v','effect','vignette',{amount:.6})]),1).layers);expect(main.fx?.vignette).toBeCloseTo(.6);expect(over.fx).toBeUndefined();
+ [main,over]=media(frameAt(t([piece('v','effect','vignette',{amount:.6,apply:'all'})]),1).layers);expect(over.fx?.vignette).toBeCloseTo(.6);
+ // Sizes follow the frame's height (1920 here): pixelate 0.3 is 4 + 12 px at 1080, scaled by 1920/1080.
+ [main]=media(frameAt(t([piece('p','effect','pixelate',{amount:.3})]),1).layers);expect(main.fx?.pixel).toBeCloseTo((4+12)*1920/1080);
+ // Cinema bars are two black fills over the main track, under the overlay.
+ const barred=frameAt(t([piece('b','effect','letterbox',{amount:1})]),1).layers,bars=barred.filter(l=>l.kind==='fill'&&(l as FillLayer).color==='#000000') as FillLayer[];
+ expect(bars.map(b=>[b.rect.y,b.rect.h])).toEqual([[0,1920*.15],[1920*.85,1920*.15]]);expect(barred.indexOf(bars[1])).toBeLessThan(barred.findIndex(l=>l.kind==='media'&&(l as MediaLayer).key==='o'));
+ // Pull out starts zoomed in and settles at the clip's end; a pulse returns to 1 on each beat.
+ const zoom=(p:ReturnType<typeof t>,time:number)=>media(frameAt(p,time).layers)[0].transform[0];
+ expect(zoom(t([piece('z','effect','pull_out',{amount:.2})]),0)).toBeCloseTo(1.2);expect(zoom(t([piece('z','effect','pull_out',{amount:.2})]),2)).toBeCloseTo(1.1);
+ expect(zoom(t([piece('z','effect','zoom_pulse',{amount:.1,rate:1})]),1)).toBeCloseTo(1);expect(zoom(t([piece('z','effect','zoom_pulse',{amount:.1,rate:1})]),.5)).toBeCloseTo(1.1);
+ // A filter on the clip grades it first; a filter item grades what is under it at its intensity.
+ [main]=media(frameAt(t([],{filter:'mono',filterIntensity:1}),1).layers);expect(main.grades[0]).toMatchObject({saturation:0,contrast:1.15});
+ [main]=media(frameAt(t([piece('f','effect','grade',{preset:'mono',intensity:.5})]),1).layers);expect(main.grades[0].saturation).toBeCloseTo(.5);expect(main.grades[0].contrast).toBeCloseTo(1.075);
+ [main]=media(frameAt(t([piece('f','effect','grade',{preset:'vintage'})]),1).layers);expect(main.grades[0]).toMatchObject({fade:.25,tint:.08});
+});
+
+it('draws styled text with its animations and stickers, and hides each kind by its own track',()=>{
+ const t=(attached:object[],trackSettings?:Record<string,{hidden?:boolean}>)=>prepare({timeline:vertical([clip('a','tall',0,4)],{attached:attached as any,...(trackSettings?{trackSettings}:{})}),footage:footage()});
+ const text=(p:ReturnType<typeof t>,time:number)=>frameAt(p,time).layers.filter((l):l is TextLayer=>l.kind==='text');
+ // A style's values sit under the text's own: the outline style's font and stroke, with this text's colour and capitals.
+ const outlined=text(t([piece('s','overlay','text',{text:'hey',style:'outline',color:'#ff0000',uppercase:true,animation:'none'})]),1)[0];
+ expect(outlined).toMatchObject({text:'HEY',fontFamily:'Arial Black',fontWeight:900,stroke:'#000000',strokeWidth:10,color:'#ff0000',shadow:'transparent',opacity:1,scale:1});
+ // Pop grows from nothing over 0.4 s; a fade out takes the last 0.35 s; the typewriter reveals the text as it goes.
+ const pop=t([piece('p','overlay','text',{text:'Hi',animation:'pop',animationOut:'fade'})]);
+ expect(text(pop,0)[0].scale).toBeCloseTo(0);expect(text(pop,.4)[0].scale).toBeCloseTo(1);expect(text(pop,4-.175)[0].opacity).toBeLessThan(1);
+ const typed=t([piece('w','overlay','text',{text:'Typewriter',style:'typewriter'})]);expect(text(typed,.225)[0].reveal).toBeCloseTo(.5);expect(text(typed,1)[0].reveal).toBe(1);
+ // Text from before styles fades in over 8 frames, as it did.
+ expect(text(t([piece('o','overlay','text',{text:'Old'})]),4/30)[0].opacity).toBeCloseTo(.5);
+ // A sticker takes its colours from the library and pops in.
+ const sticker=text(t([piece('k','overlay','sticker',{sticker:'heart'})]),1)[0];expect(sticker).toMatchObject({component:'sticker',sticker:'heart',color:'#ff4d6d',background:'#ffffff',size:.3*1080});
+ // Hiding the second text row hides only that text; the stickers row hides stickers.
+ const both=[piece('a','overlay','text',{text:'A'},{layer:0}),piece('b','overlay','text',{text:'B'},{layer:1}),piece('c','overlay','sticker',{sticker:'star'})];
+ expect(text(t(both,{'text:1':{hidden:true}}),1).map(l=>l.text||l.sticker)).toEqual(['A','star']);
+ expect(text(t(both,{'stickers:0':{hidden:true}}),1).map(l=>l.text)).toEqual(['A','B']);
+});

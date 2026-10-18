@@ -15,7 +15,7 @@
 
 /* Assets: a rail of tabs, then the open tab. */
 .editor-assets{display:flex;min-width:0;min-height:0;background:var(--n1)}
-.editor-rail{flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0;overflow-y:auto;border-right:1px solid var(--n5)}
+.editor-rail{flex:none;width:62px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 0;overflow-y:auto;scrollbar-width:none;border-right:1px solid var(--n5)}
 .rail-tab{width:54px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 0 7px;border-radius:9px;color:var(--n40);font-size:9.5px;letter-spacing:.1px}
 .rail-tab:hover{color:var(--n75);background:var(--n3)}
 .rail-tab[aria-pressed=true]{color:var(--n90);background:var(--n5)}
@@ -166,3 +166,20 @@
 .ai-stage .transition-mark.selected{background:#111;color:#fff;box-shadow:0 0 0 2px #fff,0 1px 4px rgb(0 0 0 / .4)}
 .ai-stage .transition-mark.leaving{opacity:.4}
 .ai-stage .cut-target{position:absolute;top:2px;bottom:2px;width:3px;margin-left:-1.5px;border-radius:2px;background:var(--n90);z-index:7;pointer-events:none;box-shadow:0 0 0 2px rgb(255 255 255 / .7)}
+.engine-tile{display:block;width:100%;aspect-ratio:16/9;height:auto;border-radius:8px;background:#111}
+.sticker-grid{grid-template-columns:repeat(auto-fill,minmax(76px,1fr))}
+.sticker-grid .engine-tile{aspect-ratio:1/1;object-fit:cover}
+.caption-styles{display:flex;flex-direction:column;gap:8px}
+.caption-style{display:grid;grid-template-columns:1fr;gap:3px;text-align:left;padding:10px 12px;border-radius:10px;background:var(--n3);color:var(--n70)}
+.caption-style:hover:not(:disabled){background:var(--n5)}
+.caption-style[aria-pressed=true]{box-shadow:inset 0 0 0 1.5px var(--n80)}
+.caption-style strong{font-size:12px;color:var(--n88);font-weight:600}
+.caption-style small{font-size:10.5px;color:var(--n42)}
+.caption-demo{display:inline-block;width:fit-content;padding:4px 9px;border-radius:6px;background:#000a;color:#fff;font:600 13px/1.4 Arial,sans-serif;margin-bottom:4px}
+.caption-demo i{font-style:normal}
+.demo-karaoke i{color:#a5b8ff}.demo-emphasis b:last-child{color:#a5b8ff}.demo-word_pop b:first-child,.demo-word_pop i{display:none}
+.ai-stage .manual-clip.look-sticker{background:#c2507a}
+/* The canvas ratio in the editor's transport: a quiet text choice like the rest of the bar. */
+.editor-layout .manual-player .ratio-picker,.editor-layout .ratio-picker{background:transparent;color:var(--n62);border:1px solid var(--n10);border-radius:6px;padding:3px 6px;font-size:11px;max-width:none;cursor:pointer}
+.editor-layout .ratio-picker:hover:not(:disabled){color:var(--n85);border-color:var(--n20)}
+.editor-layout .ratio-picker option{background:var(--n0);color:var(--n85)}

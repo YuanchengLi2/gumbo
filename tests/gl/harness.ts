@@ -27,6 +27,9 @@ const pixel=(gl:WebGL2RenderingContext,x:number,y:number)=>{const out=new Uint8A
   split:{width:200,height:100,background:'#000000',layers:[media({fx:{split:30}}) as any]},
   vignette:{width:200,height:100,background:'#000000',layers:[media({fx:{vignette:1}}) as any]},
   pixel:{width:200,height:100,background:'#000000',layers:[media({fx:{pixel:80}}) as any]},
+  // A heart sticker drawn at the centre, and a magenta tint on a darkened picture.
+  sticker:{width:200,height:100,background:'#000000',layers:[{kind:'text',key:'s',component:'sticker',sticker:'heart',text:'',x:.5,y:.5,rotation:0,scale:1,opacity:1,color:'#ff0000',background:'#ffffff',fontSize:0,fontWeight:0,size:80,time:0} as any]},
+  tint:{width:200,height:100,background:'#000000',layers:[media({grades:[{exposure:-1,contrast:1,saturation:1,temperature:0,tint:1}]}) as any]},
  };
  c.draw(frames[name],()=>pic);
  return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50)};

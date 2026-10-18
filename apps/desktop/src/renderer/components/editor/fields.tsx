@@ -58,11 +58,11 @@ export function ColorField(p:{label:string;value:string;disabled?:boolean;allowN
   <input type="color" aria-label={p.label} value={none?'#000000':hex(p.value)} disabled={p.disabled} onChange={e=>change(e.target.value+alpha)}/></span></label>;
 }
 
-export function TextField(p:{label:string;value:string;multiline?:boolean;disabled?:boolean}&Live<string>){
+export function TextField(p:{label:string;value:string;multiline?:boolean;disabled?:boolean;bare?:boolean}&Live<string>){
  const [text,setText]=useState(p.value),timer=useRef<number>(undefined),editing=useRef(false);
  useEffect(()=>{if(!editing.current)setText(p.value);},[p.value]);
  useEffect(()=>()=>window.clearTimeout(timer.current),[]);
  const change=(v:string)=>{setText(v);p.live(v);window.clearTimeout(timer.current);timer.current=window.setTimeout(()=>p.commit(v),600);};
  const props={'aria-label':p.label,value:text,disabled:p.disabled,onFocus:()=>{editing.current=true;},onBlur:()=>{editing.current=false;window.clearTimeout(timer.current);if(text!==p.value)p.commit(text);},onChange:(e:React.ChangeEvent<HTMLInputElement|HTMLTextAreaElement>)=>change(e.target.value)};
- return <label className="prop-field text"><span>{p.label}</span>{p.multiline?<textarea rows={3} {...props}/>:<input type="text" {...props}/>}</label>;
+ return <label className={'prop-field text'+(p.bare?' bare':'')}>{!p.bare&&<span>{p.label}</span>}{p.multiline?<textarea rows={3} {...props}/>:<input type="text" {...props}/>}</label>;
 }

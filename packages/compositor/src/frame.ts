@@ -1,4 +1,4 @@
-import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
+import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,effectInfo,textStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 
 /** What one frame of the edit shows, as a list of layers drawn in order over the background. It is the single description
@@ -28,10 +28,15 @@ export type MediaLayer={kind:'media';
  uv:Rect;rect:Rect;transform:Matrix;opacity:number;grades:Grade[];blur:number;mask?:Mask;fx?:Fx};
 export type FillLayer={kind:'fill';color:string;rect:Rect;transform:Matrix;opacity:number;mask?:Mask};
 export type TextLayer={kind:'text';key:string;
- component:'text'|'title_card'|'lower_third'|'circle_highlight'|'callout_arrow'|'counter'|'progress_bar'|'caption'|'audio_card';
+ component:'text'|'title_card'|'lower_third'|'circle_highlight'|'callout_arrow'|'counter'|'progress_bar'|'caption'|'audio_card'|'sticker';
  text:string;x:number;y:number;rotation:number;scale:number;opacity:number;color:string;background?:string;fontSize:number;fontWeight:number;
  /** Caption words, with the ones shown in the highlight colour. */
- words?:{text:string;highlight:boolean}[];size?:number;progress?:number};
+ words?:{text:string;highlight:boolean}[];size?:number;progress?:number;
+ /** Text styles: font, italics, letter spacing, outline, shadow, glow, box padding and corner, and how much of the text the
+  * typewriter has revealed (0-1). */
+ fontFamily?:string;italic?:boolean;letterSpacing?:number;stroke?:string;strokeWidth?:number;shadow?:string;shadowBlur?:number;shadowX?:number;shadowY?:number;glow?:string;glowSize?:number;padding?:number;radius?:number;reveal?:number;
+ /** A sticker: which drawing (color is its colour, background its accent), and seconds since it appeared. */
+ sticker?:string;time?:number};
 export type Layer=MediaLayer|FillLayer|TextLayer;
 export type Frame={width:number;height:number;background:string;layers:Layer[]};
 
@@ -70,27 +75,55 @@ export type FrameInput={timeline:TimelineDocument;footage:FootageIndex;resolved?
 /** Everything that does not change from frame to frame, worked out once. */
 export function prepare(input:FrameInput){
  const resolved=input.resolved??resolve(input.timeline,input.footage),assets=new Map(input.footage.assets.map(a=>[a.id,a]));
- const t=input.timeline,hidden=(i:ResolvedItem)=>!!t.trackSettings?.[(i.type==='sfx'?'audio:':'visual:')+i.layer]?.hidden;
+ const t=input.timeline,hidden=(i:ResolvedItem)=>!!t.trackSettings?.[itemTrackId(i)]?.hidden;
  return{timeline:t,resolved,assets,visible:resolved.items.filter(i=>i.type!=='sfx'&&!hidden(i)).sort((a,b)=>a.layer-b.layer),words:[...resolved.words].sort((a,b)=>a.start-b.start)};
 }
 export type Prepared=ReturnType<typeof prepare>;
 
+const chance=(n:number)=>{const x=Math.sin(n*12.9898)*43758.5453;return x-Math.floor(x);};
+/** What the effect items over a moment do to a picture: a zoom and a shake (main track only), grades (filter items and
+ * looks that come with an effect), blur, shader effects and cinema bars. Overlays take only the effects that ask for them
+ * (`params.apply: "all"`). Amounts follow the frame's height, so a 4K edit looks like its 1080p preview. */
+function effectsAt(p:Prepared,time:number,o:{progress:number;clipFrame:number;main:boolean}){
+ const {height:H,fps}=p.timeline.settings,frameNo=Math.round(time*fps),px=H/1080;let motion=1,dx=0,blur=0,bars=0,fx:Fx|undefined;const grades:Grade[]=[];
+ const add=(more:Fx)=>{fx=mergeFx(fx,more);};
+ for(const item of p.visible){if(item.type!=='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;const q=item.params as Record<string,unknown>;
+  if(!o.main&&q.apply!=='all')continue;
+  const a=Math.max(0,Number(q.amount??effectInfo(item.component)?.params.find(x=>x.key==='amount')?.default??.5)),elapsed=time-item.timelineStart;
+  switch(item.component){
+   case 'slow_push':if(o.main)motion*=1+o.progress*Number(q.amount??.08);break;
+   case 'pull_out':if(o.main)motion*=1+(1-o.progress)*a;break;
+   case 'punch_zoom':if(o.main)motion*=1+Number(q.amount??.15);break;
+   case 'zoom_pulse':if(o.main)motion*=1+a*(.5-.5*Math.cos(2*Math.PI*Number(q.rate??2)*elapsed));break;
+   case 'shake':if(o.main)dx=Math.sin(o.clipFrame*2.7)*Number(q.amount??.1)*40;break;
+   case 'grade':{const e=gradeOf({...filterGrade(typeof q.preset==='string'?q.preset:undefined,Number(q.intensity??1)),...q});if(!isNeutral(e))grades.push(e);break;}
+   case 'blur':blur+=a*24*px;break;
+   case 'vignette':add({vignette:Math.min(1,a)});break;
+   case 'glow':add({glow:Math.min(1,a)});break;
+   case 'grain':add({grain:Math.min(1,a),seed:frameNo});break;
+   case 'rgb_split':add({split:a*20*px});break;
+   case 'pixelate':if(a>0)add({pixel:4*px+a*40*px});break;
+   case 'letterbox':bars=Math.max(bars,Math.min(1,a)*.15);break;
+   case 'vhs':add({split:a*4*px,scan:Math.min(1,a)*.6,jitter:a*.25,grain:a*.25,seed:frameNo});grades.push(gradeOf({saturation:1-.3*a,contrast:1-.1*a,fade:.15*a,tint:-.05*a}));break;
+   case 'glitch':{const on=chance(Math.floor(frameNo/3)+item.timelineStart*7)<.25+.5*Math.min(1,a);add({split:a*16*px*(on?1:.15),jitter:on?Math.min(1,a):0,seed:frameNo});break;}
+  }}
+ return{motion,dx,blur,bars,grades,fx};
+}
+
 /** A clip's look at a moment: its framing with keyframed values, the effects over it (slow push, punch zoom, shake, grade
- * layers) and its grade, as the clip's CSS was worked out before. */
+ * layers) and its grade, as the clip's CSS was worked out before. A filter on the clip (`framing.filter`) grades it first. */
 function clipLook(p:Prepared,clip:ResolvedClip,time:number){
  const {width,height,fps}=p.timeline.settings,f=clip.framing,keys=keyframeValues(clip.keyframes,clipClock(clip,time));
- let motion=1,dx=0;const grades:Grade[]=[];const g=gradeOf({...f,...keys});if(!isNeutral(g))grades.push(g);
+ const grades:Grade[]=[],filter=gradeOf(filterGrade(f?.filter,f?.filterIntensity??1));if(!isNeutral(filter))grades.push(filter);const g=gradeOf({...f,...keys});if(!isNeutral(g))grades.push(g);
  const frame=Math.max(0,(time-clip.start)*fps),progress=Math.max(0,Math.min(1,(time-clip.start)/Math.max(1e-9,clip.end-clip.start)));
- for(const item of p.visible){if(item.type!=='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;const q=item.params as any;
-  if(item.component==='slow_push')motion*=1+progress*Number(q.amount??.08);if(item.component==='punch_zoom')motion*=1+Number(q.amount??.15);
-  if(item.component==='shake')dx=Math.sin(frame*2.7)*Number(q.amount??.1)*40;if(item.component==='grade'){const e=gradeOf(q);if(!isNeutral(e))grades.push(e);}}
+ const effects=effectsAt(p,time,{progress,clipFrame:frame,main:true}),motion=effects.motion,dx=effects.dx;grades.push(...effects.grades);
  // A hard rule: the main track always fills the project's frame. Footage of another shape is cropped to cover it (never
  // letterboxed), it is never zoomed out below the frame, and moves and shake only travel as far as the zoom leaves room,
  // so no edge or bar ever shows, whatever framing a request sets.
  const scale=Math.max(1,(keys.scale??f?.scale??1)*motion),room=(scale-1)/2,clampOffset=(v:number)=>Math.max(-room,Math.min(room,v));
  const x=.5+clampOffset((keys.x??.5)-.5),y=.5+clampOffset((keys.y??.5)-.5),shake=Math.max(-room*width,Math.min(room*width,dx));
  const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(shake,0),rotation(keys.rotation??f?.rotation??0),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
- return{transform,opacity:keys.opacity??f?.opacity??1,grades,fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5,fx:undefined as Fx|undefined};
+ return{transform,opacity:keys.opacity??f?.opacity??1,grades:grades.slice(0,4),fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5,fx:effects.fx,blur:effects.blur,bars:effects.bars};
 }
 
 /** A clip's picture: its background and its media, at the source time given, all under one more transform and opacity. */
@@ -100,7 +133,7 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const layers:Layer[]=background?[{kind:'fill',color:CLIP_BG,rect:box,transform:outer,opacity:outerOpacity}]:[];
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
-  const effect=sceneSafe(kind,{grades:look.grades,blur,fx:mergeFx(look.fx,fx)});
+  const effect=sceneSafe(kind,{grades:look.grades,blur:Math.max(blur,look.blur),fx:mergeFx(look.fx,fx)});
   layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:effect.grades,blur:effect.blur,...(effect.fx?{fx:effect.fx}:{}),...(mask?{mask}:{})});}
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
@@ -143,15 +176,47 @@ function sourceLayer(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  const {width,height}=p.timeline.settings,elapsed=time-item.timelineStart,q={...item.params,...keyframeValues(item.keyframes,item.source!.srcIn+elapsed)} as any;
  const box={x:0,y:0,w:width,h:height},placed=fitInBox(asset.width,asset.height,box,q.fit==='contain'||kind==='sequence'?'contain':'cover');
  const transform=aboutCentre(width,height,translate((Number(q.x??.5)-.5)*width,(Number(q.y??.5)-.5)*height),rotation(Number(q.rotation??0)),scaling(Number(q.scale??1),Number(q.scale??1)));
- const g=gradeOf(q),sourceTime=item.source!.srcIn+elapsed;
- return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:isNeutral(g)||kind==='scene'?[]:[g],blur:0}];
+ const filter=gradeOf(filterGrade(typeof q.filter==='string'?q.filter:undefined,Number(q.filterIntensity??1))),g=gradeOf(q),sourceTime=item.source!.srcIn+elapsed,effects=effectsAt(p,time,{progress:0,clipFrame:0,main:false});
+ const look=sceneSafe(kind,{grades:[...(isNeutral(filter)?[]:[filter]),...(isNeutral(g)?[]:[g]),...effects.grades].slice(0,4),blur:effects.blur,fx:effects.fx});
+ return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:look.grades,blur:look.blur,...(look.fx?{fx:look.fx}:{})}];
 }
 const components=new Set(['title_card','lower_third','circle_highlight','callout_arrow','counter','progress_bar']);
-/** A drawn element (a title, lower third, highlight, arrow, counter or progress bar), fading in over its first 8 frames. */
+/** How long a text's or sticker's entrance lasts: the typewriter types about 22 characters a second (at least 0.4 s,
+ * at most 70% of its time); the others last animationSec (0.4 s), at most half its time. */
+export function entranceSec(params:Record<string,unknown>,lengthSec:number,sticker=false){
+ const style=textStyle(params.style),q={...(style?.params??{}),...params},animation=String(q.animation??(sticker?'pop':'fade'));
+ if(animation==='none')return 0;if(animation==='typewriter')return Math.min(lengthSec*.7,Math.max(.4,String(q.text??'').length*.045));
+ return Math.min(lengthSec/2,Number(q.animationSec??.4));
+}
+const clamp01=(v:number)=>Math.max(0,Math.min(1,v)),easeOut=(t:number)=>1-Math.pow(1-t,3),back=(t:number)=>1+2.70158*Math.pow(t-1,3)+1.70158*Math.pow(t-1,2);
+/** A drawn element (a title, lower third, highlight, arrow, counter or progress bar), text and stickers. Text with a style
+ * takes the style's values under its own; it comes in, goes out and moves as its animations say (as CapCut's in, out and
+ * loop). Elements and text from before styles (no style, no animation) fade in over their first 8 frames, as they did. */
 function elementLayers(p:Prepared,item:ResolvedItem,time:number):Layer[]{
- const {fps}=p.timeline.settings,frame=Math.max(0,Math.round((time-item.timelineStart)*fps)),q={...item.params,...keyframeValues(item.keyframes,time-item.timelineStart)} as any;
- const component=(components.has(item.component)?item.component:'text') as TextLayer['component'],fade=Math.min(1,frame/8);
- return[{kind:'text',key:item.id,component,text:String(q.text??''),x:Number(q.x??.5),y:Number(q.y??(item.component==='title_card'?.5:.8)),rotation:Number(q.rotation??0),scale:Number(q.scale??1),opacity:fade*Number(q.opacity??1),color:String(q.color??'#ffffff'),background:q.background===undefined?undefined:String(q.background),fontSize:Number(q.fontSize??60),fontWeight:500,size:Number(q.size??220),
+ const {fps,width:W,height:H}=p.timeline.settings,elapsed=time-item.timelineStart,frame=Math.max(0,Math.round(elapsed*fps)),length=item.timelineEnd-item.timelineStart;
+ const sticker=item.component==='sticker'?stickerInfo(item.params.sticker):undefined,style=textStyle(item.params.style);
+ const q={...(style?.params??{}),...item.params,...keyframeValues(item.keyframes,elapsed)} as Record<string,any>;
+ const component=(sticker||item.component==='sticker'?'sticker':components.has(item.component)?item.component:'text') as TextLayer['component'];
+ let opacity=Number(q.opacity??1),scale=Number(q.scale??1),rotation=Number(q.rotation??0),x=Number(q.x??.5),y=Number(q.y??(item.component==='title_card'||component==='sticker'?.5:.8)),reveal:number|undefined;
+ if(!style&&q.animation===undefined&&component!=='sticker')opacity*=Math.min(1,frame/8);
+ else{
+  const animation=String(q.animation??(component==='sticker'?'pop':'fade')),out=String(q.animationOut??'none'),loop=String(q.loop??sticker?.loop??'none');
+  const inSec=entranceSec(item.params,length,component==='sticker'),k=inSec>0?clamp01(elapsed/inSec):1,e=easeOut(k);
+  if(animation==='fade')opacity*=e;else if(animation==='pop'){scale*=Math.max(0,back(k));opacity*=clamp01(k*4);}else if(animation==='slide_up'){y+=(1-e)*.06;opacity*=e;}
+  else if(animation==='slide_down'){y-=(1-e)*.06;opacity*=e;}else if(animation==='zoom'){scale*=.5+.5*e;opacity*=e;}else if(animation==='typewriter')reveal=k;
+  const outSec=Math.min(length/2,Number(q.animationOutSec??.35)),left=outSec>0?clamp01((item.timelineEnd-time)/outSec):1,o=easeOut(left);
+  if(out==='fade')opacity*=o;else if(out==='pop'){scale*=.4+.6*o;opacity*=o;}else if(out==='slide_down'){y+=(1-o)*.06;opacity*=o;}else if(out==='zoom'){scale*=1+(1-o)*.4;opacity*=o;}
+  if(loop==='pulse')scale*=1+.06*Math.sin(2*Math.PI*1.5*elapsed);else if(loop==='wiggle')rotation+=6*Math.sin(2*Math.PI*2*elapsed);else if(loop==='float')y+=.012*Math.sin(2*Math.PI*.8*elapsed);
+  else if(loop==='bounce')y-=.03*Math.abs(Math.sin(Math.PI*2*elapsed));else if(loop==='spin')rotation+=60*elapsed;
+ }
+ const base={kind:'text' as const,key:item.id,component,x,y,rotation,scale,opacity:clamp01(opacity)};
+ if(component==='sticker')return[{...base,text:String(q.text??''),color:String(q.color??sticker?.color??'#ffffff'),background:String(q.accent??sticker?.accent??'#ffffff'),fontSize:0,fontWeight:0,size:Number(q.size??.3*Math.min(W,H)),sticker:sticker?.id??String(q.sticker??''),time:elapsed}];
+ const optional=(key:string,make:(v:any)=>unknown)=>q[key]===undefined||q[key]===''?{}:{[key]:make(q[key])};
+ const styled={...optional('fontFamily',String),...optional('italic',Boolean),...optional('letterSpacing',Number),...optional('stroke',String),...optional('strokeWidth',Number),...optional('shadowBlur',Number),...optional('shadowX',Number),...optional('shadowY',Number),...optional('glow',String),...optional('glowSize',Number),...optional('padding',Number),...optional('radius',Number),
+  // A styled text without a shadow of its own has none (the soft default shadow is for text from before styles).
+  ...(q.shadow!==undefined?{shadow:String(q.shadow)}:style?{shadow:'transparent'}:{}),...(reveal===undefined?{}:{reveal})};
+ const text=String(q.text??''),shown=q.uppercase?text.toUpperCase():text;
+ return[{...base,text:shown,color:String(q.color??'#ffffff'),background:q.background===undefined||q.background===''?undefined:String(q.background),fontSize:Number(q.fontSize??60),fontWeight:Number(q.fontWeight??500),size:Number(q.size??220),...styled,
   progress:component==='counter'?Math.round(Math.min(1,frame/60)*Number(q.value??100)):component==='progress_bar'?Math.min(100,frame*2):undefined,...(component==='counter'?{text:String(Math.round(Math.min(1,frame/60)*Number(q.value??100)))+String(q.suffix??'')}:{})}];
 }
 /** Captions: the word being spoken (word pop), or up to seven words of its clip around it with the current word or
@@ -176,6 +241,9 @@ export function frameAt(p:Prepared,time:number):Frame{
    // A dip into the first clip fades it in from black (or white) at the start of the video.
    if(dip<1&&clip.transitionIn?.type==='dip_to_white')layers.push({kind:'fill',color:'#ffffff',rect:{x:0,y:0,w:width,h:height},transform:identity,opacity:1});
    layers.push(...clipLayers(p,clip,time,clip.srcIn+(clip.holdSec?0:elapsed*clip.speed),identity,dip));}
+  // Cinema bars from a letterbox effect sit on the main track, under overlays, text and captions.
+  const bars=effectsAt(p,time,{progress:0,clipFrame:0,main:true}).bars;
+  if(bars>0)for(const y of [0,height*(1-bars)])layers.push({kind:'fill',color:'#000000',rect:{x:0,y,w:width,h:height*bars},transform:identity,opacity:1});
  }
  for(const item of p.visible){if(item.type==='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;layers.push(...(item.source?sourceLayer(p,item,time):elementLayers(p,item,time)));}
  layers.push(...captionLayers(p,time));

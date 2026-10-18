@@ -53,7 +53,7 @@ export function PreviewHandles(p:{timeline:TimelineDocument;base:TimelineDocumen
 
  const s=1/Math.max(.05,(svg.current?.getBoundingClientRect().width??W)/W);
  const knob=selected&&(()=>{const [a,b]=selected.corners,mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=mx-selected.cx,dy=my-selected.cy,len=Math.hypot(dx,dy)||1;return{x:mx+dx/len*26*s,y:my+dy/len*26*s,mx,my};})();
- return <svg ref={svg} className="preview-handles" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} aria-label="Select and move on the preview">
+ return <svg ref={svg} className="preview-handles" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={()=>{if(selected?.item)document.querySelector<HTMLTextAreaElement|HTMLInputElement>('.editor-properties .prop-field.text textarea,.editor-properties .prop-field.text input')?.focus();}} aria-label="Select and move on the preview">
   {guides.x&&<line x1={W/2} x2={W/2} y1={0} y2={H} className="preview-guide" strokeWidth={s}/>}{guides.y&&<line x1={0} x2={W} y1={H/2} y2={H/2} className="preview-guide" strokeWidth={s}/>}
   {selected&&<g className={'preview-selection'+(selected.item?'':' main')}>
    <polygon points={selected.corners.map(c=>c.join(',')).join(' ')} strokeWidth={1.5*s}/>

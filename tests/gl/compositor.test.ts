@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 it('draws media, transforms, opacity, grades, canvas scaling and text as the frame model says',()=>{
  const dir=resolve('tests/gl'),require_=createRequire(import.meta.url);
  execFileSync(process.execPath,[require_.resolve('esbuild/bin/esbuild'),join(dir,'harness.ts'),'--bundle','--format=iife','--outfile='+join(dir,'harness.js'),'--log-level=error']);
- const electron=require_('electron') as unknown as string,cases=['plain','zoom','moved','graded','grey','scaled','text','maskRect','maskCircle','hue','fade','split','vignette','pixel'];
+ const electron=require_('electron') as unknown as string,cases=['plain','zoom','moved','graded','grey','scaled','text','maskRect','maskCircle','hue','fade','split','vignette','pixel','sticker','tint'];
  const run=spawnSync(electron,[join(dir,'main.cjs')],{env:{...process.env,CASES:cases.join(',')},encoding:'utf8',timeout:60000});
  const line=(run.stdout??'').split('\n').find(l=>l.startsWith('RESULT '));if(!line)throw new Error('Harness failed: '+run.stderr);
  const r=JSON.parse(line.slice(7)),near=(a:number[],b:number[])=>a.every((v,i)=>Math.abs(v-b[i])<=8);
@@ -30,4 +30,8 @@ it('draws media, transforms, opacity, grades, canvas scaling and text as the fra
  expect(r.vignette.left[0]).toBeLessThan(120);expect(r.vignette.middleLeft[0]).toBeGreaterThan(200);
  // 80 px blocks: x = 95 falls in the block from 80 to 160, whose middle is blue.
  expect(near(r.pixel.middleLeft,[0,0,255])).toBe(true);
+ // The heart's red fills the middle (a little below centre, clear of its highlight); the corner stays black.
+ expect(near(r.sticker.centre,[255,0,0])&&near(r.sticker.corner,[0,0,0])).toBe(true);
+ // Tint 1 (magenta) lifts red and blue by 10% and lowers green: red halved by exposure -1 becomes 0.55 of full.
+ expect(near(r.tint.left,[140,0,0])).toBe(true);
 },90_000);
