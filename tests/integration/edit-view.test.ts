@@ -45,6 +45,10 @@ it('still says what is on screen when no window can draw, and spreads a range ov
  const failed=await viewEdit({startSec:0,endSec:10},{versionId:'v1',timeline:timeline(),footage:footage()},async()=>{throw new Error('The editor window is closed');},new AbortController().signal);
  const summary=JSON.parse(failed.content[0].text!);expect(summary.note).toContain('editor window is closed');expect(summary.moments).toHaveLength(10);expect(failed.content).toHaveLength(1);expect(viewTimes({startSec:0,endSec:3},10,30)).toHaveLength(6);expect(viewTimes({startSec:0,endSec:9.9},10,30)).toHaveLength(10);
  expect(viewTimes({times:[-2,4,4,99]},10,30)).toEqual([0,4,9.967]);expect(viewTimes({startSec:3},10,30)).toEqual([3]);
+ // A look with no times or range is the whole cut: the middle of every shot, at most sixteen evenly chosen.
+ expect(viewTimes({},10,30,[{start:0,end:2},{start:2,end:6},{start:6,end:10}])).toEqual([1,4,8]);
+ const many=Array.from({length:31},(_,n)=>({start:n,end:n+1}));expect(viewTimes({},31,30,many)).toHaveLength(16);expect(viewTimes({},31,30,many)[0]).toBe(.5);expect(viewTimes({},31,30,many).at(-1)).toBe(30.5);
+ expect(viewTimes({startSec:0},10,30,[{start:0,end:10}])).toEqual([0]);
 });
 
 it('asks the editor window for frames and returns its answer, or its error, or gives up when stopped',async()=>{

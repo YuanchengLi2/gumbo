@@ -298,7 +298,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Media is read where it is; copies into Sources/ are only made for commands that need the files.
    // The edit itself is looked at as the player draws it (frames drawn by the editor's engine, with what is on screen at
    // each moment); only Export renders video.
-   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:3,width:1536},s):undefined,this.sourceFacts());
+   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:Math.max(1,Math.ceil(images.length/4)),width:1536},s):undefined,this.sourceFacts());
    const scene=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId&&a.scene):undefined;
    if(scene)return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',instruction:'Scene source only, not rendered visual evidence. Only Export renders video.'};
    const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});

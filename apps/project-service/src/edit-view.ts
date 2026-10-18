@@ -22,10 +22,19 @@ export function onScreen(layers:Layer[],names:Map<string,{filename:string;scene?
  });
 }
 /** The moments to show: the times asked for, or six spread over a range, or the start of the range; inside the video. */
-export function viewTimes(input:EditViewInput,duration:number,fps:number){
+/** The most frames one look at the edit draws: a sheet of four rows of four. */
+export const MAX_EDIT_FRAMES=16;
+/** The timeline times a look at the edit draws. Given times are drawn as asked; a stretch (startSec-endSec) as a strip of a
+ * frame about every second; and a look with neither is the whole cut: the middle of every shot on the main track (evenly
+ * chosen among them when there are more than fit), so one look shows the cut as a whole. Until October 18 such a look
+ * drew only the first frame, and an agent checked a 16-shot cut by looking at each shot on its own. */
+export function viewTimes(input:EditViewInput,duration:number,fps:number,shots:{start:number;end:number}[]=[]){
  const last=Math.max(0,duration-1/fps),clamp=(t:number)=>Math.min(last,Math.max(0,t));
- if(input.times?.length)return[...new Set(input.times.map(clamp).map(t=>round(t,3)))].slice(0,12);
- const start=clamp(input.startSec??0);if(input.endSec===undefined)return[start];
+ if(input.times?.length)return[...new Set(input.times.map(clamp).map(t=>round(t,3)))].slice(0,MAX_EDIT_FRAMES);
+ const start=clamp(input.startSec??0);
+ if(input.endSec===undefined&&!start&&shots.length>1){const pick=shots.length<=MAX_EDIT_FRAMES?shots:Array.from({length:MAX_EDIT_FRAMES},(_,n)=>shots[Math.round(n*(shots.length-1)/(MAX_EDIT_FRAMES-1))]);
+  return[...new Set(pick.map(s=>round(clamp((s.start+s.end)/2),3)))];}
+ if(input.endSec===undefined)return[start];
  // A stretch is watched as a strip: a frame about every second, six to twelve.
  const end=clamp(input.endSec),count=end>start?Math.min(12,Math.max(6,Math.ceil(end-start))):1;return Array.from({length:count},(_,n)=>round(start+(end-start)*(count>1?n/(count-1):0),3));
 }
@@ -43,7 +52,7 @@ export function happenings(resolved:ResolvedTimeline,names:Map<string,{filename:
 }
 export async function viewEdit(input:EditViewInput,project:{versionId:string;timeline:TimelineDocument;footage:FootageIndex},draw:ReviewRenderer|undefined,signal:AbortSignal,sheet?:(images:{data:string}[],signal:AbortSignal)=>Promise<{data:string}>,facts?:SourceFacts){
  const {timeline,footage,versionId}=project,resolved=resolveTimeline(timeline,footage),{fps,width,height}=timeline.settings;
- const times=viewTimes(input,resolved.durationSec,fps),p=prepare({timeline,footage,resolved}),names=new Map(footage.assets.map(a=>[a.id,a]));
+ const times=viewTimes(input,resolved.durationSec,fps,resolved.clips.map(c=>({start:c.start,end:c.end}))),p=prepare({timeline,footage,resolved}),names=new Map(footage.assets.map(a=>[a.id,a]));
  const moments=times.map(t=>({atSec:t,onScreen:onScreen(frameAt(p,t).layers,names)}));
  let frames:Awaited<ReturnType<ReviewRenderer>>['frames']|undefined,note:string|undefined;
  if(!moments.length)note='The video is empty.';
