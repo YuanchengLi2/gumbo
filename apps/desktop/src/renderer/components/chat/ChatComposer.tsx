@@ -36,32 +36,21 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
  </div>;
 }
 
-/** The model picker: Auto first, as the one to leave on, then each provider's models as rows with what they're for (Most
- * capable, Balanced, Fast) and their cost as a five-step meter. A provider without its key on the gateway is listed but
- * greyed out. */
-const tierTag:Record<string,[string,typeof Zap]>={frontier:['Most capable',Crown],strong:['Balanced',Cpu],light:['Fast',Zap]};
-const providerDot:Record<string,string>={anthropic:'#d97757',openai:'#10a37f',google:'#4285f4',deepseek:'#536af5'};
+/** The model picker, a plain list: Auto first, then each provider's models, each with a word on what it's for. A provider
+ * without its key on the gateway is listed but greyed out. */
+const tierWord:Record<string,string>={frontier:'Most capable',strong:'Balanced',light:'Fast'};
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
  const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
  const groups=(['anthropic','openai','google','deepseek'] as const).map(provider=>({provider,models:modelCatalog.filter(m=>m.provider===provider)}));
- const pick=(choice:ModelChoice)=>{onChange(choice);menu.setOpen(false);};
+ const row=(choice:ModelChoice,name:string,note:string,ready=true)=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}</span><span className="model-note">{note}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
  return <div className="composer-popover-anchor" ref={menu.ref}>
-  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}>{value==='auto'&&<Sparkles size={13}/>}<span>{label}</span><ChevronDown size={12}/></button>
+  <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover model-picker" role="menu" aria-label="Model">
-   <header><span>Model</span><kbd>{shortcutHints.model}</kbd></header>
-   <button type="button" role="menuitemradio" aria-checked={value==='auto'} className={'model-auto'+(value==='auto'?' selected':'')} onClick={()=>pick('auto')}>
-    <span className="model-auto-icon"><Wand2 size={16}/></span><span className="model-auto-text"><b>Auto<em>Recommended</em></b><small>Picks the right model for each request</small></span>{value==='auto'&&<Check size={15}/>}
-   </button>
-   {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <section key={g.provider} className={'model-provider'+(ready?'':' off')}>
-    <h4><i style={{background:providerDot[g.provider]}}/>{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</h4>
-    {g.models.map(m=>{const [tag,Icon]=tierTag[m.tier]??tierTag.strong,dots=Math.min(5,m.cost.length);
-     return <button key={m.choice} type="button" role="menuitemradio" aria-checked={m.choice===value} disabled={!available(m.choice,providers)} className={'model-row'+(m.choice===value?' selected':'')} title={m.detail} onClick={()=>pick(m.choice)}>
-      <span className="model-name">{m.label.replace(/^Claude /,'')}</span>
-      <span className={'model-tag '+m.tier}><Icon size={11}/>{tag}</span>
-      <span className="model-cost" aria-label={`Cost ${dots} of 5`}>{[1,2,3,4,5].map(n=><i key={n} className={n<=dots?'on':''}/>)}</span>
-      <span className="model-check">{m.choice===value&&<Check size={14}/>}</span>
-     </button>;})}
-   </section>;})}
+   {row('auto','Auto','Picks for each request')}
+   {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <React.Fragment key={g.provider}>
+    <div className="model-group-name">{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</div>
+    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers)))}
+   </React.Fragment>;})}
   </div>}
  </div>;
 }

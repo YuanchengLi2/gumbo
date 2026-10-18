@@ -14,7 +14,7 @@ function chromeColour(){
 }
 export function applyTheme(){
  const theme=resolvedTheme();document.documentElement.dataset.theme=theme;
- void window.dream?.setTheme(theme,chromeColour()).catch(()=>{});
+ void window.dream?.setTheme(theme,chromeColour(),themeChoice()).catch(()=>{});
 }
 export function setThemeChoice(choice:ThemeChoice){try{localStorage.setItem(KEY,choice);}catch{}applyTheme();listeners.forEach(l=>l());}
 /** Applies the theme now and whenever the system theme changes; returns the current choice for menus. */

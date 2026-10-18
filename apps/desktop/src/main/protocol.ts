@@ -8,7 +8,8 @@ import {resolve} from 'node:path';
 export const PROTOCOL='gumbo';
 export function registerProtocol(){
  // A development build runs as electron.exe with the app's folder, so the link must start it the same way.
- if(process.defaultApp&&process.argv.length>=2)app.setAsDefaultProtocolClient(PROTOCOL,process.execPath,[resolve(process.argv[1])]);
+ // (Its folder is the app path, not argv[1], which can be a switch such as --remote-debugging-port.)
+ if(process.defaultApp)app.setAsDefaultProtocolClient(PROTOCOL,process.execPath,[resolve(app.getAppPath())]);
  else app.setAsDefaultProtocolClient(PROTOCOL);
 }
 /** The gumbo:// link among a launch's arguments, if any. */

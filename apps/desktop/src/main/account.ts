@@ -13,10 +13,22 @@ export class Account {
  /** Guests are gone: an account is needed for Gumbo AI. A guest session saved by an older version is dropped. */
  private signedIn(){if(this.session?.user.is_anonymous)this.clear();return this.session;}
  private clear(){this.session=null;if(existsSync(this.file))unlinkSync(this.file);}
+ /** The session saved on disk, which another copy of the app (the installed one, a development build) may have refreshed
+  * since this one read it. A refresh token works once, so this copy's would then be spent. */
+ private saved():Session|null{try{return existsSync(this.file)&&safeStorage.isEncryptionAvailable()?JSON.parse(safeStorage.decryptString(readFileSync(this.file))):null;}catch{return null;}}
  async token(){
-  const current=this.signedIn();if(!current)throw new SignInRequired();
+  let current=this.signedIn();if(!current)throw new SignInRequired();
+  // Another copy refreshed first: its newer session is used rather than spending this copy's old refresh token.
+  const disk=this.saved();if(disk&&disk.refresh_token!==current.refresh_token&&disk.expires_at>current.expires_at){this.session=disk;current=disk;}
   if(current.expires_at<Date.now()/1000+60){
-   if(!this.refreshing){const session=current,generation=this.generation;this.refreshing=(async()=>{const response=await fetch(`${this.url}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token}),signal:AbortSignal.timeout(15000)});if(!response.ok){if([400,401].includes(response.status)&&generation===this.generation){this.clear();return;}throw new Error('Gumbo AI could not refresh its connection. Retry when online.');}const body=await response.json() as any;if(generation===this.generation&&this.session?.refresh_token===session.refresh_token)this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});})().finally(()=>{this.refreshing=null;});}
+   if(!this.refreshing){const session=current,generation=this.generation;this.refreshing=(async()=>{const response=await fetch(`${this.url}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token}),signal:AbortSignal.timeout(15000)});if(!response.ok){
+    // Refused: if another copy refreshed meanwhile, its session is used; only a refusal nobody got past signs out.
+    const latest=this.saved();if(latest&&latest.refresh_token!==session.refresh_token){this.session=latest;return;}
+    // Only Supabase saying the refresh token is no good signs out. A refusal for anything else (a build started without
+    // the app's key, a proxy) used to sign out too, and deleted the saved sign-in.
+    const reason=await response.json().catch(()=>({})) as {error_code?:string;error?:string;msg?:string;error_description?:string};
+    const invalid=['refresh_token_not_found','refresh_token_already_used','session_not_found','session_expired','user_not_found'].includes(reason.error_code??'')||reason.error==='invalid_grant'||/refresh token/i.test(reason.msg??reason.error_description??'');
+    if(invalid&&generation===this.generation){this.clear();return;}throw new Error('Gumbo AI could not refresh its connection. Retry when online.');}const body=await response.json() as any;if(generation===this.generation&&this.session?.refresh_token===session.refresh_token)this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});})().finally(()=>{this.refreshing=null;});}
    await this.refreshing;if(!this.session)throw new SignInRequired();
   }
   return this.session?.access_token??'';
