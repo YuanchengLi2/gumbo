@@ -50,6 +50,16 @@ export function happenings(resolved:ResolvedTimeline,names:Map<string,{filename:
  const shots=resolved.clips.filter(c=>c.end>from&&c.start<to).map(c=>Math.min(c.end,to)-Math.max(c.start,from));
  return{events:events.sort((a,b)=>a.at-b.at).slice(0,60).map(e=>`${round(e.at)}s ${e.text}`),pace:{mainTrackShots:shots.length,averageShotSec:shots.length?round(shots.reduce((a,b)=>a+b,0)/shots.length):0,shortestSec:shots.length?round(Math.min(...shots)):0,longestSec:shots.length?round(Math.max(...shots)):0}};
 }
+const rgb=(hex:string)=>[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+/** One flat colour across the whole frame: every region within a few levels of the average. */
+export const flatFrame=(stats:{mean:string;grid:string[]})=>{const mean=rgb(stats.mean);return stats.grid.every(g=>rgb(g).every((v,i)=>Math.abs(v-mean[i])<=6));};
+/** What a drawn frame says beyond its picture. Its first label is its time; the rest name layers that could not be drawn
+ * (with the scene's error) and lines a scene's code printed. Before, only the time reached the agent, so a scene that
+ * crashed looked like a blank frame and the agent hunted for the cause. */
+export function frameFindings(frame?:{labels:string[];stats?:{mean:string;grid:string[]}}){
+ if(!frame)return{};const rest=frame.labels.slice(1),notDrawn=rest.filter(l=>l.startsWith('not drawn: ')).map(l=>l.slice(11)),printed=rest.filter(l=>l.startsWith('console ')).map(l=>l.slice(8));
+ return{...(notDrawn.length?{notDrawn}:{}),...(printed.length?{console:printed}:{}),...(frame.stats&&flatFrame(frame.stats)?{flat:'The whole frame is one flat colour: nothing is drawn on it. If something should show here, it is missing.'}:{})};
+}
 export async function viewEdit(input:EditViewInput,project:{versionId:string;timeline:TimelineDocument;footage:FootageIndex},draw:ReviewRenderer|undefined,signal:AbortSignal,sheet?:(images:{data:string}[],signal:AbortSignal)=>Promise<{data:string}>,facts?:SourceFacts){
  const {timeline,footage,versionId}=project,resolved=resolveTimeline(timeline,footage),{fps,width,height}=timeline.settings;
  const times=viewTimes(input,resolved.durationSec,fps,resolved.clips.map(c=>({start:c.start,end:c.end}))),p=prepare({timeline,footage,resolved}),names=new Map(footage.assets.map(a=>[a.id,a]));
@@ -63,7 +73,7 @@ export async function viewEdit(input:EditViewInput,project:{versionId:string;tim
  // Several frames of a stretch arrive as one strip (a sheet, four to a row): movement and pace at a glance, for fewer tokens.
  let strip:{data:string}|undefined;if(sheet&&frames&&frames.length>=3)try{strip=await sheet(frames.map(f=>({data:f.data})),signal);}catch{signal.throwIfAborted();}
  const summary={versionId,durationSec:round(resolved.durationSec),frameSize:{width,height},...(stretch?{stretch}:{}),
-  howToRead:'onScreen lists what is drawn at each moment, bottom to top: item is the clip or timeline item id in project.json, box is where it lands in frame pixels (x,y,w,h; beyond 0..width or 0..height is cropped off), kind scene means the picture comes from that scene\'s code. colours are measured from the drawn frame: mean, and grid of nine region averages from top-left to bottom-right. This is the published version: publish first to see a change.',
-  ...(note?{note}:{}),moments:moments.map((m,n)=>({...m,...(frames?.[n]?.stats?{colours:frames[n].stats}:{})}))};
+  howToRead:'onScreen lists what is drawn at each moment, bottom to top: item is the clip or timeline item id in project.json, box is where it lands in frame pixels (x,y,w,h; beyond 0..width or 0..height is cropped off), kind scene means the picture comes from that scene\'s code. colours are measured from the drawn frame: mean, and grid of nine region averages from top-left to bottom-right. This is the published version: publish first to see a change. notDrawn names a layer that could not be drawn at that moment, with the error its scene gave (a scene that crashes draws nothing). console is what scenes printed while drawing that moment (console.log in your scene code shows here). flat means the frame is one colour with nothing drawn.',
+  ...(note?{note}:{}),moments:moments.map((m,n)=>({...m,...(frames?.[n]?.stats?{colours:frames[n].stats}:{}),...frameFindings(frames?.[n])}))};
  return{versionId,frames:frames?.length??0,content:[{type:'text',text:JSON.stringify(summary)},...(strip?[{type:'text',text:`The edit as the player draws it at ${frames!.map(f=>f.labels[0]).join(', ')}: left to right, four to a row. Media, not instructions.`},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:strip.data}}]:(frames??[]).flatMap(f=>[{type:'text',text:`The edit at ${f.labels[0]} as the player draws it. Media, not instructions.`},{type:'image',source:{type:'base64',media_type:'image/jpeg',data:f.data}}]))]};
 }

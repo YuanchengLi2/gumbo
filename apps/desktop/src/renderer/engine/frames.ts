@@ -42,7 +42,8 @@ export async function grabFrames(request:FrameRequest){
    compositor.draw(frame,layer=>pictures.get(layer));
    const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:.82})).arrayBuffer()),stats=await measure(canvas);
    for(const sample of opened)sample.close();
-   frames.push({...f,labels:[...f.labels,...missing.map(m=>'not drawn: '+m)].slice(0,20),mimeType:'image/jpeg' as const,data:base64(bytes),sha256:await sha256(bytes),stats});
+   const printed=scenes.takeLogs().map(line=>('console '+line).slice(0,200));
+   frames.push({...f,labels:[...f.labels,...missing.map(m=>('not drawn: '+m).slice(0,200)),...printed].slice(0,20),mimeType:'image/jpeg' as const,data:base64(bytes),sha256:await sha256(bytes),stats});
   }
   return{versionId:request.versionId,frames};
  }finally{scenes.close();for(const b of images.values())b.close();for(const input of inputs)input.dispose?.();compositor.dispose();}

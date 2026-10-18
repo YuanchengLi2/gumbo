@@ -5,7 +5,7 @@ import {editingGuide} from '../../../packages/orchestrator/src/editing-guide';
 import {activeDecisions} from '../../../packages/orchestrator/src/project-memory';
 import {searchWorkspace} from './workspace-search';
 import {workspaceEnvironment} from './workspace-environment';
-import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,lstatSync,renameSync,copyFileSync,unlinkSync} from 'node:fs';
+import {existsSync,readFileSync,writeFileSync,mkdirSync,readdirSync,lstatSync,renameSync,copyFileSync,unlinkSync,statSync} from 'node:fs';
 import {createReadStream} from 'node:fs';
 import {createInterface} from 'node:readline';
 import {join,dirname,basename,relative,isAbsolute} from 'node:path';
@@ -68,7 +68,21 @@ export class CodeWorkspace implements CodeWorkspacePort {
   const live=options.inEdit?inEdit():undefined;
   const drafts=turnId?Object.entries(JSON.parse(this.db.getMeta('turn-drafts:'+turnId)??'{}') as Record<string,string>).filter(([key])=>!live||live.has(key.slice(0,key.lastIndexOf('#')))).map(([,hash])=>hash):[];
   const names=new Map(this.db.footage().assets.map(a=>[a.scene?.revisionId,a.filename]));
-  return this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
+  const found=this.db.sceneErrors({revisions,drafts}).map(e=>({scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.revisionId)??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}));
+  // Finishing judges only this request's scenes; the project state also carries errors that are still live.
+  if(options.inEdit)return found;
+  const seen=new Set(found.map(e=>e.message+'|'+e.location));
+  return[...found,...this.liveSceneErrors().filter(e=>!seen.has(e.message+'|'+e.location))].slice(0,20);
+ }
+ /** Errors from the last day whose file has not changed since the scene reported them, in this request or an earlier one:
+  * the code that crashed is still the code there. A crash seen while the user watched, or in a stopped request, used to
+  * be invisible to the next request, which then looked for why the drawings were blank. */
+ liveSceneErrors(){
+  const names=new Map(this.db.footage().assets.map(a=>[a.id,a.filename]));
+  return this.db.recentSceneErrors(new Date(Date.now()-86_400_000).toISOString()).flatMap(e=>{
+   const file=e.location.replace(/:\d+(:\d+)?$/,'');let changed:number;try{changed=statSync(workspacePath(this.root,file)).mtimeMs;}catch{return[];}
+   return changed<=Date.parse(e.lastAt)+1000?[{scene:e.draft?`draft ${e.draft.slice(0,8)}`:names.get(e.assetId??'')??e.assetId??'scene',assetId:e.assetId,location:e.location,message:e.message}]:[];
+  });
  }
  private queue:Promise<unknown>=Promise.resolve();
  /** Parallel workers share one workspace: commands and publication run one at a time (dependency installs, lockfiles, project.json). */
@@ -298,9 +312,10 @@ export class CodeWorkspace implements CodeWorkspacePort {
    // Media is read where it is; copies into Sources/ are only made for commands that need the files.
    // The edit itself is looked at as the player draws it (frames drawn by the editor's engine, with what is on screen at
    // each moment); only Export renders video.
-   if(input.target==='preview')return viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:Math.max(1,Math.ceil(images.length/4)),width:1536},s):undefined,this.sourceFacts());
+   const crashes=()=>{const errors=this.sceneErrors(turnId,{changedOnly:false});return errors.length?[{type:'text',text:JSON.stringify({sceneErrors:errors,note:'Scenes that crashed while playing, with the file and line. A scene that crashes draws nothing from that point, so blank drawings in these scenes come from these errors. Fix the code at that line.'})}]:[];};
+   if(input.target==='preview'){const viewed:any=await viewEdit(input,{versionId:this.db.head(),timeline:this.db.timeline(),footage:this.db.playbackFootage()},this.options.renderReview,signal,this.db.contactSheet?(images,s)=>this.db.contactSheet!(images,{columns:4,rows:Math.max(1,Math.ceil(images.length/4)),width:1536},s):undefined,this.sourceFacts());return{...viewed,content:[...viewed.content,...crashes()]};}
    const scene=input.assetId?this.db.footage().assets.find(a=>a.id===input.assetId&&a.scene):undefined;
-   if(scene)return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',instruction:'Scene source only, not rendered visual evidence. Only Export renders video.'};
+   if(scene){const errors=this.sceneErrors(turnId,{changedOnly:false}).filter(e=>!e.assetId||e.assetId===scene.id||e.scene.startsWith('draft'));return{assetId:scene.id,scene:scene.scene,source:readFileSync(scene.originalPath,'utf8').slice(0,16000),preview:'live',...(errors.length?{sceneErrors:errors}:{}),instruction:'Scene source only, not rendered visual evidence: to see it drawn, view the edit (target preview) at a time it plays. sceneErrors are crashes it reported while playing, with the file and line.'};}
    const result=await inspectMedia(this.db,input,this.options.ffmpeg,this.options.ffprobe,signal);this.db.saveState('code-evidence:'+callId,{versionId:this.db.head(),...result.evidence});
    // The footage index's shots in the range looked at, with their measured facts (camera, light, sharpness, loudness).
    const index=input.assetId?this.options.shots?.saved(input.assetId):undefined,range=result.evidence.range;

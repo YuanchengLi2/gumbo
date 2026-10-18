@@ -23,6 +23,17 @@ describe('replies',()=>{
  });
 });
 
+describe('what a look at the edit tells the agent',()=>{
+ it('names a scene that crashed, what scenes printed, and a frame with nothing drawn',async()=>{
+  const {frameFindings,flatFrame}=await import('../../apps/project-service/src/edit-view');
+  const flat={mean:'#f4ecd8',grid:Array(9).fill('#f4ecd8')},drawn={mean:'#c8b48a',grid:['#f4ecd8','#30302c','#f4ecd8','#f4ecd8','#a03020','#f4ecd8','#f4ecd8','#f4ecd8','#f4ecd8']};
+  expect(flatFrame(flat)).toBe(true);expect(flatFrame(drawn)).toBe(false);
+  const found=frameFindings({labels:['4.2s','not drawn: plan-stroll (Scene plan-stroll: inputRange must be strictly monotonically increasing)','console plan-stroll: fade 18 28 5 13'],stats:flat});
+  expect(found.notDrawn?.[0]).toContain('inputRange must be strictly monotonically increasing');expect(found.console).toEqual(['plan-stroll: fade 18 28 5 13']);expect(found.flat).toMatch(/nothing is drawn/);
+  expect(frameFindings({labels:['1s'],stats:drawn})).toEqual({});
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

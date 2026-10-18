@@ -11,8 +11,9 @@ import {BrowserWindow,type NativeImage} from 'electron';
  * the picture it has. Before, every frame was captured and sent whole, about 75 ms each, identical or not. */
 export type SceneSource={url:string}|{html:string};
 /** paint names the picture; data is left out when it is the picture the caller already has (its since). */
-export type ScenePixels={width:number;height:number;paint:number;data?:Uint8Array};
-type Entry={window:BrowserWindow;loaded:Promise<void>;sequence:number;paints:Paints};
+/** logs: what the scene's code printed (console.log, warnings, errors) while this frame was drawn, for the agent. */
+export type ScenePixels={width:number;height:number;paint:number;data?:Uint8Array;logs?:string[]};
+type Entry={window:BrowserWindow;loaded:Promise<void>;sequence:number;paints:Paints;logs:string[]};
 const windows=new Map<string,Entry>();
 const FRAME_TIMEOUT_MS=60_000;
 // The windows draw at 240 frames a second (the most Chromium allows), so waiting for the next frame is about 4 ms.
@@ -39,11 +40,13 @@ function open(source:SceneSource,width:number,height:number):Entry{
  const window=new BrowserWindow({show:false,frame:false,transparent:true,backgroundColor:'#00000000',width,height,useContentSize:true,
   webPreferences:{offscreen:{deviceScaleFactor:1},sandbox:true,contextIsolation:true,nodeIntegration:false,webSecurity:true,backgroundThrottling:false}});
  window.webContents.setWindowOpenHandler(()=>({action:'deny'}));window.webContents.on('will-navigate',event=>event.preventDefault());
- const paints=new Paints();window.webContents.on('paint',(_event,_dirty,image)=>paints.add(image));
+ const paints=new Paints(),logs:string[]=[];window.webContents.on('paint',(_event,_dirty,image)=>paints.add(image));
+ // What the scene's code prints, so the agent can debug a scene the way a developer reads its console.
+ window.webContents.on('console-message',(...args:any[])=>{const details=args[0],message=String(details?.message??args[2]??'').trim(),level=String(details?.level??args[1]??'');if(!message)return;logs.push(((/warn|^2$/.test(level)?'warning: ':/error|^3$/.test(level)?'error: ':'')+message).slice(0,240));if(logs.length>200)logs.splice(0,logs.length-200);});
  window.webContents.setFrameRate(FRAME_RATE);
  const url='url' in source?source.url:'data:text/html;charset=utf-8;base64,'+Buffer.from(source.html,'utf8').toString('base64');
  const loaded=window.loadURL(url).then(()=>undefined);loaded.catch(()=>{});
- return{window,loaded,sequence:0,paints};
+ return{window,loaded,sequence:0,paints,logs};
 }
 
 /** The page script that asks a scene for one frame and settles when the scene has drawn it. The scene is the window's own
@@ -76,7 +79,7 @@ export function frameRequestScript(id:number,frame:number,fps:number,timeoutMs=F
  * the picture when it is since, the one the caller already has. */
 export async function sceneFrame(key:string,source:SceneSource,width:number,height:number,frame:number,fps:number,since?:number):Promise<ScenePixels>{
  let entry=windows.get(key);if(!entry||entry.window.isDestroyed()){entry=open(source,width,height);windows.set(key,entry);}
- await entry.loaded;const id=++entry.sequence,before=entry.paints.number;
+ await entry.loaded;const id=++entry.sequence,before=entry.paints.number,printed=entry.logs.length;
  const answer=await entry.window.webContents.executeJavaScript(frameRequestScript(id,frame,fps)) as {error?:string;changed?:boolean};
  if(answer?.error)throw new Error(answer.error);
  // A frame that changed the page is waited for until its paint lands (a big drawing can take well past a few frames to
@@ -85,10 +88,10 @@ export async function sceneFrame(key:string,source:SceneSource,width:number,heig
  // picture already painted.
  if(entry.paints.number===before)await entry.paints.next(answer?.changed!==false?CHANGED_WAIT_MS:SETTLE_MS);
  // Still no paint of this frame: a window's first picture, or one that never painted, is captured instead.
- const latest=entry.paints.latest,painted=entry.paints.number!==before;
- if(!latest||(!painted&&answer?.changed!==false&&since===undefined)){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:latest?.number??0,data:image.toBitmap()};}
+ const latest=entry.paints.latest,painted=entry.paints.number!==before,lines=entry.logs.slice(printed).slice(-8),logs=lines.length?{logs:lines}:{};
+ if(!latest||(!painted&&answer?.changed!==false&&since===undefined)){const image=await entry.window.webContents.capturePage(),size=image.getSize();return{width:size.width,height:size.height,paint:latest?.number??0,data:image.toBitmap(),...logs};}
  const size=latest.image.getSize();
- return latest.number===since?{width:size.width,height:size.height,paint:latest.number}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap()};
+ return latest.number===since?{width:size.width,height:size.height,paint:latest.number,...logs}:{width:size.width,height:size.height,paint:latest.number,data:latest.image.toBitmap(),...logs};
 }
 export function closeScenes(){for(const {window} of windows.values())if(!window.isDestroyed())window.destroy();windows.clear();}
 /** One small still of a scene for the timeline: drawn in its own hidden window, which is closed straight after, and

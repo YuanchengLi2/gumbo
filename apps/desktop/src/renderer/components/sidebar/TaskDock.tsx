@@ -9,7 +9,8 @@ import {modelName} from '../../models';
 
 const live=(status:string)=>['running','drafting','ready'].includes(status);
 const step=(e:PublicActivity)=>(e.kind==='action'||e.kind==='changes')&&e.tool!=='finish';
-const money=(usd:number)=>usd<.01?`$${usd.toFixed(3)}`:`$${usd.toFixed(2)}`;
+// What a request has cost, in the credits it is billed in (1 credit = 1 cent of AI cost), never in dollars.
+const money=(usd:number)=>{const n=Math.round(usd*100);return usd>0&&n<1?'<1 credit':`${n.toLocaleString()} ${n===1?'credit':'credits'}`;};
 const tokens=(n:number)=>n>=1e6?`${(n/1e6).toFixed(1)}M`:n>=1e3?`${Math.round(n/1e3)}K`:String(n);
 const seconds=(ms:number)=>{const s=Math.round(ms/1000);return s<60?`${s}s`:`${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`;};
 function Icon({status}:{status:string}){return status==='complete'?<Check size={14}/>:live(status)?<i className="spin"><LoaderCircle size={14}/></i>:status==='paused'?<Pause size={14}/>:['failed','interrupted'].includes(status)?<AlertCircle size={14}/>:<Circle size={14}/>;}
@@ -41,7 +42,7 @@ export function TaskDock({project}:{project:ProjectState}){
   <div className="task-window-main">
    <header><strong>Tasks{tasks.length?<small> {completed} of {tasks.length}</small>:null}</strong>{!!owners.length&&<span className="task-window-cost" title={owners.map(o=>`${o.label} · ${o.models}: ${o.calls} calls · ${tokens(o.tokens)} tokens · ${seconds(o.ms)} · ${money(o.cost)}`).join('\n')}>{money(cost)} · {owners.reduce((n,o)=>n+o.calls,0)} calls · {[...new Set(rows.map(r=>modelName(r.model)))].join(' + ')}</span>}</header>
    {tasks.length?<ol>{tasks.map(task=><li key={task.id} className={task.status}><Icon status={task.status}/><span>{task.title}</span><small>{task.status==='complete'?'Done':task.status==='running'?'In progress':task.status==='paused'?'Paused':task.status==='failed'?'Failed':'Pending'}</small></li>)}</ol>:<p className="task-window-empty">{working?'Working without a task list.':'No tasks.'}</p>}
-   {owners.length>1&&<ol className="task-window-usage" aria-label="Cost by helper">{owners.map(o=><li key={o.owner}><span>{o.label}<small> · {o.models}</small></span><small>{o.calls} calls · {money(o.cost)}</small></li>)}</ol>}
+   {owners.length>1&&<ol className="task-window-usage" aria-label="Cost by part">{owners.map(o=><li key={o.owner}><span>{o.label}<small> · {o.models}</small></span><small>{o.calls} calls · {money(o.cost)}</small></li>)}</ol>}
   </div>
   <div className="task-window-side">
    <header><strong>Latest activity</strong><span>{working?'Running · '+elapsed:steps.length?'Finished':'Nothing yet'}</span></header>

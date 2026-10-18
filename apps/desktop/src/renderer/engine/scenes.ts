@@ -69,7 +69,9 @@ export class SceneLayers{
  * a frame (the same frame asked twice, or a frame that paints nothing new) keeps the picture it had, so it is neither sent
  * nor uploaded again. */
 export class SceneCaptures{
- private last=new Map<string,{frame:number;paint:number;picture:RawPicture}>();private documents=new Map<string,Promise<string>>();
+ private last=new Map<string,{frame:number;paint:number;picture:RawPicture}>();private documents=new Map<string,Promise<string>>();private printed:string[]=[];
+ /** What scenes' code printed since the last call, as "scene: line". */
+ takeLogs(){const lines=this.printed;this.printed=[];return lines;}
  /** Frames asked for; drawn and sent; unchanged from the frame before; the same frame asked again. */
  readonly counts={asked:0,drawn:0,unchanged:0,repeated:0};
  async picture(layer:MediaLayer,asset:Asset){
@@ -79,6 +81,7 @@ export class SceneCaptures{
   if(asset.scene!.format==='engine')source={url:sceneUrl(asset)};
   else{let html=this.documents.get(asset.id);if(!html){html=legacyDocument(asset);this.documents.set(asset.id,html);}source={html:await html};}
   const pixels=await window.dream.sceneFrame({key,source,width:asset.width,height:asset.height,frame,fps:asset.fps||30,since:cached?.paint}).catch((error:Error)=>{throw new Error(`Scene ${asset.filename}: ${error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/,'')}`);});
+  if(pixels.logs?.length)this.printed.push(...pixels.logs.map((line:string)=>`${asset.filename}: ${line}`));
   if(!pixels.data){if(!cached)throw new Error(`Scene ${asset.filename}: its frame ${frame} came back empty.`);cached.frame=frame;this.counts.unchanged++;return cached.picture;}
   const picture:RawPicture={width:pixels.width,height:pixels.height,data:pixels.data,format:'bgra-premultiplied'};
   this.last.set(key,{frame,paint:pixels.paint,picture});this.counts.drawn++;return picture;
