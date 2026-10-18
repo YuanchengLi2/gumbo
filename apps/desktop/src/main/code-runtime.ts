@@ -71,13 +71,14 @@ export class CodeRuntime {
   // Every command runs through the host, in a job object with a memory cap: on the user's computer as the user (their
   // programs and files, the workspace's tools first on PATH), otherwise in the AppContainer.
   const hostRequest=local?{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[],environment:localEnvironment(environment),memoryLimitBytes:commandMemoryLimit(),local:true}:{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment,memoryLimitBytes:commandMemoryLimit()};
+  const started=Date.now();
   return await new Promise<ProcessResult>((ok,fail)=>{
    const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});let pending='',result:ProcessResult|undefined,error:Error|undefined;
    const cancel=()=>{if(child.stdin.writable)child.stdin.write('cancel\n');};controller.signal.addEventListener('abort',cancel,{once:true});
    child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify(hostRequest)+'\n');if(signal.aborted)cancel();
    child.stdout.on('data',chunk=>{pending+=chunk.toString();let newline:number;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);try{const data=JSON.parse(line);if(data.type==='output'){appendFileSync(logPath,data.text);onOutput(data.text);}if(data.type==='result')result={...data.result,logPath};if(data.type==='error')error=new Error(data.message);}catch(e){error=e as Error;cancel();}}});
    child.stderr.on('data',b=>appendFileSync(logPath,b));child.on('error',e=>{error=e;});
-   child.on('close',()=>{clearInterval(renderTimer);controller.abort();signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',cancel);this.owned.delete(controller);child.stdin.end();if(result)ok(result);else fail(error??new Error('Creation host ended without a process receipt. The last published video is unchanged.'));});
+   child.on('close',()=>{clearInterval(renderTimer);controller.abort();signal.removeEventListener('abort',stop);controller.signal.removeEventListener('abort',cancel);this.owned.delete(controller);child.stdin.end();if(result)ok(cancelReason(result,signal,started,request.timeoutMs));else fail(error??new Error('Creation host ended without a process receipt. The last published video is unchanged.'));});
   });
  }
  stop(){for(const controller of this.owned)controller.abort();}
@@ -89,4 +90,15 @@ function localEnvironment(sandbox:Record<string,string>){
  const {HOME:_home,USERPROFILE:_profile,APPDATA:_appData,LOCALAPPDATA:_localAppData,TEMP:_temp,TMP:_tmp,SystemRoot:_root,WINDIR:_windir,ComSpec:_comspec,...tools}=sandbox;
  const [shims]=sandbox.PATH.split(';').slice(-1),own=sandbox.PATH.split(';').slice(0,-1).join(';');
  const env:Record<string,string>={...user,...tools,PATH:[own,user.PATH??user.Path??'',shims].filter(Boolean).join(';')};delete env.Path;return env;
+}
+
+/** A cancelled command says why: the host reports "cancelled" with nothing more for both a stop and a time limit, so the
+ * agent (and a log) saw "Command cancelled: ." and could only guess. */
+export function cancelReason(result:ProcessResult,signal:AbortSignal,started:number,timeoutMs?:number):ProcessResult{
+ if(result.status!=='cancelled')return result;
+ const seconds=Math.round((Date.now()-started)/1000),reason=signal.reason instanceof Error?signal.reason.message:typeof signal.reason==='string'?signal.reason:'';
+ const why=signal.aborted?`Cancelled after ${seconds}s: ${reason||'the request was stopped'}.`
+  :timeoutMs&&Date.now()-started>=timeoutMs*.95?`Cancelled after ${seconds}s: it ran past its ${Math.round(timeoutMs/1000)}s time limit. Run it with a longer timeoutMs, in the background, or on less material.`
+  :`Cancelled after ${seconds}s by the command host (it gave no reason; it may have gone past the memory limit).`;
+ return{...result,output:(result.output?result.output.trimEnd()+'\n':'')+why};
 }

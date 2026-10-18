@@ -8,6 +8,7 @@ import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
+import {handleReport,supabaseReportPorts} from './reports.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
@@ -65,6 +66,8 @@ Deno.serve(async(req)=>{
   // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).
   if(action==='billing-checkout'||action==='billing-portal'){const config=stripeConfig(name=>Deno.env.get(name));if(!config)return json({error:'Paying is not set up on the gateway yet.'},503);
    try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config,fetch,body.flow==='cancel'?{cancel:true}:undefined):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
+  // Send log: one edit's log a user chose to send (reports.ts).
+  if(action==='report'){const result=await handleReport(body,user.id,supabaseReportPorts(db));return json(result.body,result.status);}
   if(action==='profile'){const result=await saveProfile(body,user.id,supabaseProfilePorts(db));return json(result.body,result.status);}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
   if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000))});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}

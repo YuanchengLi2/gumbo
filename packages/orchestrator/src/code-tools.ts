@@ -106,11 +106,23 @@ const looseInputs:Record<string,z.ZodTypeAny>={};
 // Only fields with a fixed set of choices are unwrapped, so file contents and prose keep their quote marks.
 const choices=(schema:any):boolean=>!!schema&&(Array.isArray(schema.enum)||(schema.anyOf??schema.oneOf??[]).some(choices));
 const unquote=(value:any,schema:any):any=>typeof value==='string'&&choices(schema)&&/^"[^"]*"$/.test(value)?value.slice(1,-1):Array.isArray(value)?value.map(item=>unquote(item,schema?.items)):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).map(([k,v])=>[k,unquote(v,schema?.properties?.[k])])):value;
+/** A number past a field's bounds is moved to the bound: a limit of 500 where 400 is the most reads 400 lines. Rejecting it
+ * cost the agent a call to send the same request again with a smaller number (two of the 69 calls of one edit). */
+const clampNumbers=(value:any,schema:any):any=>{
+ if(typeof value==='number'&&Number.isFinite(value)&&schema&&(schema.type==='number'||schema.type==='integer')){
+  let n=value;if(typeof schema.maximum==='number')n=Math.min(n,schema.maximum);if(typeof schema.exclusiveMaximum==='number'&&n>=schema.exclusiveMaximum)n=schema.type==='integer'?schema.exclusiveMaximum-1:n;
+  if(typeof schema.minimum==='number')n=Math.max(n,schema.minimum);if(typeof schema.exclusiveMinimum==='number'&&n<=schema.exclusiveMinimum)n=schema.type==='integer'?schema.exclusiveMinimum+1:n;
+  return schema.type==='integer'?Math.round(n):n;
+ }
+ if(Array.isArray(value))return value.map(item=>clampNumbers(item,schema?.items));
+ if(value&&typeof value==='object'&&schema?.properties)return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,clampNumbers(v,schema.properties[k])]));
+ return value;
+};
 /** Input problems as plain lines: the field, what is wrong, and the accepted values when there is a choice. */
 export function inputErrors(name:string,error:z.ZodError){return`The ${name} input is not valid: `+error.issues.slice(0,6).map(i=>`${i.path.join('.')||'input'}: ${(i as any).values?`must be one of ${(i as any).values.map((v:unknown)=>JSON.stringify(v)).join(', ')}`:i.message}`).join('; ')+'.';}
 export function parseCodeTool(name:string,input:unknown,readOnly=false,allowed?:Set<string>){
  if(!(name in codeSchemas)||(allowed?!allowed.has(name):readOnly&&(sideEffects.has(name as ToolName)||name==='delegate')))throw new Error('This capability is unavailable in the current phase.');
- const schema=codeSchemas[name as ToolName],json=z.toJSONSchema(schema,{target:'draft-7',io:'input'});const result=(looseInputs[name]??schema).safeParse(trimProse(normalizeOptionalNulls(unquote(input,json),json),json));if(!result.success)throw new Error(inputErrors(name,result.error));const parsed:any=result.data;
+ const schema=codeSchemas[name as ToolName],json=z.toJSONSchema(schema,{target:'draft-7',io:'input'});const result=(looseInputs[name]??schema).safeParse(clampNumbers(trimProse(normalizeOptionalNulls(unquote(input,json),json),json),json));if(!result.success)throw new Error(inputErrors(name,result.error));const parsed:any=result.data;
  const progress=!unlabeled.has(name)&&input&&typeof input==='object'?(input as any).progress:undefined;return progress==null?parsed:{...parsed,progress:z.string().trim().min(1).max(200).parse(progress)};
 }
 /** A delegate call is a task graph of helpers. Helpers never write project.json or the whole workspace, tasks that may run

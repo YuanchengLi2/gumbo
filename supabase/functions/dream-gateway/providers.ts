@@ -134,9 +134,11 @@ class Events{
  signature(key:string,value:string){if(value&&this.open?.kind==='tool'&&this.open.key===key)this.send('content_block_delta',{type:'content_block_delta',index:this.index,delta:{type:'signature_delta',signature:value}});}
  args(key:string,partial:string){if(partial&&this.open?.kind==='tool'&&this.open.key===key)this.send('content_block_delta',{type:'content_block_delta',index:this.index,delta:{type:'input_json_delta',partial_json:partial}});}
  isOpenTool(key:string){return this.open?.kind==='tool'&&this.open.key===key;}
- finish(stop:'end_turn'|'max_tokens'|'refusal'|'tool_use',usage:{input:number;cached:number;output:number}){
+ /** usage.reasoning: the output tokens the model spent thinking, which OpenAI, Gemini and DeepSeek report and Anthropic's
+  * shape has no field for; passed on as output_tokens_details.reasoning_tokens so logs show how much a call thought. */
+ finish(stop:'end_turn'|'max_tokens'|'refusal'|'tool_use',usage:{input:number;cached:number;output:number;reasoning?:number}){
   this.start();this.close();
-  this.send('message_delta',{type:'message_delta',delta:{stop_reason:this.tools&&stop==='end_turn'?'tool_use':stop,stop_sequence:null},usage:{input_tokens:Math.max(0,usage.input-usage.cached),cache_read_input_tokens:usage.cached,cache_creation_input_tokens:0,output_tokens:usage.output}});
+  this.send('message_delta',{type:'message_delta',delta:{stop_reason:this.tools&&stop==='end_turn'?'tool_use':stop,stop_sequence:null},usage:{input_tokens:Math.max(0,usage.input-usage.cached),cache_read_input_tokens:usage.cached,cache_creation_input_tokens:0,output_tokens:usage.output,...(usage.reasoning?{output_tokens_details:{reasoning_tokens:usage.reasoning}}:{})}});
   this.send('message_stop',{type:'message_stop'});
  }
  fail(message:string){this.send('error',{type:'error',error:{type:'provider_error',message}});}
@@ -168,7 +170,7 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
   try{
    if(!response.body)throw new Error('The provider sent no stream.');
    if(model.api==='chat'){
-    let stop:'end_turn'|'max_tokens'|'refusal'='end_turn',usage={input:0,cached:0,output:0};const toolIds=new Map<number,string>();let pending:string|undefined,lastTool:string|undefined;
+    let stop:'end_turn'|'max_tokens'|'refusal'='end_turn',usage:{input:number;cached:number;output:number;reasoning?:number}={input:0,cached:0,output:0};const toolIds=new Map<number,string>();let pending:string|undefined,lastTool:string|undefined;
     for await(const {data} of records(response.body)){
      if(data.error)throw new Error(data.error.message??'The provider reported an error.');out.start();
      const choice=data.choices?.[0],delta=choice?.delta??{};
@@ -183,7 +185,7 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
      if(choice?.finish_reason)stop=choice.finish_reason==='length'?'max_tokens':choice.finish_reason==='content_filter'?'refusal':'end_turn';
      // Gemini leaves its thinking out of completion_tokens (only total_tokens has it) but bills it as output, so output
      // is whichever is larger: the completion, or everything after the prompt.
-     if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:Math.max(u.completion_tokens??0,(u.total_tokens??0)-(u.prompt_tokens??0))};}
+     if(data.usage){const u=data.usage,cached=u.prompt_tokens_details?.cached_tokens??u.prompt_cache_hit_tokens??0;usage={input:u.prompt_tokens??0,cached,output:Math.max(u.completion_tokens??0,(u.total_tokens??0)-(u.prompt_tokens??0)),reasoning:u.completion_tokens_details?.reasoning_tokens??0};}
     }
     out.finish(stop,usage);
    }else{
@@ -196,7 +198,7 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
      else if(type==='response.function_call_arguments.done'&&!streamed.has(data.item_id))out.args(data.item_id,data.arguments??'');
      else if(type==='response.output_item.done'&&data.item?.type==='function_call'&&!streamed.has(data.item.id)&&out.isOpenTool(data.item.id)&&data.item.arguments){streamed.add(data.item.id);out.args(data.item.id,data.item.arguments);}
      else if(type==='response.completed'||type==='response.incomplete'){const r=data.response??{},u=r.usage??{};finished=true;
-      out.finish(r.incomplete_details?.reason==='max_output_tokens'?'max_tokens':r.incomplete_details?.reason==='content_filter'?'refusal':'end_turn',{input:u.input_tokens??0,cached:u.input_tokens_details?.cached_tokens??0,output:u.output_tokens??0});}
+      out.finish(r.incomplete_details?.reason==='max_output_tokens'?'max_tokens':r.incomplete_details?.reason==='content_filter'?'refusal':'end_turn',{input:u.input_tokens??0,cached:u.input_tokens_details?.cached_tokens??0,output:u.output_tokens??0,reasoning:u.output_tokens_details?.reasoning_tokens??0});}
      else if(type==='response.failed'||type==='error')throw new Error(data.response?.error?.message??data.error?.message??data.message??'The provider reported an error.');
     }
     if(!finished)throw new Error('The provider stream ended before the response finished.');

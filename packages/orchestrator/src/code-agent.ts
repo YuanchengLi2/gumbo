@@ -1,4 +1,6 @@
 import type {ProjectDB} from '@dream/project-db';
+import {unchangedRead} from './working-context';
+import {resumeMessage} from './resume-message';
 import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
 import {ranToEnd} from '@dream/contracts';
 import {engineBudgets} from '@dream/config';
@@ -149,7 +151,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  for(;;){
   signal.throwIfAborted();
   if(!checkpoint.pending){
-   if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:checkpoint.feedback.text});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;checkpoint.steps=0;checkpoint.spendStart=spent();save();}
+   if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:resumeMessage(checkpoint.feedback.text)});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;checkpoint.steps=0;checkpoint.spendStart=spent();save();}
    // Appended only when the state changes, so the cached conversation prefix stays intact. Only what changed is sent;
    // the full state is kept locally, so compaction can restore it when it drops the earlier messages it builds on.
    const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined}),paused=checkpoint.messages.at(-1)?.role==='assistant';if(mediaState&&mediaState!==checkpoint.mediaState&&!paused){
@@ -236,6 +238,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
       result={reports};
      }else if(call.name==='web_search'){if(!options.webSearch)throw new Error('Web search is unavailable in this phase.');result=await options.webSearch(input.query);}else if(call.name==='remember_decision'){result={memory:rememberDecision(db,input),saved:true};}else if(call.name==='set_project_title'){if(db.getMeta('project_title_source')!=='user'){db.rename(input.title);db.setMeta('project_title_source','ai');publish('state',db.state({bounded:true}));}result={title:db.meta.name,saved:true};}else if(call.name==='update_tasks'){db.setTasks(turnId,input.tasks);if(input.notes)db.setMeta(`task-notes:${turnId}:${phase}`,input.notes);publish('ai.tasks',{turnId,tasks:input.tasks});result={saved:true};}
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
+     // An unchanged guide read again comes back as a short receipt: its lines are already in the agent's context.
+     if(call.name==='read_file')result=unchangedRead(checkpoint.messages,input,result);
      if(result?.process&&!ranToEnd(result.process))throw new Error(`Command ${result.process.status==='failed'?'crashed':result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      for(const k of Object.keys(checkpoint.failures))if(k===operationKey||k.startsWith(operationKey+'#'))delete checkpoint.failures[k];if(checkpoint.coarse)for(const k of Object.keys(checkpoint.coarse))if(k===coarse||k.startsWith(coarse+'#'))delete checkpoint.coarse[k];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
     }catch(error){

@@ -903,3 +903,15 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .project-delete{height:32px;padding:0 14px;border-radius:8px;background:#d9534a;color:#fff;font-size:13px;font-weight:600}.project-delete:hover{background:#c4433a}
 
 .settings-panel:has(.settings-body.wide) .settings-panel-head{max-width:1040px}
+
+/* Send log: a quiet link under a finished request, and its dialog. */
+.turn-send-log{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:2px 0;font-size:11.5px;color:var(--n35);opacity:0;transition:opacity .15s,color .15s}
+.assistant-turn:hover .turn-send-log,.turn-send-log:focus-visible{opacity:1}.turn-send-log:hover{color:var(--n76)}
+.send-log-backdrop{position:fixed;inset:0;z-index:3001;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .45)}
+.send-log{position:relative;width:min(460px,100%);padding:24px 24px 20px;border:1px solid var(--n9);border-radius:16px;background:var(--chrome);color:var(--n87);box-shadow:0 24px 70px rgb(0 0 0 / .35)}
+.send-log h3{margin:0 28px 8px 0;font-size:16px;font-weight:600;color:var(--n100)}.send-log>p{margin:0 0 14px;font-size:13px;line-height:1.55;color:var(--n56)}
+.send-log textarea{width:100%;resize:vertical;padding:10px 12px;border:1px solid var(--n10);border-radius:10px;background:var(--n1);color:var(--n87);font:inherit;font-size:13px;outline:none}.send-log textarea:focus{border-color:var(--n35)}
+.send-log footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.send-log-error{margin:10px 0 0;font-size:12.5px;color:#d9534a}
+.send-log-done{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0 4px;text-align:center}.send-log-done>span{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgb(226 85 42 / .14);color:var(--paprika)}
+.send-log-done h3{margin:4px 0 0}.send-log-done p{margin:0 0 10px;font-size:13px;color:var(--n56)}.send-log-done b{color:var(--n100);font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}

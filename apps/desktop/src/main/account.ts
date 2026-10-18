@@ -46,6 +46,13 @@ export class Account {
   * are not asked again, and saved when someone finishes them. unavailable when the gateway is older than profiles. */
  async profile(answers?:unknown){if(!this.signedIn())return null;const auth={Authorization:`Bearer ${await this.token()}`};const response=await fetch(`${this.gateway()}/profile`,answers?{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:JSON.stringify(answers)}:{headers:auth});if(response.status===404||response.status===405)return{unavailable:true};const body=await response.json().catch(()=>({})) as any;if(!response.ok)throw new Error(body.error??'Your answers could not be saved.');return body;}
  async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number;flow?:string}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
+ /** Send log: one edit's log (turn-log.ts), what the user wrote about it, and the app's version, to the gateway; its
+  * reference comes back for the user to quote. */
+ async report(report:{turnId:string;note:string;appVersion:string;platform:string;log:unknown}){
+  if(!this.signedIn())throw new Error('Sign in to send a log.');
+  const response=await fetch(`${this.gateway()}/report`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(report)});
+  const body=await response.json().catch(()=>({})) as {reference?:string;error?:string};if(!response.ok)throw new Error(body.error??'The log could not be sent.');return{reference:String(body.reference)};
+ }
  signout(){this.generation++;this.clear();return {signedIn:false};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }

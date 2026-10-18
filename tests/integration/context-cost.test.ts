@@ -24,10 +24,10 @@ it('keeps the editing agent\'s fixed prefix small: the project and scene referen
  for(const heading of api.match(/^## .+$/gm)!)expect(projectReference.includes(heading)!==sceneReference.includes(heading)).toBe(true);
 });
 
-it('gives the model types and choices, not validation limits, which parsing still enforces',()=>{
+it('gives the model types and choices, not validation limits, which parsing still enforces (a number past its bounds is moved to the bound)',()=>{
  const tools=JSON.stringify(toolsFor('solo',{canDelegate:true}));
  expect(tools).not.toContain('maxLength');expect(tools).not.toContain('$schema');expect(tools).toContain('"enum"');
- expect(()=>parseCodeTool('list_files',{offset:-1})).toThrow('offset');expect(parseCodeTool('set_project_title',{title:'x'.repeat(200)}).title).toHaveLength(80);
+ expect(parseCodeTool('list_files',{offset:-1}).offset).toBe(0);expect(()=>parseCodeTool('list_files',{offset:'first'})).toThrow('offset');expect(parseCodeTool('set_project_title',{title:'x'.repeat(200)}).title).toHaveLength(80);
  expect(toolsFor('solo').find(t=>t.name==='view_media')!.input_schema.properties).toHaveProperty('detail');
 });
 

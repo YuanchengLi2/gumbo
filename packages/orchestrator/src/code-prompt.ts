@@ -32,7 +32,7 @@ You own the request: look at what you need, decide, edit, publish and check it y
 
 ${projectRules('Before writing or changing a scene, a score or a sound effect, read context/engine.md. ')}
 
-Before your first edit of project.json in a request, read context/project.md: the document's format, clips, framing, keyframes, timeline items, anchors, captions and built-in effects.
+Before your first edit of project.json in this edit, read context/project.md (once: it stays in your context, through summaries and after a stop and continue): the document's format, clips, framing, keyframes, timeline items, anchors, captions and built-in effects.
 
 ${updateRules}
 
