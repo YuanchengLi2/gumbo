@@ -13,7 +13,7 @@
 
 export const PLANS={
  free:{name:'Free',priceUsd:0,credits:100},
- pro:{name:'Pro',priceUsd:25,credits:1000},
+ pro:{name:'Pro',priceUsd:25,credits:1250},
  max:{name:'Max',priceUsd:100,credits:4500},
  max20:{name:'Max 20x',priceUsd:200,credits:18000}
 } as const;

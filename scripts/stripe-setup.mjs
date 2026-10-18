@@ -23,7 +23,7 @@ async function stripe(path,params,method=params?'POST':'GET'){
 }
 
 const items=[
- {id:'pro',name:'Gumbo Pro',lookup:'gumbo_pro_monthly',cents:2500,recurring:true,description:'1,000 credits a month for Gumbo AI'},
+ {id:'pro',name:'Gumbo Pro',lookup:'gumbo_pro_monthly',cents:2500,recurring:true,description:'1,250 credits a month for Gumbo AI'},
  {id:'max',name:'Gumbo Max',lookup:'gumbo_max_monthly',cents:10000,recurring:true,description:'4,500 credits a month for Gumbo AI'},
  {id:'max20',name:'Gumbo Max 20x',lookup:'gumbo_max20_monthly',cents:20000,recurring:true,description:'18,000 credits a month for Gumbo AI'},
  {id:'topup',name:'Gumbo credits',lookup:'gumbo_credits_500',cents:1000,recurring:false,description:'500 credits for Gumbo AI, which do not expire'}
