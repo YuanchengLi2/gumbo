@@ -14,7 +14,7 @@ import {renderVisual} from '../sandbox/manager';
 import {PlayerFrames} from './player-frames';
 import {BackgroundProjects,sameFolder} from './background-projects';
 import {handleInstallerEvent} from './lifecycle';
-import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme} from 'electron';import {join} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
+import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme} from 'electron';import {join,dirname} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
 import {Models} from './models';
 import {startCrashLog,logCrash} from './crash-log';
 import {beginBrowserSignIn} from './auth';
@@ -57,6 +57,25 @@ if(!installerLaunch&&!secondCopy)app.whenReady().then(async()=>{
   // The window controls take the colour of the page behind them, so the header reads as one strip.
   const background=typeof color==='string'&&/^#[0-9a-f]{6}$/i.test(color)?color:theme==='dark'?'#111112':'#ffffff';window.setBackgroundColor(background);if(process.platform==='win32')window.setTitleBarOverlay({color:background,symbolColor:theme==='dark'?'#e6e6e6':'#1a1a1a',height:28});saveBackground(background);reveal();});
  ipcMain.handle('dream:projects',event=>{trusted(event);return library.list();});
+ // The home screen's project menu. Deleting moves the folder to the Recycle Bin (so it can be restored) and only for
+ // projects Gumbo made in its Projects folder; a project kept elsewhere can only be removed from the list. The open project
+ // and one still editing out of sight are left alone.
+ ipcMain.handle('dream:projectAction',async(event,id:unknown,action:unknown)=>{trusted(event);
+  const entry=typeof id==='string'?library.find(id):undefined;if(!entry)throw new Error('That project is no longer on the list.');
+  const busy=(running&&currentState?.meta&&sameFolder(currentState.meta.folder,entry.folder))||background.ids().includes(entry.id);
+  const projects=join(process.env.DREAM_DOCUMENTS_DIRECTORY??app.getPath('documents'),'Dream','Projects');
+  if(action==='pin'||action==='unpin')library.mark(entry.id,{pinned:action==='pin'});
+  else if(action==='archive'||action==='unarchive'){if(busy&&action==='archive')throw new Error('Gumbo is still editing this project. Stop it first.');library.mark(entry.id,{archived:action==='archive'});}
+  else if(action==='forget'){if(busy)throw new Error('Gumbo is still editing this project. Stop it first.');library.mark(entry.id,'forget');}
+  else if(action==='reveal'){if(!existsSync(entry.folder))throw new Error("This project's folder is missing.");shell.showItemInFolder(join(entry.folder,'Project.dreamproj'));}
+  else if(action==='trash'){
+   if(busy)throw new Error('Gumbo is still editing this project. Stop it first.');
+   if(currentState?.meta&&sameFolder(currentState.meta.folder,entry.folder))throw new Error('Close this project before deleting it.');
+   if(!sameFolder(dirname(entry.folder),projects))throw new Error("This project is kept in your own folder, so Gumbo won't delete it. Remove it from the list instead.");
+   if(existsSync(entry.folder))await shell.trashItem(entry.folder);library.mark(entry.id,'forget');
+  }
+  else throw new Error('Unknown project action.');
+  return library.list();});
  ipcMain.handle('dream:createProject',async(event,raw)=>{trusted(event);const request=InitialRequestSchema.parse(raw);request.paths.forEach(path=>access.assert(path));const location=library.allocate(request);access.project(location.folder);if(currentState?.meta.folder===location.folder)return currentState;await switchProject();const state=await service.command({type:'create',...location,initialRequest:request});currentState=state;library.update(state);return state;});
  ipcMain.handle('dream:fileGrants',event=>{trusted(event);return access.list();});
  ipcMain.handle('dream:grantComputer',event=>{trusted(event);return access.grant('computer',undefined,true);});

@@ -1,11 +1,13 @@
 import React from 'react';
-import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2} from 'lucide-react';
+import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2,Pin,ChevronRight} from 'lucide-react';
+import {ProjectMenu,type MenuAt} from './ProjectMenu';
 import {useWorking} from '../../working';
-import type {ProjectSummary} from '@dream/contracts';
+import type {ProjectSummary,ProjectAction} from '@dream/contracts';
 import {ChatComposer,type Attachment} from '../chat/ChatComposer';
 import {useEditor} from '../../store/editor';
 import {ProfileMenu} from '../settings/SettingsMenu';
 import {SidebarUpgrade} from '../billing/Upgrade';
+import {useBilling,billingReady} from '../../billing';
 
 /** The Gumbo mark, as on usegumbo.app: a paprika bowl with a play button in it and steam rising. The steam takes the text
  * colour, so the mark reads on light and dark; the bowl is the app's one brand colour. */
@@ -27,22 +29,36 @@ const ideas:[typeof Film,string,string][]=[
 /** Home, laid out like Claude's: a sidebar with the mark, a new video, opening a project and the recent ones, and you at its
  * foot (the profile menu, which holds Settings); beside it one big box to start an edit, quick ideas, and the projects as
  * pictures. The top strip of both is the window's drag area, and the window's own controls sit on the main side. */
-export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;busy:boolean}){
- const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model),working=useWorking();
+export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;onProjectAction:(project:ProjectSummary,action:ProjectAction)=>Promise<void>;busy:boolean}){
+ const permission=useEditor(s=>s.permission),model=useEditor(s=>s.model),working=useWorking(),billing=useBilling(),plan=billingReady(billing)&&billing.plan!=='free'?billing.planName:'';
+ // The sidebar's width is the user's: dragged at its edge, kept on this computer.
+ const [side,setSide]=React.useState(()=>{try{return Math.min(420,Math.max(200,Number(localStorage.getItem('gumbo-sidebar-width'))||240));}catch{return 240;}});
+ const resize=(e:React.PointerEvent)=>{e.preventDefault();const startX=e.clientX,start=side;let last=start;
+  const move=(m:PointerEvent)=>{last=Math.min(420,Math.max(200,start+m.clientX-startX));setSide(last);};
+  const up=()=>{window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);document.body.classList.remove('resizing-side');try{localStorage.setItem('gumbo-sidebar-width',String(last));}catch{}};
+  document.body.classList.add('resizing-side');window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);};
+ // Right-click a project for its menu; pinned ones lead the sidebar, archived ones wait under Archived.
+ const [menu,setMenu]=React.useState<MenuAt|null>(null),[showArchived,setShowArchived]=React.useState(false);
+ const options=(project:ProjectSummary)=>(e:React.MouseEvent)=>{e.preventDefault();setMenu({project,x:e.clientX,y:e.clientY});};
+ const live=p.projects.filter(x=>!x.archived),pinned=live.filter(x=>x.pinned),recent=live.filter(x=>!x.pinned),archived=p.projects.filter(x=>x.archived);
+ const item=(project:ProjectSummary)=><button type="button" key={project.id} className={(project.missing?'missing ':'')+(menu?.project.id===project.id?'menu-open':'')} title={project.name} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}><span>{project.name}</span>{working.has(project.id)&&<Loader2 size={13} className="spin" aria-label="Gumbo is editing"/>}</button>;
  // A new video starts in the box: it is cleared and focused.
  const newVideo=()=>{p.onChange('');requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.fig-home .home-composer textarea')?.focus());};
- return <div className="home-screen fig-home">
+ return <div className="home-screen fig-home" style={{'--side-width':`${side}px`} as React.CSSProperties}>
   <aside className="home-side" aria-label="Gumbo">
-   <div className="home-brand"><GumboMark/><span>Gumbo</span></div>
+   <div className="home-brand"><GumboMark/><span>Gumbo</span>{plan&&<span className="home-brand-plan">{plan}</span>}</div>
    <nav className="home-nav">
     <button type="button" className="home-new" onClick={newVideo}><Plus size={16}/>New video</button>
     <button type="button" onClick={()=>p.onOpen()}><FolderOpen size={16}/>Open project</button>
    </nav>
-   {p.projects.length>0&&<section className="home-recents" aria-label="Recent projects"><h2>Recent</h2>
-    {p.projects.slice(0,30).map(project=><button type="button" key={project.id} className={project.missing?'missing':undefined} title={project.name} onClick={()=>p.onOpen(project.folder)}><span>{project.name}</span>{working.has(project.id)&&<Loader2 size={13} className="spin" aria-label="Gumbo is editing"/>}</button>)}
-   </section>}
+   <div className="home-lists">
+    {pinned.length>0&&<section className="home-recents" aria-label="Pinned projects"><h2><Pin size={11}/>Pinned</h2>{pinned.map(item)}</section>}
+    {recent.length>0&&<section className="home-recents" aria-label="Recent projects"><h2>Recent</h2>{recent.slice(0,30).map(item)}</section>}
+    {archived.length>0&&<section className="home-recents archived" aria-label="Archived projects"><button type="button" className="home-archived-toggle" aria-expanded={showArchived} onClick={()=>setShowArchived(v=>!v)}><ChevronRight size={12}/>Archived<small>{archived.length}</small></button>{showArchived&&archived.map(item)}</section>}
+   </div>
    <SidebarUpgrade/>
    <footer className="home-side-foot"><ProfileMenu up label/></footer>
+   <div className="home-side-resize" role="separator" aria-orientation="vertical" aria-label="Resize the sidebar" onPointerDown={resize} onDoubleClick={()=>{setSide(240);try{localStorage.setItem('gumbo-sidebar-width','240');}catch{}}}/>
   </aside>
   <main className="fig-home-main">
    <div className="home-drag" aria-hidden="true"/>
@@ -52,12 +68,13 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
     <div className="fig-ideas">{ideas.map(([Icon,label,prompt])=><button key={label} onClick={()=>p.onChange(prompt)}><Icon size={14}/>{label}</button>)}</div>
    </section>
    <section className="fig-recent" aria-label="Your projects">
-    <header><h2>Your projects</h2>{p.projects.length>0&&<span>{p.projects.length}</span>}</header>
-    {p.projects.length?<div className="fig-project-grid">{p.projects.map(project=><button className={'project-card'+(project.missing?' missing':'')} key={project.id} onClick={()=>p.onOpen(project.folder)}>
-     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}{working.has(project.id)&&<span className="project-working"><Loader2 size={12} className="spin"/>Editing</span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
+    <header><h2>Your projects</h2>{live.length>0&&<span>{live.length}</span>}</header>
+    {live.length?<div className="fig-project-grid">{[...pinned,...recent].map(project=><button className={'project-card'+(project.missing?' missing':'')} key={project.id} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}>
+     <div className="project-cover">{project.thumbnail?<img src={project.thumbnail} alt=""/>:<div className="project-cover-empty"><Film size={24}/></div>}{project.durationSec>0&&<span className="duration-badge">{time(project.durationSec)}</span>}{working.has(project.id)&&<span className="project-working"><Loader2 size={12} className="spin"/>Editing</span>}{project.pinned&&!working.has(project.id)&&<span className="project-pin" title="Pinned"><Pin size={11}/></span>}<i className="project-open"><ArrowUpRight size={15}/></i></div>
      <strong>{project.name}</strong><small>{updated(project)}</small>
     </button>)}</div>:<div className="fig-empty"><GumboMark/><div><strong>Your first edit starts above.</strong><p>Add your clips, say what you want, and Gumbo cuts it on a real timeline. Projects are saved here automatically.</p></div></div>}
    </section>
   </main>
+  <ProjectMenu at={menu} onClose={()=>setMenu(null)} onOpen={project=>p.onOpen(project.folder)} onAction={p.onProjectAction}/>
  </div>;
 }

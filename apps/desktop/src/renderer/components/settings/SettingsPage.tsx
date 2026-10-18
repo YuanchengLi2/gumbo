@@ -111,7 +111,7 @@ export function SettingsPage(p:{onClose:()=>void;initial?:SettingsSection}){
   <div className="settings-panel" ref={panel}>
    <header className="settings-panel-head"><h1>{title}</h1><button type="button" className="settings-close" aria-label="Close settings" title="Close (Esc)" onClick={p.onClose}><X size={18}/></button></header>
    {error&&<p className="settings-error" role="alert">{error}</p>}
-   <div className="settings-body">
+   <div className={'settings-body'+(section==='plan'?' wide':'')}>
     {section==='profile'&&(settings?<Profile settings={settings} save={save}/>:<Row label="Loading…"/>)}
     {section==='appearance'&&<Row label="Theme" help="System follows your computer's light or dark mode."><div className="settings-segments" role="radiogroup" aria-label="Theme">{themes.map(([id,label,Icon])=><button key={id} type="button" role="radio" aria-checked={choice===id} className={choice===id?'selected':''} onClick={()=>setThemeChoice(id)}><Icon size={14}/>{label}</button>)}</div></Row>}
     {section==='account'&&<Account/>}

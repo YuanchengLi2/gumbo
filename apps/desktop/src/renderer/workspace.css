@@ -310,8 +310,8 @@
 /* Home: a sidebar (the mark, New video, Open project, the recent projects, you at the foot) and beside it a headline, one
    big box to start an edit, quick ideas and the projects as pictures. Black and white like the rest of the app; paprika
    only where Gumbo itself is (the mark, sending, your circle). The window's controls sit on the main side's top strip. */
-.fig-home{--side-text:var(--n87);--side-muted:var(--n46);--side-faint:var(--n32);--side-line:var(--n8);--side-hover:var(--n5);--side-accent:var(--accent);display:grid;grid-template-columns:240px minmax(0,1fr);height:100%;overflow:hidden;background:var(--chrome);color:var(--n87);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
-.home-side{display:flex;flex-direction:column;min-height:0;padding:12px 10px 10px;border-right:1px solid var(--n7);background:var(--n2)}
+.fig-home{--side-text:var(--n87);--side-muted:var(--n46);--side-faint:var(--n32);--side-line:var(--n8);--side-hover:var(--n5);--side-accent:var(--accent);display:grid;grid-template-columns:var(--side-width,240px) minmax(0,1fr);height:100%;overflow:hidden;background:var(--chrome);color:var(--n87);font-family:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif}
+.home-side{position:relative;display:flex;flex-direction:column;min-height:0;padding:12px 10px 10px;border-right:1px solid var(--n7);background:var(--n2)}
 .home-brand{display:flex;align-items:center;gap:9px;height:40px;padding:0 8px 2px;font:600 19px/1 "Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;letter-spacing:-.4px;color:var(--n100);-webkit-app-region:drag}
 .home-brand .gumbo-mark{width:28px;height:28px}
 .home-nav{display:flex;flex-direction:column;gap:1px;margin-top:12px}
@@ -319,7 +319,7 @@
 .home-nav button svg{flex:none;color:var(--n56)}
 .home-nav button:hover,.home-recents button:hover{background:var(--n6);color:var(--n100)}
 .home-nav .home-new{color:var(--n100);font-weight:500}.home-nav .home-new svg{color:var(--n100)}
-.home-recents{flex:1;min-height:0;overflow:auto;margin-top:18px;scrollbar-width:thin}
+.home-lists{flex:1;min-height:0;overflow:auto;margin-top:6px}.home-recents{margin-top:14px}
 .home-recents h2{margin:0 10px 4px;font-size:11.5px;font-weight:500;color:var(--n40)}
 .home-recents button{display:block;height:31px;line-height:31px;font-size:13px;color:var(--n65);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .home-recents button.missing{opacity:.5}
@@ -880,3 +880,42 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 @keyframes agent-click{0%{opacity:.9;transform:scale(.4)}100%{opacity:0;transform:scale(1.8)}}
 .agent-cursor>span{white-space:nowrap;animation:agent-label .25s ease-out .38s both}
 @keyframes agent-label{from{opacity:0;transform:translateY(-3px)}}
+
+/* The home sidebar: its plan beside the name, and an edge to drag it wider or narrower (double-click resets it). */
+.home-brand-plan{margin-left:-3px;font-weight:400;color:var(--paprika)}
+.home-side-resize{position:absolute;top:0;right:-4px;z-index:6;width:8px;height:100%;cursor:col-resize;-webkit-app-region:no-drag}
+.home-side-resize::after{content:'';position:absolute;top:0;bottom:0;left:3px;width:2px;background:transparent;transition:background .15s}
+.home-side-resize:hover::after,.resizing-side .home-side-resize::after{background:var(--n25)}
+.resizing-side{cursor:col-resize;user-select:none}
+
+/* Plan: room for bigger plan cards. */
+.settings-body.wide{max-width:1040px}
+.settings-body.wide .plan-grid{gap:14px}
+.settings-body.wide .plan-option{gap:6px;padding:24px 22px 22px;border-radius:18px;min-height:330px}
+.settings-body.wide .plan-option-head strong{font-size:18px}
+.settings-body.wide .plan-badge{font-size:11.5px;padding:3px 9px}
+.settings-body.wide .plan-option>small{font-size:13.5px}
+.settings-body.wide .plan-option-price{margin:18px 0 14px;font-size:34px;letter-spacing:-.8px}.settings-body.wide .plan-option-price span{font-size:14px}
+.settings-body.wide .plan-option ul{gap:10px;margin-bottom:22px;font-size:14px}
+.settings-body.wide .plan-option>button,.settings-body.wide .plan-option-current{height:42px;font-size:14px}
+.settings-body.wide .plan-current h3{font-size:36px}
+
+/* Projects: pinned first, archived tucked away, and a menu on right-click. */
+.home-recents h2{display:flex;align-items:center;gap:5px}
+.home-recents button.menu-open{background:var(--n6);color:var(--n100)}
+.home-archived-toggle{display:flex!important;align-items:center;gap:5px;height:28px!important;font-size:11.5px!important;color:var(--n40)!important}
+.home-archived-toggle svg{transition:transform .15s}.home-archived-toggle[aria-expanded=true] svg{transform:rotate(90deg)}.home-archived-toggle small{margin-left:4px;color:var(--n32)}
+.home-recents.archived>button:not(.home-archived-toggle){color:var(--n46)}
+.fig-home .project-pin{position:absolute;left:7px;top:7px;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;background:rgb(0 0 0 / .6);color:#fff}
+.project-menu{position:fixed;z-index:3000;min-width:200px;padding:5px;border:1px solid var(--n9);border-radius:11px;background:var(--n0);box-shadow:0 14px 40px rgb(0 0 0 / .28);color:var(--n87)}
+.project-menu button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 10px;border-radius:7px;font-size:13px;text-align:left}
+.project-menu button svg{color:var(--n56)}.project-menu button:hover:not(:disabled){background:var(--n5)}.project-menu button:disabled{opacity:.4}
+.project-menu button.danger,.project-menu button.danger svg{color:#d9534a}
+.project-menu hr{margin:4px 6px;border:0;border-top:1px solid var(--n7)}
+.project-confirm-backdrop{position:fixed;inset:0;z-index:3001;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .45)}
+.project-confirm{position:relative;width:min(420px,100%);padding:24px 24px 20px;border:1px solid var(--n9);border-radius:16px;background:var(--chrome);color:var(--n87);box-shadow:0 24px 70px rgb(0 0 0 / .35)}
+.project-confirm h3{margin:0 28px 8px 0;font-size:16px;font-weight:600;color:var(--n100)}.project-confirm p{margin:0;font-size:13px;line-height:1.55;color:var(--n56)}
+.project-confirm footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.project-delete{height:32px;padding:0 14px;border-radius:8px;background:#d9534a;color:#fff;font-size:13px;font-weight:600}.project-delete:hover{background:#c4433a}
+
+.settings-panel:has(.settings-body.wide) .settings-panel-head{max-width:1040px}

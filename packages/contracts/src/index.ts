@@ -53,6 +53,7 @@ export type RuntimeStatus={ffmpeg:boolean;ffprobe:boolean;python:boolean;whisper
 export interface DreamDesktop {
  setTheme(theme:'light'|'dark',color?:string,choice?:'light'|'dark'|'system'):Promise<void>;
  projects():Promise<ProjectSummary[]>;
+ /** Pins, archives, removes from the list, reveals, or deletes (to the Recycle Bin) a project; returns the new list. */ projectAction(id:string,action:import('./files').ProjectAction):Promise<ProjectSummary[]>;
  createProject(request:InitialRequest):Promise<ProjectState>;
  fileGrants():Promise<FileGrant[]>;
  grantComputer():Promise<FileGrant>;
