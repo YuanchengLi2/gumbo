@@ -31,8 +31,8 @@ test('Gumbo AI asks to sign in in the browser, then carries on with the request'
   await expect(dialog).toHaveCount(0);
   await expect.poll(()=>page.evaluate(async()=>(await window.dream.command<any>({type:'account',action:'get'})).signedIn)).toBe(true);
   await expect(page.getByLabel('Ask Gumbo to edit')).toBeVisible({timeout:60000});
-  // Settings shows the account; signing out brings sign-in back for the next request.
-  await page.getByRole('button',{name:'Settings'}).first().click();const settings=page.getByRole('dialog',{name:'Settings'});
+  // Settings (from the profile menu) shows the account; signing out brings sign-in back for the next request.
+  await page.getByRole('button',{name:'Profile',exact:true}).click();await page.getByRole('menuitem',{name:'Settings'}).click();const settings=page.getByRole('dialog',{name:'Settings'});
   await settings.getByRole('navigation',{name:'Settings sections'}).getByRole('button',{name:'Account'}).click();
   await expect(settings).toContainText('local-fixture@example.invalid');
   await settings.getByRole('button',{name:'Sign out'}).click();await expect(settings.getByRole('button',{name:'Sign in'})).toBeVisible();
