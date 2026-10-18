@@ -12,7 +12,7 @@
  * changed keeps its old id in STRIPE_PRICES_OLD ("pro=price_...,max=price_..."), so subscriptions still on it stay that plan. */
 
 export const PLANS={
- free:{name:'Free',priceUsd:0,credits:100},
+ free:{name:'Free',priceUsd:0,credits:50},
  pro:{name:'Pro',priceUsd:25,credits:1250},
  max:{name:'Max',priceUsd:100,credits:4500},
  max20:{name:'Max 20x',priceUsd:200,credits:18000}

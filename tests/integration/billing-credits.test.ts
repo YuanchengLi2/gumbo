@@ -16,18 +16,18 @@ const grant=(user:string,kind:string,plan:string|null,credits:number,source:stri
 describe('credits',()=>{
  it('gives a free account its month on its first request, and each request takes its cost in cents',async()=>{
   const user=await account();expect(await balance(user)).toBe(0);
-  const usage=await reserve(user);expect(await balance(user)).toBe(100);
-  await finish(usage,0.3);expect(await balance(user)).toBe(70);
+  const usage=await reserve(user);expect(await balance(user)).toBe(50);
+  await finish(usage,0.3);expect(await balance(user)).toBe(20);
   const {rows}=await db.query<{credits:string}>('select credits from dream_usage where id=$1',[usage]);expect(Number(rows[0].credits)).toBe(30);
   // The month is granted once: another request does not add to it.
-  await finish(await reserve(user),0);expect(await balance(user)).toBe(70);
+  await finish(await reserve(user),0);expect(await balance(user)).toBe(20);
  });
  it('lets the last request run over, then refuses until a top-up pays the overdraft',async()=>{
-  const user=await account();await finish(await reserve(user),1.2);expect(await balance(user)).toBe(-20);
+  const user=await account();await finish(await reserve(user),1.2);expect(await balance(user)).toBe(-70);
   await expect(reserve(user)).rejects.toThrow(/used all your credits/);
-  expect(await grant(user,'topup',null,500,'cs_test_'+user)).toBe(true);expect(await balance(user)).toBe(480);
+  expect(await grant(user,'topup',null,500,'cs_test_'+user)).toBe(true);expect(await balance(user)).toBe(430);
   // Stripe may send the same event twice: the second grant is refused.
-  expect(await grant(user,'topup',null,500,'cs_test_'+user)).toBe(false);expect(await balance(user)).toBe(480);
+  expect(await grant(user,'topup',null,500,'cs_test_'+user)).toBe(false);expect(await balance(user)).toBe(430);
   await expect(reserve(user)).resolves.toBeTruthy();
  });
  it('spends the plan before top-ups, and a new plan period replaces the last one',async()=>{
@@ -41,8 +41,8 @@ describe('credits',()=>{
   expect(await left('plan')).toBe(900);expect(await balance(user)).toBe(1400);
  });
  it('gives credits back when a recorded cost goes down',async()=>{
-  const user=await account();const usage=await reserve(user);await finish(usage,0.5);expect(await balance(user)).toBe(50);
-  await finish(usage,0.1);expect(await balance(user)).toBe(90);
+  const user=await account();const usage=await reserve(user);await finish(usage,0.5);expect(await balance(user)).toBe(0);
+  await finish(usage,0.1);expect(await balance(user)).toBe(40);
  });
  it('gives no free credits to a paid account or a guest',async()=>{
   const paid=await account();await db.query("update dream_accounts set plan='max' where id=$1",[paid]);

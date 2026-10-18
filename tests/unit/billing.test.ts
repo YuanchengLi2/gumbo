@@ -21,7 +21,9 @@ const sign=(payload:string,secret:string,t=Math.floor(Date.now()/1000))=>`t=${t}
 
 describe('billing',()=>{
  it('keeps the free plan\'s credits the same in the gateway and the database',()=>{
-  expect(readFileSync('supabase/migrations/202610170003_billing.sql','utf8')).toContain(`select ${PLANS.free.credits}::numeric`);
+  // The migration that last defines the free credits is the one the database runs.
+  const {readdirSync}=require('node:fs') as typeof import('node:fs'),latest=readdirSync('supabase/migrations').filter(f=>f.endsWith('.sql')).sort().map(f=>readFileSync('supabase/migrations/'+f,'utf8')).filter(sql=>sql.includes('function public.dream_free_credits()')).at(-1);
+  expect(latest).toContain(`select ${PLANS.free.credits}::numeric`);expect(PLANS.free.credits).toBe(50);
   expect([PLANS.pro.priceUsd,PLANS.max.priceUsd,PLANS.max20.priceUsd,PLANS.pro.credits,PLANS.max.credits,PLANS.max20.credits,TOPUP.credits,TOPUP.priceUsd]).toEqual([25,100,200,1250,4500,18000,500,10]);
  });
  it('encodes Stripe\'s nested form fields',()=>{
