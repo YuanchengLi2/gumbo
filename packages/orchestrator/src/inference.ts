@@ -125,8 +125,16 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
  // Haiku is never sent more than its hard input ceiling, which keeps it out of the long-context price tier.
  if(haiku&&!saved?.response){const total=calibrated(budget.estimated)??budget.estimated;if(total>HAIKU_HARD){const ratio=Buffer.byteLength(JSON.stringify(budget.messages))/Math.max(1,total);if(shrinkResults(budget.messages,Math.ceil((total-HAIKU_HARD*.9)*ratio))>0){session=providerSession(db,config,{...input,messages:budget.messages});wireInput={...input,max_tokens:initialCapacity,messages:session.messages};fingerprint=fingerprintOf(wireInput);key='inference:'+fingerprint;}}}
  // After compaction the provider can no longer derive the task budget already spent, so the remainder is sent explicitly.
- const spendKey=`task-spend:${input.turnId??'standalone'}:${scopeName}`;
- if(input.taskBudget&&JSON.stringify(budget.messages).includes('Older tool exchanges were compacted.')){const remaining=Math.max(0,input.taskBudget.total-Number(db.getMeta(spendKey)??0));wireInput={...wireInput,taskBudget:{total:input.taskBudget.total,remaining}};fingerprint=fingerprintOf(wireInput);key='inference:'+fingerprint;}
+ // It is the budget left where the compacted conversation starts (the provider counts what follows itself), so it is set
+ // once per compaction and kept until the next one: task_budget sits in output_config, and changing it resets the
+ // provider's message cache. On October 18 an Opus run sent a new remainder each call after a compaction and every
+ // call re-wrote its whole conversation to the cache (9-14k tokens, 5-7 cents a call) instead of reading it.
+ const spendKey=`task-spend:${input.turnId??'standalone'}:${scopeName}`,digest=budget.messages.find((m:any)=>typeof m?.content==='string'&&m.content.includes('Older tool exchanges were compacted.'));
+ if(input.taskBudget&&digest){
+  const remainingKey=`task-remaining:${input.turnId??'standalone'}:${scopeName}:${createHash('sha256').update(digest.content).digest('hex')}`,frozen=db.getMeta(remainingKey);
+  const remaining=frozen?Number(frozen):Math.max(0,input.taskBudget.total-Number(db.getMeta(spendKey)??0));if(!frozen)db.setMeta(remainingKey,String(remaining));
+  wireInput={...wireInput,taskBudget:{total:input.taskBudget.total,remaining}};fingerprint=fingerprintOf(wireInput);key='inference:'+fingerprint;
+ }
  assertToolExchanges(wireInput.messages);
  let receipt:Receipt=db.loadState<Receipt>(key)??{id:randomUUID(),resume,attempt:0,capacity:initialCapacity,transientRetries:0,status:'prepared'};
  const cancelRemote=async(id=receipt.id)=>{if(signal?.reason?.dreamStop==='shutdown')return;await request(config.url+'/ai-cancel',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token},body:JSON.stringify({requestId:id}),signal:AbortSignal.timeout(5000)}).catch(()=>{});};
