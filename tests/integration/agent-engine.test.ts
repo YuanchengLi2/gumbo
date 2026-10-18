@@ -235,3 +235,17 @@ it('plans with Opus and, when the user says "do it", runs the approved plan as o
   expect(db.state().messages.some(m=>m.role==='user'&&m.text==='do it')).toBe(true);
  }finally{db.close();}
 });
+
+it('pauses a request once a stretch of it has cost the spending limit, and continues from the saved state for another stretch',async()=>{
+ const db=fixture();try{
+  const base={db,turnId:'spend',model:models.agent,text:'Edit the opening',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({files:[]})}};
+  // Each call costs 2 cents, as recorded for the request: the limit ($0.50) is reached after 25 calls.
+  let calls=0;const infer=async()=>{calls++;db.recordUsage({requestId:'r'+calls,turnId:'spend',model:models.agent,purpose:'execution',costUsd:.02,usage:{input_tokens:1000,output_tokens:10}});return toolUse('read'+calls,'list_files',{path:'.'});};
+  const first=await codeAgent({...base,phase:'main',infer});
+  expect(first.outcome.status).toBe('blocked');expect(first.outcome.summary).toContain('Paused after about 50 credits');expect(calls).toBe(25);
+  // Saying continue resumes the request: a new stretch, from where it stopped.
+  db.setMeta('resume_count:spend','1');
+  const second=await codeAgent({...base,phase:'main',infer});
+  expect(second.outcome.summary).toContain('Paused after about 50 credits');expect(calls).toBe(50);
+ }finally{db.close();}
+});
