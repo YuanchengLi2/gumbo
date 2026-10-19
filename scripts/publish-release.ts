@@ -1,0 +1,36 @@
+/** Publishes the Windows build from `pnpm make` as a GitHub release of YuanchengLi2/gumbo-releases, the public repo the
+ * installed app updates from (apps/desktop/src/main/updates.ts reads .../releases/latest/download). It uploads Squirrel's
+ * RELEASES list, the full package (and a delta when the build made one) and the installer as Gumbo-Setup.exe, so the
+ * download link https://github.com/YuanchengLi2/gumbo-releases/releases/latest/download/Gumbo-Setup.exe always serves the
+ * newest version. Without --yes it only checks the build and says what it would publish.
+ *
+ *   pnpm exec tsx scripts/publish-release.ts [--notes "What changed"] [--yes]
+ *
+ * Every release needs a higher version in apps/desktop/package.json than the one before: installed apps only take newer.
+ */
+import {readFileSync,existsSync,readdirSync,copyFileSync,mkdtempSync,statSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {execFileSync} from 'node:child_process';
+
+const repo='YuanchengLi2/gumbo-releases',feed=`https://github.com/${repo}/releases/latest/download`;
+const args=process.argv.slice(2),publish=args.includes('--yes'),notesAt=args.indexOf('--notes'),notes=notesAt>=0?args[notesAt+1]??'':'';
+const version=JSON.parse(readFileSync('apps/desktop/package.json','utf8')).version as string;
+const made='apps/desktop/out/make/squirrel.windows/x64',packaged='apps/desktop/out/Dream-win32-x64/resources/staged/cloud.json';
+const fail=(message:string)=>{console.error(message);process.exit(1);};
+
+// The build must be this version, and must know where to update from, or the people who install it are stuck on it.
+const setup=join(made,`Dream-${version} Setup.exe`),full=join(made,`Dream-${version}-full.nupkg`),list=join(made,'RELEASES');
+for(const file of [setup,full,list])if(!existsSync(file))fail(`Missing ${file}. Run pnpm make for version ${version} first.`);
+if(!readFileSync(list,'utf8').includes(`Dream-${version}-full.nupkg`))fail(`RELEASES does not list version ${version}.`);
+const cloud=existsSync(packaged)?JSON.parse(readFileSync(packaged,'utf8')):{};
+if(cloud.updates!==feed)fail(`The packaged app updates from ${cloud.updates??'nowhere'}, not ${feed}. Set DREAM_UPDATE_URL=${feed} in .env.local, run scripts/prepare-package.ts, and build again.`);
+const deltas=readdirSync(made).filter(name=>name===`Dream-${version}-delta.nupkg`).map(name=>join(made,name));
+
+const installer=join(mkdtempSync(join(tmpdir(),'gumbo-release-')),'Gumbo-Setup.exe');copyFileSync(setup,installer);
+const files=[list,full,...deltas,installer];
+console.log(`Gumbo ${version} -> ${repo} (tag v${version})`);
+for(const file of files)console.log(`  ${file.split(/[\\/]/).pop()}  ${(statSync(file).size/1e6).toFixed(0)} MB`);
+if(!publish){console.log('Checked. Run again with --yes to publish.');process.exit(0);}
+execFileSync('gh',['release','create',`v${version}`,'--repo',repo,'--title',`Gumbo ${version}`,'--notes',notes||`Gumbo ${version}`,...files],{stdio:'inherit'});
+console.log(`Published. Installer: ${feed}/Gumbo-Setup.exe`);

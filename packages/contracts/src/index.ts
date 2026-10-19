@@ -59,6 +59,8 @@ export type BillingSummary={plan:PlanId;planName:string;status:string|null;cance
  credits:{left:number;plan:number;planTotal:number;topups:number;overdraft:number};plans:{id:PlanId;name:string;priceUsd:number;credits:number}[];
  topup:{credits:number;priceUsd:number;maxPacks:number};payments:boolean;portal:boolean};
 export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:string;turnId?:string};
+/** A new version of the app downloading in the background, or ready to start (Windows; apps/desktop/src/main/updates.ts). */
+export type UpdateStatus={status:'idle'|'downloading'|'ready';version?:string};
 export type ExportProgress={status:'rendering'|'completed'|'failed'|'cancelled';progress:number;path?:string;paths?:string[];error?:string;phase?:string;warnings?:string[]};
 /** automated: a test or script drives this copy (DREAM_HEADLESS), so first-run screens such as the onboarding stay away;
  * onboarding: DREAM_ONBOARDING asks for the onboarding even on a computer that has been through it. */
@@ -91,6 +93,9 @@ export interface DreamDesktop {
  catalog():Promise<{scores:Record<string,unknown>[];sfx:Record<string,unknown>[]}>;
  /** Answers a frames.request event: frames the editor's engine drew for the agent, or the error that stopped it. */
  framesResult(id:string,result:unknown):Promise<void>;
+ /** The background app update (also sent as app.update events), and restarting into a downloaded one. */
+ update():Promise<UpdateStatus>;
+ restartToUpdate():Promise<{restarted:boolean;reason?:string}>;
  onEvent(handler:(event:DesktopEvent)=>void):()=>void;
 }
 declare global {interface Window {dream:DreamDesktop;}}

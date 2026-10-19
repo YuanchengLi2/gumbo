@@ -1,11 +1,12 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Settings,Gauge,LogOut,LogIn,Sun,Moon,Monitor,User,Sparkles} from 'lucide-react';
+import {Settings,Gauge,LogOut,LogIn,Sun,Moon,Monitor,User,Sparkles,RefreshCw} from 'lucide-react';
 import {openUpgrade,topPlan} from '../billing/Upgrade';
 import {SettingsPage,type SettingsSection} from './SettingsPage';
 import {useAccount,requireSignIn,signedOut} from '../../account';
 import {useBilling,billingReady,refreshBilling,credits} from '../../billing';
 import {useTheme,setThemeChoice,type ThemeChoice} from '../../theme';
+import {useUpdate,restartToUpdate} from '../../updates';
 
 /** Whether Settings is open, and on which page, for the whole app: the profile menu on the home screen and in the editor's
  * header are different components (one replaces the other when a project opens), and Settings stays open across that. */
@@ -18,7 +19,7 @@ const themes:[ThemeChoice,string,typeof Sun][]=[['light','Light',Sun],['dark','D
  * signing in or out. It replaces the Settings gear. up opens the menu above (the home sidebar's foot); otherwise it opens
  * below, right-aligned (the editor's header). A header is a window-drag area on Windows, so the anchor is not. */
 export function ProfileMenu(p:{up?:boolean;label?:boolean}){
- const account=useAccount(),billing=useBilling(),choice=useTheme(),[menu,setMenu]=useState(false),anchor=useRef<HTMLDivElement>(null),b=billingReady(billing)?billing:null;
+ const account=useAccount(),billing=useBilling(),choice=useTheme(),update=useUpdate(),[updateNote,setUpdateNote]=useState<string>(),[menu,setMenu]=useState(false),anchor=useRef<HTMLDivElement>(null),b=billingReady(billing)?billing:null;
  const signedIn=!!account?.signedIn,email=account?.email??'',name=email.split('@')[0]||'You',initial=(signedIn?name[0]:'')?.toUpperCase();
  useEffect(()=>{if(!menu)return;
   const away=(e:MouseEvent)=>{if(!anchor.current?.contains(e.target as Node))setMenu(false);},key=(e:KeyboardEvent)=>{if(e.key==='Escape')setMenu(false);};
@@ -30,11 +31,13 @@ export function ProfileMenu(p:{up?:boolean;label?:boolean}){
  const signOut=async()=>{setMenu(false);await window.dream.command({type:'account',action:'signout'});signedOut();void refreshBilling();};
  return <div className={'profile-anchor'+(p.up?' up':'')} ref={anchor}>
   <button type="button" className={'profile-button'+(p.label?' labelled':'')} aria-label="Profile" title={signedIn?email:'Profile'} aria-haspopup="menu" aria-expanded={menu} onClick={()=>setMenu(v=>!v)}>
-   <span className={'profile-avatar'+(signedIn?'':' signed-out')} aria-hidden="true">{initial||<User size={15}/>}</span>
+   <span className={'profile-avatar'+(signedIn?'':' signed-out')} aria-hidden="true">{initial||<User size={15}/>}{update.status==='ready'&&<i className="profile-update-dot"/>}</span>
    {p.label&&<span className="profile-name"><strong>{signedIn?name:'Not signed in'}</strong><small>{!signedIn?'Sign in for Gumbo AI':b?`${b.planName} plan`:'Gumbo AI'}</small></span>}
   </button>
   {menu&&<div className="profile-menu" role="menu">
    <header><span className={'profile-avatar'+(signedIn?'':' signed-out')} aria-hidden="true">{initial||<User size={15}/>}</span><span><strong>{signedIn?name:'Not signed in'}</strong><small>{signedIn?email:'Your projects work without an account.'}</small></span></header>
+   {/* A new version downloaded in the background: restarting starts it now (otherwise it starts the next time Gumbo opens). */}
+   {update.status==='ready'&&<button type="button" role="menuitem" className="profile-update" title={updateNote} onClick={()=>void restartToUpdate().then(setUpdateNote)}><RefreshCw size={15}/>{updateNote??'Restart to update'}</button>}
    {signedIn&&b&&<button type="button" role="menuitem" className="profile-usage" onClick={()=>go('usage')}>
     <span><Gauge size={14}/>{b.planName}</span><span>{credits(b.credits.left)} credits left</span>
     <i role="meter" aria-label="Plan credits left" aria-valuemin={0} aria-valuemax={b.credits.planTotal} aria-valuenow={Math.max(0,b.credits.plan)}><b style={{width:`${Math.round(Math.min(1,Math.max(0,b.credits.plan)/Math.max(1,b.credits.planTotal))*100)}%`}}/></i>
