@@ -8,6 +8,17 @@ What Roux showed on real edits (October 18-19): about 2.5 times cheaper than GPT
 
 Links to dsh are to `main`; paths are relative to its repository root.
 
+## Status after measuring (October 19)
+
+Before changing anything, 669 DeepSeek calls from 19 real requests were measured. `scripts/cache-replay.ts` replays a finished request as DeepSeek received it and prints every step where the prompt stopped being the previous one plus new messages.
+
+- **1, real window: changed.** Prompts ran at a median of 47K tokens, 75K at the 90th percentile and 109K at most. About 3% of steps missed DeepSeek's cache on DeepSeek's side: only the system prompt was read from the cache, so the whole conversation was re-sent at 50 times the cached price. Those misses were a fifth of Roux's spend. dsh has no fix for this; its session headers are for diagnostics and are kept out of the cache identity. A conversation three times larger makes each miss three times as expensive, so the 90K working target stays. Only the hard limit moves to DeepSeek's real 1M window.
+- **Picture notes: no change needed.** Swapping pictures the agent has already seen for its notes broke the prefix on 60 of 234 steps of the Vietnam edit. It re-sent only about 60K tokens in all (about 2 credits), because the swap falls at the newest results.
+- **4, repeat reminders: done** (`packages/orchestrator/src/repeat-reminder.ts`), for every model.
+- **3, structured summaries: footage part done, without a model call.** Each summary now carries `footageSeen` (`footageNotes` in `conversation.ts`): every look at a source with what the agent wrote right after it, carried from one summary to the next, newest 30.
+- **5, spill: already in place.** A result over 12,000 characters is saved as a receipt and replaced by an excerpt with a pointer (`capText` in `code-agent.ts`, `boundedToolResult` in `conversation.ts`).
+- **2, thinking replay: not started.** It changes the gateway and needs an A/B on real edits.
+
 ## Ranked
 
 ### 1. Give DeepSeek its real context window (high impact, small effort)

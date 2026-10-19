@@ -16,11 +16,12 @@ import {stateChanges} from './state-delta';
 import {createHash} from 'node:crypto';
 import {partsBlocker,notPossibleNote,type RequestPart} from './request-parts';
 import {newCredits} from './credits';
+import {trackRepeat,withReminder,type Repeat} from './repeat-reminder';
 
 /** A separate piece a helper builds in its own files for the editing agent. */
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
-type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[]};
+type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];repeat?:Repeat};
 // Results are capped at 12,000 characters (about 4k tokens); a file read keeps up to 24,000, since the agent asked for
 // that file (the editing guides run to about 12,600) and reads longer ones in pages.
 const RESULT_LIMIT=12000,READ_LIMIT=24000;
@@ -142,17 +143,17 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  let dropped=false;
  checkpoint.messages=checkpoint.messages.map((m:any,n:number,all:any[])=>{if(m.role!=='assistant'||!Array.isArray(m.content)||(n===all.length-1&&!checkpoint.pending?.length))return m;const content=withoutUnansweredServerCalls(m.content);if(content.length===m.content.length)return m;dropped=true;return{...m,content:content.length?content:[{type:'text',text:'(No output.)'}]};});
  if(dropped)checkpoint.journalEpoch=(checkpoint.journalEpoch??0)+1;
- const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
+ const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;delete checkpoint.repeat;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
  // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
  const feedback=db.loadState<any>('resume_input:'+turnId);if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
  if(checkpoint.feedback&&checkpoint.pending){closeBatch();save();}
  // The next approved plan step continues the same conversation. Earlier steps' publications cannot complete it.
- if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
+ if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;delete checkpoint.repeat;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
  if(checkpoint.outcome)return{outcome:checkpoint.outcome,plan:checkpoint.plan};
  for(;;){
   signal.throwIfAborted();
   if(!checkpoint.pending){
-   if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:resumeMessage(checkpoint.feedback.text)});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;checkpoint.steps=0;checkpoint.spendStart=spent();save();}
+   if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:resumeMessage(checkpoint.feedback.text)});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;delete checkpoint.repeat;checkpoint.steps=0;checkpoint.spendStart=spent();save();}
    // Appended only when the state changes, so the cached conversation prefix stays intact. Only what changed is sent;
    // the full state is kept locally, so compaction can restore it when it drops the earlier messages it builds on.
    const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined}),paused=checkpoint.messages.at(-1)?.role==='assistant';if(mediaState&&mediaState!==checkpoint.mediaState&&!paused){
@@ -244,7 +245,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
     }
    }else if(!result.error){checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};if(call.name==='finish'&&result.finished&&!checkpoint.outcome){const input:any=parseCodeTool('finish',call.input,readOnly,allowed);conclude(input.status==='complete'?{status:'complete',summary:input.summary,evidence:input.evidence}:{status:'blocked',summary:input.summary,evidence:input.evidence,nextAction:input.nextAction});checkpoint.plan=planning?input.plan:undefined;}}
    db.setMeta('workspace-receipt-summary:'+receiptKey,JSON.stringify({receipt:receiptKey,tool:call.name,path:call.input?.path,command:call.input?.command,status:result?.error?'failed':'complete',error:result?.error,publication:result?.publication?{versionId:result.publication.versionId,changes:result.publication.changes}:undefined,process:result?.process?{id:result.process.id,status:result.process.status,output:String(result.process.output??'').slice(-2000)}:undefined}));db.db.prepare('INSERT OR IGNORE INTO context_dirty VALUES(?,?)').run('execution',receiptKey);
-   const content=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT);checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
+   // The exact same call several times in a row comes back with an advisory reminder (repeat-reminder.ts).
+   const capped=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT),{repeat,reminder}=trackRepeat(checkpoint.repeat,call.name,operationKey),content=reminder?withReminder(capped,reminder):capped;checkpoint.repeat=repeat;
+   if(reminder)db.event('ai.repeat_reminder',{turnId,tool:call.name,count:repeat!.count});checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
    const outcome=checkpoint.outcome as EditOutcome|undefined;
    if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}
   }

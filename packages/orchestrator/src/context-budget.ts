@@ -17,7 +17,10 @@ export function budgetRequest(db:ProjectDB,input:{model:string;purpose:string;sy
  const target=contextTarget(input.model,input.purpose);
  // Working targets control cost, not whether a task may continue. Only the
  // provider's real context window (including output) is a hard boundary.
- const limit=(input.model.endsWith('5-5')?1_000_000:200_000)-input.max_tokens-8192;
+ // DeepSeek V4.1 Flash takes about 1M tokens too, but keeps the 90K working target: about 3% of its steps miss the cache
+ // on DeepSeek's side and re-send the whole conversation at 50 times the cached price (on October 18-19 those misses were
+ // a fifth of Roux's spend), so a conversation carried three times larger costs more than the summaries it avoids.
+ const limit=(input.model.endsWith('5-5')||input.model.startsWith('deepseek')?1_000_000:200_000)-input.max_tokens-8192;
  const scope=`${input.purpose}:${input.model}:${input.phase??'main'}`,turn=input.turnId??'standalone';
  let messages=providerView(db,turn,scope,input.messages);
  if(compactRatio!==undefined)messages=providerView(db,turn,scope,input.messages,Math.floor(conversationBytes(messages)*compactRatio));

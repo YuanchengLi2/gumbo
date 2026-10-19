@@ -58,6 +58,31 @@ function keptDirections(db:ProjectDB,older:Message[],tail:Message[],budget:numbe
  }
  return kept.reverse();
 }
+/** What the agent learned by looking at the footage, kept through compaction: each look at a source (frames, sound, words,
+ * a shot search) with what the agent wrote right after it, or the start of the result when it wrote nothing. Footage does
+ * not change during an edit, so the notes stay true. Before, a summary kept only the last eight things the agent wrote,
+ * and on long edits Roux looked at the same footage again after every summary (the pattern DeepSeek Harness's structured
+ * checkpoints keep in a section of their own). The newest note for the same look replaces an older one. */
+const LOOKS=new Set(['view_media','listen','read_transcript','find_shots']),FOOTAGE_NOTES=30,NOTE_CHARS=240;
+function footageNotes(db:ProjectDB,messages:Message[],cut:number,entries:Entry[],earlier:string[]=[]){
+ const names=new Map(db.footage().assets.map(a=>[a.id,a.filename])),called=new Map(entries.map(e=>[e.toolCallId,e]));
+ const sec=(n:number)=>`${Math.round(n*10)/10}s`,notes=new Map<string,string>();
+ for(const line of earlier){const at=line.indexOf(': ');if(at>0)notes.set(line.slice(0,at),line.slice(at+2));}
+ for(let i=1;i<cut;i++){
+  const m=messages[i];if(m.role!=='user'||!Array.isArray(m.content))continue;
+  const next=messages[i+1],noted=next?.role==='assistant'&&Array.isArray(next.content)?next.content.filter((b:any)=>b?.type==='text').map((b:any)=>String(b.text)).join(' ').replace(/\s+/g,' ').trim():'';
+  for(const block of m.content){
+   const entry=block?.type==='tool_result'&&!block.is_error?called.get(block.tool_use_id):undefined;if(!entry||!LOOKS.has(entry.name))continue;
+   // A look at the edit itself (the preview) goes stale with the next change; only the sources are kept.
+   const input:any=entry.input??{};if(input.target==='preview'||input.scope==='computer')continue;
+   const times:number[]=Array.isArray(input.times)?input.times:[],range=times.length?`${sec(Math.min(...times))}-${sec(Math.max(...times))}`:input.endSec!==undefined||input.startSec?`${sec(input.startSec??0)}-${input.endSec!==undefined?sec(input.endSec):'end'}`:'';
+   const look=`${entry.name} `+(entry.name==='find_shots'?`"${input.query??'all shots'}"`:[names.get(input.assetId)??input.assetId??input.path,range].filter(Boolean).join(' '));
+   const note=(noted||textOf(block.content).replace(/\s+/g,' ').trim()).slice(0,NOTE_CHARS);
+   if(note){notes.delete(look);notes.set(look,note);}
+  }
+ }
+ return[...notes].slice(-FOOTAGE_NOTES).map(([look,note])=>`${look}: ${note}`);
+}
 const previousDigest=(older:Message[])=>{for(const m of [...older].reverse()){if(typeof m.content!=='string')continue;try{const value=JSON.parse(m.content);if(value?.notice?.startsWith('Older tool exchanges were compacted.'))return value;}catch{}}};
 
 type Plan={cut:number;prefix:Message[]};
@@ -74,8 +99,8 @@ function planCompaction(db:ProjectDB,turn:string,messages:Message[],targetBytes:
   const directions=keptDirections(db,older,tail,targetBytes*.15,cleanMessage);
   const decisions=[...earlier?.recentAssistantNotes??[],...older.filter(m=>m.role==='assistant').flatMap(m=>Array.isArray(m.content)?m.content.filter(b=>b.type==='text').map(b=>String(b.text)):typeof m.content==='string'?[m.content]:[])].slice(-8).map((t:string)=>t.slice(0,1500));
   // A later compaction carries the earlier summary forward instead of losing it.
-  const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length;
-  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-RECENT_RECEIPTS),recentReceipts:receipts.slice(-RECENT_RECEIPTS).map((r:any)=>typeof r?.excerpt==='string'&&r.excerpt.length>RECEIPT_EXCERPT?{...r,excerpt:r.excerpt.slice(0,RECEIPT_EXCERPT),truncated:true}:r),recentAssistantNotes:decisions,...(planNotes?{planNotes}:{})};
+  const receipts=[...earlier?.recentReceipts??[],...entries.map(entry=>describe(entry,turn))],archived=(earlier?.archivedCalls??0)+entries.length,footageSeen=footageNotes(db,messages,cut,entries,earlier?.footageSeen);
+  const digest={notice:'Older tool exchanges were compacted. Exact reads are retained separately below as of this compaction; later writes in the conversation supersede them. Other full results remain local: use read_file with scope receipt and the provided receipt path. Excerpts here are incomplete and historical. Do not claim old images were inspected in this request. footageSeen is what you saw in the source footage earlier in this request, with what you noted then: the footage has not changed, so look again only for what those notes do not cover. Earlier user direction below remains authoritative.',archivedCalls:archived,earlierCallsOmitted:Math.max(0,archived-RECENT_RECEIPTS),recentReceipts:receipts.slice(-RECENT_RECEIPTS).map((r:any)=>typeof r?.excerpt==='string'&&r.excerpt.length>RECEIPT_EXCERPT?{...r,excerpt:r.excerpt.slice(0,RECEIPT_EXCERPT),truncated:true}:r),recentAssistantNotes:decisions,...(footageSeen.length?{footageSeen}:{}),...(planNotes?{planNotes}:{})};
   const working=workingContext(messages,tail,targetBytes*WORKING_SHARE);
   plan={cut,prefix:[cleanMessage(messages[0]),{role:'user',...(keepMetadata?{dreamSource:'snapshot' as const}:{}),content:JSON.stringify(digest)},...directions,...(working?[cleanMessage(working)]:[])]};
   if(bytes([...plan.prefix,...tail])<=targetBytes)break;
