@@ -81,7 +81,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  // Replies and plans are offered the editing agent's tools so they read the same cached prefix; allowed
  // still refuses every call that would change something.
  const tools=options.bare?[]:toolsFor('solo');
- const maxSteps=engineBudgets.agentSteps;
+ // Roux 1 runs edits on DeepSeek, whose steps cost a fraction of a cent: a long edit gets 200 steps to finish (80 cut
+ // two of its first edits off unfinished); the credits pause still stops each 50 credits. Other models keep 80.
+ const maxSteps=options.model.startsWith('deepseek')?engineBudgets.rouxSteps:engineBudgets.agentSteps;
  // What the whole request has cost so far: every model call recorded for it, its helpers' included.
  const spent=()=>Number(db.turnUsage?.(turnId)?.costUsd??0);
  await workspace.initialize();const resumed=db.loadState<Checkpoint>(key);let checkpoint=resumed??{protocolVersion:2,messages:[{role:'user',content:options.firstMessage??briefing(workspace.context(options.text),options.text+(options.system?'':modeNote(role,planning)),{projectTitle:db.meta.name,titleSource:db.getMeta('project_title_source')??'legacy'})}],results:[],completed:{},model:options.model,failures:{},startHead:db.head()};

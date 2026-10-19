@@ -48,6 +48,9 @@ it('stops at the step limit and after bounded nudges instead of looping',async()
   const base={db,turnId:'turn',model:models.agent,text:'Edit the opening',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({files:[]})}};
   let reads=0;const capped=await codeAgent({...base,phase:'loop',infer:async()=>toolUse('read'+reads++,'list_files',{path:'.'})});
   expect(capped.outcome.status).toBe('blocked');expect(capped.outcome.summary).toContain('step limit');expect(reads).toBe(80);
+  // Roux 1's edits run on DeepSeek, whose steps cost a fraction of a cent: they get 200 steps to finish.
+  let rouxReads=0;const roux=await codeAgent({...base,model:'deepseek-flash',phase:'roux-loop',infer:async()=>toolUse('roux'+rouxReads++,'list_files',{path:'.'})});
+  expect(roux.outcome.summary).toContain('step limit');expect(rouxReads).toBe(200);
   let texts=0;const talker=await codeAgent({...base,phase:'talk',infer:async()=>{texts++;return{content:[{type:'text',text:'I would change the opening.'}],stop_reason:'end_turn',usage:{}};}});
   // An edit request that only talks is nudged, then stopped as blocked; with nothing changed there is nothing to publish.
   expect(texts).toBe(3);expect(talker.outcome.status).toBe('blocked');expect(talker.outcome.summary).toContain('I would change the opening.');expect(talker.outcome.summary).not.toContain('Publish the current revision');
