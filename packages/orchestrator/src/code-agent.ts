@@ -4,7 +4,7 @@ import {resumeMessage} from './resume-message';
 import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
 import {ranToEnd} from '@dream/contracts';
 import {engineBudgets} from '@dream/config';
-import {codePrompt} from './code-prompt';
+import {promptFor,guideInPrompt} from './code-prompt';
 import {toolsFor,allowedTools,parseCodeTool,type AgentRole} from './code-tools';
 import {toolActivity,toolDetail} from './activity';
 import {FileApprovalRequired} from './file-tools';
@@ -170,7 +170,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    if((checkpoint.steps??0)>=maxSteps){conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    assertToolExchanges(checkpoint.messages);
    let response:any;
-   try{response=await options.infer(checkpoint.model,options.system??codePrompt,checkpoint.messages,tools);}
+   try{response=await options.infer(checkpoint.model,options.system??promptFor(checkpoint.model),checkpoint.messages,tools);}
    catch(error){if(error instanceof InferenceError&&error.code==='truncated'){const repeats=checkpoint.failures.truncation=(checkpoint.failures.truncation??0)+1;checkpoint.steps=(checkpoint.steps??0)+1;if(repeats>=3){conclude({status:'blocked',summary:'The AI response repeatedly exceeded the output limit. No partial commands or file writes were executed.',evidence:[],nextAction:'Resume with a smaller scope, or split the scene into several parts.'});save();return{outcome:checkpoint.outcome!};}// A response that only thought steps this phase's effort down; either way the agent is told to act in smaller pieces.
      if(error.thinkingOnly){const overrideKey=`effort-override:${turnId}:${phase}`;db.setMeta(overrideKey,String(Math.min(2,Number(db.getMeta(overrideKey)??0)+1)));}
      checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}throw error;}
@@ -229,6 +229,8 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
      else result=await (started.get(call.id)??workspace.execute(call.name,input,call.id,turnId,signal,scopeFor()));
      // An unchanged guide read again comes back as a short receipt: its lines are already in the agent's context.
      if(call.name==='read_file')result=unchangedRead(checkpoint.messages,input,result);
+     // Roux has the editing and scene-engine guides in its prompt (code-prompt.ts), so reading one returns a short receipt.
+     if(call.name==='read_file'&&!options.system&&guideInPrompt(checkpoint.model,input)&&!result?.error)result={path:input.path,unchanged:true,note:'This guide is already in your instructions, word for word (at their end). Use it from there.'};
      if(result?.process&&!ranToEnd(result.process))throw new Error(`Command ${result.process.status==='failed'?'crashed':result.process.status}: ${result.process.output}. Log: ${result.process.id}`);
      for(const k of Object.keys(checkpoint.failures))if(k===operationKey||k.startsWith(operationKey+'#'))delete checkpoint.failures[k];if(checkpoint.coarse)for(const k of Object.keys(checkpoint.coarse))if(k===coarse||k.startsWith(coarse+'#'))delete checkpoint.coarse[k];db.saveState(receiptKey,result);checkpoint.completed[call.id]={saved:true,publication:publicationOf(result),evidence:result?.evidence};activity('tool:'+call.id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...inspected(call.name,input,result)});
     }catch(error){
