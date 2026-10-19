@@ -45,7 +45,7 @@ Deno.serve(async(req)=>{
  // the waitlist. Anyone can sign in and see where they stand.
  if(['ai','count-tokens','transcribe','media-search','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
- if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access').eq('id',user.id).single();return json(data);}
+ if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
  if(action==='usage'){const since=new Date(Date.now()-30*86_400_000);
   const {data:rows}=await db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000);

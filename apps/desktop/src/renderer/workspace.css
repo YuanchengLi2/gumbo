@@ -911,6 +911,10 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .settings-panel:has(.settings-body.wide) .settings-panel-head{max-width:1040px}
 
 /* Send log: a quiet link under a finished request, and its dialog. */
+.turn-actions{display:flex;align-items:center;gap:2px;margin-top:6px;opacity:.55;transition:opacity .15s}.assistant-turn:hover .turn-actions,.conversation-turn:last-child .turn-actions,.turn-actions:focus-within{opacity:1}
+.turn-action{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;color:var(--n46)}.turn-action:hover:not(:disabled){background:var(--n5);color:var(--n87)}.turn-action.on{color:var(--n100)}.turn-action:disabled{opacity:.4;cursor:default}
+.turn-actions .turn-send-log{margin:0 0 0 6px;opacity:1}
+.message-actions{display:flex;justify-content:flex-end;margin:-10px 0 10px;opacity:0;transition:opacity .15s}.message.user:hover .message-actions,.message-actions:focus-within{opacity:1}
 .turn-send-log{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:2px 0;font-size:11.5px;color:var(--n35);opacity:0;transition:opacity .15s,color .15s}
 .assistant-turn:hover .turn-send-log,.turn-send-log:focus-visible{opacity:1}.turn-send-log:hover{color:var(--n76)}
 .send-log-backdrop{position:fixed;inset:0;z-index:3001;display:grid;place-items:center;padding:24px;background:rgb(0 0 0 / .45)}

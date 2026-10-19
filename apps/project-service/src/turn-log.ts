@@ -30,7 +30,7 @@ export function turnLog(db:ProjectDB,turnId:string){
  walk(workspace);
  const log={version:1,turnId,project:{name:db.meta.name},
   totals:Object.entries(totals).map(([model,t])=>({model,...t,costUsd:Math.round(t.costUsd*10000)/10000})),
-  usage,messages,before,activity,sceneErrors,footage,files};
+  usage,messages,before,activity,sceneErrors,footage,files,rating:db.getMeta('turn-feedback:'+turnId)||null};
  // Kept under the size the gateway takes: the biggest workspace files go first.
  let text=JSON.stringify(log);
  while(text.length>TOTAL&&files.some(f=>f.text)){const biggest=files.filter(f=>f.text).sort((a,b)=>b.text!.length-a.text!.length)[0];delete biggest.text;text=JSON.stringify(log);}

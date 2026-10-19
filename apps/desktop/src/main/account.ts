@@ -48,7 +48,7 @@ export class Account {
  async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number;flow?:string}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
  /** Send log: one edit's log (turn-log.ts), what the user wrote about it, and the app's version, to the gateway; its
   * reference comes back for the user to quote. */
- async report(report:{turnId:string;note:string;appVersion:string;platform:string;log:unknown}){
+ async report(report:{turnId:string;note:string;kind?:'report'|'feedback'|'training';rating?:'up'|'down';appVersion:string;platform:string;log:unknown}){
   if(!this.signedIn())throw new Error('Sign in to send a log.');
   const response=await fetch(`${this.gateway()}/report`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(report)});
   const body=await response.json().catch(()=>({})) as {reference?:string;error?:string};if(!response.ok)throw new Error(body.error??'The log could not be sent.');return{reference:String(body.reference)};

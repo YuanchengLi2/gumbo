@@ -1,5 +1,5 @@
 import {editingChanges} from '../../editing-language';
-import {SendLog} from './SendLog';
+import {TurnActions,CopyButton} from './TurnActions';
 import {RunStream,clock} from './RunStream';
 import React from 'react';
 import {ChevronRight} from 'lucide-react';
@@ -16,7 +16,7 @@ import {sameItems} from '../../memo';
 // Attached media and the timeline selection sent with a message show as media tiles, not names.
 function UserMessage({text,assetIds,selection,assets}:{text:string;assetIds?:string[];selection?:SelectionRef[];assets:Asset[]}){
  const asset=(id?:string)=>id?assets.find(a=>a.id===id):undefined;
- return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div></article>;
+ return <article className="message user"><div>{(!!assetIds?.length||!!selection?.length)&&<div className="message-attachments">{assetIds?.map(id=><MediaTile key={id} asset={asset(id)} label={asset(id)?.filename??'Media'}/>)}{selection?.map(ref=><MediaTile key={ref.id} asset={asset(ref.assetId)} label={ref.label} srcIn={ref.kind==='caption'?undefined:ref.srcIn} srcOut={ref.srcOut}/>)}</div>}<p>{text}</p></div><div className="message-actions"><CopyButton text={text} label="Copy message"/></div></article>;
 }
 
 /** A change as a short pill: "Added 7 clips" reads "+7 clips", "Removed a transition" reads "− transition". */
@@ -67,6 +67,6 @@ const Turn=React.memo(function Turn({group,activity,running,commentary,assets,re
  {(()=>{const pills=changes.length>0?<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>:null;
   // Edits show as change cards; a request that only touched files keeps its short summary.
   return !running&&group.turnId&&changes.length?<ChangeCards turnId={group.turnId} refresh={refresh} fallback={pills}/>:pills;})()}
- {!running&&group.turnId&&count>0&&<SendLog turnId={group.turnId}/>}
+ {!running&&group.turnId&&(count>0||answered)&&<TurnActions turnId={group.turnId} request={group.messages.find(m=>m.role==='user')?.text} reply={answered?last!.text:undefined}/>}
  </div>}</section>;
 },(a,b)=>a.activity===b.activity&&a.running===b.running&&a.assets===b.assets&&a.refresh===b.refresh&&a.startedAt===b.startedAt&&a.group.id===b.group.id&&sameItems(a.group.messages,b.group.messages)&&sameItems(a.commentary,b.commentary));

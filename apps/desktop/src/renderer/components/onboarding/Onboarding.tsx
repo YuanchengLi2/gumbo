@@ -99,11 +99,11 @@ export function OnboardingLayer(){
    </>}
 
    {step==='improve'&&<>
-    <h1>Help make Gumbo better?</h1>
-    <p>When an edit goes wrong (an error, a stop, or a long and costly run), Gumbo can send us that edit's log so we can fix it: the steps it took, your request and the code it wrote. Never your footage. You can change this any time in Settings, under Privacy.</p>
+    <h1>Help improve Gumbo’s AI?</h1>
+    <p>Share your edits with us: your requests, every step the AI took, the code it wrote and any rating you give. We use them to fix problems and to train Gumbo’s own model. Never your footage. You can change this any time in Settings, under Privacy.</p>
     <div className="onboarding-options" role="radiogroup" aria-label="Help improve Gumbo">
-     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(true)}><b>Yes, send logs when something goes wrong</b><span>Helps us fix the problems you hit.</span><ArrowRight size={15}/></button>
-     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(false)}><b>No thanks</b><span>You can still send a log yourself from any edit.</span><ArrowRight size={15}/></button>
+     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(true)}><b>Yes, share my edits</b><span>Helps Gumbo get better at the videos you make.</span><ArrowRight size={15}/></button>
+     <button type="button" role="radio" aria-checked={false} onClick={()=>void improve(false)}><b>No thanks</b><span>Your edits stay yours. You can still send a log yourself.</span><ArrowRight size={15}/></button>
     </div>
    </>}
 

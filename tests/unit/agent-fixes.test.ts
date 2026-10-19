@@ -93,6 +93,22 @@ describe('a cold cache',()=>{
  });
 });
 
+describe('edit logs by kind',()=>{
+ it('keeps a training log or a rating with its own daily limit, and a report by default',async()=>{
+  const {handleReport,KIND_LIMITS}=await import('../../supabase/functions/dream-gateway/reports');
+  const rows:any[]=[],asked:(string|undefined)[]=[],log={project:{name:'Vietnam'},totals:[{costUsd:.03,calls:26}]};
+  const ports=(sent:number)=>({sentToday:async(_u:string,kind?:any)=>{asked.push(kind);return sent;},insert:async(row:any)=>{rows.push(row);}});
+  expect((await handleReport({turnId:'t1',kind:'training',note:'Finished.',log},'owner',ports(400))).status).toBe(200);
+  expect((await handleReport({turnId:'t1',kind:'feedback',rating:'up',log},'owner',ports(0))).status).toBe(200);
+  expect((await handleReport({turnId:'t1',log},'owner',ports(0))).status).toBe(200);
+  expect(rows.map(r=>[r.kind,r.rating])).toEqual([['training',null],['feedback','up'],['report',null]]);expect(asked).toEqual(['training','feedback','report']);
+  // A bug report keeps its low limit; training allows a day of editing.
+  expect((await handleReport({turnId:'t2',log},'owner',ports(KIND_LIMITS.report))).status).toBe(429);
+  expect((await handleReport({turnId:'t2',kind:'training',log},'owner',ports(KIND_LIMITS.training))).status).toBe(429);
+  expect((await handleReport({turnId:'t2',kind:'anything',log},'owner',ports(0))).status).toBe(200);expect(rows.at(-1).kind).toBe('report');
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

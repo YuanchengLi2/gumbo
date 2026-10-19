@@ -69,6 +69,8 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  const approval=project.aiStatus==='awaiting_approval'&&approvesPlan(text);if(approval&&store.permission==='plan')store.setPermission('auto');
  const result=await s.command({type:'message',text,selection:s.selected,assetIds,intent:approval?'auto':store.permission,model:store.model,requestId});if(!result&&useEditor.getState().pending?.requestId===requestId){useEditor.getState().setPending(null);if(override===undefined){setInput(text);s.setAttachments(assetIds);}}return !!result;}
 
+ // Redo under a finished request sends that request again (chat/TurnActions).
+ useEffect(()=>{const send=(e:Event)=>{void submit(String((e as CustomEvent).detail??''));};window.addEventListener('gumbo:send',send);return()=>window.removeEventListener('gumbo:send',send);});
  useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey,key=e.key.toLowerCase(),fps=project?.timeline.settings.fps??30;
   // Playback keys as OpenCut has them (manual/shortcuts.ts): Space or K plays, J and L step a second, arrows a frame
   // (Shift: five seconds), Home and End jump to the ends.
