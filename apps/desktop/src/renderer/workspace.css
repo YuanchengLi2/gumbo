@@ -100,7 +100,7 @@
 .ai-stage .manual-timeline-toolbar{position:absolute;top:0;right:12px;z-index:20;min-height:30px;padding:0 4px 0 12px;border-bottom:0;gap:8px;color:var(--n34);background:linear-gradient(90deg,rgb(var(--paper-rgb) / 0),var(--n0) 12px)}
 .ai-stage .manual-timeline-toolbar input{width:120px}
 .ai-stage .manual-timeline-scroll{scrollbar-width:auto;scrollbar-color:auto}
-.ai-stage .manual-timeline-scroll::-webkit-scrollbar{width:8px;height:0}
+.ai-stage .manual-timeline-scroll::-webkit-scrollbar{width:8px;height:6px}
 .ai-stage .manual-timeline-scroll::-webkit-scrollbar-thumb{background:var(--n11);border-radius:4px}
 .ai-stage .manual-timeline-scroll::-webkit-scrollbar-track{background:transparent}
 .ai-stage .manual-ruler{background:var(--n0);border-bottom:0}
@@ -136,10 +136,12 @@
 .ai-stage .manual-wave{color:#c6f3e7;opacity:.85;top:auto;bottom:2px;left:0;right:0;inset:auto 0 2px 0;height:60%}
 .ai-stage .manual-clip.derived{opacity:.92}
 /* Selected: a white outline with trim handles on the ends. */
-.ai-stage .manual-clip.selected{box-shadow:inset 0 0 0 2px #fff,0 0 0 1.5px #1d1930;outline:none;z-index:3}
+.ai-stage .manual-clip.selected{box-shadow:none;z-index:3}
+.ai-stage .manual-clip.selected::before,.ai-stage .manual-clip.dragging::before,.ai-stage .manual-clip:not(.selected):not(.leaving):hover::before{content:'';position:absolute;inset:0;border:2px solid var(--n90);border-radius:inherit;z-index:4;pointer-events:none}
+.ai-stage .manual-clip:not(.selected):not(.dragging):not(.leaving):hover::before{border:1px solid rgb(255 255 255 / .7)}
 .ai-stage .manual-trim{width:8px;background:transparent}
-.ai-stage .manual-clip.selected .manual-trim{background:var(--n0)}
-.ai-stage .manual-clip.selected .manual-trim::after{content:'';position:absolute;left:3.5px;top:32%;bottom:32%;width:1px;border-radius:1px;background:rgb(var(--accent-rgb) / 0.4)}
+.ai-stage .manual-clip.selected .manual-trim{background:var(--n90)}
+.ai-stage .manual-clip.selected .manual-trim::after{content:'';position:absolute;left:3.5px;top:32%;bottom:32%;width:1px;border-radius:1px;background:var(--n0)}
 .ai-stage .manual-clip:not(.selected):hover .manual-trim{background:rgb(var(--paper-rgb) / 0.333)}
 .ai-stage .manual-keyframe{position:absolute;bottom:4px;width:8px;height:8px;margin-left:-4px;transform:rotate(45deg);background:var(--n0);border:1px solid rgb(var(--accent-rgb) / 0.349);border-radius:1px;cursor:ew-resize;z-index:2;box-shadow:0 0 0 1px #ffffff40}
 .ai-stage .manual-keyframe:hover,.ai-stage .manual-keyframe:focus-visible{background:#ffd84d;outline:none}
@@ -924,4 +926,17 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .send-log footer{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 .send-log-error{margin:10px 0 0;font-size:12.5px;color:#d9534a}
 .send-log-done{display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px 0 4px;text-align:center}.send-log-done>span{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgb(226 85 42 / .14);color:var(--paprika)}
+/* The editor's timeline while you work on it: a dragged block follows the pointer at once (the rest still glide out of its
+   way), the selection, the snap line and the drag's readout read at a glance in both themes, and the scrollbar shows on
+   hover. */
+.ai-stage .manual-timeline-scroll::-webkit-scrollbar-thumb{background:transparent}
+.ai-stage .manual-timeline-scroll:hover::-webkit-scrollbar-thumb{background:var(--n11)}
+.ai-stage .manual-clip.dragging{transition:none;z-index:6;box-shadow:0 6px 18px rgb(0 0 0 / .35)}
+.ai-stage .manual-timeline.drag-move,.ai-stage .manual-timeline.drag-move *{cursor:grabbing!important}
+.ai-stage .manual-timeline.drag-left *,.ai-stage .manual-timeline.drag-right *{cursor:ew-resize!important}
+.ai-stage .manual-snap{border-left:0;width:2px;margin-left:-1px;background:var(--n90);box-shadow:0 0 0 1px var(--n0)}
+.manual-hover-line{position:absolute;top:0;bottom:0;width:1px;background:var(--n20);pointer-events:none;z-index:13}
+.manual-hover-line>span{position:absolute;left:5px;top:6px;padding:1px 5px;border-radius:4px;background:var(--n5);color:var(--n70);font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.manual-drag-readout{position:absolute;transform:translateX(-50%);z-index:19;padding:2px 7px;border-radius:5px;background:var(--n90);color:var(--n0);font-size:10.5px;line-height:15px;font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+.manual-snap-off{font-size:10.5px;color:var(--n40)}
 .send-log-done h3{margin:4px 0 0}.send-log-done p{margin:0 0 10px;font-size:13px;color:var(--n56)}.send-log-done b{color:var(--n100);font-family:ui-monospace,"Cascadia Mono",Consolas,monospace}
