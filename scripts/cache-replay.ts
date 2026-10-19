@@ -1,18 +1,18 @@
 /** Replays a finished request's conversation step by step as DeepSeek received it (the provider view, then the gateway's
- * Chat Completions form) and prints each step where the request stopped being the previous one plus new messages: the
- * part after that point was billed at the full input price instead of the cache price. Reads a copy of the database, so a
- * project open in Gumbo is never touched.
+ * Chat Completions form, or with --messages its Messages form, thinking included) and prints each step where the request
+ * stopped being the previous one plus new messages: the part after that point was billed at the full input price instead
+ * of the cache price. Reads a copy of the database, so a project open in Gumbo is never touched.
  *
- *   pnpm exec tsx scripts/cache-replay.ts "C:/Users/you/Documents/Dream/Projects/<id>" <turnId>
+ *   pnpm exec tsx scripts/cache-replay.ts "C:/Users/you/Documents/Dream/Projects/<id>" <turnId> [--messages]
  */
 import {mkdtempSync,mkdirSync,copyFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {ProjectDB} from '@dream/project-db';
 import {withoutSeenImages} from '../packages/orchestrator/src/conversation';
-import {chatRequest} from '../supabase/functions/dream-gateway/providers';
+import {chatRequest,messagesRequest} from '../supabase/functions/dream-gateway/providers';
 
-const [folder,turn]=process.argv.slice(2);if(!folder||!turn){console.error('Give a project folder and a turn id.');process.exit(1);}
+const [folder,turn]=process.argv.slice(2).filter(a=>a!=='--messages'),messagesRoute=process.argv.includes('--messages');if(!folder||!turn){console.error('Give a project folder and a turn id.');process.exit(1);}
 const copy=mkdtempSync(join(tmpdir(),'gumbo-cache-replay-'));mkdirSync(join(copy,'.dream'));
 for(const file of ['project.sqlite','project.sqlite-wal','project.sqlite-shm'])if(existsSync(join(folder,'.dream',file)))copyFileSync(join(folder,'.dream',file),join(copy,'.dream',file));
 const db=new ProjectDB(copy,'Replay');
@@ -24,7 +24,8 @@ try{
  let previous:string[]|undefined,steps=0,changes=0,missedBytes=0;
  for(let i=1;i<=messages.length;i++){
   if(i<messages.length&&messages[i].role!=='assistant')continue;
-  const wire=chatRequest({system:'',messages:withoutSeenImages(messages.slice(0,i)),tools:[]},model,1000).messages.map(m=>JSON.stringify(m));steps++;
+  const body={system:'',messages:withoutSeenImages(messages.slice(0,i)),tools:[]};
+  const wire=(messagesRoute?messagesRequest(body,{...model,api:'messages'},1000).messages:chatRequest(body,model,1000).messages).map(m=>JSON.stringify(m));steps++;
   if(previous){
    const n=Math.min(previous.length,wire.length);let j=0;while(j<n&&previous[j]===wire[j])j++;
    if(j<previous.length){

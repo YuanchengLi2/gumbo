@@ -1,6 +1,6 @@
 import {it,expect,vi} from 'vitest';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
-import {chatRequest,responsesRequest,providerModels,promptCacheKey} from '../../supabase/functions/dream-gateway/providers';
+import {chatRequest,responsesRequest,messagesRequest,messagesUsage,providerModels,promptCacheKey,deepseekMessagesEndpoint,providerEndpoints} from '../../supabase/functions/dream-gateway/providers';
 import {usageCost} from '../../supabase/functions/dream-gateway/inference-policy';
 import {usageCost as appCost} from '@dream/config';
 import {SSEDecoder,MessageAssembler} from '../../supabase/functions/_shared/stream';
@@ -138,4 +138,96 @@ it('sends two editing requests the same prompt start and cache key, so the secon
  // Nothing that changes per request sits in the prompt start: no date, turn id or project text.
  const start=JSON.stringify([first.instructions,first.tools]);expect(start).not.toContain('turn-a');expect(start).not.toMatch(/20\d\d-\d\d-\d\d/);expect(start).not.toContain('travel recap');
  expect(JSON.stringify(first.input).slice(0,60)).toBe(JSON.stringify(second.input).slice(0,60));
+});
+
+it('sends DeepSeek\'s Messages endpoint the agent\'s request with its thinking, its pictures in tool results and the request\'s effort',()=>{
+ const request=messagesRequest({...conversation,model:'deepseek-flash'},providerModels['deepseek-flash'],4096) as any;
+ expect(request).toMatchObject({model:'deepseek-flash',max_tokens:4096,stream:true,system:'You edit videos.',thinking:{type:'enabled'},output_config:{effort:'high'}});
+ expect(request.messages).toEqual([
+  {role:'user',content:[{type:'text',text:'Trim the intro'}]},
+  // The model's earlier thinking goes back with its signature, before its text and call.
+  {role:'assistant',content:[{type:'thinking',thinking:'',signature:'x'},{type:'text',text:'Looking first.'},{type:'tool_use',id:'call_1',name:'look',input:{at:2}}]},
+  // The picture stays in the tool result it came with.
+  {role:'user',content:[{type:'tool_result',tool_use_id:'call_1',content:[{type:'text',text:'Frame at 2s'},png]},{type:'text',text:'Go on'}]}]);
+ // Only custom tools (no web search), and nothing DeepSeek ignores.
+ expect(request.tools).toEqual([{name:'look',description:'Look at a frame',input_schema:conversation.tools[0].input_schema}]);expect(request.tool_choice).toBeUndefined();
+ expect(JSON.stringify(request)).not.toContain('cache_control');
+ // The same effort levels as the chat route; without an effort DeepSeek thinks at its default.
+ const effort=(e?:string)=>(messagesRequest({...conversation,model:'deepseek-flash',profile:e?{effort:e}:undefined},providerModels['deepseek-flash'],4096) as any).output_config?.effort;
+ expect([effort('low'),effort('medium'),effort('high'),effort('xhigh'),effort()]).toEqual(['low','low','high','max',undefined]);
+ // What it cannot take: documents and sound become notes; redacted thinking, Claude's web search blocks and Gemini's call
+ // signatures are left out; turns of one role in a row are one turn, tool results first; a failed call says so.
+ const odd=messagesRequest({model:'deepseek-flash',system:[{type:'text',text:'A'},{type:'text',text:'B'}],tools:[],tool_choice:{type:'any'},messages:[
+  {role:'user',content:[{type:'text',text:'Here'},{type:'document',source:{type:'base64',data:'x'}},{type:'audio',source:{data:'x'}}]},{role:'user',content:'And this'},
+  {role:'assistant',content:[{type:'redacted_thinking',data:'r'},{type:'server_tool_use',id:'s1',name:'web_search',input:{}},{type:'web_search_tool_result',tool_use_id:'s1',content:[]},{type:'tool_use',id:'c1',name:'look',input:{},signature:'GEMINI'}]},
+  {role:'user',content:[{type:'text',text:'A note'},{type:'tool_result',tool_use_id:'c1',is_error:true,content:'No such clip'}]},
+  {role:'assistant',content:[{type:'thinking',thinking:'',signature:''},{type:'text',text:''},{type:'tool_use',id:'c2',name:'look',input:{}}]},
+  {role:'user',content:[{type:'tool_result',tool_use_id:'c2',content:[]}]}]},providerModels['deepseek-flash'],1000) as any;
+ expect(odd.system).toBe('A\n\nB');expect(odd.tools).toBeUndefined();expect(odd.tool_choice).toBeUndefined();
+ expect(odd.messages).toEqual([
+  {role:'user',content:[{type:'text',text:'Here'},{type:'text',text:'[A document was attached here; this model cannot read it.]'},{type:'text',text:'[Audio was attached here; this model cannot hear it.]'},{type:'text',text:'And this'}]},
+  {role:'assistant',content:[{type:'tool_use',id:'c1',name:'look',input:{}}]},
+  {role:'user',content:[{type:'tool_result',tool_use_id:'c1',content:[{type:'text',text:'Error:'},{type:'text',text:'No such clip'}]},{type:'text',text:'A note'}]},
+  {role:'assistant',content:[{type:'tool_use',id:'c2',name:'look',input:{}}]},
+  {role:'user',content:[{type:'tool_result',tool_use_id:'c2',content:[{type:'text',text:'(no output)'}]}]}]);
+ expect((messagesRequest({...conversation,model:'deepseek-flash',tool_choice:{type:'none'}},providerModels['deepseek-flash'],10) as any).tool_choice).toEqual({type:'none'});
+ // A model without vision gets a note instead of the picture.
+ expect(JSON.stringify(messagesRequest({...conversation,model:'deepseek-flash'},{...providerModels['deepseek-flash'],vision:false},4096))).not.toContain('"type":"image"');
+});
+
+it('reads DeepSeek\'s Messages usage as the gateway bills it: every prompt token not read from the cache is input',()=>{
+ const billed={input_tokens:2000,cache_read_input_tokens:10000,cache_creation_input_tokens:0,output_tokens:300};
+ expect(messagesUsage({input_tokens:2000,cache_read_input_tokens:10000,output_tokens:300})).toEqual(billed);
+ // Tokens reported as cache writes are billed by DeepSeek as misses, at the input price.
+ expect(messagesUsage({input_tokens:1500,cache_creation_input_tokens:500,cache_read_input_tokens:10000,output_tokens:300})).toEqual(billed);
+ // DeepSeek's own hit and miss counts decide when present.
+ expect(messagesUsage({input_tokens:12000,prompt_cache_hit_tokens:10000,prompt_cache_miss_tokens:2000,output_tokens:300})).toEqual(billed);
+ expect(messagesUsage({})).toEqual({input_tokens:0,cache_read_input_tokens:0,cache_creation_input_tokens:0,output_tokens:0});
+});
+
+// The same call on both routes: 12,000 prompt tokens of which 10,000 read from the cache, and 300 written.
+const deepseekMessages=[{type:'message_start',message:{id:'m1',type:'message',role:'assistant',model:'deepseek-flash',content:[],stop_reason:null,usage:{input_tokens:2000,cache_read_input_tokens:10000,output_tokens:1}}},
+ {type:'content_block_start',index:0,content_block:{type:'thinking',thinking:'',signature:''}},
+ {type:'content_block_delta',index:0,delta:{type:'thinking_delta',thinking:'The intro runs 4s; '}},{type:'content_block_delta',index:0,delta:{type:'thinking_delta',thinking:'trim to 4.'}},
+ {type:'content_block_delta',index:0,delta:{type:'signature_delta',signature:'ds-sig'}},{type:'content_block_stop',index:0},
+ {type:'content_block_start',index:1,content_block:{type:'tool_use',id:'call_9',name:'trim',input:{}}},{type:'content_block_delta',index:1,delta:{type:'input_json_delta',partial_json:'{"to":4}'}},{type:'content_block_stop',index:1},
+ // A later report without the prompt count does not lower it.
+ {type:'message_delta',delta:{stop_reason:'tool_use',stop_sequence:null},usage:{input_tokens:0,output_tokens:300}},{type:'message_stop'}];
+const deepseekChat=[{choices:[{index:0,delta:{role:'assistant',content:null,reasoning_content:'The intro runs 4s; trim to 4.'}}]},
+ {choices:[{index:0,delta:{tool_calls:[{index:0,id:'call_9',type:'function',function:{name:'trim',arguments:'{"to":4}'}}]}}]},
+ {choices:[{index:0,delta:{},finish_reason:'tool_calls'}],usage:{prompt_tokens:12000,completion_tokens:300,prompt_cache_hit_tokens:10000,prompt_cache_miss_tokens:2000}}];
+
+it('answers DeepSeek on its Messages endpoint when the gateway says so, keeps its signed thinking, and bills it as the chat route does',async()=>{
+ const sent:{url:string;headers:Headers;body:any}[]=[];
+ const fetcher:typeof fetch=async(url,init)=>{sent.push({url:String(url),headers:new Headers(init?.headers),body:JSON.parse(String(init?.body))});return String(url)===deepseekMessagesEndpoint?sse(deepseekMessages,true):sse(deepseekChat);};
+ const ask=async(route:string|undefined,requestId:string)=>{const result=await handleAI({...conversation,model:'deepseek-flash',requestId,max_tokens:4096,stream:true},'user',{db,key:'anthropic',providerKeys:{deepseek:'ds-test'},fetcher,deepseekRoute:route});const assembler=await read(result.stream!);return{message:assembler.result(),receipt:assembler.receipt,policy:assembler.policy};};
+ for(const at of ['2026-10-14T02:00:00Z','2026-10-14T12:00:00Z']){// DeepSeek's peak, then off-peak at half price.
+  vi.setSystemTime(new Date(at));sent.length=0;
+  const messages=await ask('messages','ds-m'),chat=await ask(undefined,'ds-c');
+  expect(sent.map(s=>s.url)).toEqual([deepseekMessagesEndpoint,providerEndpoints.deepseek]);
+  expect(sent[0].headers.get('x-api-key')).toBe('ds-test');expect(sent[0].headers.get('authorization')).toBeNull();expect(sent[0].headers.get('anthropic-version')).toBe('2023-06-01');
+  expect(sent[0].body).toMatchObject({model:'deepseek-flash',thinking:{type:'enabled'},output_config:{effort:'high'}});expect(sent[1].body.reasoning_effort).toBe('high');
+  expect(messages.message.content).toEqual([{type:'thinking',thinking:'The intro runs 4s; trim to 4.',signature:'ds-sig'},{type:'tool_use',id:'call_9',name:'trim',input:{to:4}}]);
+  expect(chat.message.content).toEqual([{type:'tool_use',id:'call_9',name:'trim',input:{to:4}}]);
+  expect(messages.message.stop_reason).toBe('tool_use');
+  expect(messages.message.usage).toMatchObject({input_tokens:2000,cache_read_input_tokens:10000,cache_creation_input_tokens:0,output_tokens:300});expect(chat.message.usage).toMatchObject({input_tokens:2000,cache_read_input_tokens:10000,output_tokens:300});
+  const share=at.endsWith('02:00:00Z')?1:.5,cost=(2000*.3+10000*.006+300*1.2)*share/1e6;
+  expect(messages.receipt.costUsd).toBeCloseTo(cost,12);expect(chat.receipt.costUsd).toBeCloseTo(cost,12);expect(appCost('deepseek-flash',messages.message.usage)).toBeCloseTo(cost,12);
+  expect(messages.policy.features).toContain('deepseek-route:messages');expect(chat.policy.features).toContain('deepseek-route:chat');
+ }
+ vi.useRealTimers();
+});
+
+it('answers on the chat route when DeepSeek\'s Messages endpoint refuses a request, and fails a Messages stream that stops early',async()=>{
+ const warn=vi.spyOn(console,'warn').mockImplementation(()=>{});const urls:string[]=[];
+ const refusing:typeof fetch=async(url)=>{urls.push(String(url));return String(url)===deepseekMessagesEndpoint?Response.json({type:'error',error:{type:'invalid_request_error',message:'unsupported content'}},{status:400}):sse(deepseekChat);};
+ const result=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-f',max_tokens:4096},'user',{db,key:'anthropic',providerKeys:{deepseek:'ds-test'},fetcher:refusing,deepseekRoute:'messages'});
+ expect(urls).toEqual([deepseekMessagesEndpoint,providerEndpoints.deepseek]);expect(result.status).toBe(200);
+ expect(result.body.content).toEqual([{type:'tool_use',id:'call_9',name:'trim',input:{to:4}}]);expect(result.body.dream_policy.features).toContain('deepseek-route:chat-fallback');
+ expect(warn.mock.calls[0][0]).toContain('unsupported content');warn.mockRestore();
+ // Other refusals are the provider's answer, as on every route.
+ const limited=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-l',max_tokens:4096},'user',{db,key:'anthropic',providerKeys:{deepseek:'ds-test'},fetcher:async()=>Response.json({type:'error',error:{type:'rate_limit_error',message:'slow down'}},{status:429}),deepseekRoute:'messages'});
+ expect(limited.status).toBe(429);expect(limited.body.dream_request.retryable).toBe(true);expect(limited.body.error.message).toContain('slow down');
+ const cut=await handleAI({...conversation,model:'deepseek-flash',requestId:'ds-x',max_tokens:4096},'user',{db,key:'anthropic',providerKeys:{deepseek:'ds-test'},fetcher:async()=>sse(deepseekMessages.slice(0,5),true),deepseekRoute:'messages'});
+ expect(cut.status).toBe(502);expect(cut.body.error.message).toContain('ended before the response finished');
 });

@@ -22,7 +22,7 @@ const sha=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.dig
 Deno.serve(async(req)=>{
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
  const action=new URL(req.url).pathname.split('/').filter(Boolean).at(-1);
- if(action==='health')return json({service:'dream-gateway',configured:Boolean(Deno.env.get('ANTHROPIC_API_KEY')),promptCacheKey:'user-and-prompt'});
+ if(action==='health')return json({service:'dream-gateway',configured:Boolean(Deno.env.get('ANTHROPIC_API_KEY')),promptCacheKey:'user-and-prompt',deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE')==='messages'?'messages':'chat'});
  // Which other providers have a key here (never the keys themselves), so the app can offer their models and Auto can use them.
  if(action==='providers')return json(Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Boolean(Deno.env.get(secret))])));
  if(action==='updates'){const {data}=await db.from('dream_releases').select('*').order('published_at',{ascending:false}).limit(10);return json({releases:data??[]});}
@@ -76,7 +76,7 @@ Deno.serve(async(req)=>{
   if(action==='report'){const result=await handleReport(body,user.id,supabaseReportPorts(db));return json(result.body,result.status);}
   if(action==='profile'){const result=await saveProfile(body,user.id,supabaseProfilePorts(db));return json(result.body,result.status);}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
-  if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000))});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
+  if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)),deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE')});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
   if(action==='share-create'){
    const id=crypto.randomUUID(),token=crypto.randomUUID()+crypto.randomUUID(),key=`${user.id}/${id}.mp4`;
    const {error}=await db.from('dream_shares').insert({id,user_id:user.id,token_hash:await sha(token),object_key:key,title:String(body.title??'Dream video').slice(0,200)});if(error)throw error;

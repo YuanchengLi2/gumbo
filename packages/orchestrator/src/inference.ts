@@ -174,7 +174,9 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
  // One usage record per provider response: tokens, cost, duration and which phase and worker made the call.
  const recordUsage=(response:any)=>{
   const usage=response?.usage??{},costUsd=Number((typeof response?.dream_request?.costUsd==='number'?response.dream_request.costUsd:usageCost(input.model,usage)).toFixed(6));
-  const event={turnId:input.turnId,requestId:receipt.id,model:input.model,purpose:input.purpose,phase:input.phase??'main',parent:workerParent(input.phase),pricingVersion:'anthropic-2026-10-07',usage,providerRequestId:receipt.providerRequestId,stopReason:response?.stop_reason,costUsd,durationMs:Date.now()-started,outputTokens:usage.output_tokens??0,visibleChars:JSON.stringify((response?.content??[]).filter((b:any)=>b?.type!=='thinking')).length};
+  // Which DeepSeek route answered (messages, chat or chat-fallback), from the gateway's receipt.
+  const route=Array.isArray(response?.dream_policy?.features)?response.dream_policy.features.find((f:unknown)=>typeof f==='string'&&f.startsWith('deepseek-route:'))?.slice('deepseek-route:'.length):undefined;
+  const event={turnId:input.turnId,requestId:receipt.id,model:input.model,purpose:input.purpose,phase:input.phase??'main',parent:workerParent(input.phase),pricingVersion:'anthropic-2026-10-07',usage,providerRequestId:receipt.providerRequestId,stopReason:response?.stop_reason,costUsd,durationMs:Date.now()-started,outputTokens:usage.output_tokens??0,visibleChars:JSON.stringify((response?.content??[]).filter((b:any)=>b?.type!=='thinking')).length,...(route?{route}:{})};
   db.event('ai.usage',event);db.recordUsage?.(event);publish?.('ai.usage',event);
   db.setMeta(spendKey,String(Number(db.getMeta(spendKey)??0)+(usage.output_tokens??0)));
   if(promptTokens(usage)>0)db.setMeta(actualKey,JSON.stringify({tokens:promptTokens(usage),estimated:budget.estimated}));

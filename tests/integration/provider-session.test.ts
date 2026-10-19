@@ -17,5 +17,26 @@ it('replays signed thinking only for its exact account, model, tools, system and
   }
   expect(JSON.stringify(providerSession(db,{...config,accountId:'other'},{...input,messages}).messages)).not.toContain('signed');
   expect(messages[1].content).toEqual(response);
+  // Claude's thinking without a signature is never sent back.
+  const unsigned=[{type:'thinking',thinking:'unsigned'},{type:'tool_use',id:'read',name:'read',input:{}}];providerSession(db,config,input).record(unsigned);
+  expect(JSON.stringify(providerSession(db,config,{...input,messages:[...input.messages,{role:'assistant',content:unsigned},messages[2]]}).messages)).not.toContain('"unsigned"');
+ }finally{db.close();}
+});
+
+it('replays DeepSeek\'s thinking whatever came before it, signed or not, but only to the same model and account',()=>{
+ const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-binding-ds-')),'Binding');
+ try{
+  const config={url:'https://fixture',token:'token',accountId:'account'},input={turnId:'turn',purpose:'execution',model:'deepseek-flash',system:'Edit',tools:[{name:'look'}],profile:{effort:'high'},messages:[{role:'user',content:'Trim'}]};
+  const signed=[{type:'thinking',thinking:'The intro runs 4s.',signature:'ds-sig'},{type:'tool_use',id:'look',name:'look',input:{}}],unsigned=[{type:'thinking',thinking:'Now cut.'},{type:'tool_use',id:'cut',name:'cut',input:{}}];
+  providerSession(db,config,input).record(signed);
+  const messages=[...input.messages,{role:'assistant',content:signed},{role:'user',content:[{type:'tool_result',tool_use_id:'look',content:'Seen'}]}];
+  providerSession(db,config,{...input,messages}).record(unsigned);
+  const later=[...messages,{role:'assistant',content:unsigned},{role:'user',content:[{type:'tool_result',tool_use_id:'cut',content:'Done'}]}];
+  // An earlier message rewritten (a picture swapped for its note, a compaction), another effort or system prompt: kept.
+  for(const change of [{},{messages:[{role:'user',content:'Trim (picture seen)'},...later.slice(1)]},{profile:{effort:'low'}},{system:'Edit, v2'}]){
+   const view=providerSession(db,config,{...input,messages:later,...change}).messages;expect(view[1].content).toEqual(signed);expect(view[3].content).toEqual(unsigned);
+  }
+  // Another model or account never gets them.
+  for(const view of [providerSession(db,config,{...input,model:'claude-haiku-5-5',messages:later}),providerSession(db,{...config,accountId:'other'},{...input,messages:later})])expect(JSON.stringify(view.messages)).not.toMatch(/ds-sig|Now cut/);
  }finally{db.close();}
 });

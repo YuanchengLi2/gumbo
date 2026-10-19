@@ -17,7 +17,7 @@ Before changing anything, 669 DeepSeek calls from 19 real requests were measured
 - **4, repeat reminders: done** (`packages/orchestrator/src/repeat-reminder.ts`), for every model.
 - **3, structured summaries: footage part done, without a model call.** Each summary now carries `footageSeen` (`footageNotes` in `conversation.ts`): every look at a source with what the agent wrote right after it, carried from one summary to the next, newest 30.
 - **5, spill: already in place.** A result over 12,000 characters is saved as a receipt and replaced by an excerpt with a pointer (`capText` in `code-agent.ts`, `boundedToolResult` in `conversation.ts`).
-- **2, thinking replay: not started.** It changes the gateway and needs an A/B on real edits.
+- **2, thinking replay: built, off until measured.** The gateway sends `deepseek-flash` to DeepSeek's Messages endpoint when its `DEEPSEEK_ROUTE` secret is `messages` (`messagesRequest` in `providers.ts`); the chat route stays the default. DeepSeek's thinking goes back on every later step, bound to the model and account only, so a picture swapped for its note or a compaction keeps it (`provider-session.ts`). A request the endpoint refuses (400 or 422) is answered on the chat route. Receipts and `ai.usage` events name the route that answered. Next: the A/B on five real edits.
 
 ## Ranked
 

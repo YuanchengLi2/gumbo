@@ -1,12 +1,13 @@
 /** Models from other providers behind the same gateway. The app and the agent speak one format (Anthropic Messages, with
  * its streaming events); requests for these models are translated to OpenAI's Responses API or the Chat Completions API
  * (Gemini's OpenAI-compatible endpoint and DeepSeek), and their streams are translated back into the same events, so
- * accounting, receipts, recovery and the app work unchanged. Prices are per million tokens (official pages, October 15,
+ * accounting, receipts, recovery and the app work unchanged. DeepSeek can instead take the request almost as it is, on its
+ * Anthropic-compatible Messages endpoint (messagesRequest). Prices are per million tokens (official pages, October 15,
  * 2026): GPT-6 above 272K prompt tokens at its long-context rate, Gemini's announced increases from their dates, DeepSeek
  * at half its peak rate off-peak. */
 export type ProviderId='openai'|'google'|'deepseek';
 type Rates={price:[number,number];cachedRead:number};
-export type ProviderModel=Rates&{provider:ProviderId;api:'responses'|'chat';vision:boolean;reasoning:boolean;
+export type ProviderModel=Rates&{provider:ProviderId;api:'responses'|'chat'|'messages';vision:boolean;reasoning:boolean;
  /** A price change announced for a date. */ change?:Rates&{from:string};
  /** The rate for prompts (uncached and cached) above this many tokens. */ longContext?:Rates&{above:number};
  /** The share of the price charged outside the provider's peak hours. */ offPeak?:number};
@@ -30,6 +31,10 @@ export function providerRates(model:ProviderModel,usage:Record<string,any>,at=ne
 export const providerSecrets:Record<ProviderId,string>={openai:'OPENAI_API_KEY',google:'GEMINI_API_KEY',deepseek:'DEEPSEEK_API_KEY'};
 export const providerNames:Record<ProviderId,string>={openai:'OpenAI',google:'Google Gemini',deepseek:'DeepSeek'};
 export const providerEndpoints:Record<ProviderId,string>={openai:'https://api.openai.com/v1/responses',google:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',deepseek:'https://api.deepseek.com/chat/completions'};
+/** DeepSeek's Anthropic-compatible Messages endpoint (https://api-docs.deepseek.com/guides/anthropic_api), the one its own
+ * harness uses. Off unless the gateway's DEEPSEEK_ROUTE is 'messages': the chat route stays the default until the two
+ * are compared on real edits. */
+export const deepseekMessagesEndpoint='https://api.deepseek.com/anthropic/v1/messages';
 
 /** Cost of a call to one of these models, from usage already in Anthropic's shape (uncached input, cache reads, output). */
 export function providerCost(model:ProviderModel,usage:Record<string,any>,at=new Date()){const {price,cachedRead}=providerRates(model,usage,at);return((usage.input_tokens??0)*price[0]+(usage.cache_read_input_tokens??0)*cachedRead+(usage.output_tokens??0)*price[1])/1e6;}
@@ -48,6 +53,10 @@ function toolResult(block:any):{text:string;images:string[]}{
  return{text:(block.is_error?'Error: ':'')+(text||'(no output)'),images};
 }
 const effortOf=(body:any)=>{const e=body.profile?.effort;return e==='low'||e==='medium'||e==='high'||e==='xhigh'?e:undefined;};
+// DeepSeek thinks at high effort on every call unless told otherwise (its levels are low, high and max), which made
+// routine edits several times slower than on GPT-6.1 Sol. Gumbo's effort for the request sets it: low and medium think
+// lightly, high fully, xhigh at most.
+const deepseekEffort=(effort:string)=>effort==='xhigh'?'max':effort==='high'?'high':'low';
 
 /** An Anthropic Messages request as a Chat Completions request (Gemini, DeepSeek). */
 export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
@@ -77,10 +86,46 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
  const tools=functionTools(body.tools),effort=effortOf(body);
  return{model:body.model,messages,...(tools.length?{tools:tools.map(f=>({type:'function',function:f})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_tokens:maxTokens,stream:true,stream_options:{include_usage:true},
   ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{}),
-  // DeepSeek thinks at high effort on every call unless told otherwise (its levels are low, high and max), which made
-  // routine edits several times slower than on GPT-6.1 Sol. Gumbo's effort for the request sets it: low and medium think
-  // lightly, high fully, xhigh at most.
-  ...(model.provider==='deepseek'&&effort?{reasoning_effort:effort==='xhigh'?'max':effort==='high'?'high':'low'}:{})};
+  ...(model.provider==='deepseek'&&effort?{reasoning_effort:deepseekEffort(effort)}:{})};
+}
+
+const unreadable:Record<string,string>={document:'[A document was attached here; this model cannot read it.]',audio:'[Audio was attached here; this model cannot hear it.]'};
+/** An Anthropic Messages request as DeepSeek's Messages endpoint takes it. Thinking is on, at the request's effort, and
+ * earlier thinking goes back with its signature as it came, so each step continues the model's own reasoning instead of
+ * starting again (the engine sends only thinking this model wrote). Pictures go inline, in tool results too. What the
+ * endpoint cannot take becomes a note (documents, sound) or is left out (redacted thinking, Anthropic's own server tools
+ * and their results, Gemini's call signatures, cache_control, which it ignores). DeepSeek ignores is_error, so a failed
+ * call says so in its text, as on the chat route. */
+export function messagesRequest(body:any,model:ProviderModel,maxTokens:number){
+ const input=(b:any):any[]=>b?.type==='text'?(b.text?[{type:'text',text:b.text}]:[]):
+  b?.type==='image'?(model.vision&&(b.source?.type==='base64'||b.source?.type==='url')?[{type:'image',source:b.source}]:[{type:'text',text:noVision}]):
+  unreadable[b?.type]?[{type:'text',text:unreadable[b.type]}]:[];
+ const result=(b:any)=>{const content=(typeof b.content==='string'?[{type:'text',text:b.content}]:Array.isArray(b.content)?b.content:[]).flatMap(input);
+  return{type:'tool_result',tool_use_id:b.tool_use_id,content:b.is_error?[{type:'text',text:'Error:'},...content]:content.length?content:[{type:'text',text:'(no output)'}]};};
+ const said=(b:any):any[]=>b?.type==='text'?(b.text?[{type:'text',text:b.text}]:[]):
+  b?.type==='thinking'&&(b.thinking||b.signature)?[{type:'thinking',thinking:b.thinking??'',...(b.signature?{signature:b.signature}:{})}]:
+  b?.type==='tool_use'?[{type:'tool_use',id:b.id,name:b.name,input:b.input??{}}]:[];
+ const messages:{role:string;content:any[]}[]=[];
+ for(const m of body.messages as any[]){
+  const blocks=typeof m.content==='string'?[{type:'text',text:m.content}]:Array.isArray(m.content)?m.content:[];
+  const content=m.role==='assistant'?blocks.flatMap(said):blocks.flatMap((b:any)=>b?.type==='tool_result'?[result(b)]:input(b));
+  if(!content.length)continue;
+  // Turns of one role in a row (notes after tool results, or a turn left empty above) are one turn, as Anthropic reads them.
+  const last=messages.at(-1);if(last&&last.role===m.role)last.content.push(...content);else messages.push({role:m.role,content});
+ }
+ for(const m of messages)if(m.role==='user')m.content=[...m.content.filter(b=>b.type==='tool_result'),...m.content.filter(b=>b.type!=='tool_result')];
+ const tools=functionTools(body.tools),effort=effortOf(body),system=systemText(body.system),choice=body.tool_choice?.type;
+ return{model:body.model,max_tokens:maxTokens,stream:true,...(system?{system}:{}),messages,
+  ...(tools.length?{tools:tools.map(t=>({name:t.name,description:t.description,input_schema:t.parameters})),...(choice==='none'||choice==='any'?{tool_choice:{type:choice}}:choice==='tool'&&body.tool_choice.name?{tool_choice:{type:'tool',name:body.tool_choice.name}}:{})}:{}),
+  thinking:{type:'enabled'},...(effort?{output_config:{effort:deepseekEffort(effort)}}:{})};
+}
+/** DeepSeek's usage on its Messages endpoint as the gateway bills it, from the largest of each count the stream reported
+ * (message_start and message_delta). Input is every prompt token not read from the cache: DeepSeek bills a miss at the
+ * input price and has no cache-write charge, so any tokens reported as cache writes are input. Its own hit and miss
+ * counts, when it sends them, decide. */
+export function messagesUsage(seen:Record<string,number>){
+ const native=Number.isFinite(seen.prompt_cache_hit_tokens)&&Number.isFinite(seen.prompt_cache_miss_tokens);
+ return{input_tokens:native?seen.prompt_cache_miss_tokens:(seen.input_tokens??0)+(seen.cache_creation_input_tokens??0),cache_read_input_tokens:native?seen.prompt_cache_hit_tokens:seen.cache_read_input_tokens??0,cache_creation_input_tokens:0,output_tokens:seen.output_tokens??0};
 }
 
 /** Two 32-bit FNV-1a hashes as 16 hex characters: enough to tell prompt prefixes apart in a cache key. */
@@ -169,7 +214,19 @@ export function anthropicStream(response:Response,model:ProviderModel,modelId:st
   const send=(event:string,data:unknown)=>controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),out=new Events(send,modelId,'msg_'+requestId.replace(/[^\w-]/g,'').slice(0,40));
   try{
    if(!response.body)throw new Error('The provider sent no stream.');
-   if(model.api==='chat'){
+   if(model.api==='messages'){
+    // Already Anthropic events: passed on as they come, with usage in the shape the gateway bills.
+    const seen:Record<string,number>={},note=(usage:any)=>{for(const [key,value] of Object.entries(usage??{}))if(typeof value==='number'&&Number.isFinite(value))seen[key]=Math.max(seen[key]??0,value);};
+    let stopped=false;
+    for await(const {event,data} of records(response.body)){
+     const type=data?.type??event;
+     if(type==='error')throw new Error(data.error?.message??'The provider reported an error.');
+     if(type==='message_start'){note(data.message?.usage);send(type,{...data,message:{...data.message,usage:messagesUsage(seen)}});}
+     else if(type==='message_delta'){note(data.usage);send(type,{...data,usage:messagesUsage(seen)});}
+     else{if(type==='message_stop')stopped=true;send(type,data);}
+    }
+    if(!stopped)throw new Error('The provider stream ended before the response finished.');
+   }else if(model.api==='chat'){
     let stop:'end_turn'|'max_tokens'|'refusal'='end_turn',usage:{input:number;cached:number;output:number;reasoning?:number}={input:0,cached:0,output:0};const toolIds=new Map<number,string>();let pending:string|undefined,lastTool:string|undefined;
     for await(const {data} of records(response.body)){
      if(data.error)throw new Error(data.error.message??'The provider reported an error.');out.start();

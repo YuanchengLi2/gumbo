@@ -12,19 +12,23 @@ export function accountScope(connection:ProviderConnection){
  return hash(connection.token);
 }
 
-/** Thinking is replayable only against the exact prefix that produced it. Local history is never rewritten. */
+/** Claude's thinking is replayable only against the exact prefix that produced it. DeepSeek takes its own thinking back
+ * whatever came before it (its harness sends every thinking block the model wrote on each later step), so there it is
+ * bound to the model and account only: a picture swapped for its note, a compaction or a new effort keeps it. Thinking
+ * DeepSeek did not sign is known by its text. Local history is never rewritten. */
 export function providerSession(db:ProjectDB,connection:ProviderConnection,input:{turnId?:string;purpose:string;model:string;system:string;tools:unknown[];messages:any[];profile?:unknown;tool_choice?:unknown;phase?:string}){
  const account=accountScope(connection),configuration=hash({gateway:connection.url,account,model:input.model,system:input.system,tools:input.tools,profile:input.profile,tool_choice:input.tool_choice});
  // One session per conversation phase: parallel workers share a purpose but are separate conversations.
  const key=`provider-session:${account}:${input.turnId??'standalone'}:${input.purpose}:${input.phase??'main'}`;
- const normalized:Message[]=[];
- const binding=(messages:Message[],content:any[])=>hash({configuration,messages,assistant:content});
+ const normalized:Message[]=[],deepseek=input.model.startsWith('deepseek');
+ const binding=(messages:Message[],content:any[])=>deepseek?hash({gateway:connection.url,account,model:input.model}):hash({configuration,messages,assistant:content});
+ const origin=(block:any):string|undefined=>block.signature||block.data||(deepseek&&block.type==='thinking'&&block.thinking?'text:'+block.thinking:undefined);
  for(const message of input.messages){
   if(!Array.isArray(message.content)){normalized.push({role:message.role,content:message.content});continue;}
   const content:any[]=[];
   for(const block of message.content){
    if(block.type==='thinking'||block.type==='redacted_thinking'){
-    const signature=block.signature??block.data;
+    const signature=origin(block);
     if(!signature||db.getMeta('thinking-origin:'+hash(signature))!==binding(normalized,content))continue;
    }
    content.push(structuredClone(block));
@@ -39,7 +43,7 @@ export function providerSession(db:ProjectDB,connection:ProviderConnection,input
  if(changed)db.event('ai.provider_epoch',{turnId:input.turnId,epoch:session.epoch,model:input.model});
  return {messages:normalized,account,epoch:session.epoch,configuration,record(content:any[]){
   const preceding:any[]=[];
-  for(const block of content){if(block.type==='thinking'||block.type==='redacted_thinking'){const signature=block.signature??block.data;if(signature)db.setMeta('thinking-origin:'+hash(signature),binding(normalized,preceding));}preceding.push(block);}
+  for(const block of content){if(block.type==='thinking'||block.type==='redacted_thinking'){const signature=origin(block);if(signature)db.setMeta('thinking-origin:'+hash(signature),binding(normalized,preceding));}preceding.push(block);}
   db.saveState(key,{...session,continuation:[...parts,hash({role:'assistant',content})]});
  }};
 }
