@@ -65,7 +65,12 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  const remove=useStable(()=>run(()=>removeItems(t,f,p.selected),'Delete selection'));
  const split=useStable(()=>run(()=>splitItems(t,f,p.selected.length?p.selected:manualItems(t,f).filter(i=>!t.trackSettings?.[i.track]?.locked).map(i=>i.id),now()),'Split at playhead'));
  const duplicate=useStable(()=>run(()=>duplicateItems(t,f,p.selected),'Duplicate selection'));
- const seek=useStable((frame:number)=>p.onSeek(frame)),attach=useStable((ids:string[])=>{p.onAttachments([...new Set([...p.attachments,...ids])]);p.onTab('chat');});
+ const seek=useStable((frame:number)=>p.onSeek(frame)),attach=useStable((ids:string[])=>{p.onAttachments([...new Set([...p.attachments,...ids])]);toChat();});
+ // The editor has no chat: writing to Gumbo (Ctrl+L or /, or attaching media) opens Gumbo's layout with the box focused.
+ const toChat=()=>{const store=useEditor.getState();if(store.layout==='editor')store.setLayout('gumbo');p.onTab('chat');
+  requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask Gumbo to edit"]')?.focus());};
+ useEffect(()=>{if(!editor)return;const key=(e:KeyboardEvent)=>{const mod=e.ctrlKey||e.metaKey;if(mod&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='l'||!mod&&!typing(e)&&e.key==='/'){e.preventDefault();toChat();}};
+  window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[editor]);
  // Read when used: while playing the workspace does not re-render, so its frame is where playback started.
  const now=()=>usePlayhead.getState().frame/t.settings.fps;
  // Editing keys after OpenCut's (manual/shortcuts.ts): S or Ctrl+B splits, Q and W split and remove a side, Ctrl+C and
@@ -107,13 +112,13 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
  const cursorView=<AgentCursor active={driving} label={drivingLabel} steps={recentSteps} stage={stage} timeline={shownDraft?.timeline??t} footage={shownDraft?.assets?.length?{...f,assets:[...f.assets,...shownDraft.assets.filter(a=>!f.assets.some(b=>b.id===a.id))]}:f} onStop={stopRun}/>;
  const helpView=help&&<ShortcutsHelp onClose={()=>setHelp(false)}/>;
  if(editor){
-  // OpenCut's layout: assets (with Gumbo's chat as the first tab), preview and properties over a full-width timeline.
+  // OpenCut's layout: assets, preview and properties over a full-width timeline.
   const drag=(set:(n:number)=>void,key:string,value:(e:React.PointerEvent<HTMLDivElement>,box:DOMRect)=>number,min:number,max:number)=>({onPointerDown:(e:React.PointerEvent<HTMLDivElement>)=>e.currentTarget.setPointerCapture(e.pointerId),onPointerMove:(e:React.PointerEvent<HTMLDivElement>)=>{if(!e.currentTarget.hasPointerCapture(e.pointerId))return;const n=Math.max(min,Math.min(max,value(e,e.currentTarget.closest('.editor-layout')!.getBoundingClientRect())));set(n);localStorage.setItem(key,String(n));}});
-  const tabs:SidebarTab[]=['chat','media','text','stickers','effects','transitions','filters','captions','elements'],tab=tabs.includes(p.tab)?p.tab:'media';
+  const tabs:SidebarTab[]=['media','text','stickers','effects','transitions','filters','captions','elements'],tab=tabs.includes(p.tab)?p.tab:'media';
   const selectedClip=p.selected.length===1?t.spine.find(c=>c.id===p.selected[0]):undefined;
   return <EditorActionsContext.Provider value={editorActions}><div className="ai-workspace editor-workspace"><section ref={stage} className={'ai-stage editor-layout'+(driving?' agent-driving':'')} style={{'--assets-width':`${assetsWidth}%`,'--properties-width':`${propsWidth}%`,'--timeline-height':`${editorTimeline}%`} as React.CSSProperties}>{cursorView}
    <div className="editor-top with-properties">
-    <AssetsPanel tab={tab} onTab={p.onTab} tabs={tabs}>{tab==='chat'?<div className="editor-chat">{chatView}{composer}</div>:tab==='elements'?elementsView:tab==='transitions'?<TransitionsView disabled={locked} onApply={addTransition}/>:tab==='text'?<TextView disabled={locked} onAdd={addPiece}/>:tab==='stickers'?<StickersView disabled={locked} onAdd={addPiece}/>:tab==='effects'?<EffectsView disabled={locked} onAdd={addPiece}/>:tab==='filters'?<FiltersView disabled={locked} onAdd={addPiece} current={selectedClip?.framing?.filter}/>:tab==='captions'?<CaptionsView disabled={locked} current={t.captions?.style} onChoose={chooseCaptions}/>:<div className="sidebar-scroll"><ProjectMedia project={p.project} selected={p.attachments} onSelect={p.onAttachments} onImport={p.onImport} onImportFiles={paths=>void p.importFiles(paths).catch(error=>p.onError((error as Error).message))} command={p.command} onAdd={locked?undefined:addMedia}/></div>}</AssetsPanel>
+    <AssetsPanel tab={tab} onTab={p.onTab} tabs={tabs}>{tab==='elements'?elementsView:tab==='transitions'?<TransitionsView disabled={locked} onApply={addTransition}/>:tab==='text'?<TextView disabled={locked} onAdd={addPiece}/>:tab==='stickers'?<StickersView disabled={locked} onAdd={addPiece}/>:tab==='effects'?<EffectsView disabled={locked} onAdd={addPiece}/>:tab==='filters'?<FiltersView disabled={locked} onAdd={addPiece} current={selectedClip?.framing?.filter}/>:tab==='captions'?<CaptionsView disabled={locked} current={t.captions?.style} onChoose={chooseCaptions}/>:<div className="sidebar-scroll"><ProjectMedia project={p.project} selected={p.attachments} onSelect={p.onAttachments} onImport={p.onImport} onImportFiles={paths=>void p.importFiles(paths).catch(error=>p.onError((error as Error).message))} command={p.command} onAdd={locked?undefined:addMedia}/></div>}</AssetsPanel>
     <div className="editor-resizer" role="separator" aria-label="Resize assets" {...drag(setAssetsWidth,'dream-editor-assets',(e,box)=>(e.clientX-box.left)/box.width*100,16,45)}/>
     <div className="editor-preview">{playerView}</div>
     <div className="editor-resizer" role="separator" aria-label="Resize properties" {...drag(setPropsWidth,'dream-editor-properties',(e,box)=>(box.right-e.clientX)/box.width*100,16,40)}/>

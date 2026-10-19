@@ -1,12 +1,11 @@
 import React from 'react';
 import {Folder,Type,Smile,Wand2,ChevronsRight,Blend,Captions,ListTree} from 'lucide-react';
 import type {SidebarTab} from '../../store/editor';
-import {GumboMark} from '../home/HomeScreen';
 
-/** The editor's assets panel, after OpenCut's: a rail of tabs down the left (Gumbo's chat first, then media and the
- * libraries) and the open tab beside it. No box and no button bar: the rail is icons with their names under them. */
+/** The editor's assets panel, after OpenCut's: a rail of tabs down the left (media, then the libraries) and the open tab
+ * beside it. Gumbo's chat is the other layout, one click away in the header. No box and no button bar: the rail is icons
+ * with their names under them. */
 export const ASSET_TABS:{id:SidebarTab;label:string;icon:React.ReactNode}[]=[
- {id:'chat',label:'Gumbo',icon:<GumboMark/>},
  {id:'media',label:'Media',icon:<Folder size={17}/>},
  {id:'text',label:'Text',icon:<Type size={17}/>},
  {id:'stickers',label:'Stickers',icon:<Smile size={17}/>},

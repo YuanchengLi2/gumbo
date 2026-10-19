@@ -28,8 +28,6 @@
 .rail-tab .gumbo-mark{width:21px;height:21px}
 .editor-assets-body{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .editor-assets-body>.sidebar-scroll{padding:16px 16px 20px}
-.editor-chat{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 14px 14px}
-.editor-chat>.sidebar-scroll{padding-top:16px}
 
 /* Preview: the picture with OpenCut's transport under it (timecode, play in the middle, view controls). */
 .editor-preview{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--n2);position:relative}
