@@ -16,7 +16,10 @@ const localRuntime=()=>{
 it('ends a command when its shell exits, even if a program it started keeps running in the background',async()=>{
  const {runtime,workspace}=localRuntime(),started=Date.now();
  const result=await runtime.run({id:'bg',projectId:'p',workspace,command:'sleep 20 & echo started',cwd:'.',timeoutMs:60000},new AbortController().signal,()=>{});
- expect(result).toMatchObject({status:'complete',exitCode:0});expect(result.output).toContain('started');expect(Date.now()-started).toBeLessThan(10000);
+ expect(result).toMatchObject({status:'complete',exitCode:0});expect(result.output).toContain('started');
+ // Well under the 20 seconds a wait for the background program would take; commands run below normal priority, so on a
+ // machine busy with the whole test suite this one can take ten seconds or more.
+ expect(Date.now()-started).toBeLessThan(17000);
 },30000);
 
 // "'head' is not recognized": a program's own shell is cmd.exe on Windows, which had no Unix tools.

@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {totalmem,setPriority,constants} from 'node:os';
 import {ProcessRequestSchema,type ProcessRequest,type ProcessResult} from '@dream/contracts';
 import {workspacePath} from '../../../../packages/project-db/src/workspace-store';
+import {extraPythonFolder} from './extra-libraries';
 
 const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
 /** Unix tools for programs that start their own shell: Python's os.system, Node's exec and npm scripts get cmd.exe on
@@ -52,6 +53,8 @@ export class CodeRuntime {
   // shell stays, waits for it and passes on its exit code.
   const script=request.command+'\nexit $?';
   const libraries=join(dirname(this.paths.creation),'libraries'),shared=existsSync(join(libraries,'libraries.json'));
+  // scipy and OpenCV, fetched after install into the user's data folder (extra-libraries.ts), sit beside the bundled ones.
+  const extraPython=shared&&existsSync(extraPythonFolder())?extraPythonFolder():undefined;
   const cache=join(root,'.cache'),sources=join(project,'Sources');mkdirSync(cache,{recursive:true});mkdirSync(sources,{recursive:true});mkdirSync(join(project,'Media'),{recursive:true});
   const longPath=(path:string)=>path.startsWith('\\\\?\\')?path:'\\\\?\\'+path;
   const systemRoot=process.env.SystemRoot??'C:\\Windows',python=join(this.paths.creation,'python'),node=join(this.paths.creation,'node');
@@ -59,7 +62,7 @@ export class CodeRuntime {
   const mediaTools=[...new Set([dirname(this.paths.ffmpeg),dirname(this.paths.ffprobe)])].filter(dir=>existsSync(dir));
   // An explicit environment keeps app/provider credentials out of child processes.
   const shims=unixToolShims(join(cache,'unix-tools'),shell);
-  const environment={SystemRoot:systemRoot,WINDIR:systemRoot,ComSpec:join(systemRoot,'System32','cmd.exe'),PATH:[join(root,'node_modules','.bin'),join(root,'.npm'),join(root,'.python-packages','bin'),join(root,'.venv','Scripts'),...(shared?[join(libraries,'node_modules','.bin')]:[]),node,python,...mediaTools,join(systemRoot,'System32'),shims].join(';'),PATHEXT:'.COM;.EXE;.BAT;.CMD',NODE_OPTIONS:'--preserve-symlinks --preserve-symlinks-main'+(shared?' --require='+JSON.stringify(join(libraries,'shared-modules.cjs')):''),...(shared?{NODE_PATH:join(libraries,'node_modules'),DREAM_SHARED_NODE:libraries}:{}),MPLCONFIGDIR:join(cache,'matplotlib'),IMAGEIO_FFMPEG_EXE:this.paths.ffmpeg,XDG_CACHE_HOME:cache,TEMP:cache,TMP:cache,DREAM_TEMP:longPath(join(cache,'tmp')),HOME:cache,USERPROFILE:cache,APPDATA:cache,LOCALAPPDATA:cache,PYTHONHOME:python,PYTHONPATH:[longPath(join(root,'.python-packages')),...(shared?[longPath(join(libraries,'python'))]:[])].join(';'),PYTHONNOUSERSITE:'1',PIP_TARGET:longPath(join(root,'.python-packages')),PIP_CACHE_DIR:join(cache,'pip'),PIP_DISABLE_PIP_VERSION_CHECK:'1',npm_config_cache:join(cache,'npm'),npm_config_prefix:join(root,'.npm'),npm_config_update_notifier:'false',npm_config_audit:'false',npm_config_dangerously_allow_all_scripts:'true',DREAM_WORKSPACE:root,DREAM_PYTHON_PACKAGES:longPath(join(root,'.python-packages'))};
+  const environment={SystemRoot:systemRoot,WINDIR:systemRoot,ComSpec:join(systemRoot,'System32','cmd.exe'),PATH:[join(root,'node_modules','.bin'),join(root,'.npm'),join(root,'.python-packages','bin'),join(root,'.venv','Scripts'),...(shared?[join(libraries,'node_modules','.bin')]:[]),node,python,...mediaTools,join(systemRoot,'System32'),shims].join(';'),PATHEXT:'.COM;.EXE;.BAT;.CMD',NODE_OPTIONS:'--preserve-symlinks --preserve-symlinks-main'+(shared?' --require='+JSON.stringify(join(libraries,'shared-modules.cjs')):''),...(shared?{NODE_PATH:join(libraries,'node_modules'),DREAM_SHARED_NODE:libraries}:{}),MPLCONFIGDIR:join(cache,'matplotlib'),IMAGEIO_FFMPEG_EXE:this.paths.ffmpeg,XDG_CACHE_HOME:cache,TEMP:cache,TMP:cache,DREAM_TEMP:longPath(join(cache,'tmp')),HOME:cache,USERPROFILE:cache,APPDATA:cache,LOCALAPPDATA:cache,PYTHONHOME:python,PYTHONPATH:[longPath(join(root,'.python-packages')),...(shared?[longPath(join(libraries,'python'))]:[]),...(extraPython?[longPath(extraPython)]:[])].join(';'),PYTHONNOUSERSITE:'1',PIP_TARGET:longPath(join(root,'.python-packages')),PIP_CACHE_DIR:join(cache,'pip'),PIP_DISABLE_PIP_VERSION_CHECK:'1',npm_config_cache:join(cache,'npm'),npm_config_prefix:join(root,'.npm'),npm_config_update_notifier:'false',npm_config_audit:'false',npm_config_dangerously_allow_all_scripts:'true',DREAM_WORKSPACE:root,DREAM_PYTHON_PACKAGES:longPath(join(root,'.python-packages'))};
   const controller=new AbortController();this.owned.add(controller);const stop=()=>controller.abort();signal.addEventListener('abort',stop,{once:true});
   // Old staged dream-render clients receive a terminal migration response; no
   // render implementation or rendering binaries are exposed to chat processes.
@@ -70,7 +73,7 @@ export class CodeRuntime {
   if(local)clearInterval(renderTimer);
   // Every command runs through the host, in a job object with a memory cap: on the user's computer as the user (their
   // programs and files, the workspace's tools first on PATH), otherwise in the AppContainer.
-  const hostRequest=local?{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[],environment:localEnvironment(environment),memoryLimitBytes:commandMemoryLimit(),local:true}:{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment,memoryLimitBytes:commandMemoryLimit()};
+  const hostRequest=local?{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[],environment:localEnvironment(environment),memoryLimitBytes:commandMemoryLimit(),local:true}:{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...(extraPython?[extraPython]:[]),...mediaTools,sources,join(project,'Media')],environment,memoryLimitBytes:commandMemoryLimit()};
   const started=Date.now();
   return await new Promise<ProcessResult>((ok,fail)=>{
    const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});

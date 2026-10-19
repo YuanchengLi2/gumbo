@@ -15,6 +15,7 @@ import {PlayerFrames} from './player-frames';
 import {BackgroundProjects,sameFolder} from './background-projects';
 import {handleInstallerEvent} from './lifecycle';
 import {startUpdates} from './updates';
+import {fetchExtraLibraries} from './extra-libraries';
 import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme,crashReporter} from 'electron';import {join,dirname} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
 import {Models} from './models';
 import {startCrashLog,logCrash,markRunning,markQuit} from './crash-log';
@@ -96,6 +97,8 @@ if(!installerLaunch&&!secondCopy)app.whenReady().then(async()=>{
  ipcMain.handle('dream:pickMedia',async event=>{trusted(event);const r=await dialog.showOpenDialog(window,{title:'Import footage, images, or audio',properties:['openFile','multiSelections'],filters:[{name:'Media',extensions:['mp4','mov','webm','mkv','m4v','avi','mts','m2ts','3gp','mpg','mpeg','wmv','wav','mp3','m4a','aac','flac','ogg','png','jpg','jpeg','webp','heic','heif','avif','gif']}]});if(r.canceled)return [];r.filePaths.forEach(path=>access.grant('path',path));return r.filePaths;});
  // Updates download in the background; restarting into one waits until no edit is running, here or in another project.
  const updates=startUpdates(status=>publish('app.update',status));
+ // scipy and OpenCV are not in the installer; they download once in the background after the first start.
+ void fetchExtraLibraries({creation:paths.creation,libraries:join(paths.staged,'libraries')});
  ipcMain.handle('dream:update',event=>{trusted(event);return updates?.status()??{status:'idle'};});
  ipcMain.handle('dream:restartToUpdate',event=>{trusted(event);if(running||background.ids().length)return{restarted:false,reason:'An edit is running. Restart when it finishes.'};return updates?.restart()?{restarted:true}:{restarted:false,reason:'No update is ready yet.'};});
  ipcMain.handle('dream:runtime',event=>{trusted(event);return{...(process.env.DREAM_ONBOARDING?{onboarding:true}:process.env.DREAM_HEADLESS?{automated:true}:{}),ffmpeg:existsSync(paths.ffmpeg),ffprobe:existsSync(paths.ffprobe),python:existsSync(ingestBinary),whisper:existsSync(whisper),models:!!(process.env.DREAM_WHISPER_MODEL??modelManager.whisperModel()),platform:process.platform,memoryGb:Math.round(totalmem()/1024**3),version:app.getVersion(),projectsFolder:join(process.env.DREAM_DOCUMENTS_DIRECTORY??app.getPath('documents'),'Dream','Projects'),logsFolder:join(app.getPath('userData'),'logs')};});

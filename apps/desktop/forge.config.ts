@@ -6,6 +6,7 @@ import {MakerSquirrel} from '@electron-forge/maker-squirrel';
 import {MakerZIP} from '@electron-forge/maker-zip';
 import {MakerDMG} from '@electron-forge/maker-dmg';
 import {finalizeInstallers} from './finalize-installer';
+import {slimLibraries} from './slim-libraries';
 import {copyRuntimeDependencies} from './copy-runtime';
 import {rmSync,readdirSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -21,9 +22,8 @@ function slimStagedRuntime(staged:string){
  rmSync(join(staged,'ingest'),{recursive:true,force:true});
  // The editable-timeline export's headless Chrome downloads on first use instead (src/main/render-browser.ts).
  rmSync(join(staged,'render-browser'),{recursive:true,force:true});
- // matplotlib and what only it needs are not among the shared libraries (libraries.json) and no command imported them.
- const python=join(staged,'libraries','python');
- if(existsSync(python))for(const name of readdirSync(python))if(/^(matplotlib|mpl_toolkits|contourpy|kiwisolver|cycler|fonttools|fontTools|pyparsing|dateutil|python_dateutil|six)([-.]|$)/i.test(name))rmSync(join(python,name),{recursive:true,force:true});
+ // Unused library files go, and scipy and OpenCV download after install instead (slim-libraries.ts).
+ slimLibraries(join(staged,'libraries'));
  const imageio=join(staged,'libraries','python','imageio_ffmpeg','binaries');
  if(existsSync(imageio))for(const name of readdirSync(imageio))if(/^ffmpeg/i.test(name))rmSync(join(imageio,name),{force:true});
 }
