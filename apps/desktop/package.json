@@ -3,7 +3,7 @@
   "productName": "Dream",
   "description": "Dream local-first AI video editor",
   "author": "Dream",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "main": ".vite/build/main.js",
   "scripts": {

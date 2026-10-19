@@ -12,7 +12,7 @@ type Updater=Pick<typeof autoUpdater,'setFeedURL'|'checkForUpdates'|'quitAndInst
 type Options={feed?:string;updater?:Updater;packaged?:boolean;platform?:string;argv?:string[];firstCheckMs?:number;everyMs?:number};
 
 /** The release feed: DREAM_UPDATE_URL, or `updates` in the staged cloud.json the package was built with. */
-export function updateFeed(env=process.env,cloud=join(process.resourcesPath??app.getAppPath(),'staged/cloud.json')){
+export function updateFeed(env:Record<string,string|undefined>=process.env,cloud=join(process.resourcesPath??app.getAppPath(),'staged/cloud.json')){
  if(env.DREAM_UPDATE_URL)return env.DREAM_UPDATE_URL;
  try{const value=existsSync(cloud)?JSON.parse(readFileSync(cloud,'utf8')).updates:undefined;return typeof value==='string'&&/^https:\/\//.test(value)?value:undefined;}catch{return undefined;}
 }

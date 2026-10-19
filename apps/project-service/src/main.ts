@@ -1,3 +1,8 @@
+import {setPriority,constants} from 'node:os';
+// The project service does the heavy background work (transcription, shot analysis, proxies, contact sheets) and starts
+// ffmpeg and whisper for it. It runs below normal priority, and on Windows every process it starts inherits that, so a
+// long import or transcription yields to whatever the user is doing instead of slowing the whole computer down.
+try{setPriority(constants.priority.PRIORITY_BELOW_NORMAL);}catch{}
 import {recordSceneError} from './scene-errors';
 import {CodeWorkspace} from './code-workspace';
 import {codeRunClient} from './code-run-client';

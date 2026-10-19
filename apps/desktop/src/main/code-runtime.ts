@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {existsSync,readFileSync,mkdirSync,appendFileSync,writeFileSync,readdirSync,renameSync} from 'node:fs';
 import {join,resolve,dirname,relative} from 'node:path';
 import {createHash} from 'node:crypto';
-import {totalmem} from 'node:os';
+import {totalmem,setPriority,constants} from 'node:os';
 import {ProcessRequestSchema,type ProcessRequest,type ProcessResult} from '@dream/contracts';
 import {workspacePath} from '../../../../packages/project-db/src/workspace-store';
 
@@ -73,7 +73,10 @@ export class CodeRuntime {
   const hostRequest=local?{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[],environment:localEnvironment(environment),memoryLimitBytes:commandMemoryLimit(),local:true}:{...request,command:script,cwd,commandHash,receiptPath,shell,readRoots:[this.paths.creation,...(shared?[libraries]:[]),...mediaTools,sources,join(project,'Media')],environment,memoryLimitBytes:commandMemoryLimit()};
   const started=Date.now();
   return await new Promise<ProcessResult>((ok,fail)=>{
-   const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});let pending='',result:ProcessResult|undefined,error:Error|undefined;
+   const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});
+   // The agent's commands (installs, Python, ffmpeg) run below normal priority, and the processes they start inherit it, so
+   // a heavy script never makes the user's computer or Gumbo's own window sluggish.
+   if(child.pid)try{setPriority(child.pid,constants.priority.PRIORITY_BELOW_NORMAL);}catch{}let pending='',result:ProcessResult|undefined,error:Error|undefined;
    const cancel=()=>{if(child.stdin.writable)child.stdin.write('cancel\n');};controller.signal.addEventListener('abort',cancel,{once:true});
    child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify(hostRequest)+'\n');if(signal.aborted)cancel();
    child.stdout.on('data',chunk=>{pending+=chunk.toString();let newline:number;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);try{const data=JSON.parse(line);if(data.type==='output'){appendFileSync(logPath,data.text);onOutput(data.text);}if(data.type==='result')result={...data.result,logPath};if(data.type==='error')error=new Error(data.message);}catch(e){error=e as Error;cancel();}}});
