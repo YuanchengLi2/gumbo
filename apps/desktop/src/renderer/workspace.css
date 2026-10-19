@@ -848,17 +848,18 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 
 
 /* The model picker: a plain list. */
-.composer-popover.model-picker{width:260px;max-height:min(520px,calc(100vh - 200px));overflow:auto;padding:4px;border-radius:12px}
-.fig-home .composer-popover.model-picker{max-height:max(260px,min(520px,calc(100vh - 520px)))}
-.model-group-name{display:flex;align-items:baseline;justify-content:space-between;margin-top:4px;padding:8px 10px 3px;border-top:1px solid var(--n6);font-size:11px;color:var(--n46)}.model-group-name small{font-size:10.5px;color:var(--n35)}
-.model-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto 14px;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border-radius:7px;text-align:left;color:var(--n87)}
-.model-row:hover:not(:disabled){background:var(--n5)}.model-row:disabled{opacity:.4;cursor:default}
-.model-name{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.model-row.selected .model-name{font-weight:600}
-.model-note{font-size:11.5px;color:var(--n46);white-space:nowrap}
-.model-recommended{margin-left:7px;padding:1px 6px;border-radius:999px;background:var(--n8);color:var(--n76);font-size:10.5px;font-style:normal;font-weight:600;vertical-align:1px}
-.home-waitlist{margin:-6px 0 16px;font-size:13.5px;color:var(--n56);text-align:center}
-.model-cost{font-size:11px;color:var(--n40);letter-spacing:.5px;font-variant-numeric:tabular-nums;min-width:40px;text-align:right;white-space:nowrap}
+.composer-popover.model-picker{width:300px;max-height:min(520px,calc(100vh - 200px));overflow:auto;padding:6px;border-radius:14px}
+.model-roux,.model-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto 16px;align-items:center;gap:12px;width:100%;padding:0 10px;border-radius:9px;text-align:left;color:var(--n87)}
+.model-roux{padding-top:8px;padding-bottom:8px}.model-row{height:40px}
+.model-roux:hover,.model-row:hover:not(:disabled){background:var(--n5)}.model-row:disabled{opacity:.4;cursor:default}
+.model-logo{display:grid;place-items:center;width:24px;height:24px;color:var(--n100)}.model-logo.roux .gumbo-mark{width:22px;height:22px}
+.model-roux-text{display:flex;flex-direction:column;gap:1px;min-width:0}.model-roux-text b{font-size:14px;font-weight:600;color:var(--n100)}.model-roux-text small{font-size:11.5px;color:var(--n46);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.model-name{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.model-row.selected .model-name{font-weight:600}
+.model-price{padding:2px 7px;border-radius:6px;background:var(--n8);color:var(--n76);font-size:11px;font-weight:700;letter-spacing:.5px;line-height:16px}
+.model-divider{height:1px;margin:6px 6px;background:var(--n7)}
 .model-check{display:grid;place-items:center;color:var(--n100)}
+.fig-home .composer-popover.model-picker{max-height:max(260px,min(520px,calc(100vh - 520px)))}
+.home-waitlist{margin:-6px 0 16px;font-size:13.5px;color:var(--n56);text-align:center}
 
 /* Working: the "Gumbo is editing" placeholder is the mark alone on no background, and the glow holds still. The cursor
    clicks where it lands (a ring) and says what it's doing. */

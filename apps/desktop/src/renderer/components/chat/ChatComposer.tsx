@@ -4,7 +4,9 @@ import {MediaTile} from '../media/MediaTile';
 import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown,Wand2,Cpu} from 'lucide-react';
 import type {Permission,ModelChoice} from '../../store/editor';
 import {shortcutHints} from '../../shortcuts';
-import {modelInfo,providerLabels,typicalCost} from '@dream/config';
+import {modelInfo,typicalCost,type ModelInfo} from '@dream/config';
+import {LabLogo} from './ModelLogos';
+import {GumboMark} from '../home/HomeScreen';
 import {useProviders,available,shortLabel,pickable,ROUX} from '../../models';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
 type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
@@ -37,23 +39,32 @@ function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permi
  </div>;
 }
 
-/** The model picker, a plain list: Auto first, then each provider's models, each with a word on what it's for. A provider
- * without its key on the gateway is listed but greyed out. */
-const tierWord:Record<string,string>={frontier:'Most capable',strong:'Balanced',light:'Fast'};
+/** The model picker, laid out like Rork's: Roux 1 (Gumbo's own model, the recommended default) on top, then every other
+ * model with its lab's mark and its price as $ to $$$$$ (a typical request's credits on hover). Roux 1 is $; every
+ * other model costs more. A provider without its key on the gateway is listed but greyed out. */
+const premium:ModelChoice[]=['opus','sonnet','gpt-astra','gpt-sol','gemini-argon','gemini-flash'];
 export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:ModelChoice)=>void}){
- const menu=usePopover(),providers=useProviders(),label=shortLabel(value);
- const groups=(['anthropic','openai','google'] as const).map(provider=>({provider,models:pickable.filter(m=>m.provider===provider)})).filter(g=>g.models.length);
- // Each model's price as $ to $$$$$ (a typical request's credits on hover): Roux 1 is $, every other model costs more.
- const signs=(cost:string)=>cost.length<2?'$$':cost,roux=modelInfo('deepseek-flash');
- const row=(choice:ModelChoice,name:string,note:string,ready=true,cost?:{signs:string;credits:number},recommended=false)=><button key={choice} type="button" role="menuitemradio" aria-checked={choice===value} disabled={!ready} className={'model-row'+(choice===value?' selected':'')} onClick={()=>{onChange(choice);menu.setOpen(false);}}><span className="model-name">{name}{recommended&&<em className="model-recommended">Recommended</em>}</span><span className="model-note">{note}</span><span className="model-cost" title={cost?`About ${cost.credits} credits for a typical request`:undefined} aria-label={cost?`About ${cost.credits} credits for a typical request`:undefined}>{cost?.signs}</span><span className="model-check">{choice===value&&<Check size={14}/>}</span></button>;
+ const menu=usePopover(),providers=useProviders(),label=shortLabel(value),roux=modelInfo('deepseek-flash');
+ const credits=(m:ModelInfo|undefined)=>m?Math.max(1,Math.round(typicalCost(m)*100)):3,signs=(cost:string)=>cost.length<2?'$$':cost;
+ const pick=(choice:ModelChoice)=>{onChange(choice);menu.setOpen(false);};
+ const models=premium.map(choice=>pickable.find(m=>m.choice===choice)).filter((m):m is ModelInfo=>!!m);
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip model-chip '+value} aria-label={'Model: '+label} aria-haspopup="menu" aria-expanded={menu.open} title="Model" onClick={()=>menu.setOpen(!menu.open)}><span>{label}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover model-picker" role="menu" aria-label="Model">
-   {row('auto',ROUX,'Gumbo’s own model',true,{signs:'$',credits:roux?Math.max(1,Math.round(typicalCost(roux)*100)):3},true)}
-   {groups.map(g=>{const ready=available(g.models[0].choice,providers);return <React.Fragment key={g.provider}>
-    <div className="model-group-name">{providerLabels[g.provider]}{!ready&&<small>Not set up</small>}</div>
-    {g.models.map(m=>row(m.choice,m.label.replace(/^Claude /,''),tierWord[m.tier]??'',available(m.choice,providers),{signs:signs(m.cost),credits:Math.max(1,Math.round(typicalCost(m)*100))}))}
-   </React.Fragment>;})}
+   <button type="button" role="menuitemradio" aria-checked={value==='auto'} className={'model-roux'+(value==='auto'?' selected':'')} onClick={()=>pick('auto')}>
+    <span className="model-logo roux"><GumboMark/></span>
+    <span className="model-roux-text"><b>{ROUX}</b><small>Gumbo’s own model · Recommended</small></span>
+    <span className="model-price" title={`About ${credits(roux)} credits for a typical request`}>$</span>
+    <span className="model-check">{value==='auto'&&<Check size={15}/>}</span>
+   </button>
+   <div className="model-divider" role="separator"/>
+   {models.map(m=>{const ready=available(m.choice,providers),selected=m.choice===value;
+    return <button key={m.choice} type="button" role="menuitemradio" aria-checked={selected} disabled={!ready} title={ready?m.detail:'Not set up yet'} className={'model-row'+(selected?' selected':'')} onClick={()=>pick(m.choice)}>
+     <span className="model-logo"><LabLogo provider={m.provider}/></span>
+     <span className="model-name">{m.label.replace(/^Claude /,'')}</span>
+     <span className="model-price" title={`About ${credits(m)} credits for a typical request`}>{signs(m.cost)}</span>
+     <span className="model-check">{selected&&<Check size={15}/>}</span>
+    </button>;})}
   </div>}
  </div>;
 }
