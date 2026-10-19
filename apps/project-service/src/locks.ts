@@ -9,6 +9,8 @@ export function acquireProjectLock(folder:string):string {
   let owner:{pid:number};
   try{owner=JSON.parse(readFileSync(path,'utf8'));}catch{throw new Error('The project lock is unreadable. Restore its backup or inspect .dream/writer.lock before opening.');}
   if(!Number.isInteger(owner.pid)||owner.pid<=0)throw new Error('The project has an invalid writer lock.');
+  // This service's own lock, left by its last open of the project: it is ours to take again.
+  if(owner.pid===process.pid){unlinkSync(path);return create();}
   try{process.kill(owner.pid,0);}catch(error){
     if((error as NodeJS.ErrnoException).code==='ESRCH'){unlinkSync(path);return create();}
     throw new Error('Unable to verify whether another Gumbo process has this project open.');

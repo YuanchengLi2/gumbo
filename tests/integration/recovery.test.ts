@@ -14,7 +14,8 @@ it('keeps the original completed artifact when processing is interrupted',async(
 });
 it('does not remove another living writer lock after rejecting an open',()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-lock-'));mkdirSync(join(folder,'.dream'));
- const lock=acquireProjectLock(folder),before=readFileSync(lock,'utf8');
+ // Another living process holds it (this test's parent); a service's own leftover lock it may take back (locks.ts).
+ const lock=acquireProjectLock(folder);writeFileSync(lock,JSON.stringify({pid:process.ppid,started:new Date().toISOString()}));const before=readFileSync(lock,'utf8');
  expect(()=>acquireProjectLock(folder)).toThrow('another Gumbo window');
  expect(existsSync(lock)).toBe(true);expect(readFileSync(lock,'utf8')).toBe(before);
 });

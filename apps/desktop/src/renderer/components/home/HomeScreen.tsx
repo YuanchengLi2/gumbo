@@ -43,7 +43,8 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
  // Right-click a project for its menu; pinned ones lead the sidebar, archived ones wait under Archived.
  const [menu,setMenu]=React.useState<MenuAt|null>(null),[showArchived,setShowArchived]=React.useState(false);
  const options=(project:ProjectSummary)=>(e:React.MouseEvent)=>{e.preventDefault();setMenu({project,x:e.clientX,y:e.clientY});};
- const live=p.projects.filter(x=>!x.archived),pinned=live.filter(x=>x.pinned),recent=live.filter(x=>!x.pinned),archived=p.projects.filter(x=>x.archived);
+ // Projects with an edit running come first in the recents (then the most recent), so everything in progress is in view.
+ const live=p.projects.filter(x=>!x.archived),pinned=live.filter(x=>x.pinned),recent=live.filter(x=>!x.pinned).sort((a,b)=>Number(working.has(b.id))-Number(working.has(a.id))),archived=p.projects.filter(x=>x.archived);
  const item=(project:ProjectSummary)=><button type="button" key={project.id} className={(project.missing?'missing ':'')+(menu?.project.id===project.id?'menu-open':'')} title={project.name} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}><span>{project.name}</span>{working.has(project.id)&&<i className="spin"><Loader2 size={13} aria-label="Gumbo is editing"/></i>}</button>;
  // A new video starts in the box: it is cleared and focused.
  const newVideo=()=>{p.onChange('');requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.fig-home .home-composer textarea')?.focus());};

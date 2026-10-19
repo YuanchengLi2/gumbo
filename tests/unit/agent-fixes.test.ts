@@ -109,6 +109,33 @@ describe('edit logs by kind',()=>{
  });
 });
 
+describe('switching projects',()=>{
+ it('lets a project service take back its own lock, and still refuses one another live process holds',async()=>{
+  const {mkdtempSync,mkdirSync,writeFileSync,readFileSync}=await import('node:fs'),{join}=await import('node:path'),{tmpdir}=await import('node:os');
+  const {acquireProjectLock}=await import('../../apps/project-service/src/locks');
+  const folder=mkdtempSync(join(tmpdir(),'gumbo-lock-'));mkdirSync(join(folder,'.dream'));
+  writeFileSync(join(folder,'.dream','writer.lock'),JSON.stringify({pid:process.pid,started:'2026-10-19T00:00:00Z'}));
+  const path=acquireProjectLock(folder);expect(JSON.parse(readFileSync(path,'utf8')).pid).toBe(process.pid);
+  // Another live process (this test's parent) still owns it.
+  writeFileSync(path,JSON.stringify({pid:process.ppid,started:'2026-10-19T00:00:00Z'}));
+  expect(()=>acquireProjectLock(folder)).toThrow(/open in another Gumbo window/);
+ });
+});
+
+describe('naming a project',()=>{
+ it('takes the router\'s title for an untitled project as soon as the message is read',async()=>{
+  const {parseTriage,routeRecord,triageMessage}=await import('../../packages/orchestrator/src/triage');
+  const t=parseTriage(JSON.stringify({kind:'edit',difficulty:3,work:'footage',feedback:'none',model:'strong',vision:true,carriesStopped:false,parts:[],lookFor:'',title:'"Vietnam Travel Recap."',reason:'a recap'}))!;
+  expect(t.title).toBe('Vietnam Travel Recap');expect(routeRecord({...t,source:'model'}).projectTitle).toBe('Vietnam Travel Recap');
+  expect(routeRecord({...t,title:'',source:'model'})).not.toHaveProperty('projectTitle');
+  // An older gateway's reply has no title, and nothing breaks.
+  expect(parseTriage(JSON.stringify({kind:'answer',difficulty:1,reason:'hi'}))?.title).toBe('');
+  const project={clips:0,overlays:0,audio:0,minutes:0,footageFiles:3};
+  expect(JSON.parse(triageMessage({message:'make a recap',mode:'auto',recent:[],project,attachments:0,untitled:true})).projectUntitled).toBe(true);
+  expect(JSON.parse(triageMessage({message:'make a recap',mode:'auto',recent:[],project,attachments:0})).projectUntitled).toBeUndefined();
+ });
+});
+
 describe('tool inputs',()=>{
  it('moves a number past a field\'s bounds to the bound instead of rejecting the call',()=>{
   const read=parseCodeTool('read_file',{path:'context/project.md',limit:5000});expect(read.limit).toBe(400);

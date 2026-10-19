@@ -137,7 +137,9 @@ export class Director {
   // needs), and the tier that made the result this message may be reacting to.
   const available=routerChoices(this.enabledProviders());
   const previousModel=this.previousModel(turnId);
-  return{models:available,...(previousModel?{previousModel}:{}),message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments};
+  return{models:available,...(previousModel?{previousModel}:{}),message:text,mode:intent,recent,stopped:stopped?.text,planWaiting:this.db.getMeta('ai_status')==='awaiting_approval',project:{clips:t.spine.length,overlays:t.attached.length,audio:t.music.length,minutes,footageFiles:footage.assets.length},attachments,
+   // An untitled project is named by the router as soon as the message is read, not partway through the edit.
+   untitled:!this.db.getMeta('project_title_source')};
  }
  private recordTriage(turnId:string,triage:Triage){
   this.recordRoute(turnId,{...routeRecord(triage),...(triage.work?{work:triage.work}:{}),...(triage.model?{model:triage.model}:{})});
