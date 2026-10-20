@@ -19,7 +19,7 @@ export const sourceExcluded=new Set(['node_modules','.venv','.python-packages','
 export function workspacePath(root:string,path:string){
  if(path.includes('\0')||(!isAbsolute(path)&&path.includes(':'))||(isAbsolute(path)&&path.slice(2).includes(':')))throw new Error('Use a path inside the workspace.');
  const target=resolve(root,path),rel=relative(root,target);
- if(rel==='..'||rel.startsWith('..\\')||rel.startsWith('../')||isAbsolute(rel))throw new Error('Path is outside the workspace.');
+ if(rel==='..'||rel.startsWith('..\\')||rel.startsWith('../')||isAbsolute(rel))throw new Error('Path is outside the workspace. For a file elsewhere on the computer use scope computer (read_file, view_media), or bring media in with import_media first.');
  let current=root;if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error('Workspace links are not allowed.');
  for(const part of rel.split(/[\\/]/).filter(Boolean)){current=join(current,part);if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error('Workspace links are not allowed.');}
  return target;

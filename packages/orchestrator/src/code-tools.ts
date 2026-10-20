@@ -106,6 +106,11 @@ const clampNumbers=(value:any,schema:any):any=>{
   if(typeof schema.minimum==='number')n=Math.max(n,schema.minimum);if(typeof schema.exclusiveMinimum==='number'&&n<=schema.exclusiveMinimum)n=schema.type==='integer'?schema.exclusiveMinimum+1:n;
   return schema.type==='integer'?Math.round(n):n;
  }
+ // Too many numbers (13 frame times where 12 is the most) keeps the most an even spread allows, first and last included:
+ // rejecting them made the agent resend the look (3 of the failed calls on October 18-19).
+ if(Array.isArray(value)&&typeof schema?.maxItems==='number'&&value.length>schema.maxItems&&schema.maxItems>1&&value.every(item=>typeof item==='number')){
+  const max=schema.maxItems;value=Array.from({length:max},(_,i)=>value[Math.round(i*(value.length-1)/(max-1))]);
+ }
  if(Array.isArray(value))return value.map(item=>clampNumbers(item,schema?.items));
  if(value&&typeof value==='object'&&schema?.properties)return Object.fromEntries(Object.entries(value).map(([k,v])=>[k,clampNumbers(v,schema.properties[k])]));
  return value;
