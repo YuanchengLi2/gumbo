@@ -116,13 +116,13 @@ it('counts tokens by day, the busiest day, the longest task and the streaks',asy
 });
 
 describe('plan limits',()=>{
- it('gives each plan its @ searches, style memory and cloud space, and the summary carries them with this month\'s use',async()=>{
+ it('gives each plan its @ searches and style memory, and the summary carries them with this month\'s use',async()=>{
   expect(Object.fromEntries(Object.entries(PLANS).map(([id,p])=>[id,p.limits]))).toEqual({
-   free:{creatorSearches:10,styleMemory:1,cloudGB:0},pro:{creatorSearches:200,styleMemory:6,cloudGB:50},
-   max:{creatorSearches:1000,styleMemory:20,cloudGB:250},max20:{creatorSearches:5000,styleMemory:null,cloudGB:1000}});
-  const ports={account:async()=>({email:'a@b.c',plan:'pro',subscription_status:'active',period_end:null,cancel_at_period_end:false,credit_overdraft:0,stripe_customer_id:null,stripe_subscription_id:null}),grants:async()=>[],ensureFree:async()=>{},usage:async()=>({creatorSearches:12,cloudBytes:0})} as unknown as BillingPorts;
+   free:{creatorSearches:10,styleMemory:1},pro:{creatorSearches:200,styleMemory:6},
+   max:{creatorSearches:1000,styleMemory:20},max20:{creatorSearches:5000,styleMemory:null}});
+  const ports={account:async()=>({email:'a@b.c',plan:'pro',subscription_status:'active',period_end:null,cancel_at_period_end:false,credit_overdraft:0,stripe_customer_id:null,stripe_subscription_id:null}),grants:async()=>[],ensureFree:async()=>{},usage:async()=>({creatorSearches:12})} as unknown as BillingPorts;
   const summary:any=await billingSummary('u',ports,undefined);
-  expect(summary.limits).toEqual({creatorSearches:200,styleMemory:6,cloudGB:50});expect(summary.usage).toEqual({creatorSearches:12,cloudBytes:0});
+  expect(summary.limits).toEqual({creatorSearches:200,styleMemory:6});expect(summary.usage).toEqual({creatorSearches:12});
   expect(summary.plans.find((p:any)=>p.id==='max20').limits.styleMemory).toBeNull();
  });
 });

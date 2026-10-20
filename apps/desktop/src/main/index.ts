@@ -17,7 +17,6 @@ import {handleInstallerEvent} from './lifecycle';
 import {startUpdates} from './updates';
 import {createHash} from 'node:crypto';
 import {fetchExtraLibraries} from './extra-libraries';
-import {saveToCloud,openFromCloud,HashCache,type CloudApi} from './cloud';
 import {app,BrowserWindow,ipcMain,dialog,protocol,shell,Menu,session,nativeTheme,crashReporter} from 'electron';import {join,dirname} from 'node:path';import {readFileSync,existsSync,writeFileSync,statSync,mkdirSync} from 'node:fs';import {familiarMediaFolders} from './media-catalog';import {totalmem} from 'node:os';import {CommandSchema} from '@dream/contracts';import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';import {ProjectService} from './service';import {registerAssets,releaseAssets,installMediaProtocol} from './media';import {installEngineProtocol,drafts} from './engine-protocol';import {runtimePaths} from './resources';import {Account} from './account';
 import {Models} from './models';
 import {startCrashLog,logCrash,markRunning,markQuit} from './crash-log';
@@ -77,18 +76,6 @@ const makeService=()=>{const created:ProjectService=new ProjectService({...setti
  // The home screen's project menu. Deleting moves the folder to the Recycle Bin (so it can be restored) and only for
  // projects Gumbo made in its Projects folder; a project kept elsewhere can only be removed from the list. The open project
  // and one still editing out of sight are left alone.
- // Gumbo's cloud (cloud.ts): the gateway's cloud routes as the signed-in user; fingerprints are remembered between saves.
- const cloudHashes=new HashCache(join(app.getPath('userData'),'cloud-hashes.json'));
- const cloudApi:CloudApi=async(action,body)=>{if(!account.signedIn())throw new Error('Sign in to use your cloud.');const response=await fetch(`${account.gateway()}/${action}`,{method:'POST',headers:{Authorization:`Bearer ${await account.token()}`,'Content-Type':'application/json'},body:JSON.stringify(body)});const result=await response.json().catch(()=>({})) as any;if(result?.notSetUp)throw new Error("Gumbo's cloud is not set up yet.");if(!response.ok)throw new Error(result?.error??`The cloud answered ${response.status}.`);return result;};
- ipcMain.handle('dream:cloud',async(event,request:any)=>{trusted(event);
-  if(request?.action==='list')return cloudApi('cloud-list',{});
-  if(request?.action==='remove'&&typeof request.projectId==='string')return cloudApi('cloud-delete',{projectId:request.projectId});
-  if(request?.action!=='open'||typeof request.projectId!=='string')throw new Error('Unknown cloud request.');
-  // Into the project's own folder when it is already on this computer (only after asking), else a new one.
-  const here=library.find(request.projectId),projects=join(process.env.DREAM_DOCUMENTS_DIRECTORY??app.getPath('documents'),'Dream','Projects');
-  if(here&&existsSync(here.folder)){if(!request.overwrite)return{exists:true,folder:here.folder};if((running||background.ids().includes(here.id))||currentState?.meta&&sameFolder(currentState.meta.folder,here.folder))throw new Error('Close this project before replacing it with the cloud copy.');}
-  const folder=here&&existsSync(here.folder)?here.folder:join(projects,createHash('sha256').update(`cloud:${request.projectId}:${Date.now()}`).digest('hex').slice(0,24));
-  mkdirSync(folder,{recursive:true});const opened=await openFromCloud(request.projectId,folder,cloudApi,p=>publish('cloud.progress',p),{hashes:cloudHashes});access.project(folder);return opened;});
  ipcMain.handle('dream:projectAction',async(event,id:unknown,action:unknown)=>{trusted(event);
   const entry=typeof id==='string'?library.find(id):undefined;if(!entry)throw new Error('That project is no longer on the list.');
   const busy=(running&&currentState?.meta&&sameFolder(currentState.meta.folder,entry.folder))||background.ids().includes(entry.id);
@@ -96,7 +83,6 @@ const makeService=()=>{const created:ProjectService=new ProjectService({...setti
   if(action==='pin'||action==='unpin')library.mark(entry.id,{pinned:action==='pin'});
   else if(action==='archive'||action==='unarchive'){if(busy&&action==='archive')throw new Error('Gumbo is still editing this project. Stop it first.');library.mark(entry.id,{archived:action==='archive'});}
   else if(action==='forget'){if(busy)throw new Error('Gumbo is still editing this project. Stop it first.');library.mark(entry.id,'forget');}
-  else if(action==='cloud'){if(!existsSync(entry.folder))throw new Error("This project's folder is missing.");await saveToCloud(entry,cloudApi,p=>publish('cloud.progress',p),{hashes:cloudHashes});}
   else if(action==='reveal'){if(!existsSync(entry.folder))throw new Error("This project's folder is missing.");shell.showItemInFolder(join(entry.folder,'Project.dreamproj'));}
   else if(action==='trash'){
    if(busy)throw new Error('Gumbo is still editing this project. Stop it first.');

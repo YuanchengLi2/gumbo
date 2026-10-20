@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {Pin,PinOff,FolderOpen,Archive,ArchiveRestore,Trash2,X,ArrowUpRight,ListX,CloudUpload} from 'lucide-react';
+import {Pin,PinOff,FolderOpen,Archive,ArchiveRestore,Trash2,X,ArrowUpRight,ListX} from 'lucide-react';
 import type {ProjectSummary,ProjectAction} from '@dream/contracts';
 
 /** A project's menu on right-click (in the sidebar or on its card): open, pin, show in folder, archive, remove from the
@@ -22,7 +22,6 @@ export function ProjectMenu(p:{at:MenuAt|null;onClose:()=>void;onOpen:(project:P
    <button type="button" role="menuitem" onClick={()=>{p.onClose();p.onOpen(project);}}><ArrowUpRight size={15}/>Open</button>
    {!project.archived&&<button type="button" role="menuitem" onClick={()=>act(project.pinned?'unpin':'pin')}>{project.pinned?<PinOff size={15}/>:<Pin size={15}/>}{project.pinned?'Unpin':'Pin to top'}</button>}
    <button type="button" role="menuitem" disabled={project.missing} onClick={()=>act('reveal')}><FolderOpen size={15}/>Show in folder</button>
-   <button type="button" role="menuitem" disabled={project.missing} onClick={()=>act('cloud')}><CloudUpload size={15}/>Save to cloud</button>
    <button type="button" role="menuitem" onClick={()=>act(project.archived?'unarchive':'archive')}>{project.archived?<ArchiveRestore size={15}/>:<Archive size={15}/>}{project.archived?'Unarchive':'Archive'}</button>
    <hr/>
    <button type="button" role="menuitem" onClick={()=>act('forget')}><ListX size={15}/>Remove from list</button>

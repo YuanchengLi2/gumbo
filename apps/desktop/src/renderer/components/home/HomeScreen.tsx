@@ -1,6 +1,5 @@
 import React from 'react';
-import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2,Pin,ChevronRight,Cloud} from 'lucide-react';
-import {CloudProjects} from './CloudProjects';
+import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2,Pin,ChevronRight} from 'lucide-react';
 import {ProjectMenu,type MenuAt} from './ProjectMenu';
 import {useWorking} from '../../working';
 import type {ProjectSummary,ProjectAction} from '@dream/contracts';
@@ -48,7 +47,6 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
  const live=p.projects.filter(x=>!x.archived),pinned=live.filter(x=>x.pinned),recent=live.filter(x=>!x.pinned).sort((a,b)=>Number(working.has(b.id))-Number(working.has(a.id))),archived=p.projects.filter(x=>x.archived);
  const item=(project:ProjectSummary)=><button type="button" key={project.id} className={(project.missing?'missing ':'')+(menu?.project.id===project.id?'menu-open':'')} title={project.name} onClick={()=>p.onOpen(project.folder)} onContextMenu={options(project)}><span>{project.name}</span>{working.has(project.id)&&<i className="spin"><Loader2 size={13} aria-label="Gumbo is editing"/></i>}</button>;
  // A new video starts in the box: it is cleared and focused.
- const [cloud,setCloud]=React.useState(false);
  const newVideo=()=>{p.onChange('');requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.fig-home .home-composer textarea')?.focus());};
  return <div className="home-screen fig-home" style={{'--side-width':`${side}px`} as React.CSSProperties}>
   <aside className="home-side" aria-label="Gumbo">
@@ -56,9 +54,7 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <nav className="home-nav">
     <button type="button" className="home-new" onClick={newVideo}><Plus size={16}/>New video</button>
     <button type="button" onClick={()=>p.onOpen()}><FolderOpen size={16}/>Open project</button>
-    <button type="button" onClick={()=>setCloud(true)}><Cloud size={16}/>Open from cloud</button>
    </nav>
-   {cloud&&<CloudProjects onClose={()=>setCloud(false)} onOpen={folder=>p.onOpen(folder)}/>}
    <div className="home-lists">
     {pinned.length>0&&<section className="home-recents" aria-label="Pinned projects"><h2><Pin size={11}/>Pinned</h2>{pinned.map(item)}</section>}
     {recent.length>0&&<section className="home-recents" aria-label="Recent projects"><h2>Recent</h2>{recent.slice(0,30).map(item)}</section>}

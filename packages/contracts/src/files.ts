@@ -37,4 +37,4 @@ export type InitialRequest=z.infer<typeof InitialRequestSchema>;
 export type ProjectSummary={id:string;folder:string;name:string;updatedAt:string;durationSec:number;thumbnail?:string;missing?:boolean;
  /** Kept at the top of the home sidebar. */ pinned?:boolean;
  /** Out of Recent and Your projects, under Archived; opening it brings it back. */ archived?:boolean};
-export type ProjectAction='pin'|'unpin'|'archive'|'unarchive'|'forget'|'trash'|'reveal'|'cloud';
+export type ProjectAction='pin'|'unpin'|'archive'|'unarchive'|'forget'|'trash'|'reveal';
