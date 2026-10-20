@@ -106,11 +106,28 @@ it('carries what the user asked for in their other projects into every request, 
  const shorts=notesOf(project(root,'Gojo Short','2026-10-17T10:00:00Z',vietnam),'Likes vertical shorts with a blurred background.');
  const evalCopy=notesOf(project(root,'EVAL DeepSeek: cut','2026-10-18T10:00:00Z',vietnam),'Eval run notes.');
  const silent=project(root,'No notes','2026-10-19T10:00:00Z',vietnam);
- const style=(yourStyle(current,[white,shorts,evalCopy,silent]) as any).yourStyle;
+ const style=(yourStyle(current,[white,shorts,evalCopy,silent],'6') as any).yourStyle;
  expect(style.fromOtherProjects).toEqual([
   {project:'Gojo Short',edited:'2026-10-17',notes:'Likes vertical shorts with a blurred background.'},
   {project:'Northern vlog',edited:'2026-10-16',notes:'Captions: the user asked for white captions.',rules:['make the caption white']},
  ]);
  expect(style.note).toContain('unless this request says otherwise');
- expect(yourStyle(current,[silent])).toEqual({});
+ expect(yourStyle(current,[silent],'all')).toEqual({});
+ // The plan decides how many projects are remembered: Free remembers the newest one (also before the plan is known).
+ expect((yourStyle(current,[white,shorts],'1') as any).yourStyle.fromOtherProjects.map((p:any)=>p.project)).toEqual(['Gojo Short']);
+ expect((yourStyle(current,[white,shorts],undefined) as any).yourStyle.fromOtherProjects).toHaveLength(1);
+ expect((yourStyle(current,[white,shorts],'all') as any).yourStyle.fromOtherProjects).toHaveLength(2);
+});
+
+it('spends one monthly creator search per @ search and stops at the plan limit, never for the agent studying a creator',async()=>{
+ const {supabaseDb}=await import('../fixtures/supabase-db');const {randomUUID}=await import('node:crypto');
+ const db=await supabaseDb(),user=randomUUID();
+ await db.query('insert into auth.users(id,email) values($1,$2)',[user,'a@example.com']);await db.query('insert into public.dream_accounts(id,email) values($1,$2)',[user,'a@example.com']);
+ const use=async(limit:number)=>(await db.query<{n:number}>('select public.dream_use_allowance($1,$2,$3) as n',[user,'creator_search',limit])).rows[0].n;
+ expect([await use(2),await use(2),await use(2)]).toEqual([1,2,-1]);
+ expect(await use(3)).toBe(3);
+ let searched=0;const fetcher=(async()=>{searched++;return new Response(JSON.stringify({items:[]}));}) as unknown as typeof fetch;
+ expect(await handleCreators({query:'mr beast'},{key:'k',fetcher,allow:async()=>({ok:false,limit:10})})).toEqual({status:200,body:{creators:[],limited:{limit:10}}});
+ expect(searched).toBe(0);
+ let spent=0;await handleCreators({handle:'MrBeast'},{key:'k',fetcher,allow:async()=>{spent++;return{ok:true,limit:10};}});expect(spent).toBe(0);
 });

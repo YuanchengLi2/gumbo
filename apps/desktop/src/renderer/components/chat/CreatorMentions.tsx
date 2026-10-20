@@ -27,7 +27,7 @@ let projectsCache:{at:number;list:ProjectSummary[]}|undefined;
 const loadProjects=async()=>{if(projectsCache&&Date.now()-projectsCache.at<60_000)return projectsCache.list;const list=await window.dream.projects().catch(()=>[] as ProjectSummary[]);projectsCache={at:Date.now(),list};return list;};
 
 export function useCreatorMentions(textarea:React.RefObject<HTMLTextAreaElement|null>,value:string,onChange:(value:string)=>void){
- const [query,setQuery]=useState<string|null>(null),[found,setFound]=useState<Item[]>([]),[projects,setProjects]=useState<ProjectSummary[]>([]),[active,setActive]=useState(0),closed=useRef<string|null>(null);
+ const [query,setQuery]=useState<string|null>(null),[found,setFound]=useState<Item[]>([]),[limited,setLimited]=useState(false),[projects,setProjects]=useState<ProjectSummary[]>([]),[active,setActive]=useState(0),closed=useRef<string|null>(null);
  const assets=useEditor(s=>s.project?.footage.assets),current=useEditor(s=>s.project?.meta.id);
  const q=query??'';
  const media:Item[]=query===null?[]:(assets??[]).filter(a=>a.generated?.role!=='stem'&&matches(q,a.filename)).slice(0,4).map(a=>({kind:'media',key:'m:'+a.id,insert:bracket(a.filename),title:a.filename,
@@ -43,8 +43,8 @@ export function useCreatorMentions(textarea:React.RefObject<HTMLTextAreaElement|
  useEffect(update,[value]);
  const open=query!==null;
  useEffect(()=>{if(open)void loadProjects().then(setProjects);},[open]);
- useEffect(()=>{setActive(0);setFound([]);if(query===null||query.length<2)return;let live=true;
-  const timer=setTimeout(()=>{void window.dream.command({type:'account',action:'creators',query}).then((r:any)=>{if(live)setFound((r?.creators??[]).filter((c:any)=>c?.handle).map((c:any)=>({kind:'creator',key:'c:'+String(c.handle).toLowerCase(),insert:'@'+c.handle,title:String(c.title),detail:[`@${c.handle}`,subscribers(c.subscribers)].filter(Boolean).join(' · '),...(c.avatar?{image:c.avatar}:{})})));},()=>{});},400);
+ useEffect(()=>{setActive(0);setFound([]);setLimited(false);if(query===null||query.length<2)return;let live=true;
+  const timer=setTimeout(()=>{void window.dream.command({type:'account',action:'creators',query}).then((r:any)=>{if(live)setLimited(!!r?.limited);if(live)setFound((r?.creators??[]).filter((c:any)=>c?.handle).map((c:any)=>({kind:'creator',key:'c:'+String(c.handle).toLowerCase(),insert:'@'+c.handle,title:String(c.title),detail:[`@${c.handle}`,subscribers(c.subscribers)].filter(Boolean).join(' · '),...(c.avatar?{image:c.avatar}:{})})));},()=>{});},400);
   return()=>{live=false;clearTimeout(timer);};},[query]);
  const pick=(item:Item)=>{const node=textarea.current;if(!node)return;const caret=node.selectionStart??node.value.length,m=token(node.value,caret);if(!m)return;
   const start=caret-m[2].length-1,next=node.value.slice(0,start)+item.insert+' '+node.value.slice(caret);onChange(next);setQuery(null);
@@ -64,6 +64,7 @@ export function useCreatorMentions(textarea:React.RefObject<HTMLTextAreaElement|
     {item.badge&&<span className="creator-badge" title="Gumbo knows this creator's style in detail">{item.badge}</span>}
    </button>
   </React.Fragment>)}
+  {limited&&<p className="creator-limited">This month's YouTube searches are used up. Gumbo's style guides still work; a bigger plan searches more.</p>}
  </div>:null;
  return{menu,onKeyDown,update};
 }

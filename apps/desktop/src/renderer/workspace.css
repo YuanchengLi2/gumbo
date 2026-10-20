@@ -952,4 +952,5 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .creator-text{min-width:0;display:flex;flex-direction:column;gap:1px}
 .creator-text b{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.creator-text b small{margin-left:6px;font-weight:400;font-size:11.5px;color:var(--n46)}
 .creator-text>span{font-size:11.5px;color:var(--n56);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.creator-limited{margin:4px 8px 6px;font-size:11.5px;line-height:1.45;color:var(--n56)}
 .creator-badge{flex:none;margin-left:auto;padding:2px 7px;border:1px solid var(--n10);border-radius:999px;font-size:10px;color:var(--n56)}

@@ -18,13 +18,16 @@ async function api(fetcher:Fetcher,path:string,params:Record<string,string>,key:
 }
 const channelOf=(c:any)=>({id:String(c.id),handle:String(c.snippet?.customUrl??'').replace(/^@/,''),title:String(c.snippet?.title??''),avatar:c.snippet?.thumbnails?.default?.url as string|undefined,subscribers:c.statistics?.hiddenSubscriberCount?undefined:Number(c.statistics?.subscriberCount)||undefined});
 
-export async function handleCreators(body:any,options:{key?:string;fetcher?:Fetcher}):Promise<{status:number;body:unknown}>{
+/** allow: spends one of the account's monthly creator searches (billing.ts PLANS limits); false when they are used up. */
+export async function handleCreators(body:any,options:{key?:string;fetcher?:Fetcher;allow?:()=>Promise<{ok:boolean;limit:number}>}):Promise<{status:number;body:unknown}>{
  const fetcher=options.fetcher??fetch,key=options.key;
  const query=typeof body?.query==='string'?body.query.trim().slice(0,80):'',handle=typeof body?.handle==='string'?body.handle.trim().replace(/^@/,'').slice(0,100):'';
  if(!query&&!handle)return{status:400,body:{error:'Give a query or a handle.'}};
  if(!key)return{status:200,body:{notSetUp:true,creators:[]}};
  try{
   if(query){
+   // Only searches spend the allowance: the agent studying a creator a request named is part of that request.
+   const allowed=options.allow?await options.allow():{ok:true,limit:0};if(!allowed.ok)return{status:200,body:{creators:[],limited:{limit:allowed.limit}}};
    const found=await api(fetcher,'search',{part:'snippet',type:'channel',q:query,maxResults:'6'},key);
    const ids=(found.items??[]).map((i:any)=>i.id?.channelId).filter(Boolean);
    if(!ids.length)return{status:200,body:{creators:[]}};

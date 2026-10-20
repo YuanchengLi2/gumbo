@@ -13,7 +13,7 @@ import {handleReport,supabaseReportPorts} from './reports.ts';
 import {handleWaitlistJoin,supabaseWaitlistPorts,WAITLISTED} from './waitlist.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
-import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts} from './billing.ts';
+import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts,PLANS} from './billing.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
 const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
@@ -69,7 +69,8 @@ Deno.serve(async(req)=>{
   if(action==='ai-status'||action==='ai-cancel'){if(typeof body.requestId!=='string')return json({error:'Request ID required'},400);if(action==='ai-cancel')await requests.cancel(user.id,body.requestId);const result=requestStatus(await requests.read(user.id,body.requestId));return json(result.body,result.status);}
   if(action==='admin'||action==='admin-invite'){const {data:account}=await db.from('dream_accounts').select('is_admin').eq('id',user.id).single();if(!account?.is_admin)return json({error:'Administrator access is required.'},403);if(action==='admin-invite'){const email=String(body.email??'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a valid email address.'},400);const {error}=await db.from('dream_invites').upsert({email});if(error)throw error;return json({invited:true});}const {data:accounts}=await db.from('dream_accounts').select('id,email,status,daily_budget_usd');const {data:usage}=await db.from('dream_usage').select('cost_usd').gte('created_at',new Date(new Date().setUTCHours(0,0,0,0)).toISOString());return json({accounts:accounts??[],requests:usage?.length??0,cost:(usage??[]).reduce((sum:number,u:any)=>sum+Number(u.cost_usd),0)});}
   // YouTube creators for the @ menu and the agent's study_creator tool (see creators.ts).
-  if(action==='creators'){const result=await handleCreators(body,{key:Deno.env.get('YOUTUBE_API_KEY')});return json(result.body,result.status);}
+  if(action==='creators'){const allow=async()=>{const {data:account}=await db.from('dream_accounts').select('plan').eq('id',user.id).single();const limit=(PLANS as any)[account?.plan??'free']?.limits?.creatorSearches??0;const {data:used,error}=await db.rpc('dream_use_allowance',{p_account:user.id,p_kind:'creator_search',p_limit:limit});return{ok:!error&&Number(used)>=0,limit};};
+   const result=await handleCreators(body,{key:Deno.env.get('YOUTUBE_API_KEY'),allow});return json(result.body,result.status);}
   // Free-to-use music, sound, footage and images for the agent (see media-search.ts).
   if(action==='media-search'){const result=await handleMediaSearch(body,{keys:Object.fromEntries(Object.entries(mediaKeys).map(([id,secret])=>[id,Deno.env.get(secret)]))});return json(result.body,result.status);}
   // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).

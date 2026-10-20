@@ -140,11 +140,14 @@ export const mentionsOf=(text:string,assets:{id:string;filename:string}[],folder
 /** What the user asked for in their other projects, for every request's context: each recent project's notes (what the
  * agent recorded the user wants, written with finish) and the rules they asked it to remember. Lasting taste (caption
  * colors, formats, pacing, what they dislike) then carries into a new project without being said again. Test copies
- * (EVAL ...) are left out; the newest six projects with something to say, about 2,000 characters at most. */
-export function yourStyle(currentFolder:string,library=projectLibrary()){
+ * (EVAL ...) are left out; as many of the newest projects with something to say as the plan remembers (Free 1, Pro 6,
+ * Max 20, Max 20x up to 40), about 350 characters each. */
+export function yourStyle(currentFolder:string,library=projectLibrary(),memory=process.env.DREAM_STYLE_MEMORY){
+ // How many projects the plan remembers (DREAM_STYLE_MEMORY from the app: a number, or all); one before the plan is known.
+ const most=memory==='all'?40:Math.max(0,Math.min(40,Number(memory)||1));
  const found:{project:string;edited:string;notes?:string;rules?:string[]}[]=[];
  for(const p of otherProjects(currentFolder,library)){
-  if(found.length>=6)break;if(/^eval\b/i.test(p.name))continue;
+  if(found.length>=most)break;if(/^eval\b/i.test(p.name))continue;
   const notes=peekMeta(p.folder,['preferences']).preferences?.replace(/\s+/g,' ').trim();
   const rules=(readJson(join(workspaceOf(p),'context','decisions.json'))??[]).map((d:any)=>typeof d?.text==='string'?d.text.replace(/\s+/g,' ').trim().slice(0,160):'').filter(Boolean).slice(0,3);
   if(!notes&&!rules.length)continue;

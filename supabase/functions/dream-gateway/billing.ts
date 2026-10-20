@@ -11,12 +11,16 @@
  * STRIPE_PRICE_MAX20 and STRIPE_PRICE_TOPUP (scripts/stripe-setup.mjs makes them in test mode). A plan's price that
  * changed keeps its old id in STRIPE_PRICES_OLD ("pro=price_...,max=price_..."), so subscriptions still on it stay that plan. */
 
+/** limits: what each plan includes beyond credits. creatorSearches: the composer's @ searches of YouTube channels a month
+ * (the built-in style library is unlimited). styleMemory: how many of the user's other projects the agent carries their
+ * style from (null: all). cloudGB: video storage in Gumbo's cloud, to open a project on another computer. */
 export const PLANS={
- free:{name:'Free',priceUsd:0,credits:50},
- pro:{name:'Pro',priceUsd:25,credits:1250},
- max:{name:'Max',priceUsd:100,credits:4500},
- max20:{name:'Max 20x',priceUsd:200,credits:18000}
+ free:{name:'Free',priceUsd:0,credits:50,limits:{creatorSearches:10,styleMemory:1,cloudGB:0}},
+ pro:{name:'Pro',priceUsd:25,credits:1250,limits:{creatorSearches:200,styleMemory:6,cloudGB:50}},
+ max:{name:'Max',priceUsd:100,credits:4500,limits:{creatorSearches:1000,styleMemory:20,cloudGB:250}},
+ max20:{name:'Max 20x',priceUsd:200,credits:18000,limits:{creatorSearches:5000,styleMemory:null,cloudGB:1000}}
 } as const;
+export type PlanLimits={creatorSearches:number;styleMemory:number|null;cloudGB:number};
 export type PlanId=keyof typeof PLANS;
 export type PaidPlan=Exclude<PlanId,'free'>;
 export const paidPlans:PaidPlan[]=['pro','max','max20'];
@@ -76,6 +80,8 @@ export type BillingPorts={
  account(user:string):Promise<BillingAccount|null>;
  /** The grants still running (not expired). */
  grants(user:string):Promise<CreditGrant[]>;
+ /** This month's use of the plan's allowances (creator searches; cloud bytes stored). */
+ usage?(user:string):Promise<{creatorSearches:number;cloudBytes:number}>;
  ensureFree(user:string):Promise<void>;
  setCustomer(user:string,customer:string):Promise<void>;
  userOfCustomer(customer:string):Promise<string|undefined>;
@@ -90,7 +96,7 @@ const round=(n:number)=>Math.round(n*100)/100;
  * renew, the plans on offer, and whether paying is set up on this gateway. */
 export async function billingSummary(user:string,ports:BillingPorts,config:StripeConfig|undefined){
  await ports.ensureFree(user);
- const [account,grants]=await Promise.all([ports.account(user),ports.grants(user)]);
+ const [account,grants,usage]=await Promise.all([ports.account(user),ports.grants(user),ports.usage?.(user)??Promise.resolve({creatorSearches:0,cloudBytes:0})]);
  if(!account)throw new Error('No such account');
  const planGrant=grants.find(g=>g.kind==='plan'),topups=grants.filter(g=>g.kind!=='plan').reduce((n,g)=>n+Number(g.remaining),0),overdraft=Number(account.credit_overdraft)||0;
  const planLeft=planGrant?Number(planGrant.remaining):0;
@@ -98,7 +104,8 @@ export async function billingSummary(user:string,ports:BillingPorts,config:Strip
   plan:account.plan,planName:PLANS[account.plan].name,status:account.subscription_status,cancelAtPeriodEnd:account.cancel_at_period_end,
   renewsAt:account.plan==='free'?(planGrant?.expires_at??null):account.period_end,
   credits:{left:round(planLeft+topups-overdraft),plan:round(planLeft),planTotal:planGrant?Number(planGrant.credits):PLANS[account.plan].credits,topups:round(topups),overdraft:round(overdraft)},
-  plans:(Object.keys(PLANS) as PlanId[]).map(id=>({id,name:PLANS[id].name,priceUsd:PLANS[id].priceUsd,credits:PLANS[id].credits})),
+  limits:PLANS[account.plan].limits as PlanLimits,usage,
+  plans:(Object.keys(PLANS) as PlanId[]).map(id=>({id,name:PLANS[id].name,priceUsd:PLANS[id].priceUsd,credits:PLANS[id].credits,limits:PLANS[id].limits as PlanLimits})),
   topup:{credits:TOPUP.credits,priceUsd:TOPUP.priceUsd,maxPacks:TOPUP.maxPacks},
   payments:!!config&&paidPlans.every(p=>config.prices[p])&&!!config.prices.topup,
   portal:!!account.stripe_customer_id
@@ -204,6 +211,7 @@ export function supabaseBillingPorts(db:any):BillingPorts{
  const check=({data,error}:{data:any;error:any})=>{if(error)throw new Error(error.message);return data;};
  return{
   account:async user=>check(await db.from('dream_accounts').select('email,plan,stripe_customer_id,stripe_subscription_id,subscription_status,period_end,cancel_at_period_end,credit_overdraft').eq('id',user).maybeSingle()),
+  usage:async user=>{const period=new Date().toISOString().slice(0,7),row=check(await db.from('dream_usage_counters').select('count').eq('account_id',user).eq('period',period).eq('kind','creator_search').maybeSingle());return{creatorSearches:Number(row?.count)||0,cloudBytes:0};},
   grants:async user=>check(await db.from('dream_credit_grants').select('kind,plan,credits,remaining,expires_at').eq('user_id',user).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order('created_at',{ascending:false}))??[],
   ensureFree:async user=>{check(await db.rpc('dream_ensure_free_grant',{p_user:user}));},
   setCustomer:async(user,customer)=>{check(await db.from('dream_accounts').update({stripe_customer_id:customer}).eq('id',user));},
