@@ -7,7 +7,7 @@
 .onboarding-back{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:9px;font-size:13px;color:var(--n56);-webkit-app-region:no-drag}
 .onboarding-back:hover{background:var(--n5);color:var(--n100)}
 .onboarding-back.corner{position:fixed;top:48px;left:20px;z-index:1}
-.onboarding-body{position:relative;width:min(560px,calc(100vw - 48px));margin:auto;padding:80px 0 56px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.onboarding-body{position:relative;z-index:1;width:min(560px,calc(100vw - 48px));margin:auto;padding:80px 0 56px;display:flex;flex-direction:column;align-items:center;text-align:center}
 .onboarding-body form{display:contents}
 .onboarding-body>.gumbo-mark{width:60px;height:60px;margin-bottom:18px}
 .onboarding-body h1{width:max-content;max-width:calc(100vw - 48px);margin:0 0 10px;font:400 40px/1.12 Georgia,"Times New Roman",serif;letter-spacing:-.6px;color:var(--n100)}
@@ -64,4 +64,20 @@
 .welcome-window .onboarding-primary{min-width:160px;margin-top:0}
 .welcome-dots{display:flex;gap:6px;margin-right:auto}.welcome-dots i{width:6px;height:6px;border-radius:50%;background:var(--n14)}.welcome-dots i.on{background:var(--n100)}
 @media(max-width:760px){.welcome-prompts{grid-template-columns:1fr}.onboarding-body h1{font-size:32px}.onboarding-back.corner{top:44px;left:8px}}
-@media(prefers-reduced-motion:reduce){.onboarding-progress i{transition:none}}
+@media(prefers-reduced-motion:reduce){.onboarding-progress i{transition:none}.onboarding-track>div,.onboarding-body>*{animation:none}}
+/* The backdrop: an editing timeline drifting past a playhead, in the app's greys, clear at the edges and gone behind the
+   words (a radial mask). Each step's contents ease in, one after another. */
+.onboarding-backdrop{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none;-webkit-mask-image:radial-gradient(ellipse 58% 62% at 50% 50%,transparent 38%,#000 92%);mask-image:radial-gradient(ellipse 58% 62% at 50% 50%,transparent 38%,#000 92%)}
+.onboarding-track{position:absolute;left:0;right:0;height:38px}
+.onboarding-track.audio{height:26px}
+.onboarding-track>div{display:flex;width:max-content;height:100%;animation:onboarding-drift linear infinite;will-change:transform}
+.onboarding-track i{flex:none;height:100%;margin-right:6px;border:1px solid var(--n8);border-radius:8px;background:var(--n4)}
+.onboarding-track.video i{background:repeating-linear-gradient(90deg,transparent 0 51px,var(--n8) 51px 52px),var(--n4)}
+.onboarding-track.audio i{border-radius:6px;background:repeating-linear-gradient(90deg,var(--n9) 0 2px,transparent 2px 5px) center/100% 46% no-repeat,var(--n4)}
+.onboarding-track:nth-child(even) i:nth-child(5n+2){background-color:var(--n6)}
+.onboarding-playhead{position:absolute;top:0;bottom:0;left:50%;width:1px;background:var(--n16)}
+.onboarding-playhead:before{content:'';position:absolute;top:4%;left:-5px;width:11px;height:11px;border-radius:3px 3px 7px 7px;background:var(--n16)}
+@keyframes onboarding-drift{to{transform:translateX(-50%)}}
+.onboarding-body>*{animation:onboarding-in .42s cubic-bezier(.2,.7,.2,1) both}
+.onboarding-body>*:nth-child(2){animation-delay:.05s}.onboarding-body>*:nth-child(3){animation-delay:.1s}.onboarding-body>*:nth-child(4){animation-delay:.15s}.onboarding-body>*:nth-child(n+5){animation-delay:.2s}
+@keyframes onboarding-in{from{opacity:0;transform:translateY(10px)}}

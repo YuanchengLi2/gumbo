@@ -52,9 +52,10 @@ export function OnboardingLayer(){
 
  return createPortal(<div className="onboarding" role="dialog" aria-modal="true" aria-label="Welcome to Gumbo">
   <div className="onboarding-drag" aria-hidden="true"/>
+  <Backdrop/>
   {at>=0&&<div className="onboarding-progress" aria-hidden="true"><i style={{width:`${(at+1)/progress.length*100}%`}}/></div>}
   {previous[step]&&!returning&&<button type="button" className="onboarding-back corner" onClick={()=>setStep(previous[step]!)}><ArrowLeft size={15}/>Back</button>}
-  <main className={'onboarding-body step-'+step}>
+  <main key={step} className={'onboarding-body step-'+step}>
 
    {step==='welcome'&&<>
     <GumboMark/><h1>Welcome to Gumbo</h1>
@@ -124,4 +125,28 @@ export function OnboardingLayer(){
    </>}
   </main>
  </div>,document.body);
+}
+
+/** Behind the questions, a quiet editing timeline: rows of clips drift past a playhead, the way footage moves through
+ * Gumbo's own timeline, faded out where the words are. Only the rows move (one transform each), so it costs the GPU next to
+ * nothing, and it holds still when the system asks for reduced motion. Each row is two identical runs of clips, so moving
+ * it by half its width loops without a seam. */
+const ROWS:[number[],'video'|'audio'][]=[
+ [[220,130,310,90,180,260,150,120,280],'video'],
+ [[160,280,110,210,340,130,190,240],'video'],
+ [[420,260,380,300,460],'audio'],
+ [[140,230,170,300,110,260,200,150],'video'],
+ [[260,150,320,120,220,180,290,140],'video'],
+ [[360,480,300,420,340],'audio'],
+ [[190,120,270,160,330,140,210,250],'video'],
+];
+function Backdrop(){
+ return <div className="onboarding-backdrop" aria-hidden="true">
+  {ROWS.map(([clips,kind],row)=><div key={row} className={'onboarding-track '+kind} style={{top:`${6+row*14.5}%`}}>
+   <div style={{animationDuration:`${150+row*23}s`,animationDelay:`${-row*37}s`}}>
+    {[0,1].flatMap(copy=>[...clips,...clips].map((width,n)=><i key={copy+'-'+n} style={{width}}/>))}
+   </div>
+  </div>)}
+  <span className="onboarding-playhead"/>
+ </div>;
 }
