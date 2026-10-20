@@ -11,7 +11,7 @@ export class Account {
  private save(session:Session){if(!safeStorage.isEncryptionAvailable())throw new Error('OS credential encryption is unavailable.');this.session=session;writeFileSync(this.file,safeStorage.encryptString(JSON.stringify(session)));}
  async exchange(code:string,verifier:string){const response=await fetch(`${this.url}/auth/v1/token?grant_type=pkce`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({auth_code:code,code_verifier:verifier})});const body=await response.json() as any;if(!response.ok)throw new Error(body.error_description??body.msg??'Sign-in failed.');this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});}
  /** Guests are gone: an account is needed for Gumbo AI. A guest session saved by an older version is dropped. */
- private signedIn(){if(this.session?.user.is_anonymous)this.clear();return this.session;}
+ /** Whether a session is held (signed in). */ signedIn(){if(this.session?.user.is_anonymous)this.clear();return this.session;}
  private clear(){this.session=null;if(existsSync(this.file))unlinkSync(this.file);}
  /** The session saved on disk, which another copy of the app (the installed one, a development build) may have refreshed
   * since this one read it. A refresh token works once, so this copy's would then be spent. */

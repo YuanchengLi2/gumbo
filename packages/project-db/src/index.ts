@@ -12,7 +12,7 @@ import {migrate,compactActivityEvent} from './migrate';
 import Database from 'better-sqlite3';
 import { randomUUID,createHash } from 'node:crypto';
 import {mkdirSync,readFileSync,writeFileSync,existsSync,renameSync} from 'node:fs';
-import {join,dirname} from 'node:path';
+import {join,dirname,basename} from 'node:path';
 import {emptyTimeline,TimelineSchema,diff,timelineChangeList,type TimelineDocument,type Op} from '@dream/timeline';
 import {emptyFootage,AssetSchema,type Asset,type FootageIndex} from '@dream/footage';
 import {processBatch} from '@dream/guardrails';
@@ -149,6 +149,9 @@ export class ProjectDB {
   for(const [assetId,runs] of ranges){const merged:{start:number;end:number}[]=[];for(const run of runs.sort((a,b)=>a.start-b.start)){const last=merged.at(-1);if(last&&run.start<=last.end)last.end=Math.max(last.end,run.end);else merged.push({...run});}for(const run of merged)for(const row of query.all(assetId,run.start,run.end) as {json:string}[]){const word=JSON.parse(row.json);words.set(word.id,word);}}
   index.words=[...words.values()];for(const id of new Set(t.spine.flatMap(c=>c.framing?.faceTrackId?[c.framing.faceTrackId]:[]))){const row=this.db.prepare("SELECT json FROM index_records WHERE kind='faces' AND id=?").get(id) as {json:string}|undefined;if(row)index.faces.push(JSON.parse(row.json));}this.playbackCache={key,value:index};return index;
  }
+ /** Footage imported from elsewhere on a computer, opened on another one (Gumbo's cloud) or after the original moved:
+  * each source whose file is missing points at the project's own copy in Sources/<asset id>/ when that copy is there. */
+ relinkFromSources(){let relinked=0;for(const asset of this.footage().assets){if(!asset.originalPath||existsSync(asset.originalPath))continue;const copy=join(this.folder,'Sources',asset.id,basename(asset.originalPath.replace(/\\/g,'/')));if(existsSync(copy)){this.saveAsset({...asset,originalPath:copy});relinked++;}}if(relinked)this.event('assets.relinked',{count:relinked});return relinked;}
  saveAsset(asset:Asset){this.db.prepare('INSERT INTO assets VALUES(?,?) ON CONFLICT(id) DO UPDATE SET json=excluded.json').run(asset.id,JSON.stringify(persistAsset(AssetSchema.parse(asset),this.folder)));this.setMeta('index_revision',String(Number(this.getMeta('index_revision')??0)+1));}
  saveRecords(kind:'words'|'shots'|'faces'|'observations',records:({id:string}&Record<string,unknown>)[]){this.db.transaction(()=>{for(const r of records){const json=JSON.stringify(r),previous=this.db.prepare('SELECT json FROM index_records WHERE kind=? AND id=?').get(kind,r.id) as {json:string}|undefined;if(previous?.json===json)continue;this.db.prepare('INSERT INTO index_records VALUES(?,?,?) ON CONFLICT(kind,id) DO UPDATE SET json=excluded.json').run(kind,r.id,json);const row=r as Record<string,unknown>;if(previous)this.db.prepare('DELETE FROM footage_fts WHERE id=? AND kind=?').run(r.id,kind);this.db.prepare('INSERT INTO footage_fts(id,asset_id,kind,text) VALUES(?,?,?,?)').run(r.id,String(row.assetId??''),kind,kind==='words'?String(row.text??''):JSON.stringify(row.log??''));}this.setMeta('index_revision',String(Number(this.getMeta('index_revision')??0)+1));})();}
  replaceRecords(kind:'words'|'shots'|'faces'|'observations',assetId:string,records:({id:string}&Record<string,unknown>)[]){if(records.some(r=>r.assetId!==assetId))throw new Error('Analysis results belong to another asset.');this.db.transaction(()=>{this.db.prepare('DELETE FROM footage_fts WHERE kind=? AND asset_id=?').run(kind,assetId);this.db.prepare("DELETE FROM index_records WHERE kind=? AND json_extract(json,'$.assetId')=?").run(kind,assetId);this.saveRecords(kind,records);})();}

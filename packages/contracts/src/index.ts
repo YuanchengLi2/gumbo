@@ -94,6 +94,9 @@ export interface DreamDesktop {
  /** Answers a frames.request event: frames the editor's engine drew for the agent, or the error that stopped it. */
  framesResult(id:string,result:unknown):Promise<void>;
  /** The background app update (also sent as app.update events), and restarting into a downloaded one. */
+ /** Gumbo's cloud: the projects saved there, opening one on this computer (exists: already here, ask before replacing),
+  * removing one. Saving a project is its 'cloud' project action. */
+ cloud(request:{action:'list'}|{action:'open';projectId:string;overwrite?:boolean}|{action:'remove';projectId:string}):Promise<any>;
  update():Promise<UpdateStatus>;
  restartToUpdate():Promise<{restarted:boolean;reason?:string}>;
  onEvent(handler:(event:DesktopEvent)=>void):()=>void;

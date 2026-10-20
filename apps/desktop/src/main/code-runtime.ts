@@ -33,8 +33,8 @@ export class CodeRuntime {
   * the isolated creation container. */
  local?:()=>boolean;
  /** Commands run below normal priority so they yield to the user's own programs; when the computer is fully busy they
-  * wait for it. Tests of timing set normal. */
- priority:'below-normal'|'normal'='below-normal';
+  * wait for it. The test suite sets normal (DREAM_COMMAND_PRIORITY). */
+ priority:'below-normal'|'normal'=process.env.DREAM_COMMAND_PRIORITY==='normal'?'normal':'below-normal';
  constructor(private paths:{creation:string;ffmpeg:string;ffprobe:string;browser:string},private qualification=false){}
  check(){
   if(process.platform!=='win32')throw new Error('Automatic creation is not yet qualified on this platform.');
