@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {codeAgent} from '../../packages/orchestrator/src/code-agent';
-import {codePrompt,rouxPrompt,promptFor,guideInPrompt} from '../../packages/orchestrator/src/code-prompt';
+import {codePrompt,rouxPrompt,rouxLightPrompt,promptFor,guideInPrompt} from '../../packages/orchestrator/src/code-prompt';
 import {editingGuide} from '../../packages/orchestrator/src/editing-guide';
 import {sceneReference} from '../../packages/scene-engine/src/reference-parts';
 
@@ -31,4 +31,10 @@ it('answers a Roux read of a guide with a short receipt, and sends Roux the prom
   expect(result.outcome.status).toBe('complete');expect(system).toBe(rouxPrompt);
   expect(receipt).toContain('already in your instructions');expect(receipt).not.toContain('## @dream/engine');
  }finally{db.close();}
+});
+
+it('runs both models behind Roux 1 as Roux 1, and leaves a model the user picked under its own name',()=>{
+ for(const prompt of [rouxPrompt,rouxLightPrompt])expect(prompt).toContain("You are Roux 1, Gumbo's own editing model");
+ expect(promptFor('claude-haiku-5-5')).toBe(rouxLightPrompt);expect(rouxLightPrompt).not.toContain(sceneReference);
+ expect(codePrompt).not.toContain('Roux');expect(promptFor('claude-sonnet-5-5')).not.toContain('Roux');
 });

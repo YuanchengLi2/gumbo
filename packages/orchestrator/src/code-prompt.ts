@@ -24,7 +24,8 @@ const updateRules=`The user watches as you work and usually cannot see tool resu
 
 // Replies, plans and edits share this prompt and the tool list, so all of them read one cached prefix; the mode of each
 // request travels in its first message. guides: the editing and scene-engine guides are in the prompt instead of files.
-const prompt=(guides:boolean)=>`You are Gumbo's video editor. Implement the user's request through code in this project.
+// roux: the model runs as Roux 1, Gumbo's own model (Auto), and says so when asked.
+const prompt=(guides:boolean,roux=false)=>`You are Gumbo's video editor. Implement the user's request through code in this project.${roux?` You are Roux 1, Gumbo's own editing model: if someone asks which AI or model they are talking to, say you are Roux 1, Gumbo's editing model. Do not name the companies or models behind it, and do not claim it was built from scratch.`:''}
 
 The user's words are the brief. Do what they ask, the way they ask, even when you would choose differently: their explicit choices (length, format, music, style, order, what to keep or cut, a tool or a look) override every default and suggestion here. Never substitute, skip or water down part of a request. If part of it truly cannot be done, do the rest and say exactly what could not be done and why. Offer your own ideas only as a short suggestion after doing what was asked.\n\nWhere the user leaves choices open, edit with taste: open on the strongest moment, keep only what moves the story, vary shot length and cut on action, beats or phrase ends; prefer clean cuts, and use a transition, effect, zoom or sound effect only when it means something; keep text short, readable and inside the safe area; keep speech clear with music ducked under it; keep colour and framing consistent. Before a first cut, a re-edit or a creative choice the user left open, ${guides?'follow the editing guide at the end of these instructions':'read context/editing.md'}.
 
@@ -46,9 +47,14 @@ export const codePrompt=prompt(false);
  * carrying them cached costs DeepSeek about three thousandths of a credit a step (and, being the same for every request,
  * they are read from the cache even when DeepSeek misses the rest of the conversation). Claude and GPT read them as files:
  * on Sonnet the same tokens cost about a tenth of a credit on every step. */
-export const rouxPrompt=prompt(true);
+export const rouxPrompt=prompt(true,true);
+/** Roux 1's light model (Haiku: small edits and questions) is Roux too, without the guides it rarely needs. */
+export const rouxLightPrompt=prompt(false,true);
 export const guidesInPrompt=(model:string)=>model.startsWith('deepseek');
-export const promptFor=(model:string)=>guidesInPrompt(model)?rouxPrompt:codePrompt;
+/** Both models behind Roux 1 are only reachable through it (the menu hides them), so each runs as Roux 1. A model the
+ * user picked themselves (Claude Sonnet or Opus, GPT, Gemini) keeps its own name. */
+export const rouxModel=(model:string)=>model.startsWith('deepseek')||model.startsWith('claude-haiku');
+export const promptFor=(model:string)=>guidesInPrompt(model)?rouxPrompt:rouxModel(model)?rouxLightPrompt:codePrompt;
 const GUIDES=new Set(['context/editing.md','context/engine.md']);
 /** Whether a read_file call asks for a guide this model already has in its prompt. */
 export const guideInPrompt=(model:string,input:any)=>guidesInPrompt(model)&&(input?.scope??'workspace')==='workspace'&&typeof input?.path==='string'&&GUIDES.has(input.path.replace(/\\/g,'/').replace(/^\.\//,''));
