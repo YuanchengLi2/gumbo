@@ -15,7 +15,7 @@ export type CloudPorts={
 const encoder=new TextEncoder();
 const hex=(bytes:ArrayBuffer)=>[...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');
 const sha256=async(text:string)=>hex(await crypto.subtle.digest('SHA-256',encoder.encode(text)));
-async function hmac(key:ArrayBuffer|Uint8Array,text:string){const k=await crypto.subtle.importKey('raw',key,{name:'HMAC',hash:'SHA-256'},false,['sign']);return crypto.subtle.sign('HMAC',k,encoder.encode(text));}
+async function hmac(key:ArrayBuffer|Uint8Array,text:string){const k=await crypto.subtle.importKey('raw',key as BufferSource,{name:'HMAC',hash:'SHA-256'},false,['sign']);return crypto.subtle.sign('HMAC',k,encoder.encode(text));}
 // RFC 3986 encoding, as Signature Version 4 wants it (encodeURIComponent leaves !'()* alone).
 const rfc3986=(s:string)=>encodeURIComponent(s).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
 
