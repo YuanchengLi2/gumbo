@@ -11,7 +11,8 @@ test('@ picks a creator, and the agent studies their style',async()=>{
  const profile=mkdtempSync(join(tmpdir(),'gumbo-mentions-profile-'));
  const seen:{context?:string;study?:any}={};
  const script:Script=(body,step)=>{
-  const first=JSON.stringify(body.messages?.[0]??'');
+  // The first message's text: the briefing, the request and its project context.
+  const content=body.messages?.[0]?.content,first=typeof content==='string'?content:Array.isArray(content)?content.map((b:any)=>b?.text??'').join(' '):'';
   if(!first.includes('@MrBeast'))return finish('other','Done.');
   if(step===0){seen.context=first;return[{type:'tool_use',id:'study',name:'study_creator',input:{handle:'MrBeast',progress:'Studying MrBeast'}}];}
   seen.study=resultOf(body,'study_creator');return finish('studied','Studied the style.');
