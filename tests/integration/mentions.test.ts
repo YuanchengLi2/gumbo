@@ -2,7 +2,8 @@ import {it,expect} from 'vitest';
 import {mkdtempSync,mkdirSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {resolveMentions,pastProjects,studyCreator,styleSummary} from '../../apps/project-service/src/mentions';
+import {resolveMentions,pastProjects,studyCreator,styleSummary,yourStyle} from '../../apps/project-service/src/mentions';
+import {ProjectDB} from '@dream/project-db';
 import {handleCreators,isoSeconds} from '../../supabase/functions/dream-gateway/creators';
 import {matchCreators,creatorStyle} from '@dream/config';
 
@@ -95,4 +96,21 @@ it('searches YouTube channels and reads one channel\'s latest uploads, and needs
  expect(calls.some(u=>u.includes('forHandle=%40MrBeast'))).toBe(true);
  const failing=(async()=>new Response(JSON.stringify({error:{message:'quota exceeded'}}),{status:403})) as unknown as typeof fetch;
  expect(await handleCreators({query:'x'},{key:'k',fetcher:failing})).toEqual({status:502,body:{error:'YouTube answered 403: quota exceeded'}});
+});
+
+it('carries what the user asked for in their other projects into every request, newest first, without test copies',()=>{
+ const root=home(),current=join(root,'current');mkdirSync(current);
+ const notesOf=<T extends {folder:string}>(p:T,notes:string):T=>{const db=new ProjectDB(p.folder,'x');try{db.setMeta('preferences',notes);}finally{db.close();}return p;};
+ const white=notesOf(project(root,'Northern vlog','2026-10-16T10:00:00Z',vietnam),'Captions: the user asked for white captions.');
+ writeFileSync(join(white.folder,'Workspace','context','decisions.json'),JSON.stringify([{scope:'captions',text:'make the caption white'}]));
+ const shorts=notesOf(project(root,'Gojo Short','2026-10-17T10:00:00Z',vietnam),'Likes vertical shorts with a blurred background.');
+ const evalCopy=notesOf(project(root,'EVAL DeepSeek: cut','2026-10-18T10:00:00Z',vietnam),'Eval run notes.');
+ const silent=project(root,'No notes','2026-10-19T10:00:00Z',vietnam);
+ const style=(yourStyle(current,[white,shorts,evalCopy,silent]) as any).yourStyle;
+ expect(style.fromOtherProjects).toEqual([
+  {project:'Gojo Short',edited:'2026-10-17',notes:'Likes vertical shorts with a blurred background.'},
+  {project:'Northern vlog',edited:'2026-10-16',notes:'Captions: the user asked for white captions.',rules:['make the caption white']},
+ ]);
+ expect(style.note).toContain('unless this request says otherwise');
+ expect(yourStyle(current,[silent])).toEqual({});
 });

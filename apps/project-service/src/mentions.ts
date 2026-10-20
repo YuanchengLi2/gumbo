@@ -1,6 +1,7 @@
 import {existsSync,readFileSync,readdirSync,statSync} from 'node:fs';
 import {join,relative,resolve,isAbsolute} from 'node:path';
 import {creatorStyle} from '@dream/config';
+import {peekMeta} from '@dream/project-db';
 
 /** What the composer's @ menu writes into a request (apps/desktop/src/renderer/components/chat/CreatorMentions.tsx), and
  * the two agent tools that follow those references:
@@ -133,3 +134,21 @@ export async function studyCreator(handle:string,lookup:((handle:string,signal:A
 }
 /** The request context's mentions field, when the request has any. */
 export const mentionsOf=(text:string,assets:{id:string;filename:string}[],folder:string)=>{const mentions=resolveMentions(text,assets,folder);return mentions.length?{mentions}:{};};
+
+// ---- The user's style ------------------------------------------------------------------------------------------------
+
+/** What the user asked for in their other projects, for every request's context: each recent project's notes (what the
+ * agent recorded the user wants, written with finish) and the rules they asked it to remember. Lasting taste (caption
+ * colors, formats, pacing, what they dislike) then carries into a new project without being said again. Test copies
+ * (EVAL ...) are left out; the newest six projects with something to say, about 2,000 characters at most. */
+export function yourStyle(currentFolder:string,library=projectLibrary()){
+ const found:{project:string;edited:string;notes?:string;rules?:string[]}[]=[];
+ for(const p of otherProjects(currentFolder,library)){
+  if(found.length>=6)break;if(/^eval\b/i.test(p.name))continue;
+  const notes=peekMeta(p.folder,['preferences']).preferences?.replace(/\s+/g,' ').trim();
+  const rules=(readJson(join(workspaceOf(p),'context','decisions.json'))??[]).map((d:any)=>typeof d?.text==='string'?d.text.replace(/\s+/g,' ').trim().slice(0,160):'').filter(Boolean).slice(0,3);
+  if(!notes&&!rules.length)continue;
+  found.push({project:p.name,edited:p.updatedAt.slice(0,10),...(notes?{notes:notes.slice(0,260)}:{}),...(rules.length?{rules}:{})});
+ }
+ return found.length?{yourStyle:{fromOtherProjects:found,note:'What the user asked for in their other projects. Keep their lasting taste (formats, caption looks, pacing, what they dislike) unless this request says otherwise; details tied to one project stay there. past_projects shows exactly how any of them was edited.'}}:{};
+}

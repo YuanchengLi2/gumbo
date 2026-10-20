@@ -43,7 +43,7 @@ import {viewEdit,type SourceFacts} from './edit-view';
 import {downloadMedia,type OnlineMedia} from './media-download';
 import {ShotIndexer,searchShots,shotLine,usedRanges,rangeFacts,type ShotIndex} from './shot-index';
 import {extractAudio,mixEditRange,measureClip,MAX_LISTEN_SEC} from './edit-audio';
-import {mentionsOf,pastProjects,studyCreator,type CreatorChannel} from './mentions';
+import {mentionsOf,pastProjects,studyCreator,yourStyle,type CreatorChannel} from './mentions';
 
 /** What the agent can use without building anything: the scene engine, sound written as code, and commands for packages. */
 export const engineCapabilities=()=>({engine:{version:ENGINE_VERSION,modules:Object.keys(MODULES).filter(name=>!/^(d3-|three\/addons|@remotion\/transitions\/|react\/)/.test(name)),fonts:['Inter','Roboto','Montserrat','Poppins','Oswald','Bebas Neue','Playfair Display','Lora','Space Grotesk','JetBrains Mono','Press Start 2P']},music:{format:'src/music/<name>.score.json (notation or full score document)'},sfx:{format:'src/sfx/<name>.sfx.json or preset:<name>',presets:sfxCatalog.map(p=>p.name)},voiceover:false,commands:true});
@@ -173,7 +173,7 @@ export class CodeWorkspace implements CodeWorkspacePort {
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[];turnId?:string}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
   let lookFor:string|undefined;try{lookFor=pending.turnId?JSON.parse(this.db.getMeta('routing:'+pending.turnId)??'{}').lookFor:undefined;}catch{}
-  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[],this.footageKnowledge(lookFor)),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json',...mentionsOf(query,this.db.footage().assets,this.db.folder)};}
+  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[],this.footageKnowledge(lookFor)),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json',...mentionsOf(query,this.db.footage().assets,this.db.folder),...yourStyle(this.db.folder)};}
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.footage().assets){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;

@@ -66,8 +66,11 @@ export class Director {
    this.controller=new AbortController();this.publish('ai.status',{status:'running'});let triage:Triage;
    try{triage=await this.triage(turnId,text,intent,stopped,model!==undefined,assetIds.length);}catch(error){this.publish('ai.status',{status:'interrupted'});throw error;}finally{this.controller=null;}
    if(triage.kind==='continue'){this.db.event('ai.routed',{turnId:stopped.turnId,...routeRecord(triage),continued:true});this.chooseEffort(stopped.turnId,effort);this.chooseModel(stopped.turnId,model);return this.resume(text);}
-   // A new message that still wants what the stopped request asked ("aside from that…") carries those asks along.
-   if(triage.carriesStopped)request+=`\n\nStill wanted from the request that was stopped before it finished (do this too): ${String(stopped.text).slice(0,4000)}`;
+   // A new message that still wants what the stopped request asked ("aside from that…") carries those asks along. The new
+   // message comes first and wins where they differ: sent after a stop it is usually a correction to the work underway
+   // ("for the pan animations no text"), and on October 19 the agent, told only "do this too", spent nine steps re-reading
+   // for the whole stopped request before touching the correction.
+   if(triage.carriesStopped)request+=`\n\nDo what this message asks first: it was sent after stopping the request below and may correct it; where they differ, this message wins. Still wanted from that stopped request, after this message: ${String(stopped.text).slice(0,4000)}`;
    this.recordTriage(turnId,triage);
   }
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.chooseModel(turnId,model);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);

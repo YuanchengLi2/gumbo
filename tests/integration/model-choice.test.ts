@@ -67,7 +67,7 @@ it('Auto runs each request on the model its triage score calls for, and keeps a 
   // A stopped request, then "aside from that…": its asks ride along with the new one.
   db.setMeta('ai_status','interrupted');db.setMeta('pending_request',JSON.stringify({text:'put the actual thing on screen with the definition',selection:[],intent:'auto',assetIds:[],turnId:'stopped-turn'}));
   score={difficulty:3,carriesStopped:true};await director.message('aside from that make the drawings black',[],'auto',[],undefined,undefined,'auto');
-  expect(ran().first).toContain('Still wanted from the request that was stopped');expect(ran().first).toContain('with the definition');
+  expect(ran().first).toContain('Do what this message asks first');expect(ran().first).toContain('Still wanted from that stopped request');expect(ran().first).toContain('with the definition');
   expect(db.state().messages.filter(m=>m.role==='user').at(-1)!.text).toBe('aside from that make the drawings black');
  }finally{db.close();}
 });

@@ -32,6 +32,9 @@ export class CodeRuntime {
   * programs, their files and the internet, with the bundled Node, Python and ffmpeg added to PATH. Otherwise they run in
   * the isolated creation container. */
  local?:()=>boolean;
+ /** Commands run below normal priority so they yield to the user's own programs; when the computer is fully busy they
+  * wait for it. Tests of timing set normal. */
+ priority:'below-normal'|'normal'='below-normal';
  constructor(private paths:{creation:string;ffmpeg:string;ffprobe:string;browser:string},private qualification=false){}
  check(){
   if(process.platform!=='win32')throw new Error('Automatic creation is not yet qualified on this platform.');
@@ -79,7 +82,7 @@ export class CodeRuntime {
    const child=spawn(join(this.paths.creation,'host','creation-host.exe'),[],{windowsHide:true,stdio:['pipe','pipe','pipe'],env:{SystemRoot:systemRoot,DOTNET_EnableDiagnostics:'0',NODE_ENV:'production'}});
    // The agent's commands (installs, Python, ffmpeg) run below normal priority, and the processes they start inherit it, so
    // a heavy script never makes the user's computer or Gumbo's own window sluggish.
-   if(child.pid)try{setPriority(child.pid,constants.priority.PRIORITY_BELOW_NORMAL);}catch{}let pending='',result:ProcessResult|undefined,error:Error|undefined;
+   if(child.pid&&this.priority==='below-normal')try{setPriority(child.pid,constants.priority.PRIORITY_BELOW_NORMAL);}catch{}let pending='',result:ProcessResult|undefined,error:Error|undefined;
    const cancel=()=>{if(child.stdin.writable)child.stdin.write('cancel\n');};controller.signal.addEventListener('abort',cancel,{once:true});
    child.stdin.on('error',()=>{});child.stdin.write(JSON.stringify(hostRequest)+'\n');if(signal.aborted)cancel();
    child.stdout.on('data',chunk=>{pending+=chunk.toString();let newline:number;while((newline=pending.indexOf('\n'))>=0){const line=pending.slice(0,newline);pending=pending.slice(newline+1);try{const data=JSON.parse(line);if(data.type==='output'){appendFileSync(logPath,data.text);onOutput(data.text);}if(data.type==='result')result={...data.result,logPath};if(data.type==='error')error=new Error(data.message);}catch(e){error=e as Error;cancel();}}});

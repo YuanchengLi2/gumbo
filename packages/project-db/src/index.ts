@@ -44,6 +44,13 @@ CREATE VIRTUAL TABLE IF NOT EXISTS footage_fts USING fts5(id UNINDEXED,asset_id 
 `;
 /** The reply a request gets when it stops because its project or the app closed before it finished. */
 export const STOPPED_WHEN_CLOSED='This request stopped when the app closed, before it finished. Say "continue" to pick up where it left off.';
+/** Values from another project's meta table, read-only (the user's other projects, for what they asked there): the file is
+ * opened without a lock or migration and closed at once, so a project open in another window is not disturbed. */
+export function peekMeta(folder:string,keys:string[]):Record<string,string|undefined>{
+ let db:Database.Database|undefined;
+ try{db=new Database(join(folder,'.dream','project.sqlite'),{readonly:true,fileMustExist:true});const get=db.prepare('SELECT value FROM meta WHERE key=?');return Object.fromEntries(keys.map(k=>[k,(get.get(k) as {value:string}|undefined)?.value]));}
+ catch{return{};}finally{db?.close();}
+}
 export class ProjectDB {
  inspectSource?:SourceInspector;
  /** Tiles frames into one grid image (set by the project service, which has ffmpeg). */

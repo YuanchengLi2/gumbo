@@ -56,5 +56,7 @@ export class Account {
  signout(){this.generation++;this.clear();return {signedIn:false};}
  /** YouTube channels matching the composer's @ text (the gateway's creators route); none when YouTube search is not set up. */
  async creators(query:string){if(!this.signedIn()||!query.trim())return{creators:[]};const response=await fetch(`${this.gateway()}/creators`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify({query})});const body=await response.json().catch(()=>({})) as any;return response.ok?body:{creators:[],error:body.error};}
+ /** Which AI providers have a key on the gateway (the editor service asks the same route once a project is open). */
+ async providers():Promise<Record<string,boolean>>{if(!this.signedIn())return{};try{const response=await fetch(`${this.gateway()}/providers`,{headers:{Authorization:`Bearer ${await this.token()}`},signal:AbortSignal.timeout(5000)});return response.ok?await response.json() as Record<string,boolean>:{};}catch{return{};}}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }

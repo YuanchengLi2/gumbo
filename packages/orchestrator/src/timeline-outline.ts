@@ -31,7 +31,12 @@ const isCaption=(i:{id:string;component:string})=>/(^|[-_])(cap|caption|subtitle
 export function editMap(t:TimelineDocument,footage:FootageIndex,sectionSec=30){
  const r=resolve(t,footage),assets=new Map(footage.assets.map(a=>[a.id,a]));
  const name=(assetId:string)=>{const a=assets.get(assetId);return a?(a.scene?`scene ${a.filename}`:a.filename):assetId;};
- const words=(i:{params?:Record<string,unknown>})=>{const v=i.params?.text??i.params?.title??i.params?.label;return typeof v==='string'?v.replace(/\s+/g,' ').trim().slice(0,60):'';};
+ // A title's words: text, title or label, or for a scene title the words among its settings (a chapter card's
+ // {num:'01',name:'HANOI',sub:'Arrival'} reads "HANOI · Arrival"); layout, colors and numbers are not words.
+ const layout=/^(x|y|scale|fit|color|colou?rs?|background|font|fontFamily|fontSize|align|position|size|src|path|assetId|style|variant|theme|easing|mode|direction|accent)$/i;
+ const words=(i:{params?:Record<string,unknown>})=>{const p=i.params??{},main=p.text??p.title??p.label;
+  const v=typeof main==='string'?main:Object.entries(p).filter(([k,x])=>typeof x==='string'&&!layout.test(k)&&x.trim()&&!/^(#|rgba?\(|\d+(\.\d+)?(px|%|s)?$)/i.test(x.trim())).map(([,x])=>String(x).trim()).join(' · ');
+  return v.replace(/\s+/g,' ').trim().slice(0,60);};
  const label=(i:typeof r.items[number])=>{const w=words(i);return w?`"${w}"`:i.source?name(i.source.assetId):i.component;};
  const overlays=r.items.filter(i=>!isCaption(i)),captions=r.items.filter(isCaption);
  const sections:string[]=[];
