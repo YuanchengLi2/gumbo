@@ -211,7 +211,7 @@ export function supabaseBillingPorts(db:any):BillingPorts{
  const check=({data,error}:{data:any;error:any})=>{if(error)throw new Error(error.message);return data;};
  return{
   account:async user=>check(await db.from('dream_accounts').select('email,plan,stripe_customer_id,stripe_subscription_id,subscription_status,period_end,cancel_at_period_end,credit_overdraft').eq('id',user).maybeSingle()),
-  usage:async user=>{const period=new Date().toISOString().slice(0,7),row=check(await db.from('dream_usage_counters').select('count').eq('account_id',user).eq('period',period).eq('kind','creator_search').maybeSingle());return{creatorSearches:Number(row?.count)||0,cloudBytes:0};},
+  usage:async user=>{const period=new Date().toISOString().slice(0,7),row=check(await db.from('dream_usage_counters').select('count').eq('account_id',user).eq('period',period).eq('kind','creator_search').maybeSingle());const cloud=check(await db.from('dream_cloud_projects').select('size_bytes').eq('account_id',user))??[];return{creatorSearches:Number(row?.count)||0,cloudBytes:cloud.reduce((n:number,p:any)=>n+Number(p.size_bytes),0)};},
   grants:async user=>check(await db.from('dream_credit_grants').select('kind,plan,credits,remaining,expires_at').eq('user_id',user).or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`).order('created_at',{ascending:false}))??[],
   ensureFree:async user=>{check(await db.rpc('dream_ensure_free_grant',{p_user:user}));},
   setCustomer:async(user,customer)=>{check(await db.from('dream_accounts').update({stripe_customer_id:customer}).eq('id',user));},

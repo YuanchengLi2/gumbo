@@ -7,6 +7,7 @@ import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {handleCreators} from './creators.ts';
+import {handleCloud,r2Config,supabaseCloudPorts} from './cloud.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
 import {handleReport,supabaseReportPorts} from './reports.ts';
@@ -44,7 +45,7 @@ Deno.serve(async(req)=>{
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
  // The paid beta: what costs money (the AI, transcription, media search, sharing, checkout) is for accounts invited from
  // the waitlist. Anyone can sign in and see where they stand.
- if(['ai','count-tokens','transcribe','media-search','creators','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
+ if(['ai','count-tokens','transcribe','media-search','creators','cloud-list','cloud-upload','cloud-commit','cloud-download','cloud-delete','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
@@ -68,6 +69,9 @@ Deno.serve(async(req)=>{
   const body=req.headers.get('content-type')===compressedJSON?JSON.parse(await new Response(req.body!.pipeThrough(new DecompressionStream('gzip'))).text()):await req.json();
   if(action==='ai-status'||action==='ai-cancel'){if(typeof body.requestId!=='string')return json({error:'Request ID required'},400);if(action==='ai-cancel')await requests.cancel(user.id,body.requestId);const result=requestStatus(await requests.read(user.id,body.requestId));return json(result.body,result.status);}
   if(action==='admin'||action==='admin-invite'){const {data:account}=await db.from('dream_accounts').select('is_admin').eq('id',user.id).single();if(!account?.is_admin)return json({error:'Administrator access is required.'},403);if(action==='admin-invite'){const email=String(body.email??'').trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return json({error:'Enter a valid email address.'},400);const {error}=await db.from('dream_invites').upsert({email});if(error)throw error;return json({invited:true});}const {data:accounts}=await db.from('dream_accounts').select('id,email,status,daily_budget_usd');const {data:usage}=await db.from('dream_usage').select('cost_usd').gte('created_at',new Date(new Date().setUTCHours(0,0,0,0)).toISOString());return json({accounts:accounts??[],requests:usage?.length??0,cost:(usage??[]).reduce((sum:number,u:any)=>sum+Number(u.cost_usd),0)});}
+  // Projects saved to Gumbo's cloud, to open on another computer (see cloud.ts); space by plan.
+  if(action.startsWith('cloud-')){const {data:account}=await db.from('dream_accounts').select('plan').eq('id',user.id).single();const limitGB=(PLANS as any)[account?.plan??'free']?.limits?.cloudGB??0;
+   try{const result=await handleCloud(action,body,user.id,{r2:r2Config(name=>Deno.env.get(name)),limitGB,ports:supabaseCloudPorts(db)});return json(result.body,result.status);}catch(error){return json({error:(error as Error).message},502);}}
   // YouTube creators for the @ menu and the agent's study_creator tool (see creators.ts).
   if(action==='creators'){const allow=async()=>{const {data:account}=await db.from('dream_accounts').select('plan').eq('id',user.id).single();const limit=(PLANS as any)[account?.plan??'free']?.limits?.creatorSearches??0;const {data:used,error}=await db.rpc('dream_use_allowance',{p_account:user.id,p_kind:'creator_search',p_limit:limit});return{ok:!error&&Number(used)>=0,limit};};
    const result=await handleCreators(body,{key:Deno.env.get('YOUTUBE_API_KEY'),allow});return json(result.body,result.status);}
