@@ -27,7 +27,7 @@ type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:
 const RESULT_LIMIT=12000,READ_LIMIT=24000;
 // Reads that one response asks for together start together (their results are still recorded in order), so looks at
 // several clips or transcripts that are still being made overlap instead of waiting one after another.
-const PARALLEL_READS=new Set(['read_file','view_media','read_transcript','search','find_shots','listen']);
+const PARALLEL_READS=new Set(['read_file','view_media','read_transcript','search','find_shots','listen','study_creator','past_projects']);
 // Coarse identity groups retries of the same target even when inputs differ (rewritten file content, tweaked command flags).
 /** An error with its numbers and ids taken out, so the same failure is recognised when its details shift slightly. */
 export const failureSignature=(message:string)=>message.replace(/\b[a-z]_[0-9a-f]{6,}\b|\b[0-9a-f]{8,}\b/gi,'#').replace(/-?\d+(?:\.\d+)?/g,'#').replace(/\s+/g,' ').trim().slice(0,240);

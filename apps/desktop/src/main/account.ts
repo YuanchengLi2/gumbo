@@ -54,5 +54,7 @@ export class Account {
   const body=await response.json().catch(()=>({})) as {reference?:string;error?:string};if(!response.ok)throw new Error(body.error??'The log could not be sent.');return{reference:String(body.reference)};
  }
  signout(){this.generation++;this.clear();return {signedIn:false};}
+ /** YouTube channels matching the composer's @ text (the gateway's creators route); none when YouTube search is not set up. */
+ async creators(query:string){if(!this.signedIn()||!query.trim())return{creators:[]};const response=await fetch(`${this.gateway()}/creators`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify({query})});const body=await response.json().catch(()=>({})) as any;return response.ok?body:{creators:[],error:body.error};}
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
 }
