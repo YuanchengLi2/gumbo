@@ -32,6 +32,18 @@ export function continues(playing:MediaLayer,arrival:Arrival,now:number,fps:numb
  return Math.abs(there-arrival.layer.time)<=CONTINUE_SEC;
 }
 
+/** How many video elements each source needs at once over `span` seconds from `from`: the most of its clips that show or
+ * get ready (from LOOKAHEAD_SEC before they start) at the same moment. A clip that continues the shot before it is
+ * counted too, so this may be one more than playback takes. */
+export function videoPool(clips:{assetId:string;start:number;end:number}[],from:number,span:number){
+ const edges=new Map<string,[number,number][]>();
+ for(const c of clips){if(c.end<=from||c.start>from+span)continue;let list=edges.get(c.assetId);if(!list)edges.set(c.assetId,list=[]);list.push([Math.max(from,c.start-LOOKAHEAD_SEC),1],[c.end,-1]);}
+ const pool=new Map<string,number>();
+ // A clip that ends as another's window opens is not counted with it.
+ for(const [asset,list] of edges){list.sort((a,b)=>a[0]-b[0]||a[1]-b[1]);let n=0,most=0;for(const [,d] of list){n+=d;most=Math.max(most,n);}pool.set(asset,most);}
+ return pool;
+}
+
 export type PooledVideo={key:string;assetId:string;el:{currentTime:number}};
 /** The video element a clip draws from: the one already showing it; else one of the same source that nothing needs this
  * moment, the one whose playhead is nearest the clip's (a cut that continues the shot takes the playing video on, a jump cut

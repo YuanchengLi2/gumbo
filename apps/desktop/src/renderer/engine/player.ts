@@ -2,7 +2,7 @@ import {prepare,frameAt,Compositor,audioManifest,envelope,type Prepared,type Med
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {SceneLayers} from './scenes';
-import {upcoming,continues,pickVideo,LOOKAHEAD_SEC} from './lookahead';
+import {upcoming,continues,pickVideo,videoPool,LOOKAHEAD_SEC} from './lookahead';
 
 /** The preview player: the engine's frames drawn live on a canvas, the way Export draws them. Video comes from muted video
  * elements (decoded on the graphics card), one per clip showing or about to, kept on the frame the timeline asks for; a cut
@@ -21,6 +21,13 @@ export const playUrl=(a:Asset)=>'dream-media://'+a.id+'/play?revision='+encodeUR
 export const audioUrl=(a:Asset)=>'dream-media://'+a.id+'/audio?revision='+encodeURIComponent(a.audioPath?'normalized':a.playback?.audio??'original');
 
 type Video={el:HTMLVideoElement;key:string;assetId:string;url:string;lastUsed:number;seeking:boolean};
+/** Video elements are the costly part of a cut: each has its own hardware decoder, and the graphics card builds or tears
+ * one down in about a tenth of a second during which it draws nothing, the preview included (a new element a second
+ * before each cut, and one let go a few seconds after, froze the picture three frames each time). So the player keeps
+ * a pool: while paused it makes the elements the next POOL_SEC of the edit needs (as many per source as it shows or
+ * parks at once), never lets one go while playing, and lets spare ones go only once paused with more than POOL_MAX.
+ * At most POOL_MAX are made ahead; more are made when a cut needs them. */
+const POOL_SEC=30,POOL_MAX=12;
 type Sound={el:HTMLAudioElement;gain:GainNode;segment:AudioSegment};
 
 export class EnginePlayer implements PlayerRef{
@@ -29,13 +36,14 @@ export class EnginePlayer implements PlayerRef{
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
  private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;
+ private pool=new Map<string,number>();private poolAt=-1;
  constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=new Compositor(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
   // A paused frame is drawn again when the preview changes size: the canvas at its new size, and coded scenes placed at
   // the new scale (they kept the old one, so dragging the timeline divider showed more or less of a graphic).
   this.resized=new ResizeObserver(()=>{this.dirty=true;});this.resized.observe(canvas);}
  /** A new revision of the edit: the frames and sound follow it without interrupting playback. */
  setProject(timeline:TimelineDocument,footage:FootageIndex){
-  this.prepared=prepare({timeline,footage});this.layerCache.clear();this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
+  this.prepared=prepare({timeline,footage});this.layerCache.clear();this.poolAt=-1;this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
   this.segments=audioManifest(timeline,footage).filter(s=>s.enabled!==false);
   for(const [id,sound] of this.sounds)if(!this.segments.some(s=>s.id===id&&s.assetId===sound.segment.assetId)){sound.el.pause();sound.gain.disconnect();this.sounds.delete(id);}
   for(const sound of this.sounds.values())sound.segment=this.segments.find(s=>s.id===sound.segment.id)!;
@@ -63,9 +71,33 @@ export class EnginePlayer implements PlayerRef{
   if(v&&v.url!==url){this.unload(v);v=undefined;}
   const stale=this.videos.get(layer.key);if(stale&&stale!==v)this.unload(stale);
   if(v&&v.key!==layer.key){this.videos.delete(v.key);v.key=layer.key;}
-  if(!v){const el=document.createElement('video');el.muted=true;el.playsInline=true;el.preload='auto';el.crossOrigin='anonymous';el.src=url;
-   v={el,key:layer.key,assetId:layer.assetId,url,lastUsed:0,seeking:false};const video=v;el.addEventListener('seeked',()=>{video.seeking=false;this.dirty=true;});el.addEventListener('loadeddata',()=>{this.dirty=true;});}
+  v??=this.make(layer.key,layer.assetId,url);
   this.videos.set(layer.key,v);claimed.add(v);v.lastUsed=performance.now();return v;
+ }
+ private make(key:string,assetId:string,url:string){
+  const el=document.createElement('video');el.muted=true;el.playsInline=true;el.preload='auto';el.crossOrigin='anonymous';el.src=url;
+  const v:Video={el,key,assetId,url,lastUsed:performance.now(),seeking:false};el.addEventListener('seeked',()=>{v.seeking=false;this.dirty=true;});el.addEventListener('loadeddata',()=>{this.dirty=true;});
+  // Played once as soon as it has a picture: a video that has never played gets its hardware decoder only when it first
+  // plays, which froze the picture at the cut that started it (the loop puts it back on its frame, or playing, at once).
+  el.addEventListener('loadeddata',()=>{if(el.paused)void el.play().then(()=>{el.pause();this.dirty=true;}).catch(()=>{});},{once:true});
+  return v;
+ }
+ /** The pool (see POOL_SEC): worked out again when the edit changes or the playhead moves on, and filled one element at a
+  * time while paused. */
+ private fillPool(time:number){
+  if(this.poolAt<0||Math.abs(time-this.poolAt)>POOL_SEC/4){
+   const video=(id:string)=>{const a=this.prepared.assets.get(id);return a?.kind==='video'&&!a.scene;};
+   const clips=[...this.prepared.resolved.clips.filter(c=>video(c.assetId)).map(c=>({assetId:c.assetId,start:c.start,end:c.end})),
+    ...this.prepared.visible.filter(i=>i.source&&video(i.source.assetId)).map(i=>({assetId:i.source!.assetId,start:i.timelineStart,end:i.timelineEnd}))];
+   this.pool=videoPool(clips,time,POOL_SEC);this.poolAt=time;}
+  if(this.videos.size>=POOL_MAX)return;
+  for(const [assetId,count] of this.pool){const url=playUrl(this.prepared.assets.get(assetId)!);let have=0;for(const v of this.videos.values())if(v.assetId===assetId&&v.url===url)have++;
+   if(have<count){const key=`pool:${assetId}:${performance.now()}`;this.videos.set(key,this.make(key,assetId,url));return;}}
+ }
+ /** Whether a video is more than its source's share of the pool. */
+ private spare(v:Video){
+  const asset=this.prepared.assets.get(v.assetId);if(!asset||v.url!==playUrl(asset))return true;
+  let have=0;for(const w of this.videos.values())if(w.assetId===v.assetId&&w.url===v.url)have++;return have>(this.pool.get(v.assetId)??0);
  }
  private unload(v:Video){v.el.pause();v.el.removeAttribute('src');v.el.load();if(this.videos.get(v.key)===v)this.videos.delete(v.key);}
  /** The media layers (not scenes) a timeline frame shows, worked out once per frame of each revision. */
@@ -121,8 +153,10 @@ export class EnginePlayer implements PlayerRef{
    else if(layer.media==='image'||layer.media==='sequence')this.picture(layer);}
   for(const layer of this.layersAt(to))if(layer.media==='sequence')this.picture(layer);
   this.sound(time);
-  // A clip that has left the frame stops playing at once (it would go on decoding unseen), and is let go after a while.
-  const now=performance.now();for(const v of [...this.videos.values()]){if(v.lastUsed<tick&&!v.el.paused)v.el.pause();if(now-v.lastUsed>4000)this.unload(v);}
+  // A clip that has left the frame stops playing at once (it would go on decoding unseen); paused, with more than POOL_MAX
+  // videos, a spare one unused for a while is let go, and the pool is filled (see POOL_SEC).
+  const now=performance.now();for(const v of [...this.videos.values()]){if(v.lastUsed<tick&&!v.el.paused)v.el.pause();if(!this.playing&&now-v.lastUsed>4000&&this.videos.size>POOL_MAX&&this.spare(v))this.unload(v);}
+  if(!this.playing)this.fillPool(time);
   if(this.playing){const n=this.getCurrentFrame();if(n!==this.lastFrame){this.lastFrame=n;this.emit('frameupdate',{frame:n});}this.dirty=true;}
   if(!this.dirty)return;
   // Wait for every picture the frame needs (up to a moment), so a seek or cut never flashes an empty frame.

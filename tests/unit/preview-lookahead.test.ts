@@ -2,7 +2,7 @@ import {it,expect} from 'vitest';
 import {emptyTimeline,TimelineSchema} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
 import {prepare,frameAt,type MediaLayer} from '@dream/compositor';
-import {upcoming,continues,pickVideo,LOOKAHEAD_SEC} from '../../apps/desktop/src/renderer/engine/lookahead';
+import {upcoming,continues,pickVideo,videoPool,LOOKAHEAD_SEC} from '../../apps/desktop/src/renderer/engine/lookahead';
 import {keyframeGap} from '../../apps/project-service/src/media-io';
 
 const footage=()=>{const f=emptyFootage();f.assets=['a','b','c'].map(id=>AssetSchema.parse({id,filename:id+'.mp4',kind:'video',originalPath:id+'.mp4',durationSec:30,width:1920,height:1080,fps:30,hasAudio:false,fingerprint:id,status:'ready'}));return f;};
@@ -62,4 +62,14 @@ it('measures the longest stretch between keyframes, to tell footage that seeks s
  expect(keyframeGap(Array.from({length:120},(_,n)=>n*.5),60)).toBeCloseTo(.5);
  // One keyframe at the start of a six-second clip; none read at all; and order does not matter.
  expect(keyframeGap([0],6)).toBe(6);expect(keyframeGap([],10)).toBe(10);expect(keyframeGap([3,0,1.5],4)).toBe(1.5);
+});
+
+it('makes as many video elements per source as the edit shows or parks at once, ahead of playing',()=>{
+ // a: 0-2 and 2.5-3 (its second clip gets ready while the first still shows), b: 2-2.5, then b again at 40 s (out of reach).
+ const clips=[{assetId:'a',start:0,end:2},{assetId:'b',start:2,end:2.5},{assetId:'a',start:2.5,end:3},{assetId:'b',start:40,end:41}];
+ expect([...videoPool(clips,0,30)]).toEqual([['a',2],['b',1]]);
+ // From 2.2 s on, a's first clip is over: one element each.
+ expect([...videoPool(clips,2.2,30)]).toEqual([['b',1],['a',1]]);
+ // A clip that ends as the next one's window opens shares its element.
+ expect([...videoPool([{assetId:'a',start:0,end:1},{assetId:'a',start:1+LOOKAHEAD_SEC,end:3}],0,30)]).toEqual([['a',1]]);
 });
