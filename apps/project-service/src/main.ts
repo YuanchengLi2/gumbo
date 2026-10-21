@@ -1,8 +1,7 @@
-import {setPriority,constants} from 'node:os';
-// The project service does the heavy background work (transcription, shot analysis, proxies, contact sheets) and starts
-// ffmpeg and whisper for it. It runs below normal priority, and on Windows every process it starts inherits that, so a
-// long import or transcription yields to whatever the user is doing instead of slowing the whole computer down.
-try{setPriority(constants.priority.PRIORITY_BELOW_NORMAL);}catch{}
+// The project service runs at normal priority. It ran below normal (October 19) so imports would yield to the user's
+// programs, but Windows starved it even with cores idle: on October 20 an 8-second clip's proxy and shot analysis took
+// 0% of a core for six minutes (26% once raised to normal), and every frame the agent asked for timed out. Its work is
+// kept light by thread limits instead (source-frames.ts queues decodes).
 import {recordSceneError} from './scene-errors';
 import {CodeWorkspace} from './code-workspace';
 import {codeRunClient} from './code-run-client';

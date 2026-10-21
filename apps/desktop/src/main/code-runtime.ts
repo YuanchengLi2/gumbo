@@ -32,9 +32,9 @@ export class CodeRuntime {
   * programs, their files and the internet, with the bundled Node, Python and ffmpeg added to PATH. Otherwise they run in
   * the isolated creation container. */
  local?:()=>boolean;
- /** Commands run below normal priority so they yield to the user's own programs; when the computer is fully busy they
-  * wait for it. The test suite sets normal (DREAM_COMMAND_PRIORITY). */
- priority:'below-normal'|'normal'=process.env.DREAM_COMMAND_PRIORITY==='normal'?'normal':'below-normal';
+ /** Commands run at normal priority. Below normal (set with DREAM_COMMAND_PRIORITY=below-normal) let Windows starve them
+  * with cores idle: the agent's ffmpeg commands crawled and its edits stalled (October 20). */
+ priority:'below-normal'|'normal'=process.env.DREAM_COMMAND_PRIORITY==='below-normal'?'below-normal':'normal';
  constructor(private paths:{creation:string;ffmpeg:string;ffprobe:string;browser:string},private qualification=false){}
  check(){
   if(process.platform!=='win32')throw new Error('Automatic creation is not yet qualified on this platform.');
