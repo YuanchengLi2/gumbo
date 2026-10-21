@@ -173,7 +173,17 @@ export class CodeWorkspace implements CodeWorkspacePort {
   // The request's attached media and timeline selection tell the agent what "my clip" or "this" refers to.
   let pending:{selection?:string[];assetIds?:string[];turnId?:string}={};try{pending=JSON.parse(this.db.getMeta('pending_request')??'{}');}catch{}
   let lookFor:string|undefined;try{lookFor=pending.turnId?JSON.parse(this.db.getMeta('routing:'+pending.turnId)??'{}').lookFor:undefined;}catch{}
-  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[],this.footageKnowledge(lookFor)),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json',...mentionsOf(query,this.db.footage().assets,this.db.folder),...yourStyle(this.db.folder)};}
+  const since=this.sinceLastRequest();
+  return{capabilities:engineCapabilities(),computer:this.computerContext(),workspace:'Workspace',workspaceFolder:this.root,baseVersionId:this.db.head(),...(since?{sinceLastRequest:since}:{}),project:new ProjectContext(this.db).initial(query,pending.selection??[],pending.assetIds??[],this.footageKnowledge(lookFor)),source:selected,media:this.mediaContext(),environment:workspaceEnvironment(this.root),projectDocument:'project.json',schema:'context/project-schema.json',...mentionsOf(query,this.db.footage().assets,this.db.folder),...yourStyle(this.db.folder)};}
+ /** What the user changed after the agent's last edit (undo, redo, a restored version, a hand edit). Without it the agent
+  * remembered its own undone edits from the conversation: after a restore it spent eleven minutes looking through old
+  * versions for a title the user had rolled back (October 20). */
+ private sinceLastRequest(){
+  const rows=this.db.db.prepare('SELECT summary,turn_id AS turn FROM versions ORDER BY rowid DESC LIMIT 40').all() as {summary:string;turn:string|null}[];
+  const changes:string[]=[];let agentBefore=false;for(const row of rows){if(row.turn){agentBefore=true;break;}if(row.summary!=='Project created')changes.push(row.summary);}
+  if(!agentBefore||!changes.length)return undefined;
+  return{changes:changes.slice(0,8).reverse(),note:'The user made these changes after your last edit. Anything they undid or restored away is gone on purpose: the current project.json and timeline are the truth. Do not look for, rebuild or re-add undone work unless this request asks for it.'};
+ }
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.footage().assets){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;
