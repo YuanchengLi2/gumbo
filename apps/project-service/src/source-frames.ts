@@ -19,14 +19,21 @@ const still=/\.(?:png|jpe?g|webp|bmp|gif|tiff?)$/i;
  * cannot be decoded is taken a quarter and then a whole second earlier: a look at the end of a clip shows its last
  * frames instead of failing (on October 18 such failures each cost the agent a step). */
 export async function jpeg(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){
- let last:unknown;for(const at of [time,time-.25,time-1]){if(at<0&&at!==time)break;try{return await jpegAt(ffmpeg,path,Math.max(0,at),signal,max);}catch(error){if(signal?.aborted)throw error;last=error;}}
+ let last:unknown;for(const at of [time,time-.25,time-1]){if(at<0&&at!==time)break;try{return await jpegAt(ffmpeg,path,Math.max(0,at),signal,max);}catch(error){if(signal?.aborted||/timed out/.test((error as Error).message))throw error;last=error;}}
  throw last;
 }
-function jpegAt(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){return new Promise<Buffer>((resolve,reject)=>{
+// A look at three 4K clips asks for nine frames at once. Each seek decodes from the previous keyframe, about 7.5 s on one
+// thread for 4K H.264, so nine single-threaded decodes beside proxy encoding ran past the 30 s limit and every frame
+// "could not be decoded" (October 20). Decodes now queue, a few at a time with two threads each, and the limit counts only
+// from a decode's start.
+const DECODES=3;let decoding=0;const waiting:(()=>void)[]=[];
+function decodeSlot(signal?:AbortSignal){if(decoding<DECODES){decoding++;return Promise.resolve();}return new Promise<void>((resolve,reject)=>{const go=()=>{signal?.removeEventListener('abort',cancel);decoding++;resolve();};const cancel=()=>{const at=waiting.indexOf(go);if(at>=0)waiting.splice(at,1);reject(new DOMException('Source inspection canceled','AbortError'));};waiting.push(go);signal?.addEventListener('abort',cancel,{once:true});});}
+function decodeDone(){decoding--;waiting.shift()?.();}
+async function jpegAt(ffmpeg:string,path:string,time:number,signal?:AbortSignal,max=768){await decodeSlot(signal);try{return await new Promise<Buffer>((resolve,reject)=>{
  const seek=time>.001&&!still.test(path)?['-ss',String(time-.001)]:[];
- const child=spawn(ffmpeg,['-v','error','-threads','1',...seek,'-i',path,'-frames:v','1','-vf',`scale=w='min(${max},iw)':h='min(${max},ih)':force_original_aspect_ratio=decrease`,'-threads','1','-q:v','4','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{windowsHide:true,signal});let size=0;const chunks:Buffer[]=[];let error='';
- const timer=setTimeout(()=>child.kill(),30000);child.stdout.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>3_000_000)child.kill();else chunks.push(chunk);});child.stderr.on('data',chunk=>error=(error+chunk.toString()).slice(-1200));child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);const bytes=Buffer.concat(chunks);if(signal?.aborted)reject(new DOMException('Source inspection canceled','AbortError'));else if(code||bytes.length<4||bytes[0]!==255||bytes[1]!==216)reject(new Error('Source frame could not be decoded. '+error));else resolve(bytes);});
-});}
+ const child=spawn(ffmpeg,['-v','error','-threads','2',...seek,'-i',path,'-frames:v','1','-vf',`scale=w='min(${max},iw)':h='min(${max},ih)':force_original_aspect_ratio=decrease`,'-threads','1','-q:v','4','-f','image2pipe','-vcodec','mjpeg','pipe:1'],{windowsHide:true,signal});let size=0;const chunks:Buffer[]=[];let error='',timedOut=false;
+ const timer=setTimeout(()=>{timedOut=true;child.kill();},60000);child.stdout.on('data',(chunk:Buffer)=>{size+=chunk.length;if(size>3_000_000)child.kill();else chunks.push(chunk);});child.stderr.on('data',chunk=>error=(error+chunk.toString()).slice(-1200));child.on('error',e=>{clearTimeout(timer);reject(e);});child.on('close',code=>{clearTimeout(timer);const bytes=Buffer.concat(chunks);if(signal?.aborted)reject(new DOMException('Source inspection canceled','AbortError'));else if(timedOut)reject(new Error('Reading this source frame timed out (a very large source or a busy computer); try fewer times at once.'));else if(code||bytes.length<4||bytes[0]!==255||bytes[1]!==216)reject(new Error('Source frame could not be decoded. '+error));else resolve(bytes);});
+});}finally{decodeDone();}}
 export function sourceInspector(db:ProjectDB,ffmpeg:string,authorize?:(paths:string[],signal?:AbortSignal)=>Promise<void>):SourceInspector{const inflight=new Map<string,{promise:Promise<SourceFrames>;controller:AbortController;users:number}>();const inspect:SourceInspector=async(raw,signal)=>{
  const request=InspectFootageSchema.parse(raw),row=db.db.prepare('SELECT json FROM assets WHERE id=?').get(request.assetId) as {json:string}|undefined;if(!row)throw new Error('Source asset is not in this project.');
  const asset=hydrateAsset(AssetSchema.parse(JSON.parse(row.json)),db.folder);if(asset.kind==='audio'||asset.sequence)throw new Error('Inspect an imported video or image; use preview_frames for generated timeline scenes.');
