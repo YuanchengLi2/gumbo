@@ -15,7 +15,7 @@
  * (the built-in style library is unlimited). styleMemory: how many of the user's other projects the agent carries their
  * style from (null: all). */
 export const PLANS={
- free:{name:'Free',priceUsd:0,credits:50,limits:{creatorSearches:10,styleMemory:1}},
+ free:{name:'Free',priceUsd:0,credits:20,limits:{creatorSearches:10,styleMemory:1}},
  pro:{name:'Pro',priceUsd:25,credits:1250,limits:{creatorSearches:200,styleMemory:6}},
  max:{name:'Max',priceUsd:100,credits:4500,limits:{creatorSearches:1000,styleMemory:20}},
  max20:{name:'Max 20x',priceUsd:200,credits:18000,limits:{creatorSearches:5000,styleMemory:null}}
