@@ -19,3 +19,6 @@ Gumbo's website, a static site on Vercel served at `https://usegumbo.app`:
 Deploy from this folder with `npx vercel deploy --prod`. `vercel.json` keeps other sites from framing the pages and sends
 no referrer (the sign-in page's address carries the app's one-time callback). Supabase needs `http://127.0.0.1:**/callback**`
 in its redirect URLs, because Google and the emailed link return to the app there.
+
+`https://usegumbo.app/download` is the link to share: `vercel.json` sends it to the newest Windows installer on the
+gumbo-releases repo (the same releases the app updates from), so it never needs changing when a version ships.
