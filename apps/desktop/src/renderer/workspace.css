@@ -177,6 +177,9 @@
 
 /* A turn: the request on the right, the agent's work and answer under it, full width. */
 .ai-workspace .conversation-turn{padding:0;margin:0 0 22px}
+/* A long chat is mostly off screen: turns there are not styled, laid out or painted (each streamed word, keystroke and click
+   laid out the whole history again). A turn keeps the size it last had while it is away. */
+.ai-workspace .conversation-turn{content-visibility:auto;contain-intrinsic-size:auto 360px}
 .ai-workspace .conversation-turn .message.user{display:block;width:fit-content;max-width:88%;margin:0 0 14px auto;padding:7px 11px;background:var(--n5);border:0;border-radius:12px;font-size:13px;line-height:1.55;color:var(--side-text)}
 .ai-workspace .conversation-turn .message.user p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
 .ai-workspace .conversation-turn .message.user .message-attachments{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px;margin-bottom:6px}
