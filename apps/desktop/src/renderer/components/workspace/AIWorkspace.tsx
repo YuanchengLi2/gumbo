@@ -3,7 +3,7 @@ import {usePlayhead} from '../../store/playhead';
 import {useEditor,stopRun} from '../../store/editor';
 import {Conversation} from '../chat/Conversation';
 import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
-import {selectionRefs} from '@dream/timeline';
+import {selectionRefs,captionParamsFor} from '@dream/timeline';
 import {MediaTile} from '../media/MediaTile';
 import type {PlayerRef} from '../../engine/EngineView';
 import {X,ArrowDown} from 'lucide-react';
@@ -101,7 +101,7 @@ export function AIWorkspace(p:{project:ProjectState;player:React.RefObject<Playe
    // where the entrance has finished, showing what was added with its handles, as CapCut plays a template once.
    void applyOps(ops,'Add '+drop.kind).then(()=>{if(added?.type!=='add_item')return;p.onSelect([added.item.id]);
     if(drop.kind==='text'||drop.kind==='sticker'){const fps=t.settings.fps,sec=entranceSec(added.item.params,added.item.durationSec??3,drop.kind==='sticker');if(sec>0)p.onSeek(Math.round((now()+sec)*fps)+1);}});}catch(error){p.onError((error as Error).message);}};
- const chooseCaptions=(style:string|null)=>run(()=>[{type:'set_captions',captions:style?{style:style as 'clean',params:t.captions?.params??{},overrides:t.captions?.overrides??[]}:null,reason:manualReason}],style?'Caption style':'Turn captions off');
+ const chooseCaptions=(style:string|null)=>run(()=>[{type:'set_captions',captions:style?{style:style as 'clean',params:captionParamsFor(t.captions?.params),overrides:t.captions?.overrides??[]}:null,reason:manualReason}],style?'Caption style':'Turn captions off');
  // The editor's + on a media card: video and photos join the main track at the playhead, audio goes to music.
  const addMedia=(assetId:string)=>{const asset=f.assets.find(a=>a.id===assetId);if(!asset)return;run(()=>addAsset(t,f,assetId,asset.kind==='audio'?'music:0':'video',Math.round(now()*t.settings.fps)/t.settings.fps),'Add media');};
  // Sending always jumps to the newest message; after that the chat follows new output while you are at the bottom.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {KeyframeSchema} from './keyframes';
-import {TRANSITION_TYPES,DIRECTIONS} from './library';
+import {TRANSITION_TYPES,DIRECTIONS,CAPTION_STYLE_IDS} from './library';
 export const AnchorSchema = z.discriminatedUnion('kind',[
   z.object({kind:z.literal('word'),wordId:z.string(),clipId:z.string(),edge:z.enum(['start','end']),offsetSec:z.number().default(0)}),
   z.object({kind:z.literal('clip'),clipId:z.string(),at:z.union([z.literal('start'),z.literal('end'),z.number().nonnegative()]),offsetSec:z.number().default(0)}),
@@ -14,7 +14,7 @@ export const ClipSchema=z.object({id:z.string(),assetId:z.string(),srcIn:z.numbe
 export type SpineClip=z.infer<typeof ClipSchema>;
 export const ItemSchema=z.object({id:z.string(),type:z.enum(['broll','overlay','effect','sfx']),start:AnchorSchema,end:AnchorSchema.optional(),durationSec:z.number().positive().optional(),component:z.string(),params:z.record(z.string(),z.unknown()).default({}),source:z.object({assetId:z.string(),srcIn:z.number().nonnegative(),srcOut:z.number().positive()}).optional(),layer:z.number().int().nonnegative().default(0),keyframes:z.array(KeyframeSchema).optional(),reason:z.string().default('')});
 export type AttachedItem=z.infer<typeof ItemSchema>;
-export const CaptionSchema=z.object({style:z.enum(['clean','karaoke','word_pop','emphasis']),params:z.record(z.string(),z.unknown()).default({}),overrides:z.array(z.object({wordId:z.string(),clipId:z.string().optional(),text:z.string().optional(),hidden:z.boolean().optional(),emphasis:z.boolean().optional()})).default([])});
+export const CaptionSchema=z.object({style:z.enum(CAPTION_STYLE_IDS),params:z.record(z.string(),z.unknown()).default({}),overrides:z.array(z.object({wordId:z.string(),clipId:z.string().optional(),text:z.string().optional(),hidden:z.boolean().optional(),emphasis:z.boolean().optional()})).default([])});
 export const MusicSchema=z.object({id:z.string(),assetId:z.string(),srcIn:z.number().nonnegative(),srcOut:z.number().positive(),start:AnchorSchema,gainDb:z.number().default(-18),duckUnderSpeechDb:z.number().nonnegative().default(12),fadeInSec:z.number().nonnegative().default(.3),fadeOutSec:z.number().nonnegative().default(1),reason:z.string().default(''),layer:z.number().int().nonnegative().optional(),scoreId:z.string().optional(),scoreRevisionId:z.string().optional()});
 export type MusicClip=z.infer<typeof MusicSchema>;
 export const SettingsSchema=z.object({fps:z.union([z.literal(24),z.literal(25),z.literal(30),z.literal(60)]).default(30),width:z.number().int().positive().max(1920),height:z.number().int().positive().max(1920),stylePreset:z.string().optional(),durationSec:z.number().min(0).max(14400).optional(),autoDuration:z.boolean().optional().describe('Derive duration from all tracks by default; false uses the fixed canvas duration.'),autoLevel:z.boolean().optional().describe('Level each clip\'s sound toward a common loudness by default; false plays clips at their recorded level.')});

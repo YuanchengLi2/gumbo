@@ -1,6 +1,6 @@
 import React,{useMemo} from 'react';
 import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick,ChevronsRight,Smile} from 'lucide-react';
-import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,EFFECTS,effectInfo,FILTERS,TEXT_STYLES,textStyle,STICKERS,stickerInfo,FONTS,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
+import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,EFFECTS,effectInfo,FILTERS,TEXT_STYLES,textStyle,CAPTION_STYLES,captionStyle,captionParamsFor,STICKERS,stickerInfo,FONTS,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import {itemLook,reason,ensureDuration,setKeyframe,transitionOps,transitionClip} from '../../manual/model';
 export {setKeyframe};
@@ -140,14 +140,16 @@ function ItemProperties({p,item,look,base,edit,now,time,fps,disabled}:Common&{it
   const colour=(key:string,label:string,fallback:string,none=false)=><ColorField key={key} label={label} allowNone={none} value={String(eff[key]??fallback)} disabled={disabled} {...edit<string|undefined>('Change '+label.toLowerCase(),v=>setParams({[key]:v??(none?'':fallback)}))}/>;
   const choice=(key:string,label:string,options:readonly {id:string;name:string}[],fallback:string)=><ChoiceField key={key} label={label} value={String(eff[key]??fallback)} disabled={disabled} options={options} onChange={v=>now(setParams({[key]:key==='fontWeight'?Number(v):v}),'Change '+label.toLowerCase())}/>;
   return <><Section title="Text"><TextField label="Text" bare multiline value={String(shownParams.text??'')} disabled={disabled} {...edit<string>('Edit text',v=>setParams({text:v}))}/>
-   <ChoiceField label="Style" value={style?.id??''} disabled={disabled} options={[{id:'',name:'None'},...TEXT_STYLES.map(t=>({id:t.id,name:t.name}))]} onChange={v=>{const keep=Object.fromEntries(Object.entries(params).filter(([key])=>['text','x','y','scale','rotation','opacity'].includes(key)));now([{type:'update_item',itemId:raw.id,changes:{component:'text',params:{...keep,...(v?{style:v}:{})}},reason}],'Change text style');}}/>
+   <ChoiceField label="Style" value={style?.id??''} disabled={disabled} options={[{id:'',name:'None'},...TEXT_STYLES.map(t=>({id:t.id,name:t.group==='Titles'?'Title · '+t.name:t.group==='Lower thirds'?'Lower third · '+t.name:t.name}))]} onChange={v=>{const keep=Object.fromEntries(Object.entries(params).filter(([key])=>['text','x','y','scale','rotation','opacity'].includes(key)));now([{type:'update_item',itemId:raw.id,changes:{component:'text',params:{...keep,...(v?{style:v}:{})}},reason}],'Change text style');}}/>
+   {eff.subtext!==undefined&&<TextField label="Second line" value={String(eff.subtext??'')} disabled={disabled} {...edit<string>('Edit second line',v=>setParams({subtext:v}))}/>}
    <ChoiceField label="Kind" value={['title_card','lower_third'].includes(component)?component:'text'} disabled={disabled} options={[{id:'text',name:'Text'},{id:'lower_third',name:'Lower third'},{id:'title_card',name:'Title card'}]} onChange={v=>now([{type:'update_item',itemId:raw.id,changes:{component:v},reason}],'Change text kind')}/></Section>
    <Section title="Font">{choice('fontFamily','Font',FONTS.map(f=>({id:f,name:f})),'Arial')}{number('fontSize','Size',60,10,300,1,{unit:'px'})}
     {choice('fontWeight','Weight',[{id:'400',name:'Regular'},{id:'500',name:'Medium'},{id:'600',name:'Semibold'},{id:'700',name:'Bold'},{id:'900',name:'Black'}],'500')}
     <ToggleField label="Italic" value={!!eff.italic} disabled={disabled} onChange={v=>now(setParams({italic:v}),'Change italic')}/><ToggleField label="Capitals" value={!!eff.uppercase} disabled={disabled} onChange={v=>now(setParams({uppercase:v}),'Change capitals')}/>
     {number('letterSpacing','Letter spacing',0,-5,40,.5,{unit:'px'})}{colour('color','Colour','#ffffff')}</Section>
    <Section title="Look">{colour('stroke','Outline','',true)}{eff.stroke&&number('strokeWidth','Outline width',6,1,30,.5,{unit:'px'})}{colour('shadow','Shadow','',true)}{eff.shadow&&eff.shadow!=='transparent'&&<>{number('shadowBlur','Shadow blur',12,0,60,1,{unit:'px'})}{number('shadowY','Shadow drop',2,-40,40,1,{unit:'px'})}</>}
-    {colour('glow','Glow','',true)}{eff.glow&&number('glowSize','Glow size',24,2,80,1,{unit:'px'})}{colour('background','Background','',true)}{eff.background&&<>{number('padding','Padding',18,0,80,1,{unit:'px'})}{number('radius','Corners',8,0,60,1,{unit:'px'})}</>}</Section>
+    {colour('glow','Glow','',true)}{eff.glow&&number('glowSize','Glow size',24,2,80,1,{unit:'px'})}{colour('background','Background','',true)}{eff.background&&<>{number('padding','Padding',18,0,80,1,{unit:'px'})}{number('radius','Corners',8,0,60,1,{unit:'px'})}</>}
+    {colour('accent','Accent bar','',true)}<Segmented label="Align" value={eff.align==='left'?'left':'center'} disabled={disabled} options={[{id:'center',name:'Centre'},{id:'left',name:'Left'}]} onChange={v=>now(setParams({align:v==='left'?'left':'center'}),'Change text alignment')}/></Section>
    <Section title="Animation">{choice('animation','In',named(TEXT_ANIMATIONS,ANIMATION_NAMES),style?'fade':'none')}{choice('animationOut','Out',named(OUT_ANIMATIONS,ANIMATION_NAMES),'none')}{choice('loop','Loop',named(LOOP_ANIMATIONS,ANIMATION_NAMES),'none')}</Section>
    {transform}{timing}</>;}
  if(look==='sticker'){const sticker=stickerInfo(shownParams.sticker),choice=(key:string,label:string,options:readonly {id:string;name:string}[],fallback:string)=><ChoiceField key={key} label={label} value={String(shownParams[key]??fallback)} disabled={disabled} options={options} onChange={v=>now(setParams({[key]:v}),'Change '+label.toLowerCase())}/>;
@@ -155,7 +157,7 @@ function ItemProperties({p,item,look,base,edit,now,time,fps,disabled}:Common&{it
    <ColorField label="Colour" value={String(shownParams.color??sticker?.color??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change sticker colour',v=>setParams({color:v}))}/>
    <ColorField label="Accent" value={String(shownParams.accent??sticker?.accent??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change sticker accent',v=>setParams({accent:v}))}/>
    {sticker?.id==='speech'&&<TextField label="Words" value={String(shownParams.text??'')} disabled={disabled} {...edit<string>('Edit sticker words',v=>setParams({text:v}))}/>}</Section>
-   <Section title="Animation">{choice('animation','In',named(TEXT_ANIMATIONS.filter(a=>a!=='typewriter'),ANIMATION_NAMES),'pop')}{choice('animationOut','Out',named(OUT_ANIMATIONS,ANIMATION_NAMES),'none')}{choice('loop','Loop',named(LOOP_ANIMATIONS,ANIMATION_NAMES),sticker?.loop??'none')}</Section>{transform}{timing}</>;}
+   <Section title="Animation">{choice('animation','In',named(TEXT_ANIMATIONS.filter(a=>a!=='typewriter'&&a!=='words'),ANIMATION_NAMES),'pop')}{choice('animationOut','Out',named(OUT_ANIMATIONS,ANIMATION_NAMES),'none')}{choice('loop','Loop',named(LOOP_ANIMATIONS,ANIMATION_NAMES),sticker?.loop??'none')}</Section>{transform}{timing}</>;}
  if(look==='effect'){const info=effectInfo(raw.component);return <><Section title="Effect">{(info?.params??[{key:'amount',label:'Amount',min:0,max:1,step:.01,default:.5,unit:'%',scale:100}]).map(x=>param(x.key,x.label,x.default,x.min,x.max,x.step,{unit:x.unit,scale:x.scale}))}
   {info?.group==='look'&&<Segmented label="Changes" value={shownParams.apply==='all'?'all':'main'} disabled={disabled} options={[{id:'main',name:'Main track'},{id:'all',name:'Everything'}]} onChange={v=>now(setParams({apply:v==='all'?'all':undefined}),'Change what the effect changes')}/>}
   {info&&<p className="prop-hint">{info.about}</p>}</Section>{timing}</>;}
@@ -173,15 +175,22 @@ function ItemProperties({p,item,look,base,edit,now,time,fps,disabled}:Common&{it
 
 const FILTER_OPTIONS=[{id:'',name:'None'},...FILTERS.map(f=>({id:f.id,name:f.name}))];
 const named=(list:readonly string[],names:Record<string,string>={})=>list.map(id=>({id,name:names[id]??id[0].toUpperCase()+id.slice(1).replaceAll('_',' ')}));
-const ANIMATION_NAMES={none:'None',slide_up:'Slide up',slide_down:'Slide down',typewriter:'Typewriter'};
-const CAPTION_STYLES=[{id:'off',name:'Off'},{id:'clean',name:'Clean'},{id:'karaoke',name:'Karaoke'},{id:'word_pop',name:'Word pop'},{id:'emphasis',name:'Emphasis'}] as const;
+const ANIMATION_NAMES={none:'None',slide_up:'Slide up',slide_down:'Slide down',slide_left:'Slide left',slide_right:'Slide right',blur_in:'Blur in',blur_out:'Blur out',typewriter:'Typewriter',words:'Word by word'};
+const CAPTION_OPTIONS=[{id:'off',name:'Off'},...CAPTION_STYLES.map(s=>({id:s.id,name:s.name}))];
+/** Captions: the style, and its values (the style's own until changed here): size, colours, the highlight or word box, how
+ * many words show at once and the height of the line. */
 function CaptionSettings({p,base,edit,now,disabled}:Omit<Common,'time'|'fps'>){
  const c=base.captions,shown=p.timeline.captions,set=(params:Record<string,unknown>)=>c?[{type:'set_captions' as const,captions:{...c,params:{...c.params,...params}},reason}]:[];
+ const q={...(captionStyle(shown?.style)?.params??{}),...shown?.params} as Record<string,any>,lit=q.highlight==='current'||q.highlight==='spoken';
  return <Section title="Captions">
-  <ChoiceField label="Style" value={(shown?.style??'off') as typeof CAPTION_STYLES[number]['id']} disabled={disabled} options={CAPTION_STYLES} onChange={v=>now([{type:'set_captions',captions:v==='off'?null:{style:v,params:c?.params??{},overrides:c?.overrides??[]},reason}],v==='off'?'Turn captions off':'Change caption style')}/>
-  {shown&&<><NumberField label="Size" value={Number(shown.params.fontSize??42)} min={16} max={120} step={1} unit="px" disabled={disabled} {...edit<number>('Change caption size',v=>set({fontSize:v}))}/>
-   <ColorField label="Colour" value={String(shown.params.color??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change caption colour',v=>set({color:v??'#ffffff'}))}/>
-   <ColorField label="Box" allowNone value={String(shown.params.background??'#00000088')} disabled={disabled} {...edit<string|undefined>('Change caption box',v=>set({background:v??'transparent'}))}/></>}
+  <ChoiceField label="Style" value={shown?.style??'off'} disabled={disabled} options={CAPTION_OPTIONS} onChange={v=>now([{type:'set_captions',captions:v==='off'?null:{style:v as NonNullable<typeof c>['style'],params:captionParamsFor(c?.params),overrides:c?.overrides??[]},reason}],v==='off'?'Turn captions off':'Change caption style')}/>
+  {shown&&<><NumberField label="Size" value={Number(q.fontSize??42)} min={16} max={160} step={1} unit="px" disabled={disabled} {...edit<number>('Change caption size',v=>set({fontSize:v}))}/>
+   <ColorField label="Colour" value={String(q.color??'#ffffff')} disabled={disabled} {...edit<string|undefined>('Change caption colour',v=>set({color:v??'#ffffff'}))}/>
+   {lit&&!q.wordBox&&<ColorField label="Highlight" value={String(q.highlightColor??'#a5b8ff')} disabled={disabled} {...edit<string|undefined>('Change caption highlight',v=>set({highlightColor:v??'#a5b8ff'}))}/>}
+   {q.wordBox&&<ColorField label="Word box" value={String(q.wordBox)} disabled={disabled} {...edit<string|undefined>('Change caption word box',v=>set({wordBox:v??q.wordBox}))}/>}
+   <ColorField label="Box" allowNone value={String(q.background??'#00000088')} disabled={disabled} {...edit<string|undefined>('Change caption box',v=>set({background:v??'transparent'}))}/>
+   {q.words!==undefined&&<NumberField label="Words at once" value={Number(q.words)} min={1} max={8} step={1} disabled={disabled} {...edit<number>('Change caption words at once',v=>set({words:Math.round(v)}))}/>}
+   <NumberField label="Height" value={Math.round((1-Number(q.y??.9))*100)} min={5} max={90} step={1} unit="%" disabled={disabled} {...edit<number>('Change caption height',v=>set({y:1-v/100}))}/></>}
  </Section>;
 }
 

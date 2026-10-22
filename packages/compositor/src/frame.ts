@@ -1,4 +1,4 @@
-import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,effectInfo,textStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
+import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,effectInfo,textStyle,captionStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 
 /** What one frame of the edit shows, as a list of layers drawn in order over the background. It is the single description
@@ -34,11 +34,15 @@ export type FillLayer={kind:'fill';color:string;rect:Rect;transform:Matrix;opaci
 export type TextLayer={kind:'text';key:string;
  component:'text'|'title_card'|'lower_third'|'circle_highlight'|'callout_arrow'|'counter'|'progress_bar'|'caption'|'audio_card'|'sticker';
  text:string;x:number;y:number;rotation:number;scale:number;opacity:number;color:string;background?:string;fontSize:number;fontWeight:number;
- /** Caption words, with the ones shown in the highlight colour. */
- words?:{text:string;highlight:boolean}[];size?:number;progress?:number;
+ /** Caption words, with the ones shown in the highlight colour (or on the word box), words not said yet hidden in their
+  * place, and the current word's pop; the highlight colour and word box colour. */
+ words?:{text:string;highlight:boolean;hidden?:boolean;scale?:number}[];highlightColor?:string;wordBox?:string;size?:number;progress?:number;
  /** Text styles: font, italics, letter spacing, outline, shadow, glow, box padding and corner, and how much of the text the
   * typewriter has revealed (0-1). */
  fontFamily?:string;italic?:boolean;letterSpacing?:number;stroke?:string;strokeWidth?:number;shadow?:string;shadowBlur?:number;shadowX?:number;shadowY?:number;glow?:string;glowSize?:number;padding?:number;radius?:number;reveal?:number;
+ /** Lower thirds and animations: left alignment (x is the box's left edge), an accent bar, a smaller second line and its
+  * colour, a blur (frame px) for blur in and out, and the reveal counted in words rather than characters. */
+ align?:'left'|'center';accent?:string;subtext?:string;subColor?:string;blur?:number;revealBy?:'words';
  /** A sticker: which drawing (color is its colour, background its accent), and seconds since it appeared. */
  sticker?:string;time?:number};
 export type Layer=MediaLayer|FillLayer|TextLayer;
@@ -209,14 +213,18 @@ function sourceLayer(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:look.grades,blur:look.blur,...(look.fx?{fx:look.fx}:{})}];
 }
 const components=new Set(['title_card','lower_third','circle_highlight','callout_arrow','counter','progress_bar']);
-/** How long a text's or sticker's entrance lasts: the typewriter types about 22 characters a second (at least 0.4 s,
- * at most 70% of its time); the others last animationSec (0.4 s), at most half its time. */
+/** How long a text's or sticker's entrance lasts: the typewriter types about 22 characters a second and word by word
+ * brings in about five words a second (at least 0.4 s, at most 70% of its time); the others last animationSec (0.4 s), at
+ * most half its time. */
 export function entranceSec(params:Record<string,unknown>,lengthSec:number,sticker=false){
  const style=textStyle(params.style),q={...(style?.params??{}),...params},animation=String(q.animation??(sticker?'pop':'fade'));
  if(animation==='none')return 0;if(animation==='typewriter')return Math.min(lengthSec*.7,Math.max(.4,String(q.text??'').length*.045));
+ if(animation==='words')return Math.min(lengthSec*.7,Math.max(.4,String(q.text??'').split(/\s+/).filter(Boolean).length*.2));
  return Math.min(lengthSec/2,Number(q.animationSec??.4));
 }
 const clamp01=(v:number)=>Math.max(0,Math.min(1,v)),easeOut=(t:number)=>1-Math.pow(1-t,3),back=(t:number)=>1+2.70158*Math.pow(t-1,3)+1.70158*Math.pow(t-1,2);
+/** A ball dropped onto the floor: 0 to 1 with three shrinking bounces. */
+const bounced=(t:number)=>{const n=7.5625,d=2.75;return t<1/d?n*t*t:t<2/d?n*(t-=1.5/d)*t+.75:t<2.5/d?n*(t-=2.25/d)*t+.9375:n*(t-=2.625/d)*t+.984375;};
 /** A drawn element (a title, lower third, highlight, arrow, counter or progress bar), text and stickers. Text with a style
  * takes the style's values under its own; it comes in, goes out and moves as its animations say (as CapCut's in, out and
  * loop). Elements and text from before styles (no style, no animation) fade in over their first 8 frames, as they did. */
@@ -225,35 +233,54 @@ function elementLayers(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  const sticker=item.component==='sticker'?stickerInfo(item.params.sticker):undefined,style=textStyle(item.params.style);
  const q={...(style?.params??{}),...item.params,...keyframeValues(item.keyframes,elapsed)} as Record<string,any>;
  const component=(sticker||item.component==='sticker'?'sticker':components.has(item.component)?item.component:'text') as TextLayer['component'];
- let opacity=Number(q.opacity??1),scale=Number(q.scale??1),rotation=Number(q.rotation??0),x=Number(q.x??.5),y=Number(q.y??(item.component==='title_card'||component==='sticker'?.5:.8)),reveal:number|undefined;
+ let opacity=Number(q.opacity??1),scale=Number(q.scale??1),rotation=Number(q.rotation??0),x=Number(q.x??.5),y=Number(q.y??(item.component==='title_card'||component==='sticker'?.5:.8)),reveal:number|undefined,blur=0,revealBy:'words'|undefined;
  if(!style&&q.animation===undefined&&component!=='sticker')opacity*=Math.min(1,frame/8);
  else{
   const animation=String(q.animation??(component==='sticker'?'pop':'fade')),out=String(q.animationOut??'none'),loop=String(q.loop??sticker?.loop??'none');
   const inSec=entranceSec(item.params,length,component==='sticker'),k=inSec>0?clamp01(elapsed/inSec):1,e=easeOut(k);
   if(animation==='fade')opacity*=e;else if(animation==='pop'){scale*=Math.max(0,back(k));opacity*=clamp01(k*4);}else if(animation==='slide_up'){y+=(1-e)*.06;opacity*=e;}
   else if(animation==='slide_down'){y-=(1-e)*.06;opacity*=e;}else if(animation==='zoom'){scale*=.5+.5*e;opacity*=e;}else if(animation==='typewriter')reveal=k;
+  else if(animation==='slide_left'){x+=(1-e)*.06;opacity*=e;}else if(animation==='slide_right'){x-=(1-e)*.06;opacity*=e;}
+  else if(animation==='stamp'){scale*=1+.9*(1-e);opacity*=clamp01(k*3);}else if(animation==='bounce'){y-=(1-bounced(k))*.12;opacity*=clamp01(k*4);}
+  else if(animation==='blur_in'){blur+=(1-e)*24;opacity*=e;}else if(animation==='words'){reveal=k;revealBy='words';}
   const outSec=Math.min(length/2,Number(q.animationOutSec??.35)),left=outSec>0?clamp01((item.timelineEnd-time)/outSec):1,o=easeOut(left);
   if(out==='fade')opacity*=o;else if(out==='pop'){scale*=.4+.6*o;opacity*=o;}else if(out==='slide_down'){y+=(1-o)*.06;opacity*=o;}else if(out==='zoom'){scale*=1+(1-o)*.4;opacity*=o;}
+  else if(out==='slide_up'){y-=(1-o)*.06;opacity*=o;}else if(out==='blur_out'){blur+=(1-o)*24;opacity*=o;}
   if(loop==='pulse')scale*=1+.06*Math.sin(2*Math.PI*1.5*elapsed);else if(loop==='wiggle')rotation+=6*Math.sin(2*Math.PI*2*elapsed);else if(loop==='float')y+=.012*Math.sin(2*Math.PI*.8*elapsed);
   else if(loop==='bounce')y-=.03*Math.abs(Math.sin(Math.PI*2*elapsed));else if(loop==='spin')rotation+=60*elapsed;
+  // A shake jolts it a little every frame; a flicker dims it now and then, about twelve times a second at most.
+  else if(loop==='shake'){x+=(chance(frame*1.3+1)-.5)*.008;y+=(chance(frame*1.7+2)-.5)*.008;rotation+=(chance(frame*1.1+3)-.5)*2;}
+  else if(loop==='flicker'&&chance(Math.floor(elapsed*12)+item.timelineStart)<.18)opacity*=.55;
  }
  const base={kind:'text' as const,key:item.id,component,x,y,rotation,scale,opacity:clamp01(opacity)};
  if(component==='sticker')return[{...base,text:String(q.text??''),color:String(q.color??sticker?.color??'#ffffff'),background:String(q.accent??sticker?.accent??'#ffffff'),fontSize:0,fontWeight:0,size:Number(q.size??.3*Math.min(W,H)),sticker:sticker?.id??String(q.sticker??''),time:elapsed}];
  const optional=(key:string,make:(v:any)=>unknown)=>q[key]===undefined||q[key]===''?{}:{[key]:make(q[key])};
  const styled={...optional('fontFamily',String),...optional('italic',Boolean),...optional('letterSpacing',Number),...optional('stroke',String),...optional('strokeWidth',Number),...optional('shadowBlur',Number),...optional('shadowX',Number),...optional('shadowY',Number),...optional('glow',String),...optional('glowSize',Number),...optional('padding',Number),...optional('radius',Number),
   // A styled text without a shadow of its own has none (the soft default shadow is for text from before styles).
-  ...(q.shadow!==undefined?{shadow:String(q.shadow)}:style?{shadow:'transparent'}:{}),...(reveal===undefined?{}:{reveal})};
+  ...(q.shadow!==undefined?{shadow:String(q.shadow)}:style?{shadow:'transparent'}:{}),...(reveal===undefined?{}:{reveal}),...(revealBy?{revealBy}:{}),...(blur>.01?{blur}:{}),
+  ...(q.align==='left'?{align:'left' as const}:{}),...optional('accent',String),...optional('subtext',String),...optional('subColor',String)};
  const text=String(q.text??''),shown=q.uppercase?text.toUpperCase():text;
  return[{...base,text:shown,color:String(q.color??'#ffffff'),background:q.background===undefined||q.background===''?undefined:String(q.background),fontSize:Number(q.fontSize??60),fontWeight:Number(q.fontWeight??500),size:Number(q.size??220),...styled,
   progress:component==='counter'?Math.round(Math.min(1,frame/60)*Number(q.value??100)):component==='progress_bar'?Math.min(100,frame*2):undefined,...(component==='counter'?{text:String(Math.round(Math.min(1,frame/60)*Number(q.value??100)))+String(q.suffix??'')}:{})}];
 }
-/** Captions: the word being spoken (word pop), or up to seven words of its clip around it with the current word or
- * emphasised words in the highlight colour, in a box at the bottom. */
+/** Captions in their style (the library's values under the edit's own): the word being spoken (one word at a time), a
+ * sliding line of up to seven words of its clip around it (the first styles), or the clip's words in fixed groups of
+ * `words`, so a group holds still while it is said and through pauses under 0.35 s. The current word, the words said so
+ * far or only emphasised ones take the highlight colour or the word box; the current word can pop up as it is said and
+ * a typewriter hides the words not said yet, in their place. Placed at the bottom, or centred at `y`. */
 function captionLayers(p:Prepared,time:number):Layer[]{
  const c=p.timeline.captions;if(!c||p.timeline.trackSettings?.captions?.hidden)return[];
- const current=p.words.find(w=>time>=w.start&&time<w.end);if(!current)return[];
- const near:ResolvedWord[]=c.style==='word_pop'?[current]:p.words.filter(w=>w.clipId===current.clipId&&w.start>=current.start-1&&w.start<current.start+1.2).slice(0,7);
- return[{kind:'text',key:'captions',component:'caption',text:near.map(w=>w.text).join(' '),words:near.map(w=>({text:w.text,highlight:c.style!=='word_pop'&&((w.id===current.id&&c.style==='karaoke')||w.emphasis)})),x:.5,y:1,rotation:0,scale:1,opacity:1,color:String(c.params.color??'#fff'),background:String(c.params.background??'#0008'),fontSize:Number(c.params.fontSize??42),fontWeight:600}];
+ const q={...(captionStyle(c.style)?.params??{}),...c.params} as Record<string,any>,size=Math.max(1,Math.round(Number(q.words??7))),grouped=q.words!==undefined&&size>1;
+ let current=p.words.find(w=>time>=w.start&&time<w.end);
+ if(!current&&grouped){let last:ResolvedWord|undefined;for(const w of p.words){if(w.start>time)break;last=w;}if(last&&time<last.end+.35)current=last;}
+ if(!current)return[];const said=current,mine=p.words.filter(w=>w.clipId===said.clipId),at=mine.indexOf(said);
+ const near:ResolvedWord[]=size===1?[said]:grouped?mine.slice(Math.floor(at/size)*size,Math.floor(at/size)*size+size):mine.filter(w=>w.start>=said.start-1&&w.start<said.start+1.2).slice(0,7);
+ const mode=String(q.highlight??'none'),pop=Number(q.pop??1),cased=(s:string)=>q.uppercase?s.toUpperCase():s;
+ const words=near.map(w=>{const highlight=size>1&&((mode==='current'&&w.id===said.id)||(mode==='spoken'&&w.start<=said.start)||w.emphasis);
+  return{text:cased(w.text),highlight,...(q.reveal&&w.start>said.start?{hidden:true}:{}),...(pop!==1&&w.id===said.id?{scale:1+(pop-1)*back(clamp01((time-w.start)/.18))}:{})};});
+ const optional=(key:string,make:(v:any)=>unknown)=>q[key]===undefined||q[key]===''?{}:{[key]:make(q[key])};
+ return[{kind:'text',key:'captions',component:'caption',text:words.map(w=>w.text).join(' '),words,x:.5,y:q.y===undefined?1:Number(q.y),rotation:0,scale:1,opacity:1,color:String(q.color??'#fff'),background:String(q.background??'#0008'),fontSize:Number(q.fontSize??42),fontWeight:Number(q.fontWeight??600),
+  ...optional('fontFamily',String),...optional('stroke',String),...optional('strokeWidth',Number),...optional('glow',String),...optional('glowSize',Number),...optional('shadow',String),...optional('shadowBlur',Number),...optional('highlightColor',String),...optional('wordBox',String)}];
 }
 
 /** The frame at a timeline time. */

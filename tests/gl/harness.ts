@@ -41,8 +41,12 @@ const pixel=(gl:WebGL2RenderingContext,x:number,y:number)=>{const out=new Uint8A
   leak:{width:200,height:100,background:'#000000',layers:[media({fx:{leak:1,phase:.5,variant:2}}) as any]},
   streak:{width:200,height:100,background:'#000000',layers:[media({fx:{streakX:60}}) as any]},
   zoomBlur:{width:200,height:100,background:'#000000',layers:[media({transform:[1,0,0,1,30,0],fx:{zoomBlur:1}}) as any]},
+  // A lower third: left-aligned from x = 20 with a red accent bar flush at the green box's left edge and a second line;
+  // a caption whose second word sits on a blue word box.
+  lowerThird:{width:200,height:100,background:'#000000',probes:[[10,50],[22,50],[60,50]],layers:[{kind:'text',key:'l',component:'text',text:'Hi',subtext:'there',align:'left',accent:'#ff0000',x:.1,y:.5,rotation:0,scale:1,opacity:1,color:'#ffffff',background:'#00ff00',padding:6,fontSize:20,fontWeight:500} as any]} as any,
+  wordBox:{width:200,height:100,background:'#000000',probes:[[73,40],[126,40]],layers:[{kind:'text',key:'c',component:'caption',text:'aa bb',words:[{text:'aa',highlight:false},{text:'bb',highlight:true}],wordBox:'#0000ff',x:.5,y:.5,rotation:0,scale:1,opacity:1,color:'#ffffff',background:'transparent',fontSize:20,fontWeight:600} as any]} as any,
  };
  c.draw(frames[name],()=>pic);
- return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50),at140:pixel(gl,140,50)};
+ return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50),at140:pixel(gl,140,50),probes:((frames[name] as any).probes??[]).map(([x,y]:number[])=>pixel(gl,x,y))};
 };
 (window as any).ready=true;
