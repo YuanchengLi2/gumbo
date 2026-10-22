@@ -86,6 +86,12 @@ export const autoTier=(tier:Tier):AutoTier=>tier==='frontier'?'strong':tier;
  * picks it, and the user's pick always wins. When DeepSeek cannot run (no key on the gateway), GPT-6.1 Sol, then Claude
  * Sonnet 5.5, stands in. */
 export const autoModels:Record<AutoTier,Choice[]>={light:['haiku'],strong:['deepseek-flash','gpt-sol','sonnet']};
+/** Auto's stand-in when the model it chose stops responding: the first model of Auto's other tier that can run, so
+ * Roux 1's two models (DeepSeek V4.1 Flash and Claude Haiku 5.5) stand in for each other. None for a model Auto does not run. */
+export function autoFallback(model:string,providers?:Partial<Record<Provider,boolean>>):string|undefined{
+ const tier=autoTiers.find(t=>autoModels[t].some(choice=>modelInfo(choice)?.id===model));if(!tier)return;
+ return autoModels[autoTiers.find(t=>t!==tier)!].map(choice=>modelInfo(choice)!).find(m=>m.id!==model&&(m.provider==='anthropic'||!!providers?.[m.provider]))?.id;
+}
 export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
 /** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
  * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */

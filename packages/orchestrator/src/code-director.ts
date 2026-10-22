@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {models,engineBudgets,agentModels,autoModel,routerChoices,isTier,workOf,modelInfo,type ModelChoice,type Provider} from '@dream/config';
+import {models,engineBudgets,agentModels,autoModel,autoFallback,routerChoices,isTier,workOf,modelInfo,type ModelChoice,type Provider} from '@dream/config';
 import {triagePrompt,triageMessage,parseTriage,ruleTriage,withMode,routeRecord,type Triage,type TriageInput} from './triage';
 import {requestPartsPrompt,parseParts,partsBriefing,mightHaveSeveralAsks,type RequestPart} from './request-parts';
 import type {RequestScore} from '@dream/config';
@@ -8,7 +8,7 @@ import type {CodeWorkspacePort,EditingEnginePort,FileService,ReviewRenderer,Task
 import {codeAgent,type AgentResult} from './code-agent';
 import {webSearchFunction} from './code-tools';
 import {searchPrompt,searchReport} from './web-search';
-import {infer,InferenceError} from './inference';
+import {infer,InferenceError,type Dependencies as InferDependencies} from './inference';
 import {intelligence,outputAllowance,taskBudget,type WorkerMode} from './intelligence';
 import {routeCodeRequest,type RequestIntent} from './routing';
 import {approvesPlan} from '@dream/contracts';
@@ -40,6 +40,8 @@ const fatalWorkerError=(error:unknown,signal:AbortSignal)=>signal.aborted||error
 export const requestBudgetUsd=(resumes=0)=>{const base=Number(process.env.DREAM_REQUEST_BUDGET_USD);return(Number.isFinite(base)&&base>0?base:3)*(resumes+1);};
 export class Director {
  private controller:AbortController|null=null;
+ /** The network and clock inference uses (tests stand in a gateway and skip the waits). */
+ dependencies:InferDependencies={};
  constructor(private db:ProjectDB,private config:(signal?:AbortSignal)=>Promise<AIConfig>,private publish:(type:string,payload:any)=>void,private renderReview?:ReviewRenderer,private engine?:EditingEnginePort,private files?:FileService,private importComputer?:(paths:string[],requestId:string,signal?:AbortSignal)=>Promise<unknown>,private workspace?:CodeWorkspacePort){}
  get running(){return!!this.controller;}
  cancel(reason:'user'|'shutdown'='user'){this.controller?.abort(Object.assign(new DOMException(reason==='user'?'Stopped by you.':'Project closed.','AbortError'),{dreamStop:reason}));}
@@ -90,7 +92,7 @@ export class Director {
   catch(error){if(withSearch&&error instanceof InferenceError&&error.httpStatus===400&&/web_search/i.test(error.message)){this.db.setMeta(searchKey,'1');this.db.event('ai.web_search_unavailable',{model,error:error.message.slice(0,300)});return this.infer(model,system,messages,(tools as any[]).slice(1),turnId,purpose,phase,profile,extra);}throw error;}
  }
  private async infer(model:string,system:string,messages:unknown[],tools:unknown[],turnId:string|undefined,purpose:string,phase:string,profile:any,extra:{workerMode?:WorkerMode;onStream?:()=>void}){
-  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:outputAllowance(profile),...(taskBudget(purpose,extra.workerMode)?{taskBudget:taskBudget(purpose,extra.workerMode)}:{})},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:extra.onStream?(type:string,payload:unknown)=>{if(type==='ai.activity')extra.onStream!();this.publish(type,payload);}:this.publish});
+  return infer({db:this.db,config:await this.config(this.controller?.signal),connect:()=>this.config(this.controller?.signal),input:{model,system,messages,tools,turnId,purpose,profile,phase,max_tokens:outputAllowance(profile),...(taskBudget(purpose,extra.workerMode)?{taskBudget:taskBudget(purpose,extra.workerMode)}:{})},resume:Number(this.db.getMeta('resume_count:'+turnId)??0),signal:this.controller?.signal,publish:extra.onStream?(type:string,payload:unknown)=>{if(type==='ai.activity')extra.onStream!();this.publish(type,payload);}:this.publish},this.dependencies);
  }
  private signal(){return this.controller?.signal??new AbortController().signal;}
  // The composer's effort choice holds for the whole request (changing it mid-conversation would reset the prompt cache).
@@ -162,7 +164,7 @@ export class Director {
  private providers?:{at:number;value:Partial<Record<Provider,boolean>>};
  private async refreshProviders(){
   if(this.providers&&Date.now()-this.providers.at<600_000)return;
-  try{const config=await this.config(this.controller?.signal),response=await fetch(config.url+'/providers',{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(5000)});
+  try{const config=await this.config(this.controller?.signal),response=await (this.dependencies.fetch??fetch)(config.url+'/providers',{headers:{Authorization:'Bearer '+config.token},signal:AbortSignal.timeout(5000)});
    const value=response.ok?await response.json() as Partial<Record<Provider,boolean>>:{};this.providers={at:Date.now(),value};}catch{this.providers={at:Date.now()-540_000,value:{}};}
  }
  async availableProviders(){await this.refreshProviders();return{anthropic:true,...this.enabledProviders()};}
@@ -178,13 +180,20 @@ export class Director {
   const model=choice&&choice!=='auto'?agentModels[choice]:auto?autoModel(this.score(turnId),this.enabledProviders()):models.agent;
   this.db.setMeta('agent-model:'+turnId,model);this.db.setMeta('agent-model-source:'+turnId,auto?'auto':'user');this.db.event('ai.model_chosen',{turnId,choice,model,auto,complexity:route?.complexity});return model;
  }
+ /** Auto's other model when the one it chose stopped responding (autoFallback). Pinned like Auto's first choice, so a
+  * resume stays on the model that answered. A model the user picked is never switched: the stall is reported instead. */
+ private fallbackModel(turnId:string,model:string){
+  if(this.db.getMeta('agent-model-source:'+turnId)!=='auto')return;
+  const next=autoFallback(model,this.enabledProviders());if(!next)return;
+  this.db.setMeta('agent-model:'+turnId,next);this.db.event('ai.model_chosen',{turnId,choice:'auto',model:next,auto:true,fallbackFrom:model,reason:'stalled'});return next;
+ }
  private activity(turnId:string,id:string,patch:any){const event=this.db.activityEvent(turnId,{id,...patch});if(event)this.publish('ai.activity',{turnId,event});}
  private async execute(text:string,turnId:string,readOnly=false,planning=false,phase='main',followUp?:{id:string;text:string}):Promise<AgentResult>{
   if(!this.workspace)throw new Error('The editing tools are unavailable. Install the latest Gumbo build.');
   // The window learns the phase at once, so it can show the agent editing from its first change.
   await this.routeModel(turnId);
   const phaseNow=planning?'planning':readOnly?'answering':'editing';this.db.setPhase(turnId,phaseNow);this.publish('ai.phase',{turnId,phase:phaseNow});const route=this.db.loadState<any>('routing:'+turnId)??routeCodeRequest(text,planning?'plan':'auto');
-  const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish,webSearch:(query:string)=>this.webSearch(query,turnId,phase)};
+  const common={db:this.db,workspace:this.workspace,turnId,phase,text,signal:this.signal(),publish:this.publish,webSearch:(query:string)=>this.webSearch(query,turnId,phase),fallback:(model:string)=>this.fallbackModel(turnId,model)};
   const model=this.agentModel(turnId,text);
   if(planning)return codeAgent({...common,planning:true,model,infer:(model,system,messages,tools)=>this.inference(model,system,messages,tools,turnId,undefined,'planning',phase)});
   // Replies look at what they need with the read-only tools.

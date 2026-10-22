@@ -53,7 +53,9 @@ it('answers a request for a script after a stop as a new turn, and continues the
   await director.message('continue');
   // The local heuristic recognizes continuing; no classification call and no new turn.
   expect(calls.slice(before).some(c=>c.purpose==='routing')).toBe(false);expect(pending(db)).toBe(stopped);expect(db.getMeta('ai_status')).toBe('complete');
-  const resumed=calls.at(-1)!;expect(resumed.purpose).toBe('execution');expect(resumed.model).toBe(models.agent);expect(resumed.messages).toContain('Build it from that script');expect(resumed.messages).toContain('continue');
+  const resumed=calls.at(-1)!;expect(resumed.purpose).toBe('execution');expect(resumed.model).toBe(models.agent);expect(resumed.messages).toContain('Build it from that script');
+  // A go-ahead picks the stopped conversation up as it was: no "continue" message for the model to chat back to.
+  expect(resumed.messages).not.toContain('"content":"continue"');
   expect(db.state().messages.at(-1)).toMatchObject({role:'assistant',text:'Built the short from your script.',report:{kind:'completion'}});
  }finally{db.close();}
 });
