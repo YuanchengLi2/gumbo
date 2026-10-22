@@ -6,7 +6,8 @@ import {supabaseDb} from '../fixtures/supabase-db';
 /** Credits in the gateway's database (supabase/migrations/202610170003_billing.sql): a free month's grant, requests taking
  * their real cost, running out, top-ups paying an overdraft, plan periods replacing each other. */
 let db:PGlite;
-beforeAll(async()=>{db=await supabaseDb();},60000);
+// Daily spending limits have their own tests (spend-limits.test.ts); these spend freely to test credits alone.
+beforeAll(async()=>{db=await supabaseDb();await db.query('update dream_limits set account_daily_usd=1000,global_daily_usd=100000');},60000);
 const account=async(guest=false)=>{const id=randomUUID();await db.query('insert into auth.users(id,email) values($1,$2)',[id,id+'@test']);await db.query('insert into dream_accounts(id,email,is_guest) values($1,$2,$3)',[id,id+'@test',guest]);return id;};
 const balance=async(user:string)=>Number((await db.query<{b:string}>('select dream_credit_balance($1) as b',[user])).rows[0].b);
 const reserve=(user:string)=>{const request=randomUUID();return db.query<{id:string}>("select dream_reserve_usage($1,$2,'turn','claude-haiku-5-5',0.5) as id",[user,request]).then(r=>r.rows[0].id);};
