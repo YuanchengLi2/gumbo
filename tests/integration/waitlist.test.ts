@@ -2,12 +2,12 @@ import {describe,it,expect,beforeAll} from 'vitest';
 import type {PGlite} from '@electric-sql/pglite';
 import {randomUUID} from 'node:crypto';
 import {supabaseDb} from '../fixtures/supabase-db';
-import {handleWaitlistJoin,MAX_JOINS_PER_HOUR,WAITLISTED,type WaitlistPorts,type WaitlistRow} from '../../supabase/functions/dream-gateway/waitlist';
+import {handleWaitlistJoin,waitlistAlert,MAX_JOINS_PER_HOUR,WAITLISTED,type WaitlistPorts,type WaitlistRow} from '../../supabase/functions/dream-gateway/waitlist';
 import {handleSpendDashboard,type SpendPorts,type WaitlistEntry} from '../../supabase/functions/dream-gateway/spend-dashboard';
 
 /** The paid beta's waitlist: joining on usegumbo.app, inviting on the dashboard, and which accounts may use the AI
  * (supabase/migrations/202610180004_waitlist.sql). */
-const memory=()=>{const rows:(WaitlistRow&{at:number})[]=[];const ports:WaitlistPorts={joinedFrom:async(address,since)=>rows.filter(r=>r.address===address&&r.at>=since.getTime()).length,join:async row=>{if(!rows.some(r=>r.email===row.email))rows.push({...row,at:Date.now()});}};return {rows,ports};};
+const memory=()=>{const rows:(WaitlistRow&{at:number})[]=[];const ports:WaitlistPorts={joinedFrom:async(address,since)=>rows.filter(r=>r.address===address&&r.at>=since.getTime()).length,join:async row=>{if(rows.some(r=>r.email===row.email))return false;rows.push({...row,at:Date.now()});return true;}};return {rows,ports};};
 
 describe('joining the waitlist',()=>{
  it('keeps the email and first ask, once, and refuses a bad email',async()=>{
@@ -23,6 +23,27 @@ describe('joining the waitlist',()=>{
   for(let n=0;n<MAX_JOINS_PER_HOUR;n++)expect((await handleWaitlistJoin({email:`p${n}@example.com`},'9.9.9.9',ports)).status).toBe(200);
   expect((await handleWaitlistJoin({email:'one-more@example.com'},'9.9.9.9',ports)).status).toBe(429);
   expect((await handleWaitlistJoin({email:'elsewhere@example.com'},'8.8.8.8',ports)).status).toBe(200);
+ });
+});
+
+describe('telling the owner about a new entry',()=>{
+ it('emails once per new email, never for a repeat, a bot or a refused join, and a failed email still joins',async()=>{
+  const {ports}=memory(),alerts:string[]=[];const alerting={...ports,alert:async(row:WaitlistRow)=>{alerts.push(row.email);}};
+  await handleWaitlistJoin({email:'maya@example.com',firstAsk:'A recap'},'1.2.3.4',alerting);await handleWaitlistJoin({email:'MAYA@example.com'},'1.2.3.4',alerting);
+  await handleWaitlistJoin({email:'bot@spam.com',website:'x'},'1.2.3.4',alerting);await handleWaitlistJoin({email:'nope'},'1.2.3.4',alerting);
+  expect(alerts).toEqual(['maya@example.com']);
+  const failing={...memory().ports,alert:async()=>{throw new Error('Resend is down');}};
+  expect(await handleWaitlistJoin({email:'sam@example.com'},'1.2.3.4',failing)).toEqual({status:200,body:{joined:true}});
+ });
+ it('sends through Resend to the owner, replies go to the person, and what they typed is escaped',async()=>{
+  expect(waitlistAlert(()=>undefined)).toBeUndefined();expect(waitlistAlert(name=>name==='RESEND_API_KEY'?'re_test':undefined)).toBeUndefined();
+  const sent:any[]=[];const env:Record<string,string>={RESEND_API_KEY:'re_test',WAITLIST_ALERT_TO:'owner@example.com'};
+  const alert=waitlistAlert(name=>env[name],async(url,init)=>{sent.push({url:String(url),auth:new Headers(init?.headers).get('Authorization'),body:JSON.parse(String(init?.body))});return Response.json({id:'e1'});})!;
+  await alert({email:'maya@example.com',first_ask:'<script>x</script> a recap',source:'top',address:'h'});
+  expect(sent[0]).toMatchObject({url:'https://api.resend.com/emails',auth:'Bearer re_test',body:{from:'Gumbo waitlist <onboarding@resend.dev>',to:['owner@example.com'],reply_to:'maya@example.com',subject:'New Gumbo waitlist signup: maya@example.com'}});
+  expect(sent[0].body.html).toContain('&lt;script&gt;');expect(sent[0].body.html).not.toContain('<script>');expect(sent[0].body.text).toContain('a recap');
+  const refused=waitlistAlert(name=>env[name],async()=>new Response('invalid key',{status:401}))!;
+  await expect(refused({email:'a@b.co',first_ask:'',source:'top',address:'h'})).rejects.toThrow('401');
  });
 });
 

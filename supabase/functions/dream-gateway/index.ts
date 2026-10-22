@@ -10,7 +10,7 @@ import {handleCreators} from './creators.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
 import {handleReport,supabaseReportPorts} from './reports.ts';
-import {handleWaitlistJoin,supabaseWaitlistPorts,WAITLISTED} from './waitlist.ts';
+import {handleWaitlistJoin,supabaseWaitlistPorts,waitlistAlert,WAITLISTED} from './waitlist.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts,PLANS} from './billing.ts';
@@ -36,7 +36,7 @@ Deno.serve(async(req)=>{
   try{const event=JSON.parse(payload),note=await handleStripeEvent(event,supabaseBillingPorts(db),config);console.log(`Stripe ${event.type} ${event.id}: ${note}`);return json({received:true});}
   catch(error){console.error('Stripe webhook failed',error);return json({error:(error as Error).message},500);}}
  // The waitlist on usegumbo.app (waitlist.ts): no account needed.
- if(action==='waitlist-join'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleWaitlistJoin(body,address,supabaseWaitlistPorts(db));return json(result.body,result.status);}
+ if(action==='waitlist-join'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleWaitlistJoin(body,address,{...supabaseWaitlistPorts(db),alert:waitlistAlert(name=>Deno.env.get(name))});return json(result.body,result.status);}
  if(action==='login-start'&&req.method==='POST'){const body=await req.json();const email=String(body.email??'').trim().toLowerCase();const {data}=await db.from('dream_invites').select('email').eq('email',email).maybeSingle();return data?json({allowed:true}):json({error:'Use the email address on your beta invitation.'},403);}
  if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('title,object_key').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,60);return error?json({error:'Video unavailable'},404):json({title:data.title,url:signed.signedUrl});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
