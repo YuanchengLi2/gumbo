@@ -25,6 +25,8 @@ export type PlanId=keyof typeof PLANS;
 export type PaidPlan=Exclude<PlanId,'free'>;
 export const paidPlans:PaidPlan[]=['pro','max','max20'];
 export const TOPUP={credits:500,priceUsd:10,maxPacks:10};
+/** What checkout answers while paying is closed (the free beta, until DREAM_PAYMENTS_OPEN=1). */
+export const PAYMENTS_CLOSED='Gumbo is free during the beta. Paid plans and credit top-ups open soon.';
 /** A paid period's credits last a few days past its end, so a renewal Stripe charges late does not leave the account empty. */
 export const GRACE_MS=3*86_400_000;
 const MONTH_MS=30.44*86_400_000;
