@@ -1,4 +1,4 @@
-import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample} from 'mediabunny';
+import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample,type InputVideoTrack} from 'mediabunny';
 import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
@@ -16,6 +16,14 @@ export type VideoJob={timeline:TimelineDocument;footage:FootageIndex;width:numbe
 const BPP={lower:.05,recommended:.1,higher:.16};
 export const videoBitrate=(job:Pick<VideoJob,'width'|'height'|'fps'|'codec'|'quality'>)=>Math.round(BPP[job.quality]*(job.codec==='hevc'?.6:1)*job.width*job.height*job.fps);
 export const originalUrl=(a:Asset)=>'dream-media://'+a.id+'/original';
+/** A video track decoded in the colours the preview plays it in. A file that does not say its colour matrix (an ffmpeg
+ * render, a screen recording) is read by the preview's <video> as Chromium guesses: BT.601 below 720 lines, BT.709 from
+ * 720 up. WebCodecs gets no guess (mediabunny fills in BT.709 at every size), so an untagged SD file exported with its
+ * saturated colours shifted (pure green 255 in the preview, 216 in the export). The decoder is told the same guess. */
+export async function decodedAsPlayed(track:InputVideoTrack){
+ const space=await track.getColorSpace(),config=await track.getDecoderConfig();if(space.matrix||track.codedHeight>=720||!config)return track;
+ track.getDecoderConfig=async()=>({...config,colorSpace:{primaries:space.primaries??'smpte170m',transfer:space.transfer??'smpte170m',matrix:'smpte170m',fullRange:space.fullRange??false}});return track;
+}
 /** Where an export's drawing time went, in milliseconds, for the export log: decoding footage, drawing scenes in their
  * windows, loading stills, compositing, and encoding (which includes waiting for the encoder to take the frame). */
 export type RenderTiming={frames:number;totalMs:number;decodeMs:number;sceneMs:number;stillMs:number;drawMs:number;encodeMs:number;scenes:{asked:number;drawn:number;unchanged:number;repeated:number}};
@@ -45,9 +53,9 @@ export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
  const source=new CanvasSource(canvas,{codec:job.codec==='hevc'?'hevc':'avc',bitrate:videoBitrate(job),keyFrameInterval:2,hardwareAcceleration:'prefer-hardware',latencyMode:'quality'});
  output.addVideoTrack(source,{frameRate:job.fps});await output.start();
  const scenes=new SceneCaptures(),inputs=new Map<string,{input:Input;sink:Promise<VideoSampleSink|undefined>}>(),readers=new Map<string,{reader:Reader;last:number}>(),images=new Map<string,ImageBitmap>();
- const sink=(asset:Asset)=>{let entry=inputs.get(asset.id);if(!entry){const input=new Input({source:new UrlSource(originalUrl(asset)),formats:ALL_FORMATS});entry={input,sink:input.getPrimaryVideoTrack().then(async track=>track&&await track.canDecode()?new VideoSampleSink(track):undefined)};inputs.set(asset.id,entry);}return entry.sink;};
+ const sink=(asset:Asset)=>{let entry=inputs.get(asset.id);if(!entry){const input=new Input({source:new UrlSource(originalUrl(asset)),formats:ALL_FORMATS});entry={input,sink:input.getPrimaryVideoTrack().then(async track=>track&&await track.canDecode()?new VideoSampleSink(await decodedAsPlayed(track)):undefined)};inputs.set(asset.id,entry);}return entry.sink;};
  // A source this computer cannot decode (a format WebCodecs does not read) uses the playback copy made at import.
- const fallback=new Map<string,Input>(),playbackSink=async(asset:Asset)=>{let input=fallback.get(asset.id);if(!input){input=new Input({source:new UrlSource(previewUrl(asset)),formats:ALL_FORMATS});fallback.set(asset.id,input);}const track=await input.getPrimaryVideoTrack();return track?new VideoSampleSink(track):undefined;};
+ const fallback=new Map<string,Input>(),playbackSink=async(asset:Asset)=>{let input=fallback.get(asset.id);if(!input){input=new Input({source:new UrlSource(previewUrl(asset)),formats:ALL_FORMATS});fallback.set(asset.id,input);}const track=await input.getPrimaryVideoTrack();return track?new VideoSampleSink(await decodedAsPlayed(track)):undefined;};
  const image=async(url:string)=>{let bitmap=images.get(url);if(!bitmap){bitmap=await createImageBitmap(await (await fetch(url)).blob());images.set(url,bitmap);if(images.size>240){const [first,old]=images.entries().next().value!;old.close();images.delete(first);}}return bitmap;};
  try{
   for(let n=0;n<total;n++){

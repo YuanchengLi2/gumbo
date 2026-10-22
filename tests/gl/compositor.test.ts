@@ -6,7 +6,7 @@ import {createRequire} from 'node:module';
 it('draws media, transforms, opacity, grades, canvas scaling and text as the frame model says',()=>{
  const dir=resolve('tests/gl'),require_=createRequire(import.meta.url);
  execFileSync(process.execPath,[require_.resolve('esbuild/bin/esbuild'),join(dir,'harness.ts'),'--bundle','--format=iife','--outfile='+join(dir,'harness.js'),'--log-level=error']);
- const electron=require_('electron') as unknown as string,cases=['plain','zoom','moved','graded','grey','scaled','text','maskRect','maskCircle','hue','fade','split','vignette','pixel','sticker','tint'];
+ const electron=require_('electron') as unknown as string,cases=['plain','zoom','moved','graded','grey','scaled','text','maskRect','maskCircle','hue','fade','split','vignette','pixel','sticker','tint','maskEdge','maskClock','stripes','burn','leak','streak','zoomBlur','lowerThird','wordBox'];
  const run=spawnSync(electron,[join(dir,'main.cjs')],{env:{...process.env,CASES:cases.join(',')},encoding:'utf8',timeout:60000});
  const line=(run.stdout??'').split('\n').find(l=>l.startsWith('RESULT '));if(!line)throw new Error('Harness failed: '+run.stderr);
  const r=JSON.parse(line.slice(7)),near=(a:number[],b:number[])=>a.every((v,i)=>Math.abs(v-b[i])<=8);
@@ -34,4 +34,17 @@ it('draws media, transforms, opacity, grades, canvas scaling and text as the fra
  expect(near(r.sticker.centre,[255,0,0])&&near(r.sticker.corner,[0,0,0])).toBe(true);
  // Tint 1 (magenta) lifts red and blue by 10% and lowers green: red halved by exposure -1 becomes 0.55 of full.
  expect(near(r.tint.left,[140,0,0])).toBe(true);
+ // The transition masks keep only their part of the layer.
+ expect(near(r.maskEdge.left,[0,0,0])&&near(r.maskEdge.right,[0,0,255])).toBe(true);
+ expect(near(r.maskClock.left,[0,0,0])&&near(r.maskClock.right,[0,0,255])).toBe(true);
+ expect(near(r.stripes.left,[255,0,0])&&near(r.stripes.right,[0,0,0])&&near(r.stripes.middleLeft,[0,0,0])).toBe(true);
+ // Burn, leak and the blurs.
+ expect(Math.min(...r.burn.left,...r.burn.right)).toBeGreaterThan(200);
+ expect(r.leak.right[0]).toBeGreaterThan(40);expect(r.leak.right[2]).toBeGreaterThan(200);
+ expect(r.streak.middleLeft[0]).toBeGreaterThan(60);expect(r.streak.middleLeft[2]).toBeGreaterThan(60);expect(near(r.streak.left,[255,0,0])).toBe(true);
+ expect(r.zoomBlur.at140[0]).toBeGreaterThan(30);expect(r.zoomBlur.at140[2]).toBeGreaterThan(100);
+ // The lower third starts at x = 20 (nothing left of it), its accent bar first, then its box.
+ const [before,bar,box]=r.lowerThird.probes;expect(near(before,[0,0,0])&&near(bar,[255,0,0])&&near(box,[0,255,0])).toBe(true);
+ // Only the highlighted caption word has the box behind it.
+ const [plain,boxed]=r.wordBox.probes;expect(near(plain,[0,0,0])&&near(boxed,[0,0,255])).toBe(true);
 },90_000);

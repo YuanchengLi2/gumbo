@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {prepare,frameAt,Compositor,paintText,type TextLayer} from '@dream/compositor';
-import {emptyTimeline,TimelineSchema,EFFECTS,FILTERS,TEXT_STYLES,STICKERS,STICKER_GROUPS,type TimelineDocument} from '@dream/timeline';
+import {emptyTimeline,TimelineSchema,EFFECTS,FILTERS,TEXT_STYLES,TEXT_STYLE_GROUPS,STICKERS,STICKER_GROUPS,CAPTION_STYLES,type TimelineDocument} from '@dream/timeline';
 import {AssetSchema,emptyFootage,type FootageIndex} from '@dream/footage';
 import type {LibraryDrop} from '../../../manual/model';
 
@@ -23,25 +23,31 @@ function samplePicture(){
 }
 const footage=():FootageIndex=>{const f=emptyFootage();f.assets=[AssetSchema.parse({id:'sample',filename:'sample',kind:'image',originalPath:'sample.png',durationSec:3,width:W,height:H,fps:30,hasAudio:false,fingerprint:'sample',status:'ready'})];return f;};
 const FOOTAGE=footage();
+/** The sample with five timed words on it, for the caption tiles. */
+const SPOKEN=(()=>{const f=footage();f.words=['Captions','that','pop','every','word'].map((text,n)=>({id:'w'+n,assetId:'sample',text,start:.15+n*.5,end:.6+n*.5})) as FootageIndex['words'];return f;})();
+const still=(id:string,holdSec:number,extra:object={})=>({id,assetId:'sample',srcIn:0,srcOut:3,holdSec,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},reason:'',...extra});
 /** A three-second edit of the sample with one piece on it. */
-function sampleEdit(o:{attached?:object[];framing?:object;picture?:boolean}):TimelineDocument{const t=emptyTimeline('library');
- return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:o.picture===false?[]:[{id:'clip',assetId:'sample',srcIn:0,srcOut:3,holdSec:3,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},...(o.framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...o.framing}}:{}),reason:''}],attached:o.attached??[]});}
+export function sampleEdit(o:{attached?:object[];framing?:object;picture?:boolean}):TimelineDocument{const t=emptyTimeline('library');
+ return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:o.picture===false?[]:[still('clip',3,o.framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...o.framing}}:{})],attached:o.attached??[]});}
+/** Two shots of the sample, the second mirrored and graded night-blue, with a transition on the cut at 1.2 s. */
+export function transitionEdit(transition:object):TimelineDocument{const t=emptyTimeline('library');
+ return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:[still('a',1.2),still('b',1.2,{framing:{mode:'fill',scale:1,x:.5,y:.5,flipX:true,filter:'neon',filterIntensity:1},transitionIn:transition})],attached:[]});}
 const item=(component:string,type:string,params:Record<string,unknown>)=>({id:'piece',type,component,start:{kind:'project',at:'start',offsetSec:0},durationSec:3,layer:0,params,reason:''});
 
 let shared:Compositor|undefined;
 /** Draws a frame of an edit on a tile's canvas: the picture through the compositor, then text and stickers on top. */
-function drawTile(canvas:HTMLCanvasElement,edit:TimelineDocument,time:number,background='#111'){
- const ctx=canvas.getContext('2d');if(!ctx)return;const frame=frameAt(prepare({timeline:edit,footage:FOOTAGE}),time),scale=canvas.width/W;
+function drawTile(canvas:HTMLCanvasElement,edit:TimelineDocument,time:number,background='#111',footage=FOOTAGE){
+ const ctx=canvas.getContext('2d');if(!ctx)return;const frame=frameAt(prepare({timeline:edit,footage}),time),scale=canvas.width/W;
  ctx.fillStyle=background;ctx.fillRect(0,0,canvas.width,canvas.height);
  if(frame.layers.some(l=>l.kind!=='text')){try{shared??=new Compositor(new OffscreenCanvas(W,H));
   shared.draw({...frame,layers:frame.layers.filter(l=>l.kind!=='text')},()=>samplePicture());ctx.drawImage(shared.canvas as OffscreenCanvas,0,0,canvas.width,canvas.height);}catch{}}
  for(const layer of frame.layers)if(layer.kind==='text')paintText(ctx,layer as TextLayer,W,H,scale);
 }
 /** A tile's picture: drawn once at rest, and played on a loop while the pointer is over it. */
-function EngineTile({edit,rest,loop=2.4,background}:{edit:TimelineDocument;rest:number;loop?:number;background?:string}){
+export function EngineTile({edit,rest,loop=2.4,background,footage}:{edit:TimelineDocument;rest:number;loop?:number;background?:string;footage?:FootageIndex}){
  const ref=useRef<HTMLCanvasElement>(null),[hover,setHover]=useState(false);
- useEffect(()=>{const canvas=ref.current;if(!canvas)return;if(!hover){drawTile(canvas,edit,rest,background);return;}
-  let raf=0;const began=performance.now(),step=()=>{drawTile(canvas,edit,((performance.now()-began)/1000)%loop,background);raf=requestAnimationFrame(step);};step();return()=>cancelAnimationFrame(raf);},[edit,hover,rest,loop,background]);
+ useEffect(()=>{const canvas=ref.current;if(!canvas)return;if(!hover){drawTile(canvas,edit,rest,background,footage);return;}
+  let raf=0;const began=performance.now(),step=()=>{drawTile(canvas,edit,((performance.now()-began)/1000)%loop,background,footage);raf=requestAnimationFrame(step);};step();return()=>cancelAnimationFrame(raf);},[edit,hover,rest,loop,background,footage]);
  return <canvas ref={ref} width={192} height={108} className="engine-tile" onPointerEnter={()=>setHover(true)} onPointerLeave={()=>setHover(false)}/>;
 }
 function Tile(p:{name:string;title?:string;drop:LibraryDrop;disabled:boolean;onAdd:(drop:LibraryDrop)=>void;children:React.ReactNode;pressed?:boolean}){
@@ -64,9 +70,10 @@ export function FiltersView(p:ViewProps&{current?:string}){
 }
 
 export function TextView(p:ViewProps){
- const edits=useMemo(()=>new Map(TEXT_STYLES.map(s=>[s.id,sampleEdit({picture:false,attached:[item('text','overlay',{text:s.sample,style:s.id,y:.5})]})])),[]);
+ // Titles and plain text sit in the middle of their tile; lower thirds where they go, on the sample picture.
+ const edits=useMemo(()=>new Map(TEXT_STYLES.map(s=>[s.id,sampleEdit({picture:s.group==='Lower thirds',attached:[item('text','overlay',{text:s.sample,style:s.id,...(s.group==='Lower thirds'?{}:{y:.5})})]})])),[]);
  return <div className="library"><p className="library-hint">Click to add at the playhead, or drag onto the timeline.</p>
-  <div className="library-grid text-grid">{TEXT_STYLES.map(s=><Tile key={s.id} name={s.name} drop={{kind:'text',id:s.id}} disabled={p.disabled} onAdd={p.onAdd}><EngineTile edit={edits.get(s.id)!} rest={1.5} loop={3} background="#2b2b2e"/></Tile>)}</div></div>;
+  {TEXT_STYLE_GROUPS.map(group=><React.Fragment key={group}><h4>{group}</h4><div className="library-grid text-grid">{TEXT_STYLES.filter(s=>(s.group??'Text')===group).map(s=><Tile key={s.id} name={s.name} drop={{kind:'text',id:s.id}} disabled={p.disabled} onAdd={p.onAdd}><EngineTile edit={edits.get(s.id)!} rest={1.5} loop={3} background="#2b2b2e"/></Tile>)}</div></React.Fragment>)}</div>;
 }
 
 export function StickersView(p:ViewProps){
@@ -75,11 +82,12 @@ export function StickersView(p:ViewProps){
   {STICKER_GROUPS.map(group=><React.Fragment key={group}><h4>{group}</h4><div className="library-grid sticker-grid">{STICKERS.filter(s=>s.group===group).map(s=><Tile key={s.id} name={s.name} drop={{kind:'sticker',id:s.id}} disabled={p.disabled} onAdd={p.onAdd}><EngineTile edit={edits.get(s.id)!} rest={1.2} loop={2.4} background="#2b2b2e"/></Tile>)}</div></React.Fragment>)}</div>;
 }
 
-const CAPTION_STYLES=[{id:'clean',name:'Clean',about:'A line of the words in a box.'},{id:'karaoke',name:'Karaoke',about:'The word being said lights up.'},{id:'word_pop',name:'Word pop',about:'One word at a time.'},{id:'emphasis',name:'Emphasis',about:'Words you mark stand out.'}] as const;
-/** Caption styles: captions follow the speech you hear; pick how they look, or turn them off. */
+/** Caption styles: captions follow the speech you hear; pick how they look, or turn them off. Each tile is the engine
+ * captioning five words said over the sample picture. */
 export function CaptionsView(p:{disabled:boolean;current?:string;onChoose:(style:string|null)=>void}){
+ const edits=useMemo(()=>new Map(CAPTION_STYLES.map(s=>[s.id,{...sampleEdit({}),captions:{style:s.id as 'clean',params:{},overrides:s.id==='emphasis'?[{wordId:'w2',emphasis:true}]:[]}}])),[]);
  return <div className="library"><p className="library-hint">Captions follow the speech in your clips (as soon as it is transcribed). Pick a style, then edit words by selecting them on the Captions row.</p>
-  <div className="caption-styles">{CAPTION_STYLES.map(s=><button key={s.id} type="button" className="caption-style" aria-pressed={p.current===s.id} disabled={p.disabled} onClick={()=>p.onChoose(s.id)}>
-   <span className={'caption-demo demo-'+s.id}><b>Make</b> <i>it</i> <b>pop</b></span><strong>{s.name}</strong><small>{s.about}</small></button>)}
-   {p.current&&<button type="button" className="prop-link" disabled={p.disabled} onClick={()=>p.onChoose(null)}>Turn captions off</button>}</div></div>;
+  <div className="library-grid">{CAPTION_STYLES.map(s=><button key={s.id} type="button" className="library-tile" title={s.about} aria-pressed={p.current===s.id} disabled={p.disabled} onClick={()=>p.onChoose(s.id)}>
+   <EngineTile edit={edits.get(s.id)!} rest={1.3} loop={2.8} footage={SPOKEN}/><span className="library-name">{s.name}</span></button>)}</div>
+  {p.current&&<button type="button" className="prop-link" disabled={p.disabled} onClick={()=>p.onChoose(null)}>Turn captions off</button>}</div>;
 }

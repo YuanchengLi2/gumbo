@@ -1,4 +1,4 @@
-import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,KEYFRAME_PROPS,transitionInfo,effectInfo,filterInfo,textStyle,stickerInfo,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument} from '@dream/timeline';
+import {resolve,apply,newId,projectAnchor,ensureDuration,addAsset,clipClock,KEYFRAME_PROPS,transitionInfo,effectInfo,filterInfo,textStyle,stickerInfo,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument} from '@dream/timeline';
 // Placement helpers live in @dream/timeline so the assistant timeline's drag-and-drop shares them.
 export {newId,projectAnchor,ensureDuration,addAsset};
 import type {FootageIndex} from '@dream/footage';
@@ -55,7 +55,7 @@ export function duplicateItems(t:TimelineDocument,f:FootageIndex,ids:string[],at
 /** A transition into a clip from the library, centred on its cut. Video on either side needs footage past the cut for half
  * the transition (a handle): when a clip has none left there, it is trimmed back by what is missing. Photos and graphics
  * hold their picture, so they need none. */
-export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string,durationSec?:number,direction?:Direction):Op[]{
+export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string,durationSec?:number,direction?:Direction,intensity?:number):Op[]{
  const index=t.spine.findIndex(c=>c.id===clipId),clip=t.spine[index];if(!clip)throw new Error('Select a clip on the main track.');
  if(type==='cut')return[{type:'set_transition',clipId,transition:null,reason}];
  if(index<1)throw new Error('Transitions go between two clips. Put this one on the cut before a clip.');
@@ -69,9 +69,20 @@ export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,ty
  if(length(before)<=outgoing+half+1/t.settings.fps||length(clip)<=incoming+half+1/t.settings.fps)throw new Error('These clips are too short for a transition this long.');
  if(outgoing>0)ops.push({type:'trim_clip',clipId:before.id,srcOut:before.srcOut-outgoing*before.speed,reason});
  if(incoming>0)ops.push({type:'trim_clip',clipId,srcIn:clip.srcIn+incoming*clip.speed,reason});
- ops.push({type:'set_transition',clipId,transition:{type:info.id,durationSec:Math.round(duration*1000)/1000,...(info.directional?{direction:direction??clip.transitionIn?.direction??'left'}:{})},reason});return ops;
+ ops.push({type:'set_transition',clipId,transition:{type:info.id,durationSec:Math.round(duration*1000)/1000,...(info.directional?{direction:direction??clip.transitionIn?.direction??'left'}:{}),...(info.strength&&(intensity??clip.transitionIn?.intensity)!==undefined?{intensity:intensity??clip.transitionIn?.intensity}:{})},reason});return ops;
 }
 /** The cut nearest a time on the main track: the clip that starts there (never the first). */
+/** A freeze frame, as CapCut's: the clip is split at the playhead and a still of that frame, held holdSec, goes between
+ * the halves (pushing the rest of the edit later). At a clip's first or last frame it goes before or after it. The still
+ * keeps the clip's framing and plays no sound. */
+export function freezeFrameOps(t:TimelineDocument,f:FootageIndex,clipId:string,time:number,holdSec=2):Op[]{
+ const r=resolve(t,f),clip=r.clips.find(c=>c.id===clipId),raw=t.spine.find(c=>c.id===clipId),fps=t.settings.fps;if(!clip||!raw)throw new Error('Select a clip on the main track.');
+ const asset=f.assets.find(a=>a.id===clip.assetId);if(asset?.kind!=='video'||asset.scene||clip.holdSec)throw new Error('Freeze frame works on video clips.');
+ const at=Math.round(Math.max(clip.start,Math.min(clip.end-1/fps,time))*fps)/fps,index=t.spine.indexOf(raw),sec=Math.max(raw.srcIn,Math.min(raw.srcOut-1/fps,clipClock(clip,at)));
+ const still={id:newId(),assetId:raw.assetId,srcIn:sec,srcOut:Math.min(asset.durationSec,sec+1/fps),speed:1,holdSec,...(raw.framing?{framing:raw.framing}:{}),audio:{...raw.audio,mute:true},reason};
+ const first=at-clip.start<1/fps,ops:Op[]=[];if(!first&&clip.end-at>1/fps)ops.push({type:'split_clip',clipId,atSec:at-clip.start,newClipId:newId(),reason});
+ ops.push({type:'insert_clip',clip:still,position:first?index:index+1,reason});return ops;
+}
 export function nearestCut(t:TimelineDocument,f:FootageIndex,time:number){const clips=resolve(t,f).clips.slice(1);let best:typeof clips[number]|undefined;for(const c of clips)if(!best||Math.abs(c.start-time)<Math.abs(best.start-time))best=c;return best;}
 /** Transitions are selected as `transition:<clip id>`, the clip they lead into. */
 export const transitionId=(clipId:string)=>'transition:'+clipId;

@@ -18,9 +18,10 @@ export function apply(t:TimelineDocument,ops:Op[],index:FootageIndex):TimelineDo
  case 'move_clip':{const c=clip(o.clipId);if(typeof o.position!=='number'&&o.position.after===c.id)break;if(typeof o.position!=='number')clip(o.position.after);next.spine.splice(next.spine.indexOf(c),1);next.spine.splice(position(o.position),0,c);break;}
  case 'delete_clips':o.clipIds.forEach(clip);next.spine=next.spine.filter(c=>!o.clipIds.includes(c.id));break;
  case 'replace_clip_source':{const c=clip(o.clipId),old=structuredClone(c);for(const [from,to] of Object.entries(o.wordMap??{})){word(from,old.assetId);const target=word(to,o.assetId);if(target.start<o.srcIn||target.end>o.srcOut)throw new EditError('invalid_word_mapping','Replacement words must lie inside the replacement range.');}c.assetId=o.assetId;c.srcIn=o.srcIn;c.srcOut=o.srcOut;if(index.assets.find(a=>a.id===o.assetId)?.kind!=='image')c.holdSec=undefined;if(c.framing?.faceTrackId&&old.assetId!==o.assetId)c.framing={...c.framing,mode:'fit',faceTrackId:undefined};replaceAnchors(next,old,c,index,o.wordMap);break;}
- case 'set_clip_hold':{const c=clip(o.clipId);if(index.assets.find(a=>a.id===c.assetId)?.kind!=='image')throw new EditError('not_still','Only still images have a hold duration.');c.holdSec=o.holdSec;break;}
+ case 'set_clip_hold':{const c=clip(o.clipId);if(index.assets.find(a=>a.id===c.assetId)?.kind==='audio')throw new EditError('not_still','Only photos and video frames can be held.');c.holdSec=o.holdSec;break;}
  case 'set_track_settings':next.trackSettings??={};next.trackSettings[o.trackId]={...next.trackSettings[o.trackId],...o.settings};break;
  case 'set_speed':clip(o.clipId).speed=o.speed;break;
+ case 'set_speed_ramp':{const c=clip(o.clipId);if(o.ramp)c.speedRamp=o.ramp;else delete c.speedRamp;break;}
  case 'set_framing':clip(o.clipId).framing=o.framing;break;
    case 'set_keyframes':{const target=next.spine.find(c=>c.id===o.id)??next.attached.find(i=>i.id===o.id);if(!target)throw new EditError('clip_not_found',`No clip or layer ${o.id}.`);if(o.keyframes.length)target.keyframes=o.keyframes;else delete target.keyframes;break;}
  case 'set_clip_audio':Object.assign(clip(o.clipId).audio,o.audio);break;
