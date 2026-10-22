@@ -6,18 +6,18 @@ describe('keys typed in a text field never act as shortcuts',()=>{
  const box={name:'chat box'},button={name:'button'};
  it('a key with focus on nothing still belongs to the field focus vanished from',()=>{
   const owner=keyOwner<object>();owner.focusIn(box,true);
-  // The box is removed mid-sentence: no blur comes, focus is on nothing.
-  expect(owner.orphan(true)).toBe(box);
+  // The box is removed mid-sentence: its blur comes, but the box is no longer on the page, and focus is on nothing.
+  owner.focusOut(box,false);expect(owner.orphan(true)).toBe(box);
   // While focus is in the field itself, the key is its own (the target says so), not an orphan.
   expect(owner.orphan(false)).toBeNull();
  });
  it('focus the user really moved frees the keys again',()=>{
-  const blurred=keyOwner<object>();blurred.focusIn(box,true);blurred.focusOut(box);expect(blurred.orphan(true)).toBeNull();
+  const blurred=keyOwner<object>();blurred.focusIn(box,true);blurred.focusOut(box,true);expect(blurred.orphan(true)).toBeNull();
   const clicked=keyOwner<object>();clicked.focusIn(box,true);clicked.pressed();expect(clicked.orphan(true)).toBeNull();
   const tabbed=keyOwner<object>();tabbed.focusIn(box,true);tabbed.focusIn(button,false);expect(tabbed.orphan(true)).toBeNull();
  });
  it('a blur from another element does not free a field that still has focus',()=>{
-  const owner=keyOwner<object>();owner.focusIn(box,true);owner.focusOut(button);expect(owner.orphan(true)).toBe(box);
+  const owner=keyOwner<object>();owner.focusIn(box,true);owner.focusOut(button,true);expect(owner.orphan(true)).toBe(box);
  });
 });
 

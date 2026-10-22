@@ -24,11 +24,13 @@ export const EDITOR_SHORTCUTS:{group:string;keys:string[];label:string}[]=[
 ];
 /** The text field keys belong to. Focus can vanish from a field without the user moving it: the field is removed, hidden
  * or disabled while they type (the editor layout coming back when Gumbo finishes takes the chat box away mid-sentence),
- * and Chromium sends no blur for that, so the next letters landed on the timeline as shortcuts (S split, Space played).
- * Until focus really moves (a click, Tab, a blur), a key pressed with focus on nothing is still the field's. */
+ * and the next letters landed on the timeline as shortcuts (S split, Space played). The blur that comes with it is not
+ * the user leaving: until focus really moves (a click, Tab, a blur of a field still there), a key pressed with focus on
+ * nothing is still the field's. */
 export function keyOwner<T>(){let field:T|null=null;return{
  focusIn(target:T,text:boolean){field=text?target:null;},
- focusOut(target:T){if(target===field)field=null;},
+ /** `stillThere`: the field is on the page, shown and enabled after the blur. */
+ focusOut(target:T,stillThere:boolean){if(target===field&&stillThere)field=null;},
  pressed(){field=null;},
  /** The field a key with focus on nothing belongs to, if any. */
  orphan(onNothing:boolean){return onNothing?field:null;}};}
@@ -36,11 +38,13 @@ const TEXT='textarea,[contenteditable],input:not([type=range],[type=checkbox],[t
 const owner=keyOwner<HTMLElement>(),typed=new WeakSet<Event>();
 if(typeof document!=='undefined'){
  document.addEventListener('focusin',e=>{const t=e.target as HTMLElement;owner.focusIn(t,!!t.matches?.(TEXT));},true);
- document.addEventListener('focusout',e=>owner.focusOut(e.target as HTMLElement),true);
+ // Looked at once the blur is over: a field being removed can still be on the page while its blur is sent.
+ const there=(t:HTMLElement)=>t.isConnected&&t.getClientRects().length>0&&!(t as HTMLTextAreaElement).disabled;
+ document.addEventListener('focusout',e=>{const t=e.target as HTMLElement;queueMicrotask(()=>owner.focusOut(t,there(t)));},true);
  document.addEventListener('pointerdown',()=>owner.pressed(),true);
  // First of the window's key handlers: the key goes back to its field (or the chat box), and no shortcut acts on it.
  window.addEventListener('keydown',e=>{const active=document.activeElement,field=owner.orphan(!active||active===document.body||active===document.documentElement);if(!field)return;typed.add(e);
-  const back=field.isConnected&&field.getClientRects().length&&!(field as HTMLTextAreaElement).disabled?field:document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask Gumbo to edit"]');back?.focus();},true);
+  const back=there(field)?field:document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask Gumbo to edit"]');back?.focus();},true);
 }
 /** Whether a key event comes from a place that types (so single-letter shortcuts leave it alone). */
 export const typing=(e:KeyboardEvent)=>typed.has(e)||!!(e.target as HTMLElement|null)?.closest?.('input,textarea,select,[contenteditable]');
