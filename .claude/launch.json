@@ -16,6 +16,16 @@
       "port": 4173
     },
     {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@dream/web",
+        "dev"
+      ],
+      "port": 5180
+    },
+    {
       "name": "dashboard",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [

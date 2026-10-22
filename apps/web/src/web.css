@@ -1,0 +1,4 @@
+.web-unsupported{max-width:520px;margin:18vh auto 0;padding:0 24px;font:15px/1.6 system-ui,sans-serif;color:#e8e6e3}
+.web-unsupported h1{font-size:24px;margin:0 0 12px}
+.web-unsupported a{color:#e2552a}
+body:has(.web-unsupported){background:#111}

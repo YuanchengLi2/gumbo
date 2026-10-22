@@ -1,4 +1,5 @@
 import React,{useState} from 'react';
+import {MEDIA} from '@dream/config';
 import {Search,Plus,Film,Music2,Check,Sparkles,Upload,AlertCircle,LoaderCircle} from 'lucide-react';
 import type {Asset} from '@dream/footage';
 import type {ProjectState} from '@dream/project-db';
@@ -34,12 +35,12 @@ export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:
 function AssetCard({asset:a,project,selected,onToggle,command,onAdd}:{asset:Asset;project:ProjectState;selected:boolean;onToggle:()=>void;command:CommandFn;onAdd?:()=>void}){
  const [hover,setHover]=useState(false),group=groupOf(a),preview=hover&&a.kind==='video'&&!a.scene&&!a.missing&&(a.playback?.ready||a.status==='ready');
  const visual=a.scene?<span className="asset-graphic"><Sparkles size={18}/></span>
-  :a.thumbnailPath||a.kind==='image'?<img src={'dream-media://'+a.id+'/'+(a.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>
+  :a.thumbnailPath||a.kind==='image'?<img src={MEDIA+a.id+'/'+(a.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>
   :a.kind==='audio'&&a.waveform?.length?<svg className="asset-wave" viewBox="0 0 100 24" preserveAspectRatio="none">{a.waveform.slice(0,100).map((v,n,all)=><line key={n} x1={n/all.length*100} x2={n/all.length*100} y1={12-v*11} y2={12+v*11}/>)}</svg>
   :<span className="asset-icon">{a.kind==='audio'?<Music2 size={18}/>:<Film size={18}/>}</span>;
  return <article className={`asset-card ${group} kind-${a.kind}${selected?' selected':''}${a.missing?' missing':''}`} draggable title="Click to send with your next message, or drag onto the timeline" onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onDragStart={e=>{e.dataTransfer.setData('application/x-dream-asset',a.id);e.dataTransfer.effectAllowed='copy';}}>
   <button className="asset-select" aria-pressed={selected} aria-label={a.filename} onClick={onToggle}>
-   <div className="asset-image">{visual}{preview&&<video src={`dream-media://${a.id}/preview`} muted autoPlay loop playsInline/>}
+   <div className="asset-image">{visual}{preview&&<video src={`${MEDIA}${a.id}/preview`} muted autoPlay loop playsInline/>}
     {a.kind!=='image'&&a.durationSec>0&&<span className="asset-length">{clock(a.durationSec)}</span>}
     {group==='made'&&!a.scene&&<span className="asset-made" title="Made by Gumbo"><Sparkles size={10}/></span>}
     <i className="asset-check">{selected&&<Check size={11} strokeWidth={3}/>}</i>

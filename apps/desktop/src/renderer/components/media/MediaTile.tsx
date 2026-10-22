@@ -1,4 +1,5 @@
 import React,{useRef,useState} from 'react';
+import {MEDIA} from '@dream/config';
 import {Film,Image as ImageIcon,Music2,Sparkles,Type,X} from 'lucide-react';
 import type {Asset} from '@dream/footage';
 import {ScenePeek} from '../chat/ScenePeek';
@@ -20,10 +21,10 @@ export function MediaTile({asset,label,srcIn,srcOut,size='chip',onRemove}:{asset
  const framed=kind==='video'&&!!asset&&(srcIn!==undefined||!asset.thumbnailPath),still=useVideoFrame(framed&&!asset!.sequence?asset:undefined,start),always=framed&&(still.failed||!!asset!.sequence),[hovered,setHovered]=useState(false);
  const play=()=>{if(!always){setHovered(true);return;}const node=video.current;if(!node)return;node.currentTime=start;void node.play().catch(()=>{});};
  const stop=()=>{if(!always){setHovered(false);return;}const node=video.current;if(!node)return;node.pause();node.currentTime=start;};
- const clip=(over:boolean)=><video ref={video} src={`dream-media://${asset!.id}/preview#t=${start.toFixed(2)}`} muted playsInline preload="metadata" autoPlay={over} style={over?{position:'absolute',inset:0}:undefined} onTimeUpdate={e=>{if(end&&e.currentTarget.currentTime>=end)e.currentTarget.currentTime=start;}}/>;
+ const clip=(over:boolean)=><video ref={video} src={`${MEDIA}${asset!.id}/preview#t=${start.toFixed(2)}`} muted playsInline preload="metadata" autoPlay={over} style={over?{position:'absolute',inset:0}:undefined} onTimeUpdate={e=>{if(end&&e.currentTarget.currentTime>=end)e.currentTarget.currentTime=start;}}/>;
  const visual=kind==='scene'&&asset?<ScenePeek asset={asset}/>
-  :kind==='video'&&asset?(framed?(always?clip(false):<>{still.url&&<img src={still.url} alt=""/>}{hovered&&clip(true)}</>):<img src={`dream-media://${asset.id}/thumbnail`} alt="" loading="lazy"/>)
-  :kind==='image'&&asset?<img src={`dream-media://${asset.id}/${asset.thumbnailPath?'thumbnail':'original'}`} alt="" loading="lazy"/>
+  :kind==='video'&&asset?(framed?(always?clip(false):<>{still.url&&<img src={still.url} alt=""/>}{hovered&&clip(true)}</>):<img src={`${MEDIA}${asset.id}/thumbnail`} alt="" loading="lazy"/>)
+  :kind==='image'&&asset?<img src={`${MEDIA}${asset.id}/${asset.thumbnailPath?'thumbnail':'original'}`} alt="" loading="lazy"/>
   :kind==='audio'&&asset?.waveform?.length?<svg className="media-tile-wave" viewBox="0 0 100 24" preserveAspectRatio="none">{asset.waveform.slice(0,100).map((v,n,all)=><line key={n} x1={n/all.length*100} x2={n/all.length*100} y1={12-v*11} y2={12+v*11}/>)}</svg>
   :<span className="media-tile-icon"><Icon size={size==='card'?20:14}/></span>;
  const length=kind==='text'?undefined:srcIn!==undefined&&srcOut!==undefined?srcOut-srcIn:asset?.durationSec;

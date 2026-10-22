@@ -1,4 +1,5 @@
 import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample,type InputVideoTrack} from 'mediabunny';
+import {MEDIA} from '@dream/config';
 import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
@@ -15,7 +16,7 @@ export type VideoJob={timeline:TimelineDocument;footage:FootageIndex;width:numbe
 // Bits per pixel each frame for each bit rate choice (HEVC needs about 40% less), the same figures the window estimates with.
 const BPP={lower:.05,recommended:.1,higher:.16};
 export const videoBitrate=(job:Pick<VideoJob,'width'|'height'|'fps'|'codec'|'quality'>)=>Math.round(BPP[job.quality]*(job.codec==='hevc'?.6:1)*job.width*job.height*job.fps);
-export const originalUrl=(a:Asset)=>'dream-media://'+a.id+'/original';
+export const originalUrl=(a:Asset)=>MEDIA+a.id+'/original';
 /** A video track decoded in the colours the preview plays it in. A file that does not say its colour matrix (an ffmpeg
  * render, a screen recording) is read by the preview's <video> as Chromium guesses: BT.601 below 720 lines, BT.709 from
  * 720 up. WebCodecs gets no guess (mediabunny fills in BT.709 at every size), so an untagged SD file exported with its

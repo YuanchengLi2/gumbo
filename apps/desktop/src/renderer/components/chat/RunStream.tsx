@@ -1,4 +1,5 @@
 import {editingActivity,editingChanges} from '../../editing-language';
+import {ENGINE,MEDIA} from '@dream/config';
 import React,{useEffect,useRef,useState} from 'react';
 import {LoaderCircle,AlertCircle,ChevronRight,Music2,Film,FileText,Search,Globe,PencilLine,Clapperboard,Eye,ScanEye,ListChecks,Type,Bookmark,Users,Wand2,Dot} from 'lucide-react';
 import type {PublicActivity} from '@dream/contracts';
@@ -41,7 +42,7 @@ function MediaStrip({media}:{media:NonNullable<PublicActivity['media']>}){
  const assets=React.useContext(Assets),seen=new Set<string>(),shown=media.flatMap(m=>{const asset=assets.find(a=>a.id===m.id);if(!asset||seen.has(asset.id))return[];seen.add(asset.id);return[asset];}).slice(0,4);
  if(!shown.length)return null;
  return <div className={'stream-media'+(shown.length===1?' single':'')}>{shown.map(asset=><figure key={asset.id} className="stream-thumb" title={asset.filename}>
-  {asset.scene?<ScenePeek asset={asset}/>:asset.thumbnailPath||asset.kind==='image'?<img src={'dream-media://'+asset.id+'/'+(asset.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>:<span className="stream-thumb-icon">{asset.kind==='audio'?<Music2 size={18}/>:<Film size={18}/>}</span>}
+  {asset.scene?<ScenePeek asset={asset}/>:asset.thumbnailPath||asset.kind==='image'?<img src={MEDIA+asset.id+'/'+(asset.thumbnailPath?'thumbnail':'original')} alt="" loading="lazy" onError={e=>{e.currentTarget.style.visibility='hidden';}}/>:<span className="stream-thumb-icon">{asset.kind==='audio'?<Music2 size={18}/>:<Film size={18}/>}</span>}
   <figcaption>{asset.scene?'Live scene':asset.kind==='audio'?'Audio':asset.kind==='image'?'Image':'Footage'} · {asset.filename}</figcaption>
  </figure>)}</div>;
 }
@@ -49,7 +50,7 @@ function MediaStrip({media}:{media:NonNullable<PublicActivity['media']>}){
 /** Scenes a worker is still writing, drawn live from their draft code before anything is published. */
 function DraftStrip({drafts}:{drafts:NonNullable<PublicActivity['drafts']>}){
  return <div className={'stream-media'+(drafts.length===1?' single':'')}>{drafts.slice(0,3).map(draft=>{const asset={id:'draft_'+draft.hash,filename:draft.name,kind:'video',durationSec:draft.durationInFrames/draft.fps,fps:draft.fps,width:draft.width,height:draft.height,originalPath:'',fingerprint:draft.hash,scene:{format:'engine',revisionId:draft.hash.padEnd(64,'0'),durationInFrames:draft.durationInFrames}} as unknown as Asset;
-  return <figure key={draft.hash} className="stream-thumb" title={draft.name}><ScenePeek asset={asset} src={`dream-engine://app/draft/${draft.hash}/index.html`}/><figcaption>Draft · {draft.name}</figcaption></figure>;})}</div>;
+  return <figure key={draft.hash} className="stream-thumb" title={draft.name}><ScenePeek asset={asset} src={`${ENGINE}app/draft/${draft.hash}/index.html`}/><figcaption>Draft · {draft.name}</figcaption></figure>;})}</div>;
 }
 // Steps and notes draw again only when they change: a long run has hundreds, and each streamed word re-drew them all.
 const Action=React.memo(function Action({event,running,media=true}:{event:PublicActivity;running:boolean;media?:boolean}){

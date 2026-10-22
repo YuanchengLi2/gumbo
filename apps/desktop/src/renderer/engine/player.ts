@@ -1,4 +1,5 @@
 import {prepare,frameAt,Compositor,audioManifest,envelope,type Prepared,type MediaLayer,type AudioSegment,type Frame} from '@dream/compositor';
+import {MEDIA} from '@dream/config';
 import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {SceneLayers} from './scenes';
@@ -15,10 +16,10 @@ export type PlayerEvent='frameupdate'|'play'|'pause'|'mutechange'|'ended';
 export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;peek(frame:number|null):void;
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void;removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void};
 
-export const previewUrl=(a:Asset)=>'dream-media://'+a.id+'/preview?revision='+encodeURIComponent(a.proxyPath?'proxy':'original');
+export const previewUrl=(a:Asset)=>MEDIA+a.id+'/preview?revision='+encodeURIComponent(a.proxyPath?'proxy':'original');
 /** What the preview's video elements play: the source's preview copy when it has one, else what the preview plays. */
-export const playUrl=(a:Asset)=>'dream-media://'+a.id+'/play?revision='+encodeURIComponent(a.previewPath?'preview':a.proxyPath?'proxy':'original');
-export const audioUrl=(a:Asset)=>'dream-media://'+a.id+'/audio?revision='+encodeURIComponent(a.audioPath?'normalized':a.playback?.audio??'original');
+export const playUrl=(a:Asset)=>MEDIA+a.id+'/play?revision='+encodeURIComponent(a.previewPath?'preview':a.proxyPath?'proxy':'original');
+export const audioUrl=(a:Asset)=>MEDIA+a.id+'/audio?revision='+encodeURIComponent(a.audioPath?'normalized':a.playback?.audio??'original');
 
 type Video={el:HTMLVideoElement;key:string;assetId:string;url:string;lastUsed:number;seeking:boolean};
 /** Video elements are the costly part of a cut: each has its own hardware decoder, and the graphics card builds or tears

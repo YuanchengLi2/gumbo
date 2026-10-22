@@ -52,6 +52,9 @@
       ],
       "@dream/scene-engine": [
         "packages/scene-engine/src/index.ts"
+      ],
+      "@renderer/*": [
+        "apps/desktop/src/renderer/*"
       ]
     }
   },

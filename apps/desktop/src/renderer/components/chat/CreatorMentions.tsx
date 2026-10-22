@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {Film,Music2,Sparkles,FolderOpen} from 'lucide-react';
-import {matchCreators} from '@dream/config';
+import {matchCreators,MEDIA} from '@dream/config';
 import type {ProjectSummary} from '@dream/contracts';
 import {useEditor} from '../../store/editor';
 
@@ -32,7 +32,7 @@ export function useCreatorMentions(textarea:React.RefObject<HTMLTextAreaElement|
  const q=query??'';
  const media:Item[]=query===null?[]:(assets??[]).filter(a=>a.generated?.role!=='stem'&&matches(q,a.filename)).slice(0,4).map(a=>({kind:'media',key:'m:'+a.id,insert:bracket(a.filename),title:a.filename,
   detail:[a.scene?'Scene':a.kind==='audio'?'Audio':a.kind==='image'?'Image':'Video',clock(a.durationSec)].filter(Boolean).join(' · '),
-  ...(a.kind==='image'||a.thumbnailPath?{image:`dream-media://${a.id}/${a.thumbnailPath?'thumbnail':'original'}`}:{icon:a.scene?Sparkles:a.kind==='audio'?Music2:Film})}));
+  ...(a.kind==='image'||a.thumbnailPath?{image:`${MEDIA}${a.id}/${a.thumbnailPath?'thumbnail':'original'}`}:{icon:a.scene?Sparkles:a.kind==='audio'?Music2:Film})}));
  const yours:Item[]=query===null?[]:projects.filter(p=>p.id!==current&&!p.missing&&!(p as any).archived&&matches(q,p.name)).slice(0,4).map(p=>({kind:'project',key:'p:'+p.id,insert:bracket(p.name),title:p.name,
   detail:[`Edited ${ago(p.updatedAt)}`,clock(p.durationSec)].filter(Boolean).join(' · '),...(p.thumbnail?{image:p.thumbnail}:{icon:FolderOpen})}));
  const library:Item[]=query===null?[]:matchCreators(q,4).map(c=>({kind:'creator',key:'c:'+c.handle.toLowerCase(),insert:'@'+c.handle,title:c.name,detail:c.look,badge:'Style guide'}));

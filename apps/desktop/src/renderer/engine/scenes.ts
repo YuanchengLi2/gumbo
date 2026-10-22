@@ -1,12 +1,13 @@
 import type {MediaLayer,RawPicture} from '@dream/compositor';
+import {ENGINE,MEDIA} from '@dream/config';
 import type {Asset} from '@dream/footage';
 import {liveSceneDocument} from '../../../../../packages/composition/src/live-scene-document';
 
 /** Coded motion graphics in the player: each scene runs in its own sandboxed document (an engine scene from
  * dream-engine://, a legacy HTML scene from its file), placed and scaled where the frame model puts its layer, and told
  * which of its frames to draw. Export captures the same documents frame by frame. */
-export const sceneUrl=(a:Asset)=>`dream-engine://app/scene/${encodeURIComponent(a.id)}/index.html?r=${a.scene!.revisionId.slice(0,16)}`;
-export const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
+export const sceneUrl=(a:Asset)=>`${ENGINE}app/scene/${encodeURIComponent(a.id)}/index.html?r=${a.scene!.revisionId.slice(0,16)}`;
+export const legacyDocument=(a:Asset)=>fetch(MEDIA+a.id+'/preview').then(r=>r.text()).then(liveSceneDocument);
 type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;playing:boolean;request:number;lastUsed:number;error?:string};
 
 /** A layer's mask (frame pixels) as a clip-path on its box: the frame point is taken back through the layer's transform, so
