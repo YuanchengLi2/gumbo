@@ -185,6 +185,23 @@ it('runs a waiting plan when the triage reads the reply as accepting it, in any 
  }finally{db.close();}
 });
 
+it('says when each run of a request ends, so its log is sent (edit-logs.ts), waiting on a plan or done',async()=>{
+ const {turnLog}=await import('../../apps/project-service/src/turn-log');
+ const db=fixture();try{
+  const ends:{turnId:string;status:string}[]=[];let agent=0,triaged=0;
+  const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),(type,payload:any)=>{if(type==='ai.turn_end')ends.push({turnId:payload.turnId,status:turnLog(db,payload.turnId).outcome.status});},undefined,undefined,undefined,undefined,workspace);
+  director.inference=async(_model,_s,_m,_t,_turn,_f,purpose='execution')=>{
+   if(purpose==='triage')return{content:[{type:'text',text:JSON.stringify({kind:triaged++?'continue':'plan',difficulty:2,vision:false,carriesStopped:false,parts:[],reason:'plan, then accepts it'})}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='planning')return toolUse('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Title card',goal:'Add a title card',steps:[{id:'title',title:'Add the title card',instruction:'Create the title card',acceptance:'Title visible',review:false}],assumptions:[]}});
+   return ++agent===1?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'Added the title card.'});};
+  await director.message('Plan a title card for the video',[],'plan',[],'turn-a',undefined,'sonnet');
+  expect(ends).toEqual([{turnId:'turn-a',status:'waiting'}]);
+  await director.message('yes do that',[],'auto',[],'turn-b',undefined,'sonnet');
+  expect(ends.at(-1)).toEqual({turnId:expect.any(String),status:'complete'});expect(ends.length).toBeGreaterThanOrEqual(2);
+ }finally{db.close();}
+});
+
 it('plans with Opus and, when the user says "do it", runs the approved plan as one Sonnet agent',async()=>{
  const {approvesPlan}=await import('../../packages/orchestrator/src/code-director');
  for(const yes of ['do it','Edit','looks good, go ahead','ok','Apply the plan.'])expect(approvesPlan(yes)).toBe(true);

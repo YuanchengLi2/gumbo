@@ -67,18 +67,6 @@ describe('pictures the agent has seen',()=>{
  });
 });
 
-describe('helping improve Gumbo',()=>{
- it('sends a log for an edit that was stopped, paused, ended with a problem, or ran long and costly, and not otherwise',async()=>{
-  vi.stubGlobal('window',{});const {reportReason}=await import('../../apps/desktop/src/renderer/improve');
-  expect(reportReason({credits:12,calls:9,ending:'Stopped.'})).toBe('the edit was stopped');
-  expect(reportReason({credits:51,calls:30,ending:'Paused after about 51 credits of work on this request, so it does not keep spending'})).toBe('the edit hit the credits pause');
-  expect(reportReason({credits:20,calls:12,ending:'Repeated attempts could not complete this step: publish failed'})).toBe('the edit ended with a problem');
-  expect(reportReason({credits:77,calls:40,ending:'Brightened the joyful moments.'})).toBe('the edit cost 77 credits');
-  expect(reportReason({credits:30,calls:55,ending:'Done.'})).toBe('the edit took 55 steps');
-  expect(reportReason({credits:18,calls:14,ending:'Added captions that follow the speech.'})).toBeUndefined();
- });
-});
-
 describe('a cold cache',()=>{
  it('is met after a pause longer than the provider keeps it, or on another model, but not on the first call',async()=>{
   const {coldCache,cacheLifeMs}=await import('../../packages/orchestrator/src/inference');
