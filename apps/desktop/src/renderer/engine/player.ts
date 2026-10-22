@@ -12,7 +12,7 @@ import {upcoming,continues,pickVideo,videoPool,LOOKAHEAD_SEC} from './lookahead'
  * Coded motion graphics play live in their own sandboxed documents between two canvases: what lies under the first
  * scene is drawn on the canvas below, what lies over it (titles, captions, overlays) on a transparent canvas above. */
 export type PlayerEvent='frameupdate'|'play'|'pause'|'mutechange'|'ended';
-export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;
+export type PlayerRef={seekTo(frame:number):void;play():void;pause():void;toggle():void;isPlaying():boolean;getCurrentFrame():number;mute():void;unmute():void;isMuted():boolean;peek(frame:number|null):void;
  addEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void;removeEventListener(event:PlayerEvent,listener:(e:CustomEvent)=>void):void};
 
 export const previewUrl=(a:Asset)=>'dream-media://'+a.id+'/preview?revision='+encodeURIComponent(a.proxyPath?'proxy':'original');
@@ -40,7 +40,7 @@ export class EnginePlayer implements PlayerRef{
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
  private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;
- private pool=new Map<string,number>();private poolAt=-1;
+ private pool=new Map<string,number>();private poolAt=-1;private peekAt?:number;
  constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=compositorOf(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
   // A paused frame is drawn again when the preview changes size: the canvas at its new size, and coded scenes placed at
   // the new scale (they kept the old one, so dragging the timeline divider showed more or less of a graphic).
@@ -59,8 +59,10 @@ export class EnginePlayer implements PlayerRef{
  private now(){return this.playing?Math.min(this.duration,this.anchor.time+(performance.now()-this.anchor.at)/1000):this.time;}
  getCurrentFrame(){return Math.min(Math.round(this.duration*this.fps)-1,Math.floor(this.now()*this.fps+1e-6));}
  isPlaying(){return this.playing;}
- seekTo(frame:number){this.time=Math.max(0,Math.min(this.duration-1/this.fps,frame/this.fps));this.anchor={time:this.time,at:performance.now()};this.dirty=true;for(const s of this.sounds.values())s.el.pause();if(!this.playing)this.emit('frameupdate',{frame:this.getCurrentFrame()});}
- play(){if(this.playing)return;if(this.time>=this.duration-1/this.fps)this.time=0;this.ensureAudio();void this.audio?.resume();this.playing=true;this.anchor={time:this.time,at:performance.now()};this.emit('play');}
+/** Shows a frame without moving the playhead (the edge a trim is at, while dragged); null goes back to the playhead. */
+ peek(frame:number|null){if(this.playing)return;this.peekAt=frame===null?undefined:Math.max(0,Math.min(this.duration-1/this.fps,frame/this.fps));this.dirty=true;}
+ seekTo(frame:number){this.peekAt=undefined;this.time=Math.max(0,Math.min(this.duration-1/this.fps,frame/this.fps));this.anchor={time:this.time,at:performance.now()};this.dirty=true;for(const s of this.sounds.values())s.el.pause();if(!this.playing)this.emit('frameupdate',{frame:this.getCurrentFrame()});}
+ play(){if(this.playing)return;this.peekAt=undefined;if(this.time>=this.duration-1/this.fps)this.time=0;this.ensureAudio();void this.audio?.resume();this.playing=true;this.anchor={time:this.time,at:performance.now()};this.emit('play');}
  pause(){if(!this.playing)return;this.time=this.now();this.playing=false;for(const v of this.videos.values())v.el.pause();for(const s of this.sounds.values())s.el.pause();this.dirty=true;this.emit('pause');}
  toggle(){if(this.playing)this.pause();else this.play();}
  mute(){this.muted=true;if(this.master)this.master.gain.value=0;this.emit('mutechange');}
@@ -148,7 +150,7 @@ export class EnginePlayer implements PlayerRef{
  private loop(){
   if(this.stopped)return;this.raf=requestAnimationFrame(this.loop);if(!this.prepared)return;
   const t=this.now();if(this.playing&&t>=this.duration){this.time=Math.max(0,this.duration-1/this.fps);this.playing=false;for(const v of this.videos.values())v.el.pause();for(const s of this.sounds.values())s.el.pause();this.emit('pause');this.emit('ended');this.dirty=true;}
-  const time=this.playing?t:this.time,frame=frameAt(this.prepared,time),media=frame.layers.filter((l):l is MediaLayer=>l.kind==='media');
+  const time=this.playing?t:this.peekAt??this.time,frame=frameAt(this.prepared,time),media=frame.layers.filter((l):l is MediaLayer=>l.kind==='media');
   const pictured=media.filter(l=>l.media!=='scene');
   const tick=performance.now();
   // Every clip that starts within the next second, however short, is loaded and parked on its first frame, so its cut
