@@ -148,3 +148,18 @@ it('gives a resume its own retries when the last try before the drop left its ca
   await expect(infer({db,config,input,resume:1,connect},{fetch:fetcher,wait:async()=>{}})).resolves.toMatchObject({content:[{type:'text',text:'Done.'}]});expect(attempts).toBe(5);
  }finally{db.close();}
 });
+
+it('pauses an edit after half an hour of one run, whatever it cost, and continue starts the clock again',async()=>{
+ const db=fixture();try{
+  const {codeAgent}=await import('../../packages/orchestrator/src/code-agent');const {vi}=await import('vitest');
+  let now=Date.parse('2026-10-22T04:00:00Z');const clock=vi.spyOn(Date,'now').mockImplementation(()=>now);
+  try{
+   db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));let calls=0;
+   const run=()=>codeAgent({db,turnId:'turn',text:'make it better',model:'deepseek-flash',signal:new AbortController().signal,publish:()=>{},workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>{now+=11*60_000;return{ok:true};}} as any,
+    infer:async()=>{calls++;return toolUse('c'+calls,'run_command',{command:'python analyse.py'});}});
+   // Three ten-minute commands: the run pauses before the fourth call, as blocked with a way to go on.
+   const paused=await run();expect(calls).toBe(3);expect(paused.outcome).toMatchObject({status:'blocked',summary:expect.stringContaining('Paused after 30 minutes')});
+   db.setMeta('resume_count:turn','1');const resumed=await run();expect(calls).toBe(6);expect(resumed.outcome.status).toBe('blocked');
+  }finally{clock.mockRestore();}
+ }finally{db.close();}
+});
