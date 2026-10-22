@@ -40,7 +40,7 @@ describe('telling the owner about a new entry',()=>{
   const sent:any[]=[];const env:Record<string,string>={RESEND_API_KEY:'re_test',WAITLIST_ALERT_TO:'owner@example.com'};
   const alert=waitlistAlert(name=>env[name],async(url,init)=>{sent.push({url:String(url),auth:new Headers(init?.headers).get('Authorization'),body:JSON.parse(String(init?.body))});return Response.json({id:'e1'});})!;
   await alert({email:'maya@example.com',first_ask:'<script>x</script> a recap',source:'top',address:'h'});
-  expect(sent[0]).toMatchObject({url:'https://api.resend.com/emails',auth:'Bearer re_test',body:{from:'Gumbo waitlist <onboarding@resend.dev>',to:['owner@example.com'],reply_to:'maya@example.com',subject:'New Gumbo waitlist signup: maya@example.com'}});
+  expect(sent[0]).toMatchObject({url:'https://api.resend.com/emails',auth:'Bearer re_test',body:{from:'Gumbo waitlist <onboarding@resend.dev>',to:['owner@example.com'],reply_to:'maya@example.com',subject:'New Gumbo signup: maya@example.com'}});
   expect(sent[0].body.html).toContain('&lt;script&gt;');expect(sent[0].body.html).not.toContain('<script>');expect(sent[0].body.text).toContain('a recap');
   const refused=waitlistAlert(name=>env[name],async()=>new Response('invalid key',{status:401}))!;
   await expect(refused({email:'a@b.co',first_ask:'',source:'top',address:'h'})).rejects.toThrow('401');

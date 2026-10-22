@@ -32,7 +32,7 @@ export function supabaseWaitlistPorts(db:any):WaitlistPorts{
 }
 
 const html=(text:string)=>text.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]!);
-/** An email to the owner for each new waitlist entry, through Resend (RESEND_API_KEY, to WAITLIST_ALERT_TO). Without both
+/** An email to the owner for each new signup (the open beta still records signups in the waitlist), through Resend (RESEND_API_KEY, to WAITLIST_ALERT_TO). Without both
  * secrets there are no alerts. Resend's shared sender reaches only the address the Resend account was made with, so
  * WAITLIST_ALERT_FROM is needed only to send from a domain verified there. */
 export function waitlistAlert(env:(name:string)=>string|undefined,request:typeof fetch=fetch):WaitlistPorts['alert']{
@@ -41,12 +41,12 @@ export function waitlistAlert(env:(name:string)=>string|undefined,request:typeof
  return async row=>{
   const ask=row.first_ask?`<p><b>First edit they'd ask for:</b><br>${html(row.first_ask)}</p>`:'<p>No first edit given.</p>';
   const response=await request('https://api.resend.com/emails',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},signal:AbortSignal.timeout(5000),
-   body:JSON.stringify({from,to:to.split(',').map(a=>a.trim()).filter(Boolean),reply_to:row.email,subject:`New Gumbo waitlist signup: ${row.email}`,
-    text:`${row.email} joined the Gumbo waitlist (${row.source} form).
+   body:JSON.stringify({from,to:to.split(',').map(a=>a.trim()).filter(Boolean),reply_to:row.email,subject:`New Gumbo signup: ${row.email}`,
+    text:`${row.email} signed up on usegumbo.app (${row.source} form).
 First edit they'd ask for: ${row.first_ask||'(none)'}
 
-Invite them on the dashboard: https://usegumbo.app/dashboard/`,
-    html:`<p><b>${html(row.email)}</b> joined the Gumbo waitlist (${html(row.source)} form).</p>${ask}<p><a href="https://usegumbo.app/dashboard/">Invite them on the dashboard</a>. Reply to this email to write to them.</p>`})});
+Every signup: https://usegumbo.app/dashboard/`,
+    html:`<p><b>${html(row.email)}</b> signed up on usegumbo.app (${html(row.source)} form).</p>${ask}<p><a href="https://usegumbo.app/dashboard/">Every signup is on the dashboard</a>. Reply to this email to write to them.</p>`})});
   if(!response.ok)throw new Error(`Resend answered ${response.status}: ${(await response.text()).slice(0,200)}`);
  };
 }
