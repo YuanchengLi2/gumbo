@@ -2,12 +2,16 @@ import {acceptRunActivity,acceptRunPhase,acceptUsage} from '../store/editor';
 import {useCallback,useEffect,useState} from 'react';
 import type {Command,ProjectSummary,InitialRequest,ExportProgress,RuntimeStatus} from '@dream/contracts';
 import {useEditor,mergeProjectDelta,stopConfirmed} from '../store/editor';
+import {useShallow} from 'zustand/react/shallow';
+import {useStable} from '../memo';
 import {grabFrames} from '../engine/frames';
 import {runExport,stopExports} from '../engine/export-job';
 import {openUpgrade} from '../components/billing/Upgrade';
 export type CommandFn=(command:Command)=>Promise<any>;
 export function useProjectSession(){
- const s=useEditor(),[projects,setProjects]=useState<ProjectSummary[]>([]),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[progress,setProgress]=useState<ExportProgress|null>(null),[catalog,setCatalog]=useState<any>({scores:[],sfx:[]});
+ // Only what the window draws from. The streamed notes, usage, composer choices and draft change the store many times a
+ // second, and re-rendering the whole window for each one made clicks and keys wait behind it.
+ const s=useEditor(useShallow(({commentary,usage,pending,draft,permission,effort,model,snapping,zoom,returned,layout,...used})=>used)),[projects,setProjects]=useState<ProjectSummary[]>([]),[runtime,setRuntime]=useState<RuntimeStatus|null>(null),[progress,setProgress]=useState<ExportProgress|null>(null),[catalog,setCatalog]=useState<any>({scores:[],sfx:[]});
  const refreshProjects=useCallback(()=>window.dream.projects().then(setProjects).catch(error=>useEditor.getState().setError(error.message)),[]);
  const command:CommandFn=useCallback(async c=>{const store=useEditor.getState();store.setBusy(true);try{const result=await window.dream.command(c);if(result?.timeline)store.setProject(result);return result;}catch(error){store.setError((error as Error).message);return undefined;}finally{store.setBusy(false);}},[]);
  // Scenes that fail while playing in the player or a chat preview report back, so the agent sees the error next step.
@@ -50,8 +54,8 @@ export function useProjectSession(){
   if(event.type==='export.progress'){const progress=event.payload as ExportProgress;if(progress.status==='cancelled')stopExports();setProgress(progress);}
   if(event.type==='models.progress'&&(event.payload as any).status==='ready')void window.dream.runtime().then(setRuntime);
  });},[]);
- const create=async(request:InitialRequest)=>{if(useEditor.getState().busy)return; s.setBusy(true);try{const project=await window.dream.createProject(request);s.setProject(project);s.setRoute('ai');await refreshProjects();return project;}catch(error){s.setError((error as Error).message);}finally{s.setBusy(false);}};
- const open=async(folder?:string)=>{const path=folder??await window.dream.pickProject();if(!path)return;if(useEditor.getState().project?.meta.folder===path){s.setRoute('ai');return;}const project=await command({type:'open',folder:path});if(project)s.setRoute('ai');};
- const importFiles=async(paths?:string[])=>{const selected=paths??await window.dream.pickMedia();if(!selected.length)return[];const before=new Set(useEditor.getState().project?.footage.assets.map(a=>a.id));const p=await command({type:'import',paths:selected,copy:true});return p?.footage.assets.filter((a:any)=>!before.has(a.id)).map((a:any)=>a.id)??[];};
+ const create=useStable(async(request:InitialRequest)=>{if(useEditor.getState().busy)return; s.setBusy(true);try{const project=await window.dream.createProject(request);s.setProject(project);s.setRoute('ai');await refreshProjects();return project;}catch(error){s.setError((error as Error).message);}finally{s.setBusy(false);}});
+ const open=useStable(async(folder?:string)=>{const path=folder??await window.dream.pickProject();if(!path)return;if(useEditor.getState().project?.meta.folder===path){s.setRoute('ai');return;}const project=await command({type:'open',folder:path});if(project)s.setRoute('ai');});
+ const importFiles=useStable(async(paths?:string[])=>{const selected=paths??await window.dream.pickMedia();if(!selected.length)return[];const before=new Set(useEditor.getState().project?.footage.assets.map(a=>a.id));const p=await command({type:'import',paths:selected,copy:true});return p?.footage.assets.filter((a:any)=>!before.has(a.id)).map((a:any)=>a.id)??[];});
  return{...s,projects,runtime,progress,setProgress,catalog,command,create,open,importFiles,refreshProjects};
 }

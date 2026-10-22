@@ -1,6 +1,7 @@
 import {useEffect} from 'react';
 import {useEditor,type Permission,type ModelChoice} from './store/editor';
 import {available} from './models';
+import {typing as typed} from './manual/shortcuts';
 
 /** Keyboard shortcuts for talking to Gumbo, on the home screen and in a project:
  * Ctrl+L (or / when not typing) puts the cursor in the chat box; Shift+Tab in the chat box, or Ctrl+1/2/3 anywhere, picks
@@ -14,7 +15,7 @@ export function useChatShortcuts(){
  useEffect(()=>{
   const key=(e:KeyboardEvent)=>{
    const target=e.target as HTMLElement|null,mod=e.ctrlKey||e.metaKey,store=useEditor.getState(),chat=document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Ask Gumbo to edit"]');
-   const typing=!!target?.closest('input,textarea,select,[contenteditable]'),inChat=!!chat&&target===chat;
+   const typing=typed(e),inChat=!!chat&&target===chat;
    if(mod&&!e.shiftKey&&!e.altKey&&e.key.toLowerCase()==='l'||!mod&&!typing&&e.key==='/'){if(!chat)return;e.preventDefault();chat.focus();chat.setSelectionRange(chat.value.length,chat.value.length);return;}
    if(inChat&&e.shiftKey&&!mod&&e.key==='Tab'){e.preventDefault();store.setPermission(next(modes,store.permission));return;}
    if(mod&&!e.shiftKey&&!e.altKey&&['1','2','3'].includes(e.key)){e.preventDefault();store.setPermission(modes[Number(e.key)-1]);return;}
