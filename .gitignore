@@ -34,4 +34,6 @@ apps/ingest-worker/build/context-dist/
 apps/desktop/native/**/bin/
 apps/desktop/native/**/obj/
 tests/gl/harness.js
+tests/gl/export-harness.js
+tests/gl/export.html
 .vercel
