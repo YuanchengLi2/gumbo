@@ -38,4 +38,5 @@
 
 
 /* Real frames along a video block (CapCut-style), over the single thumbnail while frames decode. */
-.manual-clip-filmstrip{position:absolute;left:0;top:0;pointer-events:none;border-radius:inherit}
+.manual-clip-filmstrip{position:absolute;left:0;top:0;pointer-events:none;border-radius:inherit;overflow:hidden}
+.manual-clip-filmstrip>span{position:absolute;top:0;height:100%;background:center/cover no-repeat}

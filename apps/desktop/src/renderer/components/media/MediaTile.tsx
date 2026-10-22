@@ -1,7 +1,8 @@
-import React,{useRef} from 'react';
+import React,{useRef,useState} from 'react';
 import {Film,Image as ImageIcon,Music2,Sparkles,Type,X} from 'lucide-react';
 import type {Asset} from '@dream/footage';
 import {ScenePeek} from '../chat/ScenePeek';
+import {useVideoFrame} from '../../manual/Filmstrip';
 
 const clock=(sec:number)=>{const s=Math.max(0,Math.round(sec));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 export type TileKind='scene'|'video'|'image'|'audio'|'text';
@@ -14,10 +15,14 @@ const icons={scene:Sparkles,video:Film,image:ImageIcon,audio:Music2,text:Type};
  * a clip's in point), a short muted preview on hover, and its length. Scenes run live; audio shows its waveform. */
 export function MediaTile({asset,label,srcIn,srcOut,size='chip',onRemove}:{asset?:Asset;label?:string;srcIn?:number;srcOut?:number;size?:'chip'|'card';onRemove?:()=>void}){
  const kind=asset?tileKind(asset):guess(label),Icon=icons[kind],video=useRef<HTMLVideoElement>(null),start=srcIn??0,end=srcOut??asset?.durationSec??0,name=label??asset?.filename??'Media';
- const play=()=>{const node=video.current;if(!node)return;node.currentTime=start;void node.play().catch(()=>{});};
- const stop=()=>{const node=video.current;if(!node)return;node.pause();node.currentTime=start;};
+ // The frame at the in point is a picture from the shared decoder; the video (a decoder of its own) is there only while
+ // hovered, playing over it. A video that cannot be decoded here, or a sequence, keeps the video element throughout.
+ const framed=kind==='video'&&!!asset&&(srcIn!==undefined||!asset.thumbnailPath),still=useVideoFrame(framed&&!asset!.sequence?asset:undefined,start),always=framed&&(still.failed||!!asset!.sequence),[hovered,setHovered]=useState(false);
+ const play=()=>{if(!always){setHovered(true);return;}const node=video.current;if(!node)return;node.currentTime=start;void node.play().catch(()=>{});};
+ const stop=()=>{if(!always){setHovered(false);return;}const node=video.current;if(!node)return;node.pause();node.currentTime=start;};
+ const clip=(over:boolean)=><video ref={video} src={`dream-media://${asset!.id}/preview#t=${start.toFixed(2)}`} muted playsInline preload="metadata" autoPlay={over} style={over?{position:'absolute',inset:0}:undefined} onTimeUpdate={e=>{if(end&&e.currentTarget.currentTime>=end)e.currentTarget.currentTime=start;}}/>;
  const visual=kind==='scene'&&asset?<ScenePeek asset={asset}/>
-  :kind==='video'&&asset?(srcIn!==undefined||!asset.thumbnailPath?<video ref={video} src={`dream-media://${asset.id}/preview#t=${start.toFixed(2)}`} muted playsInline preload="metadata" onTimeUpdate={e=>{if(end&&e.currentTarget.currentTime>=end)e.currentTarget.currentTime=start;}}/>:<img src={`dream-media://${asset.id}/thumbnail`} alt="" loading="lazy"/>)
+  :kind==='video'&&asset?(framed?(always?clip(false):<>{still.url&&<img src={still.url} alt=""/>}{hovered&&clip(true)}</>):<img src={`dream-media://${asset.id}/thumbnail`} alt="" loading="lazy"/>)
   :kind==='image'&&asset?<img src={`dream-media://${asset.id}/${asset.thumbnailPath?'thumbnail':'original'}`} alt="" loading="lazy"/>
   :kind==='audio'&&asset?.waveform?.length?<svg className="media-tile-wave" viewBox="0 0 100 24" preserveAspectRatio="none">{asset.waveform.slice(0,100).map((v,n,all)=><line key={n} x1={n/all.length*100} x2={n/all.length*100} y1={12-v*11} y2={12+v*11}/>)}</svg>
   :<span className="media-tile-icon"><Icon size={size==='card'?20:14}/></span>;
