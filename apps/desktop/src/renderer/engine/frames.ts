@@ -4,7 +4,7 @@ import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {previewUrl} from './player';
 import {SceneCaptures} from './scenes';
-import {originalUrl} from './export';
+import {originalUrl,decodedAsPlayed} from './export';
 
 /** Frames of the edit for the agent to look at, drawn by the same compositor the player and Export use (source frames
  * decoded exactly, scenes drawn by their own documents), at the moments it asks for. Each comes with measured colours: the
@@ -27,7 +27,7 @@ export async function grabFrames(request:FrameRequest){
  const canvas=new OffscreenCanvas(Math.max(2,Math.round(width*scale)),Math.max(2,Math.round(height*scale))),compositor=new Compositor(canvas),scenes=new SceneCaptures();
  const inputs:Input[]=[],sinks=new Map<string,Promise<VideoSampleSink|undefined>>(),images=new Map<string,ImageBitmap>();
  // The original when this computer can decode it, else the playback copy made at import.
- const sinkFor=(asset:Asset)=>{let sink=sinks.get(asset.id);if(!sink){sink=(async()=>{for(const url of [originalUrl(asset),previewUrl(asset)]){try{const input=new Input({source:new UrlSource(url),formats:ALL_FORMATS});inputs.push(input);const track=await input.getPrimaryVideoTrack();if(track&&await track.canDecode())return new VideoSampleSink(track);}catch{}}return undefined;})();sinks.set(asset.id,sink);}return sink;};
+ const sinkFor=(asset:Asset)=>{let sink=sinks.get(asset.id);if(!sink){sink=(async()=>{for(const url of [originalUrl(asset),previewUrl(asset)]){try{const input=new Input({source:new UrlSource(url),formats:ALL_FORMATS});inputs.push(input);const track=await input.getPrimaryVideoTrack();if(track&&await track.canDecode())return new VideoSampleSink(await decodedAsPlayed(track));}catch{}}return undefined;})();sinks.set(asset.id,sink);}return sink;};
  const image=async(url:string)=>{let bitmap=images.get(url);if(!bitmap){bitmap=await createImageBitmap(await (await fetch(url)).blob());images.set(url,bitmap);}return bitmap;};
  const frames=[];
  try{
