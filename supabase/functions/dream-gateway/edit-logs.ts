@@ -1,4 +1,4 @@
-/** Edit logs (see migrations/202610210002_edit_logs.sql): every request's log, sent by the app on its own when a run of
+/** Edit logs (see migrations/202610220003_edit_logs.sql): every request's log, sent by the app on its own when a run of
  * it ends, kept one row per request with the account, the app's version and the request's id, and beside it what beta
  * usage is studied by (how it ended, what it cost, how many calls and tools, how long it took). A log is at most 2 MB,
  * and an account can send at most EDIT_LOGS_PER_DAY in a day, so the table can't be flooded. */

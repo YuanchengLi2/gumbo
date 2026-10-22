@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {supabaseDb} from '../fixtures/supabase-db';
 import {handleEditLog,MAX_EDIT_LOG_BYTES,type EditLogPorts} from '../../supabase/functions/dream-gateway/edit-logs';
 
-/** Every request's log, kept by the gateway (supabase/migrations/202610210002_edit_logs.sql): one row per request with the
+/** Every request's log, kept by the gateway (supabase/migrations/202610220003_edit_logs.sql): one row per request with the
  * account, the app's version and the request's id, a later run replacing an earlier one, the same run never twice. */
 let db:PGlite;
 beforeAll(async()=>{db=await supabaseDb();},60000);
