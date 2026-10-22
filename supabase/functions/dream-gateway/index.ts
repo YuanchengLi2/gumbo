@@ -10,6 +10,7 @@ import {handleCreators} from './creators.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
 import {handleReport,supabaseReportPorts} from './reports.ts';
+import {handleEditLog,supabaseEditLogPorts} from './edit-logs.ts';
 import {handleWaitlistJoin,supabaseWaitlistPorts,WAITLISTED} from './waitlist.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
@@ -78,6 +79,8 @@ Deno.serve(async(req)=>{
    try{return json(action==='billing-portal'?await openPortal(user.id,supabaseBillingPorts(db),config,fetch,body.flow==='cancel'?{cancel:true}:undefined):await startCheckout(user.id,{plan:body.plan,packs:body.packs},supabaseBillingPorts(db),config));}catch(error){return json({error:(error as Error).message},400);}}
   // Send log: one edit's log a user chose to send (reports.ts).
   if(action==='report'){const result=await handleReport(body,user.id,supabaseReportPorts(db));return json(result.body,result.status);}
+  // Every request's log, sent by the app on its own when a run of it ends (edit-logs.ts).
+  if(action==='edit-log'){const result=await handleEditLog(body,user.id,supabaseEditLogPorts(db));return json(result.body,result.status);}
   if(action==='profile'){const result=await saveProfile(body,user.id,supabaseProfilePorts(db));return json(result.body,result.status);}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
   if(action==='ai'){const result=await handleAI(body,user.id,{db,key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)),deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE')});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}

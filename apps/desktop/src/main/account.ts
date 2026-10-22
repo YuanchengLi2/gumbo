@@ -1,4 +1,5 @@
-import {app,safeStorage} from 'electron';import {readFileSync,writeFileSync,existsSync,unlinkSync} from 'node:fs';import {join} from 'node:path';
+import {app,safeStorage} from 'electron';import {readFileSync,writeFileSync,existsSync,unlinkSync} from 'node:fs';import {join} from 'node:path';import {gzip} from 'node:zlib';import {promisify} from 'node:util';
+const gzipped=promisify(gzip);
 type Session={access_token:string;refresh_token:string;expires_at:number;user:{id?:string;email?:string;is_anonymous?:boolean}};
 /** Gumbo AI needs a signed-in account; the app shows its sign-in screen when it meets this. */
 export class SignInRequired extends Error{constructor(){super('SIGN_IN_REQUIRED: Sign in to use Gumbo AI.');this.name='SignInRequired';}}
@@ -52,6 +53,13 @@ export class Account {
   if(!this.signedIn())throw new Error('Sign in to send a log.');
   const response=await fetch(`${this.gateway()}/report`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(report)});
   const body=await response.json().catch(()=>({})) as {reference?:string;error?:string};if(!response.ok)throw new Error(body.error??'The log could not be sent.');return{reference:String(body.reference)};
+ }
+ /** An edit's log, sent on its own (edit-logs.ts): the gateway's status, or 0 when it could not be reached. Gzipped like
+  * the agent's requests, since the code in a log can look like an attack to the firewall in front of the gateway. */
+ async editLog(entry:unknown){
+  if(!this.signedIn())return 401;
+  try{const body=await gzipped(Buffer.from(JSON.stringify(entry)));const response=await fetch(`${this.gateway()}/edit-log`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/x-dream-json-gzip'},body,signal:AbortSignal.timeout(60_000)});await response.arrayBuffer().catch(()=>{});return response.status;}
+  catch(error){return error instanceof SignInRequired?401:0;}
  }
  signout(){this.generation++;this.clear();return {signedIn:false};}
  /** YouTube channels matching the composer's @ text (the gateway's creators route); none when YouTube search is not set up. */
