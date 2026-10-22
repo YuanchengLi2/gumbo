@@ -6,17 +6,25 @@ import {budgetRequest,estimateTokens} from './context-budget';
 import {conversationBytes} from './conversation';
 import {readMessageStream} from '../../../supabase/functions/_shared/stream';
 import {providerSession,accountScope,type ProviderConnection} from './provider-session';
-import {engineBudgets,usageCost,promptTokens} from '@dream/config';
+import {engineBudgets,usageCost,promptTokens,modelInfo} from '@dream/config';
 import {createHash,randomUUID} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import type {ProjectDB} from '@dream/project-db';
 
 export class InferenceError extends Error {thinkingOnly?:boolean;constructor(message:string,public code:string,public httpStatus?:number){super(message);this.name='InferenceError';}}
 export type InferenceResponse={content:any[];stop_reason:string;usage:unknown};
-type Receipt={id:string;resume:number;attempt:number;capacity?:number;transientRetries?:number;usageRecorded?:boolean;status:'prepared'|'inflight'|'complete'|'failed'|'uncertain'|'truncated';response?:InferenceResponse;error?:string;retryable?:boolean;retryAfterMs?:number;providerRequestId?:string;diagnostics?:unknown;errorCode?:string};
+type Receipt={id:string;resume:number;attempt:number;capacity?:number;transientRetries?:number;stalls?:number;usageRecorded?:boolean;status:'prepared'|'inflight'|'complete'|'failed'|'uncertain'|'truncated';response?:InferenceResponse;error?:string;retryable?:boolean;retryAfterMs?:number;providerRequestId?:string;diagnostics?:unknown;errorCode?:string};
 // cacheTtl and taskBudget are optional gateway features; a gateway that does not know them ignores them.
 type Input={model:string;system:string;messages:unknown[];tools:unknown[];turnId?:string;tool_choice?:unknown;purpose:string;max_tokens:number;profile?:unknown;phase?:string;cacheTtl?:'1h';taskBudget?:{total:number;remaining?:number}};
-type Dependencies={fetch?:typeof fetch;wait?:(ms:number,signal?:AbortSignal)=>Promise<void>;idleMs?:number};
+export type Dependencies={fetch?:typeof fetch;wait?:(ms:number,signal?:AbortSignal)=>Promise<void>;idleMs?:number;stall?:{firstMs:number;gapMs:number}};
+/** How long a model may produce nothing before its call counts as stalled: until its first token, then between tokens.
+ * The gateway pings every 5 seconds whatever the model does, so the connection watchdog never saw a hung model: on
+ * October 21 a DeepSeek call sent nothing while Roux showed "Reconnecting to AI". DeepSeek's thinking streams on its
+ * Messages route, and on the chat route the gateway already ends a stream silent for a minute, so a minute without a
+ * token is a hang there; Claude, GPT and Gemini can think for minutes without streaming it. */
+export const stallLimits=(model:string)=>model.startsWith('deepseek')?{firstMs:60_000,gapMs:45_000}:{firstMs:300_000,gapMs:300_000};
+// Events that show the model itself producing (pings, the policy and the receipt come from the gateway).
+const PROGRESS=new Set(['content_block_start','content_block_delta','content_block_stop','message_delta','message_stop']);
 
 /** The share of the conversation's bytes to compact to: the share wanted, but at least enough that the latest exchange
  * stays whole (compaction keeps it verbatim only while it is under half its target). */
@@ -188,7 +196,9 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
  const metricsKey='inference-context:'+fingerprint;
  if(!db.getMeta(metricsKey)){const metrics={turnId:input.turnId,model:input.model,profile:input.profile,estimatedInputTokens:budget.estimated,inputBudget:budget.limit,outputReserve:budget.outputReserve,systemCharacters:input.system.length,toolCharacters:JSON.stringify(input.tools).length,messageCharacters:JSON.stringify(wireInput.messages).length,toolCount:input.tools.length};db.db.transaction(()=>{db.setMeta(metricsKey,JSON.stringify(metrics));db.event('ai.context',metrics);})();}
  if(!config.token)throw new Error('Gumbo AI is disconnected. Retry when online. Local editing and export remain available offline.');
- if(receipt.resume!==resume&&receipt.status!=='prepared')receipt={id:randomUUID(),resume,attempt:0,capacity:initialCapacity,transientRetries:0,status:'prepared'};
+ // A resume gets its own retries. A receipt left prepared (its connection check failed after the retries began) used to
+ // keep its spent count, so the resume's first network hiccup ended the request with no retry at all.
+ if(receipt.resume!==resume)receipt=receipt.status!=='prepared'?{id:randomUUID(),resume,attempt:0,capacity:initialCapacity,transientRetries:0,status:'prepared'}:{...receipt,resume,transientRetries:0,stalls:0};
  receipt.capacity??=input.max_tokens;receipt.transientRetries??=0;
  const save=()=>db.db.transaction(()=>{db.saveState(key,receipt);db.saveState('inference-attempt:'+receipt.id,receipt);})();
  const usage=()=>{if(!receipt.usageRecorded&&receipt.response){receipt.usageRecorded=true;recordUsage(receipt.response);}};
@@ -196,8 +206,9 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
   if(receipt.transientRetries!>=TRANSIENT_RETRIES)throw new InferenceError(reason+' Saved work is intact; resume to try again.','unavailable');
   const backoff=Math.max(500,Math.min(30_000,retryAfterMs??1000*2**receipt.transientRetries!));
   publish?.('ai.step',{label:'Reconnecting to AI',status:'running',detail:'Retrying a temporary service failure'});
-  await wait(backoff,signal);signal?.throwIfAborted();receipt={id:randomUUID(),resume,attempt:receipt.attempt+1,capacity:receipt.capacity,transientRetries:receipt.transientRetries!+1,status:'prepared'};save();
+  await wait(backoff,signal);signal?.throwIfAborted();receipt={id:randomUUID(),resume,attempt:receipt.attempt+1,capacity:receipt.capacity,transientRetries:receipt.transientRetries!+1,stalls:receipt.stalls,status:'prepared'};save();
  };
+ const limits=dependencies.stall??stallLimits(input.model),label=modelInfo(input.model)?.label??input.model;
 
  for(;;){
   if(receipt.status==='truncated'){
@@ -216,21 +227,37 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
    await retryLater(receipt.error??'The AI service is temporarily unavailable.',receipt.retryAfterMs);
   }
   started=Date.now();signal?.throwIfAborted();if(receipt.attempt>0&&options.connect){const renewed=await options.connect();if(renewed.url!==config.url||accountScope(renewed)!==accountScope(config))throw new Error('The AI connection changed. Resume to use the new account configuration.');config=renewed;}signal?.throwIfAborted();receipt.status='inflight';save();
-  let response:Response,body:any;
+  let response:Response,body:any,heard=false;
   const live=input.turnId&&!quietPurposes.has(String(input.purpose))?new RunStream(db,input.turnId,receipt.id,publish,AGENT_PURPOSES.includes(input.purpose),workerParent(input.phase)):undefined;
   // Idle watchdog instead of a total timeout: long generations are fine while events keep arriving (the gateway pings every 5s).
   const idle=new AbortController();let providerRequestId:string|undefined,timer:ReturnType<typeof setTimeout>|undefined;const touch=()=>{if(timer)clearTimeout(timer);timer=setTimeout(()=>idle.abort(Object.assign(new Error('The AI stream stopped sending data.'),{code:'idle_timeout'})),dependencies.idleMs??IDLE_MS);};
+  // The stall watchdog runs on the model's own output, so the gateway's pings do not keep a hung model alive.
+  let progress:ReturnType<typeof setTimeout>|undefined;const quiet=(ms:number)=>{if(progress)clearTimeout(progress);progress=setTimeout(()=>idle.abort(Object.assign(new Error(`${label} stopped responding (nothing for ${Math.round(ms/1000)} seconds).`),{code:'stalled'})),ms);};
   try{
-   touch();
+   touch();quiet(limits.firstMs);
    const {phase:_phase,...wire}=wireInput as any;
    const {body:aiBody,...aiType}=compressed({...wire,requestId:receipt.id,stream:true,max_tokens:receipt.capacity});response=await request(`${config.url}/ai`,{method:'POST',headers:{...aiType,Authorization:`Bearer ${config.token}`},body:aiBody,signal:AbortSignal.any([...(signal?[signal]:[]),idle.signal,AbortSignal.timeout(HARD_MS)])});
-   touch();
-   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();if(event.event==='dream_request')providerRequestId=event.data?.providerRequestId;live?.accept(event);}):await replyJSON(response);
-  }catch(error){
+   heard=true;touch();
+   body=response.ok&&response.headers.get('content-type')?.includes('text/event-stream')?await readMessageStream(response,event=>{touch();if(PROGRESS.has(event.data?.type))quiet(limits.gapMs);if(event.event==='dream_request')providerRequestId=event.data?.providerRequestId;live?.accept(event);}):await replyJSON(response);
+  }catch(caught){
+   // The watchdog's reason is what failed, whatever form the aborted fetch or stream read gives it. The gateway ends a
+   // provider stream that sent nothing for a minute itself (streaming.ts); that is the same stall, seen from there.
+   const own=idle.signal.aborted&&idle.signal.reason?.code==='stalled',stalled=!signal?.aborted&&(own||!idle.signal.aborted&&/AI provider stopped sending data/.test(String((caught as Error)?.message))),error=own?idle.signal.reason:caught;
    // Every failed attempt is recorded with what the stream showed, so a failure can be diagnosed after the run.
    if(!signal?.aborted)db.event('ai.inference_failed',{turnId:input.turnId,phase:input.phase??'main',purpose:input.purpose,model:input.model,attempt:receipt.attempt,transientRetries:receipt.transientRetries??0,code:(error as any).code??(error as Error).name,message:String((error as Error).message).slice(0,500),diagnostics:(error as any).diagnostics,providerRequestId:(error as any).diagnostics?.providerRequestId??providerRequestId});
    live?.interrupt((error as Error).message);receipt.status='uncertain';receipt.error=(error as Error).message;receipt.diagnostics=(error as any).diagnostics;receipt.errorCode=(error as any).code;save();
    if(signal?.aborted){await cancelRemote();signal.throwIfAborted();}
+   // A hung model is not waited on (its status would only say it is still running): it is cancelled so it stops billing
+   // and asked once more. A second stall goes to the caller, which falls back to Auto's other model or tells the user.
+   // Silence before the gateway answered at all may be the network rather than the model: a stall needs the gateway to
+   // be reachable, otherwise it is retried as a lost connection and no model is switched over a network outage.
+   const reachable=stalled&&(heard||await request(config.url+'/ai-status',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+config.token},body:JSON.stringify({requestId:receipt.id}),signal:AbortSignal.any([...(signal?[signal]:[]),AbortSignal.timeout(10000)])}).then(()=>true,()=>false));
+   if(stalled&&reachable){
+    await cancelRemote();receipt.status='failed';receipt.retryable=true;save();
+    if((receipt.stalls??0)>=1)throw new InferenceError(`${label} stopped responding twice. Saved work is intact; say continue to try again, or pick another model.`,'stalled');
+    publish?.('ai.step',{label:'Asking the AI again',status:'running',detail:`${label} stopped responding`});
+    receipt={id:randomUUID(),resume,attempt:receipt.attempt+1,capacity:receipt.capacity,transientRetries:receipt.transientRetries,stalls:(receipt.stalls??0)+1,status:'prepared'};save();continue;
+   }
    const recovered=await recover();
    if(recovered){body=recovered;response=Response.json(body);}
    else{
@@ -239,7 +266,7 @@ export async function infer(options:{db:ProjectDB;config:ProviderConnection;inpu
     receipt.status='failed';receipt.retryable=true;save();
     await retryLater(invalid?'The AI response could not be decoded. No incomplete edits were executed.':(error as Error).message);continue;
    }
-  }finally{if(timer)clearTimeout(timer);}
+  }finally{if(timer)clearTimeout(timer);if(progress)clearTimeout(progress);}
   if(response.status===202){const recovered=await recover();if(recovered){body=recovered;response=Response.json(body);}else{await cancelRemote();receipt.status='failed';receipt.retryable=true;save();await retryLater('The AI response is still unconfirmed.');continue;}}
   signal?.throwIfAborted();
   body=served(body);

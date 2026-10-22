@@ -5,11 +5,12 @@ import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import Database from 'better-sqlite3';
 import {sessionReport,formatReport,type RequestReport} from '../../scripts/session-report';
+import type {ModelChoice} from '@dream/config';
 
 export type Step={name:string;request:string;status:string;problem?:string;targets:Record<string,boolean>;seconds:number;reply?:string;numbers?:RequestReport;[key:string]:unknown};
 /** intent: the composer's mode (plan first, ask only); selection: timeline clip IDs the user selected; assetIds: media
- * attached to the message; expect: the status the request should end in (complete unless planning). */
-export type AskOptions={intent?:'auto'|'plan'|'ask';selection?:string[];assetIds?:string[];expect?:string};
+ * attached to the message; expect: the status the request should end in (complete unless planning; any when either ending is right). */
+export type AskOptions={intent?:'auto'|'plan'|'ask';selection?:string[];assetIds?:string[];expect?:string;model?:ModelChoice};
 export type Ask=(name:string,text:string,check:(before:any,after:any,numbers:RequestReport|undefined)=>string|undefined,targets?:(before:any,after:any,numbers:RequestReport|undefined)=>Record<string,boolean>,options?:AskOptions)=>Promise<any>;
 export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>string|undefined;state:()=>Promise<any>;send:(text:string,options?:AskOptions)=>Promise<void>;settled:(before:any)=>Promise<any>;importFiles:(paths:string[])=>Promise<any>;record:(step:Step)=>void;words:(assetId:string)=>{start:number;end:number;text:string}[]};
 
@@ -17,14 +18,22 @@ export type Session={page:Page;app:any;folder:string;ask:Ask;meta:(key:string)=>
  * or not), and the deployed gateway newer than every change to the gateway's code. A live run on October 11 went to the
  * wrong model because the gateway had never been deployed after its routing schema changed. */
 export function assertCurrent(executable:string,ref:string){
- const git=(...args:string[])=>spawnSync('git',args,{encoding:'utf8',windowsHide:true}).stdout.trim();
+ const git=(...args:string[])=>spawnSync('git',args,{encoding:'utf8',windowsHide:true,maxBuffer:1e8}).stdout.trim();
  // The last time any tracked or new file under these paths changed on disk. A commit alone changes no file, so committing
  // after packaging does not make the build stale.
- const newest=(paths:string[])=>git('ls-files','-co','--exclude-standard','--',...paths).split('\n').filter(path=>path&&existsSync(path)).reduce((latest,path)=>Math.max(latest,statSync(path).mtimeMs),0);
+ // A file unchanged since its last commit counts from the earlier of the two: a fresh checkout (a worktree) writes every
+ // file now, which made a current gateway look stale.
+ const newest=(paths:string[])=>{
+  const committed=new Map<string,number>(),dirty=new Set(git('status','--porcelain','--',...paths).split('\n').filter(Boolean).map(line=>line.slice(3).trim()));let at=0;
+  for(const line of git('log','--format=@%ct','--name-only','--',...paths).split('\n'))if(line.startsWith('@'))at=Number(line.slice(1))*1000;else if(line&&!committed.has(line))committed.set(line,at);
+  return git('ls-files','-co','--exclude-standard','--',...paths).split('\n').filter(path=>path&&existsSync(path)).reduce((latest,path)=>Math.max(latest,dirty.has(path)||!committed.has(path)?statSync(path).mtimeMs:Math.min(statSync(path).mtimeMs,committed.get(path)!)),0);
+ };
  const asar=join(dirname(executable),'resources','app.asar'),code=newest(['apps','packages']);
- if(!existsSync(asar)||statSync(asar).mtimeMs<code)throw new Error(`The packaged app is older than its code (changed ${new Date(code).toISOString()}). Run pnpm package first.`);
+ // DREAM_LIVE_SHIPPED_BUILD=1 drives a build on purpose (a stress test of what users have); the gateway is then checked
+ // against master's gateway code as it was when that build was made.
+ if(process.env.DREAM_LIVE_SHIPPED_BUILD!=='1'&&(!existsSync(asar)||statSync(asar).mtimeMs<code))throw new Error(`The packaged app is older than its code (changed ${new Date(code).toISOString()}). Run pnpm package first.`);
  const listed=spawnSync('powershell.exe',['-NoProfile','-Command',`supabase functions list --project-ref ${ref}`],{encoding:'utf8',windowsHide:true});
- const deployed=Number(JSON.parse(listed.stdout.slice(listed.stdout.indexOf('{'))).functions?.find((f:any)=>f.slug==='dream-gateway')?.updated_at??0),gateway=newest(['supabase/functions']);
+ const deployed=Number(JSON.parse(listed.stdout.slice(listed.stdout.indexOf('{'))).functions?.find((f:any)=>f.slug==='dream-gateway')?.updated_at??0),gateway=process.env.DREAM_LIVE_SHIPPED_BUILD==='1'?Number(git('log','-1','--format=%ct',`--before=${new Date(statSync(asar).mtimeMs).toISOString()}`,'master','--','supabase/functions'))*1000:newest(['supabase/functions']);
  if(deployed<gateway)throw new Error(`The deployed dream-gateway (${new Date(deployed).toISOString()}) is older than its code (changed ${new Date(gateway).toISOString()}). Run supabase functions deploy dream-gateway first.`);
 }
 
@@ -53,7 +62,7 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
   if(options.computer!==false)await page.evaluate(()=>window.dream.grantComputer());
   const state=()=>page.evaluate(()=>window.dream.command({type:'state'})) as Promise<any>;
   // A message starts a request without waiting for it, so a test can stop it part way.
-  const send=async(text:string,o:AskOptions={})=>{void page.evaluate(command=>window.dream.command(command),{type:'message' as const,text,selection:o.selection??[],assetIds:o.assetIds??[],...(o.intent?{intent:o.intent}:{})}).catch(()=>{});};
+  const send=async(text:string,o:AskOptions={})=>{void page.evaluate(command=>window.dream.command(command),{type:'message' as const,text,selection:o.selection??[],assetIds:o.assetIds??[],...(o.intent?{intent:o.intent}:{}),...(o.model?{model:o.model}:{})}).catch(()=>{});};
   const settled=async(before:any)=>{let after:any;await expect.poll(async()=>{after=await state();return['complete','interrupted','awaiting_file_permission','awaiting_approval','failed'].includes(after.aiStatus)&&after.experience?.turnId!==before.experience?.turnId?after.aiStatus:'running';},{timeout:2_700_000,intervals:[3000]}).not.toBe('running');return after;};
   // Files the user brings in through the app's own picker, as from the Media tab, ready once every one is analyzed.
   const importFiles=async(paths:string[])=>{await app!.evaluate(({dialog}:any,paths:string[])=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},paths);await page.evaluate(()=>window.dream.pickMedia());await page.evaluate(async paths=>window.dream.command({type:'import',paths,copy:true}),paths);
@@ -63,7 +72,7 @@ export async function liveSession(prefix:string,run:(session:Session)=>Promise<v
    const before=await state(),started=Date.now();await send(text,o);
    const after=await settled(before);
    const numbers=(()=>{try{return sessionReport(folder).find(r=>r.turnId===after.experience?.turnId);}catch{return undefined;}})();
-   const problem=after.aiStatus!==(o.expect??'complete')?`status ${after.aiStatus}`:check(before,after,numbers),reply=after.messages.filter((m:any)=>m.role==='assistant').at(-1);
+   const problem=o.expect!=='any'&&after.aiStatus!==(o.expect??'complete')?`status ${after.aiStatus}`:check(before,after,numbers),reply=after.messages.filter((m:any)=>m.role==='assistant').at(-1);
    const goals=targets?.(before,after,numbers)??{};
    const step:Step={name,request:text,status:after.aiStatus,problem,targets:goals,seconds:Math.round((Date.now()-started)/1000),reply:reply?.report?.summary??reply?.text,numbers,spine:after.timeline.spine.map((c:any)=>({id:c.id,assetId:c.assetId,filename:after.footage.assets.find((a:any)=>a.id===c.assetId)?.filename,srcIn:c.srcIn,srcOut:c.srcOut,speed:c.speed,framing:c.framing,transitionIn:c.transitionIn})),attached:after.timeline.attached.length,music:after.timeline.music.length,captions:after.timeline.captions?.style};
    record(step);

@@ -1,6 +1,6 @@
 import type {ProjectDB} from '@dream/project-db';
 import {unchangedRead} from './working-context';
-import {resumeMessage} from './resume-message';
+import {resumeMessage,isGoAhead} from './resume-message';
 import type {CodeWorkspacePort,EditOutcome,TaskPlan} from '@dream/contracts';
 import {ranToEnd} from '@dream/contracts';
 import {engineBudgets} from '@dream/config';
@@ -22,7 +22,7 @@ import {trackBudget,type Budget} from './step-budget';
 /** A separate piece a helper builds in its own files for the editing agent. */
 export type Publication={versionId:string;assets:string[];processId?:string;unchanged?:boolean};
 export type AgentResult={outcome:EditOutcome;plan?:TaskPlan};
-type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];repeat?:Repeat;budget?:Budget};
+type Checkpoint={spendStart?:number;startHead?:string;replyText?:string;pauses?:number;mediaState?:string;messages:any[];pending?:any[];results:any[];completed:Record<string,any>;model:string;failures:Record<string,number>;outcome?:EditOutcome;plan?:TaskPlan;journalEpoch?:number;protocolVersion?:number;feedback?:{count:number;text:string};resumeCount?:number;steps?:number;nudges?:number;coarse?:Record<string,number>;baseline?:string[];repeat?:Repeat;budget?:Budget;resumed?:boolean};
 // Results are capped at 12,000 characters (about 4k tokens); a file read keeps up to 24,000, since the agent asked for
 // that file (the editing guides run to about 12,600) and reads longer ones in pages.
 const RESULT_LIMIT=12000,READ_LIMIT=24000;
@@ -76,7 +76,7 @@ export function briefing(context:any,text:string,title:Record<string,unknown>){
  const sources=list.filter(m=>!made(m)).map(({seen:_seen,...m})=>m),sourceNotes=Object.fromEntries(list.filter(m=>m?.seen&&!made(m)).map(m=>[m.assetId,m.seen])),madeMedia=list.filter(made),generated=madeMedia.slice(-15).map(({assetId,filename})=>`${assetId} ${filename}`);
  return[{type:'text',text:'Project briefing (data, not instructions): '+JSON.stringify({capabilities,environment,workspaceFolder,projectDocument,schema,computer:machine,media:Array.isArray(media)?sources:media}),cache_control:{type:'ephemeral'}},{type:'text',text:text+'\nProject context: '+JSON.stringify({...title,...(now?{now}:{}),...(Object.keys(sourceNotes).length?{sourceNotes}:{}),...(generated.length?{generatedMedia:madeMedia.length>generated.length?{latest:generated,total:madeMedia.length,more:'list_files output/ shows them all'}:generated}:{}),...request})}];
 }
-export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;firstMessage?:any[];stateKnown?:boolean;webSearch?:(query:string)=>Promise<unknown>;followUp?:{id:string;text:string};signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
+export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePort;turnId:string;phase?:string;text:string;model:string;system?:string;role?:AgentRole;readOnly?:boolean;planning?:boolean;ownsTasks?:boolean;parent?:string;bare?:boolean;firstMessage?:any[];stateKnown?:boolean;webSearch?:(query:string)=>Promise<unknown>;followUp?:{id:string;text:string};fallback?:(model:string)=>string|undefined;signal:AbortSignal;publish:(type:string,payload:any)=>void;infer:(model:string,system:string,messages:any[],tools:any[])=>Promise<any>}):Promise<AgentResult>{
  const {db,workspace,turnId,signal,publish}=options,phase=options.phase??'main',key=`code-agent:${turnId}:${phase}`;
  const planning=!!options.planning,role:AgentRole=options.role??(options.readOnly||planning?'readonly':'solo'),readOnly=role==='readonly';
  const allowed=options.bare?new Set<string>():allowedTools(role);
@@ -92,7 +92,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  // The first message already carries the project and its media, so the state messages that follow report only changes.
  if(!resumed&&options.stateKnown!==false){const state=workspace.currentContext?.()??workspace.mediaContext?.();if(state!==undefined){const {sceneErrors:_errors,...initial}=state as any;checkpoint.mediaState=JSON.stringify({state:Array.isArray(state)?state:initial});}}
  const save=()=>db.saveState(key,checkpoint),activity=(id:string,patch:any)=>{const event=db.activityEvent(turnId,{id,...(options.parent?{parent:options.parent}:{}),...patch});if(event)publish('ai.activity',{turnId,event});};
- checkpoint.model=options.model;
+ checkpoint.model=options.model;const tried=new Set([options.model]),runStarted=Date.now();
  const ownsTasks=options.ownsTasks??(phase==='main'&&role==='solo');
  const hasPendingTasks=()=>ownsTasks&&db.turnActivity(turnId)?.tasks?.some(t=>t.status!=='complete');
  const completeTasks=()=>{if(!ownsTasks)return;const tasks=db.turnActivity(turnId)?.tasks;if(tasks?.some(t=>t.status!=='complete')){const done=tasks.map(t=>({...t,status:'complete' as const}));db.setTasks(turnId,done);publish('ai.tasks',{turnId,tasks:done});}};
@@ -144,17 +144,21 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
  let dropped=false;
  checkpoint.messages=checkpoint.messages.map((m:any,n:number,all:any[])=>{if(m.role!=='assistant'||!Array.isArray(m.content)||(n===all.length-1&&!checkpoint.pending?.length))return m;const content=withoutUnansweredServerCalls(m.content);if(content.length===m.content.length)return m;dropped=true;return{...m,content:content.length?content:[{type:'text',text:'(No output.)'}]};});
  if(dropped)checkpoint.journalEpoch=(checkpoint.journalEpoch??0)+1;
- const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;delete checkpoint.repeat;delete checkpoint.budget;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
+ const resumeCount=Number(db.getMeta('resume_count:'+turnId)??0);if(checkpoint.outcome?.status==='blocked'&&resumeCount>(checkpoint.resumeCount??0)){closeBatch();delete checkpoint.outcome;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;checkpoint.resumed=true;delete checkpoint.repeat;delete checkpoint.budget;checkpoint.messages.push({role:'user',dreamSource:'nudge',content:'Resume the interrupted request. Recheck the blocker against the current saved project and continue if it is resolved.'});}checkpoint.resumeCount=resumeCount;
  // User feedback belongs to the conversation the user sees: the editing agent's, never a helper's.
  const feedback=db.loadState<any>('resume_input:'+turnId);if(feedback&&!db.getMeta(key+':feedback:'+feedback.count)){checkpoint.feedback=feedback;delete checkpoint.outcome;}
- if(checkpoint.feedback&&checkpoint.pending){closeBatch();save();}
+ // A plain go-ahead ("continue") picks the request up where it stopped: tool calls not yet run still run, and the next
+ // model call is the one that was cut off. Only new instructions close the batch and go into the conversation.
+ if(checkpoint.feedback&&checkpoint.pending&&!isGoAhead(checkpoint.feedback.text)){closeBatch();save();}
  // The next approved plan step continues the same conversation. Earlier steps' publications cannot complete it.
  if(options.followUp&&!db.getMeta(key+':followup:'+options.followUp.id)){db.db.transaction(()=>{if(resumed){if(checkpoint.pending)closeBatch();checkpoint.baseline=Object.keys(checkpoint.completed);delete checkpoint.outcome;delete checkpoint.plan;checkpoint.steps=0;checkpoint.spendStart=spent();checkpoint.nudges=0;delete checkpoint.repeat;delete checkpoint.budget;checkpoint.messages.push({role:'user',content:options.followUp!.text});}db.setMeta(key+':followup:'+options.followUp!.id,'1');save();})();}
  if(checkpoint.outcome)return{outcome:checkpoint.outcome,plan:checkpoint.plan};
  for(;;){
   signal.throwIfAborted();
   if(!checkpoint.pending){
-   if(checkpoint.feedback){checkpoint.messages.push({role:'user',content:resumeMessage(checkpoint.feedback.text)});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;delete checkpoint.repeat;delete checkpoint.budget;checkpoint.steps=0;checkpoint.spendStart=spent();save();}
+   // A go-ahead adds nothing: a bare "continue" after tool results reads as chat and invites a line like "Continuing with
+   // the captions." with no tool call, which the plain-reply rule below would take as the end of a published edit.
+   if(checkpoint.feedback){if(!isGoAhead(checkpoint.feedback.text))checkpoint.messages.push({role:'user',content:resumeMessage(checkpoint.feedback.text)});db.setMeta(key+':feedback:'+checkpoint.feedback.count,'1');delete checkpoint.feedback;delete checkpoint.repeat;delete checkpoint.budget;checkpoint.steps=0;checkpoint.nudges=0;checkpoint.resumed=true;checkpoint.spendStart=spent();save();}
    // Appended only when the state changes, so the cached conversation prefix stays intact. Only what changed is sent;
    // the full state is kept locally, so compaction can restore it when it drops the earlier messages it builds on.
    const published=headPublication(),currentState=workspace.currentContext?.()??workspace.mediaContext?.(),mediaState=JSON.stringify(currentState===undefined?undefined:{state:currentState,completionEvidence:published?[{toolCallId:published.toolCallId,finding:'Published the current revision.'}]:undefined}),paused=checkpoint.messages.at(-1)?.role==='assistant';if(mediaState&&mediaState!==checkpoint.mediaState&&!paused){
@@ -167,6 +171,9 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    // covered by the request that started them.
    if(!readOnly&&spent()-(checkpoint.spendStart??0)>=engineBudgets.requestSpendUsd){const credits=Math.round((spent()-(checkpoint.spendStart??0))*100);
     conclude({status:'blocked',summary:`Paused after about ${credits} credits of work on this request, so it does not keep spending without you seeing it. Completed work is saved`+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Say continue to keep going from here, or tell me what to change.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
+   // A run also pauses after requestMinutes, whatever it costs: a run that keeps processing files cost little but went 42
+   // minutes on October 22 with nothing placed. Each run (a resume, continue) starts the clock again.
+   if(!readOnly&&Date.now()-runStarted>=engineBudgets.requestMinutes*60_000){conclude({status:'blocked',summary:`Paused after ${engineBudgets.requestMinutes} minutes on this request, so it does not keep going without you seeing it. Completed work is saved`+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Say continue to keep going from here, or tell me what to change.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    // Reaching the limit never counts as completion: the agent did not say it was done.
    if((checkpoint.steps??0)>=maxSteps){conclude({status:'blocked',summary:'This request reached its step limit before it was finished. Completed work is saved'+(published?' and the latest published version is live.':'.'),evidence:[],nextAction:'Resume to continue from the saved state, or narrow the request.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};}
    assertToolExchanges(checkpoint.messages);
@@ -174,14 +181,18 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    try{response=await options.infer(checkpoint.model,options.system??promptFor(checkpoint.model),checkpoint.messages,tools);}
    catch(error){if(error instanceof InferenceError&&error.code==='truncated'){const repeats=checkpoint.failures.truncation=(checkpoint.failures.truncation??0)+1;checkpoint.steps=(checkpoint.steps??0)+1;if(repeats>=3){conclude({status:'blocked',summary:'The AI response repeatedly exceeded the output limit. No partial commands or file writes were executed.',evidence:[],nextAction:'Resume with a smaller scope, or split the scene into several parts.'});save();return{outcome:checkpoint.outcome!};}// A response that only thought steps this phase's effort down; either way the agent is told to act in smaller pieces.
      if(error.thinkingOnly){const overrideKey=`effort-override:${turnId}:${phase}`;db.setMeta(overrideKey,String(Math.min(2,Number(db.getMeta(overrideKey)??0)+1)));}
-     checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}throw error;}
+     checkpoint.messages.push({role:'user',dreamSource:'nudge',content:error.thinkingOnly?'The last response spent its whole allowance thinking and produced nothing. Act now: make one concrete tool call for the first piece (for example, write the first small file), then continue step by step.':'The last response was cut off at the output limit and none of its tool calls ran. Split the work: write large content as several smaller files or focused edit_file patches, and keep each response to a few compact tool calls.'});save();continue;}
+     // A model that stopped responding twice (inference.ts) hands the same conversation to Auto's other model, once per
+     // model in a run; a model the user picked has no fallback, so the stall ends the run with a message to the user.
+     if(error instanceof InferenceError&&error.code==='stalled'){const next=options.fallback?.(checkpoint.model);if(next&&!tried.has(next)){tried.add(next);db.event('ai.model_fallback',{turnId,phase,from:checkpoint.model,to:next,reason:'stalled'});publish('ai.step',{label:'Switched AI model',status:'complete',detail:error.message.split('.')[0]});checkpoint.model=next;save();continue;}}
+     throw error;}
    delete checkpoint.failures.truncation;checkpoint.steps=(checkpoint.steps??0)+1;
    if(response.stop_reason!=='pause_turn'){response.content=withoutUnansweredServerCalls(response.content);if(!response.content.length)response.content=[{type:'text',text:'(No output.)'}];}
-   checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];
+   checkpoint.messages.push({role:'assistant',content:response.content});checkpoint.pending=response.content.filter((b:any)=>b.type==='tool_use');checkpoint.results=[];const afterResume=!!checkpoint.resumed;delete checkpoint.resumed;
    // Text written alongside finish is the reply itself (a script, an answer); the saved reply keeps it, not only the summary.
    // Text that ends the agent's work (sent with finish, or a response with no tool calls) is its reply to the user; a later
    // short line ("Done.") does not replace a substantive one.
-   const said=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim();if(said&&(!checkpoint.pending!.length||checkpoint.pending!.some((c:any)=>c.name==='finish'))&&(!checkpoint.replyText||said.length>=200||said.length>=checkpoint.replyText.length))checkpoint.replyText=said;save();
+   const said=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim();if(said&&!(afterResume&&!readOnly&&!checkpoint.pending!.length)&&(!checkpoint.pending!.length||checkpoint.pending!.some((c:any)=>c.name==='finish'))&&(!checkpoint.replyText||said.length>=200||said.length>=checkpoint.replyText.length))checkpoint.replyText=said;save();
    for(const block of response.content)if(block.type==='server_tool_use')activity('web:'+block.id,{kind:'action',tool:block.name,text:block.name==='web_search'?'Searching the web':'Reading the web',detail:String(block.input?.query??block.input?.url??'').slice(0,200),status:'complete'});
    // A long run of web searches pauses on the server; sending the conversation back as it is resumes it.
    if(response.stop_reason==='pause_turn'&&!checkpoint.pending!.length){delete checkpoint.pending;checkpoint.pauses=(checkpoint.pauses??0)+1;save();if(checkpoint.pauses<=5)continue;}
@@ -190,13 +201,15 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    if(!checkpoint.pending!.length){
     const answer=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n\n').trim(),nudges=checkpoint.nudges??0;delete checkpoint.pending;
     const current=publishedHead(),blocker=completionBlocker();
-    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||current&&!blocker&&!hasPendingTasks())){conclude({status:'complete',summary:answer,evidence:readOnly||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
+    // The first reply after resuming an edit is not taken as its end when it only talks: the edit was cut off mid-work,
+    // so it is asked to carry on or call finish.
+    if(!planning&&answer&&response.stop_reason==='end_turn'&&(readOnly||current&&!blocker&&!hasPendingTasks()&&!afterResume)){conclude({status:'complete',summary:answer,evidence:readOnly||!current?[]:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]});save();return{outcome:checkpoint.outcome!};}
     if(nudges>=engineBudgets.textNudges){
      // Stop nudging: accept a published edit that passes the gate, otherwise report honestly instead of looping.
      conclude(!planning&&current&&!blocker&&needsPublication()?{status:'complete',summary:answer||'The edit is published to the live preview.',evidence:[{toolCallId:current.toolCallId,finding:'Published the current revision.'}]}:{status:'blocked',summary:[answer,blocker].filter(Boolean).join('\n\n')||'The request stopped before a change was published.',evidence:[],nextAction:planning?'Resume to return the plan.':blocker?'Resume to fix what is listed, then finish.':'Resume to continue the edit.'});save();return{outcome:checkpoint.outcome!,plan:checkpoint.plan};
     }
     checkpoint.nudges=nudges+1;
-    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':current&&blocker?`The request is not finished: ${blocker} Then call finish.`:'Continue the requested work using the available capabilities, or call finish: complete once any change is published (a request that needs no change finishes complete with your answer as the summary), or blocked with a concrete reason.'});save();continue;
+    checkpoint.messages.push({role:'user',dreamSource:'nudge',content:planning?'Return the editable plan with finish.':afterResume&&!blocker?'The request was interrupted and has resumed. Carry on with the remaining work using tool calls, or call finish if everything asked for is done.':current&&blocker?`The request is not finished: ${blocker} Then call finish.`:'Continue the requested work using the available capabilities, or call finish: complete once any change is published (a request that needs no change finishes complete with your answer as the summary), or blocked with a concrete reason.'});save();continue;
    }
    checkpoint.nudges=0;
   }
@@ -250,7 +263,7 @@ export async function codeAgent(options:{db:ProjectDB;workspace:CodeWorkspacePor
    db.setMeta('workspace-receipt-summary:'+receiptKey,JSON.stringify({receipt:receiptKey,tool:call.name,path:call.input?.path,command:call.input?.command,status:result?.error?'failed':'complete',error:result?.error,publication:result?.publication?{versionId:result.publication.versionId,changes:result.publication.changes}:undefined,process:result?.process?{id:result.process.id,status:result.process.status,output:String(result.process.output??'').slice(-2000)}:undefined}));db.db.prepare('INSERT OR IGNORE INTO context_dirty VALUES(?,?)').run('execution',receiptKey);
    // The exact same call several times in a row comes back with an advisory reminder (repeat-reminder.ts), and so does a
    // request running long: published many times, refined long after publishing, or many calls in (step-budget.ts).
-   const capped=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT),{repeat,reminder}=trackRepeat(checkpoint.repeat,call.name,operationKey),spend=trackBudget(checkpoint.budget,call.name,!result?.error),notes=[reminder,spend.reminder].filter(Boolean).join('\n\n'),content=notes?withReminder(capped,notes):capped;checkpoint.repeat=repeat;checkpoint.budget=spend.budget;
+   const capped=capText(result?.content??JSON.stringify(modelView(result)),receiptKey,call.name==='read_file'?READ_LIMIT:RESULT_LIMIT),{repeat,reminder}=trackRepeat(checkpoint.repeat,call.name,operationKey),spend=trackBudget(checkpoint.budget,call.name,!result?.error,/ran past its \d+s time limit/.test(String(result?.error??''))),notes=[reminder,spend.reminder].filter(Boolean).join('\n\n'),content=notes?withReminder(capped,notes):capped;checkpoint.repeat=repeat;checkpoint.budget=spend.budget;
    if(reminder)db.event('ai.repeat_reminder',{turnId,tool:call.name,count:repeat!.count});if(spend.reminder)db.event('ai.budget_reminder',{turnId,tool:call.name,...spend.budget});checkpoint.results.push({type:'tool_result',tool_use_id:call.id,is_error:!!result?.error,content});save();
    const outcome=checkpoint.outcome as EditOutcome|undefined;
    if(outcome){closeBatch();save();if(checkpoint.feedback){delete checkpoint.outcome;save();break;}activity('finish:'+turnId+':'+phase,{kind:'terminal',text:outcome.summary,status:outcome.status});return{outcome,plan:checkpoint.plan};}

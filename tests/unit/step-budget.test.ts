@@ -26,3 +26,9 @@ it('reminds at 40 calls and more firmly at 70; finish and task updates are not c
 it('says nothing on a short, healthy request',()=>{
  expect(run([['view_media',true],['read_file',true],['write_file',true],['publish_project',true],['finish',true]]).reminders).toEqual([]);
 });
+
+it('reminds once two commands have run out of time, pointing at the footage tools',()=>{
+ let budget:Budget|undefined;const reminders:string[]=[];
+ for(const timedOut of [true,false,true,true]){const r=trackBudget(budget,'run_command',!timedOut,timedOut);budget=r.budget;if(r.reminder)reminders.push(r.reminder);}
+ expect(budget!.timeouts).toBe(3);expect(reminders).toHaveLength(1);expect(reminders[0]).toMatch(/two commands have now run out of time.*find_shots/);
+});

@@ -3,20 +3,23 @@
  * pass worked, so nothing failed and nothing stopped it. The reminders come when the request has been published several
  * times, when work continues long after a successful publication, and when the calls pile up. A new message from the
  * user starts the count again. */
-export type Budget={calls:number;publishes:number;sincePublish?:number};
+export type Budget={calls:number;publishes:number;sincePublish?:number;timeouts?:number};
 const PUBLISH_MARKS=[3,5,8],AFTER_PUBLISH=8,CALL_MARKS=[40,70,100];
 // Calls that are not work on the edit.
 const UNTRACKED=new Set(['finish','update_tasks']);
 
 /** The request's budget after this call, and the reminder to send with its result, if any. */
-export function trackBudget(previous:Budget|undefined,tool:string,succeeded:boolean):{budget:Budget;reminder?:string}{
+/** timedOut: a command that ran out of its time limit. On October 22 "make it better" on nine minutes of gameplay spent
+ * 42 minutes in Roux's own ffmpeg and Python scripts over whole files, six of them running out of time, and placed no clip. */
+export function trackBudget(previous:Budget|undefined,tool:string,succeeded:boolean,timedOut=false):{budget:Budget;reminder?:string}{
  const start=previous??{calls:0,publishes:0};if(UNTRACKED.has(tool))return{budget:start};
- const budget:Budget={calls:start.calls+1,publishes:start.publishes,sincePublish:start.sincePublish};
+ const budget:Budget={calls:start.calls+1,publishes:start.publishes,sincePublish:start.sincePublish,...(start.timeouts||timedOut?{timeouts:(start.timeouts??0)+(timedOut?1:0)}:{})};
  const published=tool==='publish_project'&&succeeded;
  if(published){budget.publishes++;budget.sincePublish=0;}else if(budget.sincePublish!==undefined)budget.sincePublish++;
  const notes:string[]=[];
  if(published&&PUBLISH_MARKS.includes(budget.publishes))notes.push(`Budget: this request has now been published ${budget.publishes} times. Each extra pass costs the user time and credits. If this version does what was asked, call finish now; keep going only for a failed check or something actually wrong.`);
  if(budget.sincePublish===AFTER_PUBLISH)notes.push(`Budget: the edit was published ${AFTER_PUBLISH} calls ago and you are still refining it. Unless something you saw is actually wrong, finish now with what is published.`);
+ if(timedOut&&budget.timeouts===2)notes.push('Budget: two commands have now run out of time. Scripts over whole long files are slow: choose moments with find_shots, view_media and the shot index, and run commands on short ranges.');
  if(CALL_MARKS.includes(budget.calls))notes.push(budget.calls===CALL_MARKS[0]
   ?`Budget: ${budget.calls} calls on this request; most edits need far fewer. Publish what works and finish unless something is actually broken.`
   :`Budget: ${budget.calls} calls on this request, well past what it needs. Publish the best version you have and finish now; name anything unfinished in the summary.`);
