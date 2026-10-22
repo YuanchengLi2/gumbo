@@ -28,6 +28,10 @@ type Video={el:HTMLVideoElement;key:string;assetId:string;url:string;lastUsed:nu
  * parks at once), never lets one go while playing, and lets spare ones go only once paused with more than POOL_MAX.
  * At most POOL_MAX are made ahead; more are made when a cut needs them. */
 const POOL_SEC=30,POOL_MAX=12;
+/** A canvas keeps its compositor (its WebGL context and shaders) for the next player drawing on it: EngineView lends the
+ * same canvases to each preview in turn, and building the shaders blocked the window whenever a project opened. */
+const compositors=new WeakMap<HTMLCanvasElement,Compositor>();
+const compositorOf=(canvas:HTMLCanvasElement,options?:{transparent?:boolean})=>{let made=compositors.get(canvas);if(!made){made=new Compositor(canvas,options);compositors.set(canvas,made);}return made;};
 type Sound={el:HTMLAudioElement;gain:GainNode;segment:AudioSegment};
 
 export class EnginePlayer implements PlayerRef{
@@ -37,7 +41,7 @@ export class EnginePlayer implements PlayerRef{
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
  private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;
  private pool=new Map<string,number>();private poolAt=-1;
- constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=new Compositor(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
+ constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=compositorOf(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
   // A paused frame is drawn again when the preview changes size: the canvas at its new size, and coded scenes placed at
   // the new scale (they kept the old one, so dragging the timeline divider showed more or less of a graphic).
   this.resized=new ResizeObserver(()=>{this.dirty=true;});this.resized.observe(canvas);}
@@ -45,6 +49,8 @@ export class EnginePlayer implements PlayerRef{
  setProject(timeline:TimelineDocument,footage:FootageIndex){
   this.prepared=prepare({timeline,footage});this.layerCache.clear();this.poolAt=-1;this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
   this.segments=audioManifest(timeline,footage).filter(s=>s.enabled!==false);
+  // Sound is ready before the first Play: starting it then put its start-up delay into the first clip's sound.
+  if(this.segments.length)this.ensureAudio();
   for(const [id,sound] of this.sounds)if(!this.segments.some(s=>s.id===id&&s.assetId===sound.segment.assetId)){sound.el.pause();sound.gain.disconnect();this.sounds.delete(id);}
   for(const sound of this.sounds.values())sound.segment=this.segments.find(s=>s.id===sound.segment.id)!;
   if(this.time>=this.duration)this.time=Math.max(0,this.duration-1/this.fps);this.dirty=true;
@@ -133,7 +139,10 @@ export class EnginePlayer implements PlayerRef{
     el.addEventListener('error',()=>window.dispatchEvent(new CustomEvent('dream-audio-error',{detail:{assetId:segment.assetId,message:'The sound could not be loaded.'}})));}
    const at=segment.sourceStartSample/48000+(t-start)*segment.speed;s.gain.gain.setTargetAtTime(active?envelope(segment,sample,speech):0,this.audio.currentTime,.01);
    if(!active){if(!s.el.paused)s.el.pause();if(s.el.readyState>=1&&Math.abs(s.el.currentTime-segment.sourceStartSample/48000)>.05)s.el.currentTime=segment.sourceStartSample/48000;continue;}
-   s.el.playbackRate=segment.speed;if(s.el.paused){if(Math.abs(s.el.currentTime-at)>.05)s.el.currentTime=at;void s.el.play().catch(()=>{});}else if(Math.abs(s.el.currentTime-at)>.15)s.el.currentTime=at;
+   // Sound that drifts from the picture is eased back like video (a seek is a gap), and only seeked when far off: a sound
+   // starting late stayed a tenth of a second behind for its whole segment, past the ~45 ms that shows on lips.
+   if(s.el.paused){s.el.playbackRate=segment.speed;if(Math.abs(s.el.currentTime-at)>.05)s.el.currentTime=at;void s.el.play().catch(()=>{});}
+   else{const drift=at-s.el.currentTime;if(Math.abs(drift)>.15)s.el.currentTime=at;const rate=segment.speed*(Math.abs(drift)>.03?1+Math.max(-.1,Math.min(.1,drift*2)):1);if(Math.abs(s.el.playbackRate-rate)>.005)s.el.playbackRate=rate;}
   }
  }
  private loop(){
@@ -170,10 +179,10 @@ export class EnginePlayer implements PlayerRef{
   this.scenes.update(scenes,this.prepared.assets,this.canvas.getBoundingClientRect().width/frame.width,this.playing);
   const above=frame.layers.slice(first).filter(l=>!(l.kind==='media'&&l.media==='scene')),overlay=this.layers.overlay;
   if(overlay.width!==this.canvas.width||overlay.height!==this.canvas.height){overlay.width=this.canvas.width;overlay.height=this.canvas.height;}
-  this.over??=new Compositor(overlay,{transparent:true});this.over.draw({...frame,background:'transparent',layers:above},l=>this.picture(l));overlay.style.visibility='visible';
+  this.over??=compositorOf(overlay,{transparent:true});this.over.draw({...frame,background:'transparent',layers:above},l=>this.picture(l));overlay.style.visibility='visible';
  }
  /** The canvas draws at the size it is shown, in device pixels, never above the project's own size. */
  private fit(){const box=this.canvas.getBoundingClientRect(),{width,height}=this.prepared.timeline.settings,k=Math.min(1,(box.width*devicePixelRatio)/width)||1,w=Math.max(2,Math.round(width*k)),h=Math.max(2,Math.round(height*k));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
  redraw(){this.dirty=true;}
- destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resized.disconnect();for(const v of this.videos.values()){v.el.pause();v.el.removeAttribute('src');v.el.load();}for(const s of this.sounds.values()){s.el.pause();s.el.removeAttribute('src');}this.videos.clear();this.sounds.clear();void this.audio?.close();this.compositor.dispose();this.over?.dispose();this.scenes?.destroy();}
+ destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resized.disconnect();for(const v of this.videos.values()){v.el.pause();v.el.removeAttribute('src');v.el.load();}for(const s of this.sounds.values()){s.el.pause();s.el.removeAttribute('src');}this.videos.clear();this.sounds.clear();void this.audio?.close();this.compositor.forget();this.over?.forget();this.scenes?.destroy();}
 }

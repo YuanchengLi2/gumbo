@@ -110,5 +110,8 @@ export class Compositor{
    this.texture('text',this.text);this.quadDraw(full,none,{x:0,y:0,w:1,h:1},1,frame);
   }
  }
- dispose(){for(const {texture} of this.textures.values())this.gl.deleteTexture(texture);this.textures.clear();this.gl.deleteProgram(this.program);}
+ /** Lets go of every picture (a new edit or project draws next) but keeps the context and its shaders, which take a third
+  * of a second to build; the canvas is cleared, as a new one would be. */
+ forget(){for(const {texture} of this.textures.values())this.gl.deleteTexture(texture);this.textures.clear();const gl=this.gl;gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT);}
+ dispose(){this.forget();this.gl.deleteProgram(this.program);}
 }
