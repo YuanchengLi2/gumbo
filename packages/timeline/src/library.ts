@@ -66,8 +66,10 @@ export type GradeValues={exposure?:number;contrast?:number;saturation?:number;te
 export const GRADE_KEYS=['exposure','contrast','saturation','temperature','tint','fade','hue','splitTone'] as const;
 const NEUTRAL:Required<GradeValues>={exposure:0,contrast:1,saturation:1,temperature:0,tint:0,fade:0,hue:0,splitTone:0};
 /** Filters: grade presets for a clip (`framing.filter`), an overlay (`params.filter`) or a stretch of the edit (an effect
- * item with component `grade` and `params.preset`), at an intensity from 0 to 1. */
-export const FILTERS:{id:string;name:string;grade:GradeValues}[]=[
+ * item with component `grade` and `params.preset`), at an intensity from 0 to 1. Looks with `fx` also bring film grain, a
+ * vignette or a glow (0-1), scaled by the same intensity. */
+export type FilterFx={grain?:number;vignette?:number;glow?:number};
+export const FILTERS:{id:string;name:string;grade:GradeValues;fx?:FilterFx}[]=[
  {id:'warm',name:'Warm',grade:{exposure:.05,contrast:1.06,saturation:1.1,temperature:.45}},
  {id:'cool',name:'Cool',grade:{contrast:1.08,saturation:.92,temperature:-.45}},
  {id:'vivid',name:'Vivid',grade:{contrast:1.12,saturation:1.4}},
@@ -83,8 +85,24 @@ export const FILTERS:{id:string;name:string;grade:GradeValues}[]=[
  {id:'retro',name:'Retro',grade:{contrast:1.05,saturation:.9,hue:-12,fade:.15,temperature:.25}},
  {id:'mono',name:'Black & white',grade:{contrast:1.15,saturation:0}},
  {id:'noir',name:'Noir',grade:{exposure:-.15,contrast:1.45,saturation:0}},
- {id:'sepia',name:'Sepia',grade:{contrast:1.05,saturation:.05,temperature:1,tint:.15,fade:.08}}];
+ {id:'sepia',name:'Sepia',grade:{contrast:1.05,saturation:.05,temperature:1,tint:.15,fade:.08}},
+ {id:'bw_punch',name:'B&W punch',grade:{exposure:.05,contrast:1.5,saturation:0},fx:{vignette:.3}},
+ {id:'film',name:'Film stock',grade:{contrast:1.06,saturation:.9,temperature:.15,fade:.1,splitTone:.3},fx:{grain:.3,vignette:.25}},
+ {id:'old_film',name:'Old film',grade:{contrast:.95,saturation:.55,temperature:.45,tint:.05,fade:.2},fx:{grain:.5,vignette:.45}},
+ {id:'vibrant',name:'Vibrant',grade:{exposure:.05,contrast:1.15,saturation:1.6}},
+ {id:'drama',name:'Drama',grade:{exposure:-.15,contrast:1.35,saturation:.8,splitTone:.25},fx:{vignette:.35}},
+ {id:'bleach',name:'Bleach bypass',grade:{exposure:-.05,contrast:1.35,saturation:.45}},
+ {id:'chrome',name:'Chrome',grade:{contrast:1.18,saturation:.8,temperature:-.1,fade:.05}},
+ {id:'cyberpunk',name:'Cyberpunk',grade:{contrast:1.15,saturation:1.3,temperature:-.6,tint:.55,hue:-10},fx:{glow:.25}},
+ {id:'summer',name:'Summer',grade:{exposure:.1,contrast:1.05,saturation:1.25,temperature:.35,tint:-.05}},
+ {id:'nordic',name:'Nordic',grade:{exposure:.05,contrast:.95,saturation:.6,temperature:-.35,fade:.1}},
+ {id:'forest',name:'Forest',grade:{exposure:-.05,contrast:1.1,saturation:.85,temperature:-.1,tint:-.3}},
+ {id:'dreamy',name:'Dreamy',grade:{exposure:.12,contrast:.85,saturation:.9,fade:.15,tint:.08},fx:{glow:.45}},
+ {id:'lofi',name:'Lo-fi',grade:{contrast:.88,saturation:.7,temperature:.2,fade:.22,hue:8},fx:{grain:.35}},
+ {id:'airy',name:'Bright & airy',grade:{exposure:.25,contrast:.88,saturation:.92,fade:.06}}];
 export const filterInfo=(id:string)=>FILTERS.find(f=>f.id===id);
+/** A look's grain, vignette and glow at an intensity (empty for plain grades). */
+export function filterFx(id:string|undefined,intensity=1):FilterFx{const fx=id?filterInfo(id)?.fx:undefined,k=Math.max(0,Math.min(1,intensity));return fx?Object.fromEntries(Object.entries(fx).map(([key,v])=>[key,v*k]).filter(([,v])=>Number(v)>0)):{};}
 /** A filter's grade at an intensity: each value moved from neutral toward the preset's. */
 export function filterGrade(id:string|undefined,intensity=1):GradeValues{
  const preset=id?filterInfo(id):undefined;if(!preset)return{};const k=Math.max(0,Math.min(1,intensity)),out:GradeValues={};

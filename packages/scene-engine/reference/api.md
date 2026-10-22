@@ -99,7 +99,7 @@ An attached item of `type` `"effect"` changes the main-track clips under it whil
 - Motion: `slow_push` (a slow zoom in across each clip, a Ken Burns move; `amount` is the extra scale by the clip's end, 0.05 to 0.15), `pull_out` (the same, zooming out), `punch_zoom` (holds the picture zoomed in by `amount`, 0.1 to 0.25), `zoom_pulse` (pulses in and out by `amount` at `rate` beats a second, for music), `shake` (camera shake, 0.05 to 0.3).
 - Looks: `blur`, `vignette`, `glow`, `grain`, `vhs`, `glitch`, `rgb_split`, `pixelate`, `letterbox` (cinema bars).
 - `grade`: a colour layer over every clip it covers: a `preset` filter with `intensity` (0 to 1), and/or `exposure`, `contrast`, `saturation`, `temperature`, `tint`, `fade`. Use it to grade a stretch of several clips at once; for one clip, set the grade in the clip's `framing`.
-- Filter presets (for `framing.filter`, an overlay's `params.filter` or a grade's `preset`): `warm`, `cool`, `vivid`, `cinematic`, `teal_orange`, `golden`, `vintage`, `faded`, `matte`, `moody`, `pastel`, `neon`, `retro`, `mono`, `noir`, `sepia`.
+- Filter presets (for `framing.filter`, an overlay's `params.filter` or a grade's `preset`): `warm`, `cool`, `vivid`, `vibrant`, `cinematic`, `teal_orange`, `golden`, `summer`, `vintage`, `film` (film stock with grain), `old_film` (grain, vignette, faded warm), `faded`, `matte`, `lofi`, `moody`, `drama`, `bleach` (bleach bypass), `chrome`, `nordic`, `forest`, `pastel`, `airy` (bright and airy), `dreamy` (soft glow), `neon`, `cyberpunk`, `retro`, `mono`, `bw_punch` (contrasty black and white), `noir`, `sepia`. Some looks bring their own grain, vignette or glow; the intensity scales those too.
 
 ## Text and stickers (built in)
 

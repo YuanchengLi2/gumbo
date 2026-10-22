@@ -1,4 +1,4 @@
-import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,effectInfo,textStyle,captionStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
+import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,filterFx,effectInfo,textStyle,captionStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 
 /** What one frame of the edit shows, as a list of layers drawn in order over the background. It is the single description
@@ -91,6 +91,8 @@ export function prepare(input:FrameInput){
 export type Prepared=ReturnType<typeof prepare>;
 
 const chance=(n:number)=>{const x=Math.sin(n*12.9898)*43758.5453;return x-Math.floor(x);};
+/** A look's grain, vignette and glow as shader effects (grain moving with the frame), or nothing for a plain grade. */
+const lookFx=(id:unknown,intensity:unknown,frameNo:number):Fx|undefined=>{const fx=filterFx(typeof id==='string'?id:undefined,Number(intensity??1));return Object.keys(fx).length?{...fx,...(fx.grain?{seed:frameNo}:{})}:undefined;};
 /** What the effect items over a moment do to a picture: a zoom and a shake (main track only), grades (filter items and
  * looks that come with an effect), blur, shader effects and cinema bars. Overlays take only the effects that ask for them
  * (`params.apply: "all"`). Amounts follow the frame's height, so a 4K edit looks like its 1080p preview. */
@@ -106,7 +108,7 @@ function effectsAt(p:Prepared,time:number,o:{progress:number;clipFrame:number;ma
    case 'punch_zoom':if(o.main)motion*=1+Number(q.amount??.15);break;
    case 'zoom_pulse':if(o.main)motion*=1+a*(.5-.5*Math.cos(2*Math.PI*Number(q.rate??2)*elapsed));break;
    case 'shake':if(o.main)dx=Math.sin(o.clipFrame*2.7)*Number(q.amount??.1)*40;break;
-   case 'grade':{const e=gradeOf({...filterGrade(typeof q.preset==='string'?q.preset:undefined,Number(q.intensity??1)),...q});if(!isNeutral(e))grades.push(e);break;}
+   case 'grade':{const e=gradeOf({...filterGrade(typeof q.preset==='string'?q.preset:undefined,Number(q.intensity??1)),...q});if(!isNeutral(e))grades.push(e);const look=lookFx(q.preset,q.intensity,frameNo);if(look)add(look);break;}
    case 'blur':blur+=a*24*px;break;
    case 'vignette':add({vignette:Math.min(1,a)});break;
    case 'glow':add({glow:Math.min(1,a)});break;
@@ -133,7 +135,7 @@ function clipLook(p:Prepared,clip:ResolvedClip,time:number){
  const scale=Math.max(1,(keys.scale??f?.scale??1)*motion),room=(scale-1)/2,clampOffset=(v:number)=>Math.max(-room,Math.min(room,v));
  const x=.5+clampOffset((keys.x??.5)-.5),y=.5+clampOffset((keys.y??.5)-.5),shake=Math.max(-room*width,Math.min(room*width,dx));
  const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(shake,0),rotation(keys.rotation??f?.rotation??0),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
- return{transform,opacity:keys.opacity??f?.opacity??1,grades:grades.slice(0,4),fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5,fx:effects.fx,blur:effects.blur,bars:effects.bars};
+ return{transform,opacity:keys.opacity??f?.opacity??1,grades:grades.slice(0,4),fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5,fx:mergeFx(lookFx(f?.filter,f?.filterIntensity,Math.round(time*fps)),effects.fx),blur:effects.blur,bars:effects.bars};
 }
 
 /** A clip's picture: its background and its media, at the source time given, all under one more transform and opacity. */
@@ -209,7 +211,7 @@ function sourceLayer(p:Prepared,item:ResolvedItem,time:number):Layer[]{
  const box={x:0,y:0,w:width,h:height},placed=fitInBox(asset.width,asset.height,box,q.fit==='contain'||kind==='sequence'?'contain':'cover');
  const transform=aboutCentre(width,height,translate((Number(q.x??.5)-.5)*width,(Number(q.y??.5)-.5)*height),rotation(Number(q.rotation??0)),scaling(Number(q.scale??1),Number(q.scale??1)));
  const filter=gradeOf(filterGrade(typeof q.filter==='string'?q.filter:undefined,Number(q.filterIntensity??1))),g=gradeOf(q),sourceTime=item.source!.srcIn+elapsed,effects=effectsAt(p,time,{progress:0,clipFrame:0,main:false});
- const look=sceneSafe(kind,{grades:[...(isNeutral(filter)?[]:[filter]),...(isNeutral(g)?[]:[g]),...effects.grades].slice(0,4),blur:effects.blur,fx:effects.fx});
+ const look=sceneSafe(kind,{grades:[...(isNeutral(filter)?[]:[filter]),...(isNeutral(g)?[]:[g]),...effects.grades].slice(0,4),blur:effects.blur,fx:mergeFx(lookFx(q.filter,q.filterIntensity,Math.round(time*p.timeline.settings.fps)),effects.fx)});
  return[{kind:'media',key:item.id,assetId:asset.id,media:kind,time:sourceTime,rate:1,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity:Number(q.opacity??1),grades:look.grades,blur:look.blur,...(look.fx?{fx:look.fx}:{})}];
 }
 const components=new Set(['title_card','lower_third','circle_highlight','callout_arrow','counter','progress_bar']);

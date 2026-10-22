@@ -1,6 +1,6 @@
 import {it,expect} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {emptyTimeline,TimelineSchema,TRANSITIONS,TRANSITION_TYPES,CAPTION_STYLES,CAPTION_STYLE_IDS,TEXT_STYLES,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,captionParamsFor,type TimelineDocument} from '@dream/timeline';
+import {emptyTimeline,TimelineSchema,TRANSITIONS,TRANSITION_TYPES,CAPTION_STYLES,CAPTION_STYLE_IDS,TEXT_STYLES,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,FILTERS,captionParamsFor,type TimelineDocument} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
 import {prepare,frameAt,apply,entranceSec,type MediaLayer,type TextLayer} from '@dream/compositor';
 
@@ -68,7 +68,7 @@ it('wipes with clock, edge and stripe masks, splits from the middle and flips li
 it('lists every library piece in Roux\'s engine reference, so a request can name any of them',()=>{
  const reference=readFileSync('packages/scene-engine/reference/api.md','utf8');
  for(const t of TRANSITION_TYPES)expect(reference,t).toContain('`'+t+'`');
- for(const id of [...CAPTION_STYLE_IDS,...TEXT_STYLES.map(s=>s.id),...TEXT_ANIMATIONS,...OUT_ANIMATIONS,...LOOP_ANIMATIONS])expect(reference,id).toContain('`'+id+'`');
+ for(const id of [...CAPTION_STYLE_IDS,...TEXT_STYLES.map(s=>s.id),...TEXT_ANIMATIONS,...OUT_ANIMATIONS,...LOOP_ANIMATIONS,...FILTERS.map(f=>f.id)])expect(reference,id).toContain('`'+id+'`');
 });
 
 it('masks coded scenes in the preview with the same edges, clock sweeps and stripes the compositor draws',async()=>{
@@ -125,4 +125,17 @@ it('draws titles and lower thirds with their animations: stamp, bounce, blur, sl
  expect(text({text:'Hi',animation:'none',animationOut:'blur_out'},4-.01).blur).toBeGreaterThan(20);
  const shaken=[1,1.1,1.2].map(t=>text({text:'Hi',animation:'none',loop:'shake'},t).x);expect(new Set(shaken).size).toBe(3);expect(Math.max(...shaken.map(x=>Math.abs(x-.5)))).toBeLessThan(.005);
  const flicker=Array.from({length:60},(_,n)=>text({text:'Hi',animation:'none',loop:'flicker'},n/30).opacity);expect(flicker.some(o=>o<1)).toBe(true);expect(flicker.filter(o=>o===1).length).toBeGreaterThan(30);
+});
+
+it('grades with the new looks, which bring their own grain, vignette or glow at the filter\'s intensity',()=>{
+ const one=(framing?:object,attached:object[]=[])=>prepare({timeline:edit([clip('a','wide',0,8,framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...framing}}:{})],{attached:attached as any}),footage:footage()});
+ const main=(p:ReturnType<typeof one>,time=1)=>at(p,time)[0];
+ expect(FILTERS.length).toBeGreaterThanOrEqual(30);
+ for(const id of ['bw_punch','film','old_film','vibrant','drama','bleach','cyberpunk','dreamy','lofi'])expect(main(one({filter:id})).grades.length,id).toBeGreaterThan(0);
+ expect(main(one({filter:'bw_punch'})).grades[0]).toMatchObject({saturation:0,contrast:1.5});expect(main(one({filter:'bw_punch'})).fx?.vignette).toBeCloseTo(.3);
+ // Half intensity halves the grain; the grain moves with the frame; plain grades bring no effects.
+ const film=main(one({filter:'film',filterIntensity:.5}));expect(film.fx?.grain).toBeCloseTo(.15);expect(main(one({filter:'film'}),1).fx?.seed).not.toBe(main(one({filter:'film'}),1.1).fx?.seed);
+ expect(main(one({filter:'vibrant'})).fx).toBeUndefined();
+ // A grade item with a look preset brings the look's effects to everything under it.
+ const graded=main(one(undefined,[{id:'g',type:'effect',component:'grade',start:{kind:'project',at:'start',offsetSec:0},durationSec:4,layer:0,params:{preset:'dreamy'},reason:''}]));expect(graded.fx?.glow).toBeCloseTo(.45);
 });
