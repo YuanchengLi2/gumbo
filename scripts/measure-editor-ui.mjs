@@ -34,7 +34,7 @@ try{
   // Sound against picture: every media element that plays, sampled while the preview plays (same source, same moment).
   window.__media=new Set();const play=HTMLMediaElement.prototype.play;HTMLMediaElement.prototype.play=function(){window.__media.add(this);return play.call(this);};
   window.__sync=[];setInterval(()=>{if(!window.__picOn)return;const playing=[...window.__media].filter(m=>!m.paused&&m.readyState>=2),asset=m=>/dream-media:\/\/([^/]+)/.exec(m.src)?.[1];
-   for(const a of playing.filter(m=>m instanceof HTMLAudioElement)){const gaps=playing.filter(m=>m instanceof HTMLVideoElement&&asset(m)===asset(a)).map(v=>Math.round(Math.abs(a.currentTime-v.currentTime)*1000));if(gaps.length)window.__sync.push(Math.min(...gaps));}},100);});
+   for(const a of playing.filter(m=>m instanceof HTMLAudioElement)){const gaps=playing.filter(m=>m instanceof HTMLVideoElement&&asset(m)===asset(a)).map(v=>Math.round(Math.abs(a.currentTime-v.currentTime)*1000));if(gaps.length)window.__sync.push(Math.min(...gaps));if(Math.min(...gaps)>100)(window.__syncOff??=[]).push({at:Math.round(performance.now()),gap:Math.min(...gaps),audio:+a.currentTime.toFixed(2),videos:playing.filter(m=>m instanceof HTMLVideoElement&&asset(m)===asset(a)).map(v=>+v.currentTime.toFixed(2)),audios:playing.filter(m=>m instanceof HTMLAudioElement).length});}},100);});
  const grant=async path=>app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},path);
  // Two projects: the large one, and a second to switch to.
  const folders=[];
@@ -151,6 +151,21 @@ try{
    await composer.evaluate(e=>{window.__box={e,parent:e.parentNode,next:e.nextSibling};e.remove();});await sleep(200);await page.keyboard.press('s');await page.keyboard.press('Space');await page.keyboard.press('Delete');await sleep(800);
    const playing=await page.locator('button[aria-label="Pause"]').count(),after=await count();await page.evaluate(()=>{const b=window.__box;b.parent.insertBefore(b.e,b.next);});await composer.fill('');
    console.log(JSON.stringify({build:label,check:'keys',splitOrDeleted:after!==before,playing:playing>0,activeIsChat:await page.evaluate(()=>document.activeElement?.getAttribute('aria-label'))}));}
+  // --qol: media dragged from the library shows where it lands and lands there; a trim shows its edge's frame in the
+  // preview and gives the playhead's back when it ends.
+  if(args.includes('--qol')){await page.evaluate(()=>document.activeElement?.blur?.());await page.keyboard.press('Home');await sleep(800);
+   await page.evaluate(()=>{window.__pic=[];window.__picOn=true;});await sleep(500);const shown=async()=>page.evaluate(()=>{const p=window.__pic;window.__pic=[];return [...new Set(p.map(e=>e[2].toFixed(2)))];});const before=await shown();
+   const c=await visibleClip(6);await page.mouse.move(c.right-3,c.y);await page.mouse.down();for(let n=1;n<=20;n++){await page.mouse.move(c.right-3-n*3,c.y);await sleep(20);}await sleep(400);const during=await shown();
+   await page.keyboard.press('Escape');await page.mouse.up();await sleep(800);const after=await shown();
+   console.log(JSON.stringify({build:label,check:'trim-peek',before,during:during.slice(-3),after:after.slice(-3)}));
+   await page.evaluate(()=>{window.__picOn=false;});
+   // Native drags cannot be driven from outside here, so the drag's own events are sent, carrying the asset as the library does.
+   const spine=async()=>(await page.evaluate(()=>window.dream.command({type:'state'}))).timeline.spine.length,clips=await spine(),assetId=(await page.evaluate(()=>window.dream.command({type:'state'}))).footage.assets[0].id;
+   const mark=await page.evaluate(async id=>{const lane=document.querySelector('.manual-track.video .manual-track-lane'),edges=[...document.querySelectorAll('.manual-track.video .manual-clip.timeline-item')].map(e=>e.getBoundingClientRect().left).filter(x=>x>lane.getBoundingClientRect().left+60),x=edges[3]+4,y=lane.getBoundingClientRect().top+20,data=new DataTransfer();data.setData('application/x-dream-asset',id);
+    const send=type=>lane.dispatchEvent(new DragEvent(type,{dataTransfer:data,clientX:x,clientY:y,bubbles:true,cancelable:true}));send('dragenter');send('dragover');await new Promise(r=>setTimeout(r,300));const m=document.querySelector('.cut-target'),r=m?.getBoundingClientRect();
+    const out=r?{offEdgePx:Math.round(r.left+r.width/2-edges[3]),pointerPx:4}:null;send('drop');return out;},assetId);
+   await sleep(2500);console.log(JSON.stringify({build:label,check:'drop-mark',mark,clipsAdded:(await spine())-clips}));}
+
   // --playback: playing through the cuts, starting and stopping, and scrubbing, timed by the preview's own pictures.
   if(args.includes('--playback')){
    const pictures=async from=>{const pic=await page.evaluate(()=>{const p=window.__pic;window.__pic=[];return p;}),changes=[];let last;
@@ -158,7 +173,7 @@ try{
     const gaps=changes.slice(2).map((t,n)=>t-changes[n+1]);return{first:changes.length>1?Math.round(changes[1]-from):null,updates:changes.length,longest:Math.round(Math.max(0,...gaps)),stalls:gaps.filter(g=>g>100).length,last:changes.length?Math.round(changes.at(-1)-from):null};};
    const press=async key=>{const at=await page.evaluate(()=>performance.now());await page.keyboard.press(key);return at;};
    await page.evaluate(()=>document.activeElement?.blur?.());await page.keyboard.press('Home');await sleep(1500);
-   await measure(label,'play',async()=>{await page.evaluate(()=>{window.__pic=[];window.__picOn=true;});await page.evaluate(()=>{window.__sync=[];});const at=await press('Space');await sleep(8000);await page.keyboard.press('Space');const r=await pictures(at),sync=(await page.evaluate(()=>window.__sync)).map(Math.abs).sort((a,b)=>a-b);r.syncMs=sync.length?{p50:sync[sync.length>>1],p95:sync[Math.floor(sync.length*.95)],n:sync.length}:null;console.log(JSON.stringify({build:label,check:'play',...r}));await sleep(600);});
+   await measure(label,'play',async()=>{await page.evaluate(()=>{window.__pic=[];window.__picOn=true;});await page.evaluate(()=>{window.__sync=[];});const at=await press('Space');await sleep(8000);await page.keyboard.press('Space');const r=await pictures(at),sync=(await page.evaluate(()=>window.__sync)).map(Math.abs).sort((a,b)=>a-b);r.syncOff=await page.evaluate(()=>{const o=window.__syncOff;window.__syncOff=[];return o;});r.syncMs=sync.length?{p50:sync[sync.length>>1],p95:sync[Math.floor(sync.length*.95)],n:sync.length}:null;console.log(JSON.stringify({build:label,check:'play',...r}));await sleep(600);});
    await measure(label,'playpause',async()=>{const firsts=[];for(let n=0;n<4;n++){await page.evaluate(()=>{window.__pic=[];});const at=await press('Space');await sleep(700);firsts.push((await pictures(at)).first);await page.keyboard.press('Space');await sleep(500);}console.log(JSON.stringify({build:label,check:'playpause',firsts}));});
    const ruler=await box('.project-player .scrubber');
    await measure(label,'scrub',async()=>{await page.evaluate(()=>{window.__pic=[];});const y=ruler.y+ruler.height/2;await page.mouse.move(ruler.x+20,y);await page.mouse.down();for(let n=1;n<=60;n++){await page.mouse.move(ruler.x+20+n*(ruler.width-40)/60,y);await sleep(16);}const up=await page.evaluate(()=>performance.now());await page.mouse.up();await sleep(1200);
