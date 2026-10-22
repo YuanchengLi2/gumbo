@@ -49,6 +49,11 @@ export const EFFECTS:{id:string;name:string;group:'motion'|'look';about:string;p
  {id:'punch_zoom',name:'Zoom punch',group:'motion',about:'Holds the picture zoomed in, for a beat or a line.',params:[amount(.15,.4)]},
  {id:'zoom_pulse',name:'Pulse',group:'motion',about:'The picture pulses in and out on a beat.',params:[amount(.06,.3),{key:'rate',label:'Beats a second',min:.25,max:4,step:.05,default:2}]},
  {id:'shake',name:'Shake',group:'motion',about:'Camera shake for an impact.',params:[amount(.1,.5)]},
+ {id:'punch_in',name:'Zoom in',group:'motion',about:'Zooms in fast at its start and holds there (a punch-in).',params:[amount(.2,.6),{key:'speed',label:'Zoom time',min:.05,max:1.5,step:.05,default:.25,unit:'s'}]},
+ {id:'handheld',name:'Handheld',group:'motion',about:'A gentle handheld drift and sway.',params:[amount(.4)]},
+ {id:'camera_shake',name:'Camera shake',group:'motion',about:'A hard, fast shake in every direction, with motion blur.',params:[amount(.5)]},
+ {id:'impact',name:'Impact',group:'motion',about:'A hit at its start: a jolt and a zoom kick that settle.',params:[amount(.6)]},
+ {id:'freeze',name:'Freeze',group:'motion',about:'Holds the picture still from its start while it lasts (the edit keeps time underneath).',params:[]},
  {id:'blur',name:'Blur',group:'look',about:'Softens the picture.',params:[amount(.4)]},
  {id:'vignette',name:'Vignette',group:'look',about:'Darkens the corners.',params:[amount(.5)]},
  {id:'glow',name:'Glow',group:'look',about:'The bright parts bloom.',params:[amount(.5)]},
@@ -57,7 +62,13 @@ export const EFFECTS:{id:string;name:string;group:'motion'|'look';about:string;p
  {id:'glitch',name:'Glitch',group:'look',about:'Bursts of digital break-up.',params:[amount(.5)]},
  {id:'rgb_split',name:'RGB split',group:'look',about:'The colour channels pulled apart.',params:[amount(.4)]},
  {id:'pixelate',name:'Pixelate',group:'look',about:'Big square pixels.',params:[amount(.3)]},
- {id:'letterbox',name:'Cinema bars',group:'look',about:'Black bars top and bottom for a widescreen look.',params:[amount(.5)]}];
+ {id:'letterbox',name:'Cinema bars',group:'look',about:'Black bars top and bottom for a widescreen look.',params:[amount(.5)]},
+ {id:'zoom_blur',name:'Zoom blur',group:'look',about:'A radial blur rushing into the middle.',params:[amount(.4)]},
+ {id:'light_leak',name:'Light leak',group:'look',about:'Warm light drifting across the picture.',params:[amount(.6)]},
+ {id:'film_burn',name:'Film burn',group:'look',about:'The film burning in from a corner.',params:[amount(.5)]},
+ {id:'old_film',name:'Old film',group:'look',about:'Faded, flickering film with grain and dark corners.',params:[amount(.7)]},
+ {id:'flash',name:'Flash',group:'look',about:'A white flash at its start that fades out.',params:[amount(.9),{key:'speed',label:'Fade time',min:.05,max:1.5,step:.05,default:.35,unit:'s'}]},
+ {id:'strobe',name:'Strobe',group:'look',about:'White flashes on a beat.',params:[amount(.7),{key:'rate',label:'Flashes a second',min:.5,max:12,step:.5,default:4}]}];
 export const effectInfo=(id:string)=>EFFECTS.find(e=>e.id===id);
 
 /** A grade: exposure in stops, contrast and saturation (1 leaves them), temperature and tint (-1 to 1), fade (0-1, lifted

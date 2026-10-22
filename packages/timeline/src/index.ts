@@ -9,3 +9,4 @@ export * from './canvas';
 export * from './placement';
 export * from './changes';
 export * from './library';
+export * from './ramp';

@@ -42,6 +42,7 @@ export function timelineChangeList(before:TimelineDocument,after:TimelineDocumen
   if(old.assetId!==clip.assetId){details.push(`Source ${name(old.assetId)} → ${name(clip.assetId)}`);restore.push({type:'replace_clip_source',clipId:id,assetId:old.assetId,srcIn:old.srcIn,srcOut:old.srcOut,reason});}
   else if(old.srcIn!==clip.srcIn||old.srcOut!==clip.srcOut){details.push(`Trimmed ${clock(old.srcIn)}–${clock(old.srcOut)} → ${clock(clip.srcIn)}–${clock(clip.srcOut)}`);restore.push({type:'trim_clip',clipId:id,srcIn:old.srcIn,srcOut:old.srcOut,reason});}
   if(old.speed!==clip.speed){details.push(`Speed ${old.speed}× → ${clip.speed}×`);restore.push({type:'set_speed',clipId:id,speed:old.speed,reason});}
+  if(!same(old.speedRamp,clip.speedRamp)){details.push(clip.speedRamp?`Speed curve ${clip.speedRamp.preset.replaceAll('_',' ')}`:'Speed curve removed');restore.push({type:'set_speed_ramp',clipId:id,ramp:old.speedRamp??null,reason});}
   if(old.holdSec!==clip.holdSec){details.push(clip.holdSec?`Held for ${clip.holdSec}s`:'No longer held');if(old.holdSec)restore.push({type:'set_clip_hold',clipId:id,holdSec:old.holdSec,reason});}
   if(!same(old.framing,clip.framing)){details.push('Framing or colour');restore.push({type:'set_framing',clipId:id,framing:old.framing??{mode:'fit',scale:1,x:.5,y:.5},reason});}
   if(!same(old.keyframes,clip.keyframes)){details.push(clip.keyframes?.length?`${clip.keyframes.length} keyframes`:'Keyframes removed');restore.push({type:'set_keyframes',id,keyframes:old.keyframes??[],reason});}

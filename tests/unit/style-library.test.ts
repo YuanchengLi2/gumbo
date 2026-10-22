@@ -1,8 +1,9 @@
 import {it,expect} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {emptyTimeline,TimelineSchema,TRANSITIONS,TRANSITION_TYPES,CAPTION_STYLES,CAPTION_STYLE_IDS,TEXT_STYLES,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,FILTERS,captionParamsFor,type TimelineDocument} from '@dream/timeline';
+import {emptyTimeline,TimelineSchema,TRANSITIONS,TRANSITION_TYPES,CAPTION_STYLES,CAPTION_STYLE_IDS,TEXT_STYLES,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,FILTERS,EFFECTS,SPEED_RAMPS,SPEED_RAMP_IDS,rampProgress,rampRate,clipClock,clipTimeAt,resolve,apply as applyOps,captionParamsFor,type TimelineDocument} from '@dream/timeline';
 import {emptyFootage,AssetSchema} from '@dream/footage';
-import {prepare,frameAt,apply,entranceSec,type MediaLayer,type TextLayer} from '@dream/compositor';
+import {prepare,frameAt,apply,entranceSec,audioManifest,type MediaLayer,type TextLayer,type FillLayer} from '@dream/compositor';
+import {freezeFrameOps} from '../../apps/desktop/src/renderer/manual/model';
 
 /** The style library added for CapCut parity: transitions, caption and text styles, looks and effects, as the frame model
  * draws them (the same description the preview and Export both draw), and Roux's reference listing every one. */
@@ -68,7 +69,7 @@ it('wipes with clock, edge and stripe masks, splits from the middle and flips li
 it('lists every library piece in Roux\'s engine reference, so a request can name any of them',()=>{
  const reference=readFileSync('packages/scene-engine/reference/api.md','utf8');
  for(const t of TRANSITION_TYPES)expect(reference,t).toContain('`'+t+'`');
- for(const id of [...CAPTION_STYLE_IDS,...TEXT_STYLES.map(s=>s.id),...TEXT_ANIMATIONS,...OUT_ANIMATIONS,...LOOP_ANIMATIONS,...FILTERS.map(f=>f.id)])expect(reference,id).toContain('`'+id+'`');
+ for(const id of [...CAPTION_STYLE_IDS,...TEXT_STYLES.map(s=>s.id),...TEXT_ANIMATIONS,...OUT_ANIMATIONS,...LOOP_ANIMATIONS,...FILTERS.map(f=>f.id),...EFFECTS.map(e=>e.id),...SPEED_RAMP_IDS])expect(reference,id).toContain('`'+id+'`');
 });
 
 it('masks coded scenes in the preview with the same edges, clock sweeps and stripes the compositor draws',async()=>{
@@ -138,4 +139,56 @@ it('grades with the new looks, which bring their own grain, vignette or glow at 
  expect(main(one({filter:'vibrant'})).fx).toBeUndefined();
  // A grade item with a look preset brings the look's effects to everything under it.
  const graded=main(one(undefined,[{id:'g',type:'effect',component:'grade',start:{kind:'project',at:'start',offsetSec:0},durationSec:4,layer:0,params:{preset:'dreamy'},reason:''}]));expect(graded.fx?.glow).toBeCloseTo(.45);
+});
+
+const effect=(component:string,params:object,start=0,durationSec=4)=>({id:component,type:'effect',component,start:{kind:'project',at:'start',offsetSec:start},durationSec,layer:0,params,reason:''});
+const under=(attached:object[],spine=[clip('a','wide',0,8)])=>prepare({timeline:edit(spine,{attached:attached as any}),footage:footage()});
+const covers=(m:MediaLayer)=>{const c=[[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>apply(m.transform,x,y));
+ // Every frame corner is inside the transformed picture: the picture's edges never show.
+ const inside=([px,py]:number[])=>{const [a,b,cc,d,e,f]=m.transform,det=a*d-b*cc,x=(d*(px-e)-cc*(py-f))/det,y=(-b*(px-e)+a*(py-f))/det;return x>=-.5&&x<=W+.5&&y>=-.5&&y<=H+.5;};
+ return c.length===4&&[[0,0],[W,0],[0,H],[W,H]].every(inside);};
+
+it('punches in, drifts, shakes and hits without ever showing an edge, and flashes or strobes white over the main track',()=>{
+ const zoom=(p:ReturnType<typeof under>,t:number)=>at(p,t)[0].transform[0];
+ const punch=under([effect('punch_in',{amount:.2})]);expect(zoom(punch,0)).toBeCloseTo(1);expect(zoom(punch,.25)).toBeCloseTo(1.2);expect(zoom(punch,3)).toBeCloseTo(1.2);
+ for(const id of ['handheld','camera_shake','impact']){const p=under([effect(id,{amount:1})]),moves=new Set<number>();
+  for(let n=0;n<40;n++){const m=at(p,n/30)[0];expect(covers(m),id+' at frame '+n).toBe(true);moves.add(Math.round(apply(m.transform,W/2,H/2)[0]));}expect(moves.size,id).toBeGreaterThan(5);}
+ // An impact settles: by 0.7 s the picture is back at rest.
+ const settled=at(under([effect('impact',{amount:1})]),.7)[0];expect(settled.transform[0]).toBeCloseTo(1);expect(apply(settled.transform,W/2,H/2)[0]).toBeCloseTo(W/2);
+ const white=(p:ReturnType<typeof under>,t:number)=>(frameAt(p,t).layers.find(l=>l.kind==='fill'&&(l as FillLayer).color==='#ffffff') as FillLayer|undefined)?.opacity??0;
+ const flash=under([effect('flash',{amount:1})]);expect(white(flash,0)).toBeCloseTo(1);expect(white(flash,.2)).toBeLessThan(.3);expect(white(flash,.5)).toBe(0);
+ const strobe=under([effect('strobe',{amount:.8,rate:2})]);expect(white(strobe,.1)).toBeCloseTo(.8);expect(white(strobe,.3)).toBe(0);expect(white(strobe,.55)).toBeCloseTo(.8);
+ // The look effects reach the shader; old film flickers its exposure from frame to frame.
+ expect(at(under([effect('zoom_blur',{amount:.4})]),1)[0].fx?.zoomBlur).toBeCloseTo(.4);expect(at(under([effect('light_leak',{amount:.6})]),1.5)[0].fx).toMatchObject({leak:.6,phase:1.5});
+ expect(at(under([effect('film_burn',{amount:.5})]),1)[0].fx?.burn).toBeCloseTo(.5);
+ const old=[1,1.1].map(t=>at(under([effect('old_film',{amount:1})]),t)[0]);expect(old[0].fx?.grain).toBeCloseTo(.5);expect(old[0].grades[0].exposure).not.toBe(old[1].grades[0].exposure);
+});
+
+it('freezes the main track from a freeze effect\'s start while overlays keep moving, and inserts freeze frames from the editor',()=>{
+ const text={id:'t',type:'overlay',component:'text',start:{kind:'project',at:'start',offsetSec:0},durationSec:8,layer:0,params:{text:'Hi',animation:'none',loop:'spin'},reason:''};
+ const p=under([effect('freeze',{},2,1.5),text]),[held]=at(p,3);expect(held.time).toBeCloseTo(2);expect(held.rate).toBe(0);expect(at(p,4)[0].time).toBeCloseTo(4);
+ const spin=(t:number)=>(frameAt(p,t).layers.find(l=>l.kind==='text') as TextLayer).rotation;expect(spin(3)).not.toBeCloseTo(spin(2.5));
+ // The editor's freeze frame: split at the playhead, a 2 s still of that frame between the halves, silent.
+ const t=edit([clip('a','wide',1,7),clip('b','other',0,4)]),ops=freezeFrameOps(t,footage(),'a',2.5),next=applyOps(t,ops,footage()),r=resolve(next,footage());
+ expect(next.spine.map(c=>c.assetId)).toEqual(['wide','wide','wide','other']);expect(next.spine[1]).toMatchObject({holdSec:2,srcIn:3.5,audio:{mute:true}});
+ expect(r.durationSec).toBeCloseTo(12);const still=prepare({timeline:next,footage:footage()});expect(at(still,3.2)[0]).toMatchObject({time:3.5,rate:0});expect(at(still,4.6)[0].time).toBeCloseTo(3.6,1);
+ // A held video frame plays no sound and has no captions.
+ expect(audioManifest(next,footage()).map(s=>s.id)).not.toContain(next.spine[1].id);
+});
+
+it('curves a clip\'s speed along a ramp without changing its length, playing the same source from start to end',()=>{
+ expect(SPEED_RAMPS.map(r=>r.id)).toEqual([...SPEED_RAMP_IDS]);
+ for(const preset of SPEED_RAMP_IDS){const r={preset,amount:1};expect(rampProgress(r,0)).toBe(0);expect(rampProgress(r,1)).toBeCloseTo(1);
+  let last=0;for(let n=1;n<=50;n++){const v=rampProgress(r,n/50);expect(v,preset).toBeGreaterThan(last);last=v;}}
+ const hero={preset:'hero' as const,amount:1};expect(rampRate(hero,.5)).toBeLessThan(.4);expect(rampRate(hero,.1)).toBeGreaterThan(1);
+ // A four-second clip at 2x stays two seconds long with a ramp; its source runs from srcIn at its start to srcOut at its end.
+ const plain=resolve(edit([clip('a','wide',2,6,{speed:2})]),footage()),ramped=resolve(edit([clip('a','wide',2,6,{speed:2,speedRamp:hero})]),footage());
+ expect(ramped.durationSec).toBe(plain.durationSec);const c=ramped.clips[0];expect(clipClock(c,c.start)).toBeCloseTo(2);expect(clipClock(c,c.end)).toBeCloseTo(6);
+ expect(clipTimeAt(c,clipClock(c,.7))).toBeCloseTo(.7,3);
+ // The player is told the speed along the curve; the frame shows the curve's source time.
+ const p=prepare({timeline:edit([clip('a','wide',2,6,{speed:2,speedRamp:hero})]),footage:footage()}),[m]=at(p,1);
+ expect(m.time).toBeCloseTo(clipClock(c,1));expect(m.rate).toBeCloseTo(2*rampRate(hero,.5));
+ // Its sound is left out (it no longer plays at one speed), and nothing else in the edit moves.
+ expect(audioManifest(edit([clip('a','wide',2,6,{speedRamp:hero}),clip('b','other',0,2)]),footage()).map(s=>s.id)).toEqual(['b']);
+ const t=edit([clip('a','wide',0,4),clip('b','other',0,4)]);expect(applyOps(t,[{type:'set_speed_ramp',clipId:'a',ramp:{preset:'montage',amount:.5},reason:'curve'}],footage()).spine[0].speedRamp).toEqual({preset:'montage',amount:.5});
 });

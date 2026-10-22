@@ -1,8 +1,8 @@
 import React,{useMemo} from 'react';
 import {Film,Type,Music2,AudioLines,Sparkles,SlidersHorizontal,Layers,Captions as CaptionsIcon,Settings2,MousePointerClick,ChevronsRight,Smile} from 'lucide-react';
-import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,EFFECTS,effectInfo,FILTERS,TEXT_STYLES,textStyle,CAPTION_STYLES,captionStyle,captionParamsFor,STICKERS,stickerInfo,FONTS,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
+import {apply,resolve,keyframeValues,clipClock,itemClock,canvasPresets,canvasRatio,projectAnchor,KEYFRAME_PROPS,TRANSITIONS,DIRECTIONS,transitionInfo,EFFECTS,effectInfo,FILTERS,TEXT_STYLES,textStyle,SPEED_RAMPS,CAPTION_STYLES,captionStyle,captionParamsFor,STICKERS,stickerInfo,FONTS,TEXT_ANIMATIONS,OUT_ANIMATIONS,LOOP_ANIMATIONS,type Direction,type Keyframe,type KeyframeProp,type Op,type TimelineDocument,type ResolvedClip,type ResolvedItem} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
-import {itemLook,reason,ensureDuration,setKeyframe,transitionOps,transitionClip} from '../../manual/model';
+import {itemLook,reason,ensureDuration,setKeyframe,transitionOps,transitionClip,freezeFrameOps} from '../../manual/model';
 export {setKeyframe};
 import {Section,NumberField,ChoiceField,Segmented,ToggleField,ColorField,TextField,type Live,type KeyState} from './fields';
 
@@ -80,7 +80,7 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
  const shownKeys=keyframeValues(clip.keyframes,clipClock(clip,Math.max(clip.start,Math.min(clip.end-1/fps,time))));
  const value=(prop:KeyframeProp)=>shownKeys[prop]??a.value(prop);
  const num=(prop:KeyframeProp,label:string,min:number,max:number,step:number,o:{unit?:string;scale?:number;offset?:number}={})=><NumberField key={prop} label={label} value={value(prop)-(o.offset??0)} min={min} max={max} step={step} unit={o.unit} scale={o.scale} disabled={disabled} keyframe={a.keyframe(prop,label)} {...edit<number>('Change '+label.toLowerCase(),v=>a.make(prop,v+(o.offset??0)))}/>;
- const index=base.spine.findIndex(c=>c.id===raw.id),video=asset?.kind==='video'&&!asset.scene;
+ const index=base.spine.findIndex(c=>c.id===raw.id),video=asset?.kind==='video'&&!asset.scene,shownRamp=clip.speedRamp;
  return <>
   <p className="prop-note">{asset?.kind==='image'?'Photo':asset?.scene?'Motion graphic':'Video'} · {clock(clip.start)}–{clock(clip.end)}{video?` · source ${clock(raw.srcIn)}–${clock(raw.srcOut)}`:''}</p>
   <Section title="Transform">{num('scale','Scale',.1,4,.01,{unit:'%',scale:100})}{num('x','Position X',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('y','Position Y',-.5,.5,.005,{unit:'%',scale:100,offset:.5})}{num('rotation','Rotation',-180,180,1,{unit:'°'})}{num('opacity','Opacity',0,1,.01,{unit:'%',scale:100})}
@@ -92,8 +92,12 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
   <Section title="Adjust">{num('exposure','Exposure',-2,2,.05)}{num('contrast','Contrast',0,2,.01,{unit:'%',scale:100})}{num('saturation','Saturation',0,2,.01,{unit:'%',scale:100})}{num('temperature','Temperature',-1,1,.01,{scale:100})}
    <NumberField label="Tint" value={shownFraming.tint??0} min={-1} max={1} step={.01} scale={100} disabled={disabled} {...edit<number>('Change tint',v=>[{type:'set_framing',clipId:raw.id,framing:{...framing,tint:v},reason}])}/>
    <NumberField label="Fade" value={shownFraming.fade??0} min={0} max={1} step={.01} unit="%" scale={100} disabled={disabled} {...edit<number>('Change fade',v=>[{type:'set_framing',clipId:raw.id,framing:{...framing,fade:v},reason}])}/></Section>
-  {asset?.kind==='image'?<Section title="Duration"><NumberField label="Duration" value={clip.holdSec??clip.end-clip.start} min={.2} max={120} step={.1} unit="s" disabled={disabled} {...edit<number>('Change duration',v=>[{type:'set_clip_hold',clipId:raw.id,holdSec:Math.max(1/fps,Math.round(v*fps)/fps),reason}])}/></Section>
-   :<Section title="Speed"><NumberField label="Speed" value={clip.speed} min={.25} max={4} step={.05} unit="×" disabled={disabled} {...edit<number>('Change speed',v=>[{type:'set_speed',clipId:raw.id,speed:v,reason}])}/></Section>}
+  {asset?.kind==='image'||clip.holdSec?<Section title="Duration"><NumberField label="Duration" value={clip.holdSec??clip.end-clip.start} min={.2} max={120} step={.1} unit="s" disabled={disabled} {...edit<number>('Change duration',v=>[{type:'set_clip_hold',clipId:raw.id,holdSec:Math.max(1/fps,Math.round(v*fps)/fps),reason}])}/>
+    {asset?.kind==='video'&&<p className="prop-hint">A freeze frame of the video.</p>}</Section>
+   :<Section title="Speed"><NumberField label="Speed" value={clip.speed} min={.25} max={4} step={.05} unit="×" disabled={disabled} {...edit<number>('Change speed',v=>[{type:'set_speed',clipId:raw.id,speed:v,reason}])}/>
+    {video&&<><ChoiceField label="Curve" value={shownRamp?.preset??''} disabled={disabled} options={[{id:'',name:'None'},...SPEED_RAMPS.map(r=>({id:r.id,name:r.name}))]} onChange={v=>now([{type:'set_speed_ramp',clipId:raw.id,ramp:v?{preset:v as typeof SPEED_RAMPS[number]['id'],amount:raw.speedRamp?.amount??1}:null,reason}],v?'Add speed curve':'Remove speed curve')}/>
+     {shownRamp&&<><NumberField label="Curve strength" value={shownRamp.amount} min={0} max={1} step={.01} unit="%" scale={100} disabled={disabled} {...edit<number>('Change speed curve',v=>[{type:'set_speed_ramp',clipId:raw.id,ramp:{preset:shownRamp.preset,amount:v},reason}])}/><p className="prop-hint">{SPEED_RAMPS.find(r=>r.id===shownRamp.preset)?.about} The clip keeps its length; its own sound is left out while it is curved.</p></>}
+     <button type="button" className="prop-link" disabled={disabled} onClick={()=>{try{now(freezeFrameOps(base,f,raw.id,time),'Freeze frame');}catch(error){p.onError((error as Error).message);}}}>Freeze frame at the playhead</button></>}</Section>}
   {asset?.hasAudio&&<Section title="Sound">
    <NumberField label="Volume" value={clip.audio.gainDb} min={-40} max={12} step={.5} unit=" dB" disabled={disabled||clip.audio.mute} {...edit<number>('Change clip volume',v=>[{type:'set_clip_audio',clipId:raw.id,audio:{gainDb:v},reason}])}/>
    <ToggleField label="Mute" value={clip.audio.mute} disabled={disabled} onChange={v=>now([{type:'set_clip_audio',clipId:raw.id,audio:{mute:v},reason}],v?'Mute clip':'Unmute clip')}/>

@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {rampProgress,rampTime,type SpeedRamp} from './ramp';
 /** CapCut-style keyframes on a clip or a layer. Each keyframe sits on the item's source clock (the seconds of srcIn and
  * srcOut), so trimming, splitting and speed changes keep it on the same moment of footage. A property animates between the
  * keyframes that set it; before the first and after the last it holds. A keyframe's easing shapes the move that arrives at
@@ -35,10 +36,13 @@ export function keyframeValues(keyframes:Keyframe[]|undefined,sec:number):Keyfra
  }
  return out;
 }
-/** A spine clip's source clock at a timeline time: srcIn plus elapsed time at the clip's speed (a held still runs at 1). */
-export const clipClock=(clip:{start:number;srcIn:number;speed:number;holdSec?:number},time:number)=>clip.srcIn+(time-clip.start)*(clip.holdSec?1:clip.speed);
+type Clocked={start:number;srcIn:number;speed:number;holdSec?:number;end?:number;srcOut?:number;speedRamp?:SpeedRamp};
+const ramped=(c:Clocked):c is Clocked&{end:number;srcOut:number;speedRamp:SpeedRamp}=>!!c.speedRamp&&!c.holdSec&&c.end!==undefined&&c.srcOut!==undefined&&c.end>c.start;
+/** A spine clip's source clock at a timeline time: srcIn plus elapsed time at the clip's speed (a held still runs at 1),
+ * or along its speed curve when it has one (a placed clip, with its end). */
+export const clipClock=(clip:Clocked,time:number)=>ramped(clip)?clip.srcIn+(clip.srcOut-clip.srcIn)*rampProgress(clip.speedRamp,(time-clip.start)/(clip.end-clip.start)):clip.srcIn+(time-clip.start)*(clip.holdSec?1:clip.speed);
 /** The timeline time where a clip's source clock reads sec. */
-export const clipTimeAt=(clip:{start:number;srcIn:number;speed:number;holdSec?:number},sec:number)=>clip.start+(sec-clip.srcIn)/(clip.holdSec?1:clip.speed);
+export const clipTimeAt=(clip:Clocked,sec:number)=>ramped(clip)?clip.start+(clip.end-clip.start)*rampTime(clip.speedRamp,(sec-clip.srcIn)/Math.max(1e-9,clip.srcOut-clip.srcIn)):clip.start+(sec-clip.srcIn)/(clip.holdSec?1:clip.speed);
 /** A layer's source clock: its source's srcIn plus elapsed time (seconds since it starts when it has no source). */
 export const itemClock=(item:{timelineStart:number;source?:{srcIn:number}},time:number)=>(item.source?.srcIn??0)+time-item.timelineStart;
 export const itemTimeAt=(item:{timelineStart:number;source?:{srcIn:number}},sec:number)=>item.timelineStart+sec-(item.source?.srcIn??0);

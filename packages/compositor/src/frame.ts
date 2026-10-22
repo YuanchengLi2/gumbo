@@ -1,4 +1,4 @@
-import {resolve,keyframeValues,clipClock,sequenceFrame as sequenceAt,itemTrackId,filterGrade,filterFx,effectInfo,textStyle,captionStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
+import {resolve,keyframeValues,clipClock,rampRate,sequenceFrame as sequenceAt,itemTrackId,filterGrade,filterFx,effectInfo,textStyle,captionStyle,stickerInfo,type TimelineDocument,type ResolvedTimeline,type ResolvedClip,type ResolvedItem,type ResolvedWord,type SpineClip} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 
 /** What one frame of the edit shows, as a list of layers drawn in order over the background. It is the single description
@@ -93,11 +93,12 @@ export type Prepared=ReturnType<typeof prepare>;
 const chance=(n:number)=>{const x=Math.sin(n*12.9898)*43758.5453;return x-Math.floor(x);};
 /** A look's grain, vignette and glow as shader effects (grain moving with the frame), or nothing for a plain grade. */
 const lookFx=(id:unknown,intensity:unknown,frameNo:number):Fx|undefined=>{const fx=filterFx(typeof id==='string'?id:undefined,Number(intensity??1));return Object.keys(fx).length?{...fx,...(fx.grain?{seed:frameNo}:{})}:undefined;};
-/** What the effect items over a moment do to a picture: a zoom and a shake (main track only), grades (filter items and
- * looks that come with an effect), blur, shader effects and cinema bars. Overlays take only the effects that ask for them
- * (`params.apply: "all"`). Amounts follow the frame's height, so a 4K edit looks like its 1080p preview. */
+/** What the effect items over a moment do to a picture: a zoom, a shake or drift (px across and down) and a turn
+ * (degrees), main track only; grades (filter items and looks that come with an effect), blur, shader effects, cinema bars
+ * and a white flash over the main track. Overlays take only the effects that ask for them (`params.apply: "all"`).
+ * Amounts follow the frame's size, so a 4K edit looks like its 1080p preview. */
 function effectsAt(p:Prepared,time:number,o:{progress:number;clipFrame:number;main:boolean}){
- const {height:H,fps}=p.timeline.settings,frameNo=Math.round(time*fps),px=H/1080;let motion=1,dx=0,blur=0,bars=0,fx:Fx|undefined;const grades:Grade[]=[];
+ const {width:W,height:H,fps}=p.timeline.settings,frameNo=Math.round(time*fps),px=H/1080;let motion=1,dx=0,dy=0,turn=0,blur=0,bars=0,flash=0,fx:Fx|undefined;const grades:Grade[]=[];
  const add=(more:Fx)=>{fx=mergeFx(fx,more);};
  for(const item of p.visible){if(item.type!=='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;const q=item.params as Record<string,unknown>;
   if(!o.main&&q.apply!=='all')continue;
@@ -118,9 +119,27 @@ function effectsAt(p:Prepared,time:number,o:{progress:number;clipFrame:number;ma
    case 'letterbox':bars=Math.max(bars,Math.min(1,a)*.15);break;
    case 'vhs':add({split:a*4*px,scan:Math.min(1,a)*.6,jitter:a*.25,grain:a*.25,seed:frameNo});grades.push(gradeOf({saturation:1-.3*a,contrast:1-.1*a,fade:.15*a,tint:-.05*a}));break;
    case 'glitch':{const on=chance(Math.floor(frameNo/3)+item.timelineStart*7)<.25+.5*Math.min(1,a);add({split:a*16*px*(on?1:.15),jitter:on?Math.min(1,a):0,seed:frameNo});break;}
+   case 'punch_in':if(o.main)motion*=1+a*easeOut(clamp01(elapsed/Math.max(.05,Number(q.speed??.25))));break;
+   // A handheld drift: slow sines that never repeat exactly, zoomed in enough to have room to move.
+   case 'handheld':if(o.main){motion*=1+.05*a;dx+=(Math.sin(elapsed*1.3)+.5*Math.sin(elapsed*2.9+1))*.012*W*a;dy+=(Math.sin(elapsed*1.1+2)+.5*Math.sin(elapsed*3.3))*.012*H*a;turn+=.6*a*Math.sin(elapsed*.9);}break;
+   case 'camera_shake':case 'impact':if(o.main){const hit=item.component==='impact'?Math.pow(Math.max(0,1-elapsed/.6),2):1,jx=(chance(frameNo*1.7+.3)-.5)*2,jy=(chance(frameNo*2.3+.6)-.5)*2,k=a*hit;
+    motion*=1+(item.component==='impact'?.12:.08)*k;dx+=jx*.03*W*k;dy+=jy*.03*H*k;turn+=jx*1.5*k;if(k>.01)add({streakX:jx*.015*W*k,streakY:jy*.015*H*k});}break;
+   case 'zoom_blur':add({zoomBlur:Math.min(1,a)});break;
+   case 'light_leak':add({leak:Math.min(1,a),phase:elapsed,variant:Math.round(item.timelineStart*fps)%7});break;
+   case 'film_burn':add({burn:Math.min(1,a),phase:elapsed,variant:Math.round(item.timelineStart*fps)%7});break;
+   case 'old_film':add({grain:.5*Math.min(1,a),vignette:.5*Math.min(1,a),seed:frameNo});grades.push(gradeOf({saturation:1-.6*a,temperature:.35*a,fade:.15*a,exposure:(chance(frameNo*.37)-.5)*.16*a}));break;
+   case 'flash':if(o.main)flash=Math.max(flash,Math.min(1,a)*Math.pow(Math.max(0,1-elapsed/Math.max(.05,Number(q.speed??.35))),2));break;
+   case 'strobe':if(o.main&&(elapsed*Number(q.rate??4))%1<.3)flash=Math.max(flash,Math.min(1,a));break;
   }}
- return{motion,dx,blur,bars,grades,fx};
+ return{motion,dx,dy,turn,blur,bars,flash,grades,fx};
 }
+/** When a freeze effect holds the main track at a moment: the time it began (the earliest, if several overlap). */
+function frozenAt(p:Prepared,time:number){let held:number|undefined;for(const item of p.visible)if(item.type==='effect'&&item.component==='freeze'&&time>=item.timelineStart&&time<item.timelineEnd)held=Math.min(held??Infinity,item.timelineStart);return held;}
+/** A clip's speed at a moment, as a share of the timeline's (its speed along its curve; 0 for a held still). */
+const clipRate=(c:ResolvedClip,time:number)=>c.holdSec?0:c.speedRamp?c.speed*rampRate(c.speedRamp,(time-c.start)/Math.max(1e-9,c.end-c.start)):c.speed;
+/** A clip's source time at any timeline time, carried on at its edge speed before its start and after its end (the
+ * handles a transition shows). */
+const sourceAt=(c:ResolvedClip,time:number)=>c.holdSec?c.srcIn:time<c.start?c.srcIn-(c.start-time)*clipRate(c,c.start):time>c.end?c.srcOut+(time-c.end)*clipRate(c,c.end):clipClock(c,time);
 
 /** A clip's look at a moment: its framing with keyframed values, the effects over it (slow push, punch zoom, shake, grade
  * layers) and its grade, as the clip's CSS was worked out before. A filter on the clip (`framing.filter`) grades it first. */
@@ -128,13 +147,14 @@ function clipLook(p:Prepared,clip:ResolvedClip,time:number){
  const {width,height,fps}=p.timeline.settings,f=clip.framing,keys=keyframeValues(clip.keyframes,clipClock(clip,time));
  const grades:Grade[]=[],filter=gradeOf(filterGrade(f?.filter,f?.filterIntensity??1));if(!isNeutral(filter))grades.push(filter);const g=gradeOf({...f,...keys});if(!isNeutral(g))grades.push(g);
  const frame=Math.max(0,(time-clip.start)*fps),progress=Math.max(0,Math.min(1,(time-clip.start)/Math.max(1e-9,clip.end-clip.start)));
- const effects=effectsAt(p,time,{progress,clipFrame:frame,main:true}),motion=effects.motion,dx=effects.dx;grades.push(...effects.grades);
+ const effects=effectsAt(p,time,{progress,clipFrame:frame,main:true}),motion=effects.motion,dx=effects.dx,dy=effects.dy;grades.push(...effects.grades);
  // A hard rule: the main track always fills the project's frame. Footage of another shape is cropped to cover it (never
  // letterboxed), it is never zoomed out below the frame, and moves and shake only travel as far as the zoom leaves room,
- // so no edge or bar ever shows, whatever framing a request sets.
- const scale=Math.max(1,(keys.scale??f?.scale??1)*motion),room=(scale-1)/2,clampOffset=(v:number)=>Math.max(-room,Math.min(room,v));
- const x=.5+clampOffset((keys.x??.5)-.5),y=.5+clampOffset((keys.y??.5)-.5),shake=Math.max(-room*width,Math.min(room*width,dx));
- const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(shake,0),rotation(keys.rotation??f?.rotation??0),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
+ // so no edge or bar ever shows, whatever framing a request sets. An effect's turn zooms in just enough to cover its corners.
+ const r=Math.abs(effects.turn)*Math.PI/180,cover=r?Math.cos(r)+Math.max(width/height,height/width)*Math.sin(r):1;
+ const base=Math.max(1,(keys.scale??f?.scale??1)*motion),scale=base*cover,room=(base-1)/2,clampOffset=(v:number)=>Math.max(-room,Math.min(room,v));
+ const x=.5+clampOffset((keys.x??.5)-.5),y=.5+clampOffset((keys.y??.5)-.5),shake=Math.max(-room*width,Math.min(room*width,dx)),drop=Math.max(-room*height,Math.min(room*height,dy));
+ const transform=aboutCentre(width,height,translate((x-.5)*width,(y-.5)*height),translate(shake,drop),rotation((keys.rotation??f?.rotation??0)+effects.turn),scaling(scale*(f?.flipX?-1:1),scale*(f?.flipY?-1:1)));
  return{transform,opacity:keys.opacity??f?.opacity??1,grades:grades.slice(0,4),fit:'cover' as 'cover'|'contain',objectX:f?.x??.5,objectY:f?.y??.5,fx:mergeFx(lookFx(f?.filter,f?.filterIntensity,Math.round(time*fps)),effects.fx),blur:effects.blur,bars:effects.bars};
 }
 
@@ -146,7 +166,7 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
   const effect=sceneSafe(kind,{grades:look.grades,blur:Math.max(blur,look.blur),fx:mergeFx(look.fx,fx)});
-  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:effect.grades,blur:effect.blur,...(effect.fx?{fx:effect.fx}:{}),...(mask?{mask:sceneMask(kind,mask)}:{})});}
+  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clipRate(clip,time),frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:effect.grades,blur:effect.blur,...(effect.fx?{fx:effect.fx}:{}),...(mask?{mask:sceneMask(kind,mask)}:{})});}
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
 }
@@ -160,7 +180,8 @@ const sequenceFrame=(a:Asset,sourceTime:number)=>sequenceAt(sourceTime,a.sequenc
 function transitionLayers(p:Prepared,before:ResolvedClip,after:ResolvedClip,time:number):Layer[]{
  const {width:W,height:H,fps}=p.timeline.settings,t=after.transitionIn!,frames=Math.max(1,Math.round(t.durationSec*fps)),start=(after.from-Math.round(t.durationSec*fps/2))/fps,frame=Math.round((time-start)*fps),k=Math.max(0,Math.min(1,frame/(frames-1||1)));
  const elapsed=Math.max(0,time-start),dir=t.direction??'left',[vx,vy]=dir==='left'?[-1,0]:dir==='right'?[1,0]:dir==='up'?[0,-1]:[0,1],s=Math.max(0,Math.min(1,t.intensity??1)),px=H/1080;
- const outTime=Math.max(0,before.srcOut-t.durationSec*before.speed/2)+elapsed*before.speed,inTime=Math.max(0,after.srcIn-t.durationSec*after.speed/2)+elapsed*after.speed;
+ // A ramped clip's handles carry on at the speed its curve has at the cut.
+ const outTime=before.speedRamp?Math.max(0,sourceAt(before,time)):Math.max(0,before.srcOut-t.durationSec*before.speed/2)+elapsed*before.speed,inTime=after.speedRamp?Math.max(0,sourceAt(after,time)):Math.max(0,after.srcIn-t.durationSec*after.speed/2)+elapsed*after.speed;
  type Look={outer?:Matrix;opacity?:number;blur?:number;mask?:Mask;fx?:Fx};
  const out=(o:Look={})=>clipLayers(p,before,time,outTime,o.outer??identity,o.opacity??1,o.blur??0,false,o.mask,o.fx);
  const into=(o:Look={})=>clipLayers(p,after,time,inTime,o.outer??identity,o.opacity??1,o.blur??0,false,o.mask,o.fx);
@@ -285,9 +306,9 @@ function captionLayers(p:Prepared,time:number):Layer[]{
   ...optional('fontFamily',String),...optional('stroke',String),...optional('strokeWidth',Number),...optional('glow',String),...optional('glowSize',Number),...optional('shadow',String),...optional('shadowBlur',Number),...optional('highlightColor',String),...optional('wordBox',String)}];
 }
 
-/** The frame at a timeline time. */
-export function frameAt(p:Prepared,time:number):Frame{
- const {width,height,fps}=p.timeline.settings,layers:Layer[]=[],r=p.resolved,videoHidden=!!p.timeline.trackSettings?.video?.hidden,frameNo=Math.round(time*fps);
+/** The frame at a timeline time. A freeze effect draws the main track as it was when the freeze began, held still. */
+export function frameAt(p:Prepared,now:number):Frame{
+ const {width,height,fps}=p.timeline.settings,layers:Layer[]=[],r=p.resolved,videoHidden=!!p.timeline.trackSettings?.video?.hidden,held=frozenAt(p,now),time=held??now,frameNo=Math.round(time*fps);
  if(!videoHidden){
   const n=r.clips.findIndex(c=>frameNo>=c.from&&frameNo<c.from+c.durationInFrames),clip=r.clips[n];
   // A transition window centred on the incoming clip's start, between two clips with a picture, draws both over black.
@@ -297,13 +318,15 @@ export function frameAt(p:Prepared,time:number):Frame{
   else if(clip){const elapsed=time-clip.start,dip=n===0&&(clip.transitionIn?.type==='dip_to_black'||clip.transitionIn?.type==='dip_to_white')?Math.min(1,(frameNo-clip.from)/(clip.transitionIn.durationSec*fps/2||1)):1;
    // A dip into the first clip fades it in from black (or white) at the start of the video.
    if(dip<1&&clip.transitionIn?.type==='dip_to_white')layers.push({kind:'fill',color:'#ffffff',rect:{x:0,y:0,w:width,h:height},transform:identity,opacity:1});
-   layers.push(...clipLayers(p,clip,time,clip.srcIn+(clip.holdSec?0:elapsed*clip.speed),identity,dip));}
-  // Cinema bars from a letterbox effect sit on the main track, under overlays, text and captions.
-  const bars=effectsAt(p,time,{progress:0,clipFrame:0,main:true}).bars;
+   layers.push(...clipLayers(p,clip,time,clip.holdSec?clip.srcIn:clipClock(clip,time),identity,dip));}
+  if(held!==undefined)for(const l of layers)if(l.kind==='media')l.rate=0;
+  // A flash whites out the main track; cinema bars from a letterbox effect sit on it; both under overlays, text and captions.
+  const {bars,flash}=effectsAt(p,now,{progress:0,clipFrame:0,main:true});
+  if(flash>0)layers.push({kind:'fill',color:'#ffffff',rect:{x:0,y:0,w:width,h:height},transform:identity,opacity:flash});
   if(bars>0)for(const y of [0,height*(1-bars)])layers.push({kind:'fill',color:'#000000',rect:{x:0,y,w:width,h:height*bars},transform:identity,opacity:1});
  }
- for(const item of p.visible){if(item.type==='effect'||time<item.timelineStart||time>=item.timelineEnd)continue;layers.push(...(item.source?sourceLayer(p,item,time):elementLayers(p,item,time)));}
- layers.push(...captionLayers(p,time));
+ for(const item of p.visible){if(item.type==='effect'||now<item.timelineStart||now>=item.timelineEnd)continue;layers.push(...(item.source?sourceLayer(p,item,now):elementLayers(p,item,now)));}
+ layers.push(...captionLayers(p,now));
  return{width,height,background:COMPOSITION_BG,layers};
 }
 /** The source moments of video a frame needs, by asset: what a decoder must deliver for it. */

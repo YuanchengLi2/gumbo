@@ -36,7 +36,8 @@ export function resolve(t:TimelineDocument,index:FootageIndex):ResolvedTimeline 
  // and sound effects are left out). The vlog's narration sat on the music track and got no captions at all.
  // captions.params.sources (a list of clip and music ids) chooses the sources exactly instead.
  const chosen=Array.isArray(t.captions?.params?.sources)?new Set((t.captions!.params.sources as unknown[]).map(String)):undefined,assets=new Map(index.assets.map(a=>[a.id,a]));
- const spoken=[...clips.filter(c=>chosen?chosen.has(c.id):!c.audio.mute).map(c=>({id:c.id,assetId:c.assetId,srcIn:c.srcIn,srcOut:c.srcOut,start:c.start,end:c.end,speed:c.speed})),
+ // A freeze frame or a speed-ramped clip plays none of its sound, so it has no words to caption.
+ const spoken=[...clips.filter(c=>!c.holdSec&&!c.speedRamp&&(chosen?chosen.has(c.id):!c.audio.mute)).map(c=>({id:c.id,assetId:c.assetId,srcIn:c.srcIn,srcOut:c.srcOut,start:c.start,end:c.end,speed:c.speed})),
   ...music.filter(m=>chosen?chosen.has(m.id):m.gainDb>=-10&&!assets.get(m.assetId)?.generated&&!m.scoreId).map(m=>({id:m.id,assetId:m.assetId,srcIn:m.srcIn,srcOut:m.srcOut,start:m.timelineStart,end:m.timelineEnd,speed:1,music:!chosen}))];
  for(const c of spoken){const source=byAsset.get(c.assetId)??[],found:ResolvedWord[]=[];let lo=0,hi=source.length;while(lo<hi){const mid=(lo+hi)>>>1;if(source[mid].start<c.srcIn-.001)lo=mid+1;else hi=mid;}for(let n=lo;n<source.length&&source[n].start<c.srcOut;n++){const w=source[n];if(w.end>c.srcOut+.001)continue;const o={...overrides.get(`*:${w.id}`),...overrides.get(`${c.id}:${w.id}`)};if(o.hidden)continue;found.push({id:`${c.id}:${w.id}`,wordId:w.id,clipId:c.id,text:o.text??w.text,start:c.start+(w.start-c.srcIn)/c.speed,end:Math.min(c.end,c.start+(w.end-c.srcIn)/c.speed),emphasis:o.emphasis??false});}
   // A song on the music track is not narration: the odd word a transcriber hears in music (fewer than one every ten
