@@ -47,13 +47,11 @@ describe('beta access in the database',()=>{
  const user=async(email:string)=>{const id=randomUUID();await db.query('insert into auth.users(id,email) values($1,$2)',[id,email]);return id;};
  const activate=(id:string,email:string)=>db.query<{ok:boolean}>('select dream_activate_account($1,$2) as ok',[id,email]).then(r=>r.rows[0].ok);
  const access=(id:string)=>db.query<{beta_access:boolean}>('select beta_access from dream_accounts where id=$1',[id]).then(r=>r.rows[0]?.beta_access);
- it('lets anyone sign in, but only invited emails and the owner use the AI; an invite after signing up counts',async()=>{
-  const stranger=await user('stranger@example.com');expect(await activate(stranger,'stranger@example.com')).toBe(true);expect(await access(stranger)).toBe(false);
+ it('opens the beta to every account as it signs in, invited or not (the open beta, 202610220001)',async()=>{
+  const stranger=await user('stranger@example.com');expect(await activate(stranger,'stranger@example.com')).toBe(true);expect(await access(stranger)).toBe(true);
   await db.query("insert into dream_invites(email) values('friend@example.com')");
   const friend=await user('friend@example.com');expect(await activate(friend,'Friend@Example.com')).toBe(true);expect(await access(friend)).toBe(true);
   const owner=await user('yuanchengli612@gmail.com');await activate(owner,'yuanchengli612@gmail.com');expect(await access(owner)).toBe(true);
-  // Invited later (from the dashboard): the next request activates their access.
-  await db.query("insert into dream_invites(email) values('stranger@example.com')");await activate(stranger,'stranger@example.com');expect(await access(stranger)).toBe(true);
  });
  it('keeps the waitlist out of reach of signed-in users and visitors',async()=>{
   const {rows}=await db.query<{relrowsecurity:boolean}>("select relrowsecurity from pg_class where relname='dream_waitlist'");expect(rows[0].relrowsecurity).toBe(true);
