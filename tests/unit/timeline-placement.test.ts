@@ -29,7 +29,9 @@ it('places dropped media in capture order on the right tracks as one change',()=
 
 it('shows media as tiles: a frame at the clip in point, a thumbnail, a live scene, a waveform, or a file-type icon',()=>{
  const video={...asset('clip','video',20),thumbnailPath:'thumb.jpg'};
- expect(renderToStaticMarkup(React.createElement(MediaTile,{asset:video,srcIn:12,srcOut:15}))).toContain('dream-media://clip/preview#t=12.00');
+ // A clip's in point is a picture from the shared frame decoder (useVideoFrame), drawn once decoded; no video of its own
+ // loads until the tile is hovered, which kept every tile's decoder busy before (0ecd08f).
+ const framed=renderToStaticMarkup(React.createElement(MediaTile,{asset:video,srcIn:12,srcOut:15}));expect(framed).toContain('media-tile-visual');expect(framed).not.toContain('<video');
  expect(renderToStaticMarkup(React.createElement(MediaTile,{asset:video}))).toContain('dream-media://clip/thumbnail');
  const scene={...asset('scene','video',5),scene:{format:'engine' as const,revisionId:'abc',durationInFrames:150}};expect(renderToStaticMarkup(React.createElement(MediaTile,{asset:scene}))).toContain('scene-peek');
  expect(renderToStaticMarkup(React.createElement(MediaTile,{asset:{...asset('song','audio',30),waveform:[.2,.5,.8]}}))).toContain('media-tile-wave');

@@ -42,7 +42,7 @@ it('asks for computer access before reading, through the existing file permissio
 it('keeps the prompt copy of the engine reference identical to reference/api.md',()=>{
  // Checkouts may convert line endings; the content is what must match.
  const lf=(text:string)=>text.replace(/\r\n/g,'\n');expect(lf(engineReferenceModule(readFileSync('packages/scene-engine/reference/api.md','utf8')))).toBe(lf(readFileSync('packages/scene-engine/src/reference.generated.ts','utf8')));
- expect(engineReference).toContain('## @dream/engine');expect(engineReference.length).toBeLessThan(24000);
+ expect(engineReference).toContain('## @dream/engine');expect(engineReference.length).toBeLessThan(28000);  // rides in every request: 24000 until the style library (Oct 22) named its transitions, captions, looks and effects
 });
 
 it('lets a reply unpack the user\'s archive to look at it, outside the project\'s files, so nothing in the project changes',async()=>{
