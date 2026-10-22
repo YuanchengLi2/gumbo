@@ -55,7 +55,7 @@ export function duplicateItems(t:TimelineDocument,f:FootageIndex,ids:string[],at
 /** A transition into a clip from the library, centred on its cut. Video on either side needs footage past the cut for half
  * the transition (a handle): when a clip has none left there, it is trimmed back by what is missing. Photos and graphics
  * hold their picture, so they need none. */
-export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string,durationSec?:number,direction?:Direction):Op[]{
+export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,type:string,durationSec?:number,direction?:Direction,intensity?:number):Op[]{
  const index=t.spine.findIndex(c=>c.id===clipId),clip=t.spine[index];if(!clip)throw new Error('Select a clip on the main track.');
  if(type==='cut')return[{type:'set_transition',clipId,transition:null,reason}];
  if(index<1)throw new Error('Transitions go between two clips. Put this one on the cut before a clip.');
@@ -69,7 +69,7 @@ export function transitionOps(t:TimelineDocument,f:FootageIndex,clipId:string,ty
  if(length(before)<=outgoing+half+1/t.settings.fps||length(clip)<=incoming+half+1/t.settings.fps)throw new Error('These clips are too short for a transition this long.');
  if(outgoing>0)ops.push({type:'trim_clip',clipId:before.id,srcOut:before.srcOut-outgoing*before.speed,reason});
  if(incoming>0)ops.push({type:'trim_clip',clipId,srcIn:clip.srcIn+incoming*clip.speed,reason});
- ops.push({type:'set_transition',clipId,transition:{type:info.id,durationSec:Math.round(duration*1000)/1000,...(info.directional?{direction:direction??clip.transitionIn?.direction??'left'}:{})},reason});return ops;
+ ops.push({type:'set_transition',clipId,transition:{type:info.id,durationSec:Math.round(duration*1000)/1000,...(info.directional?{direction:direction??clip.transitionIn?.direction??'left'}:{}),...(info.strength&&(intensity??clip.transitionIn?.intensity)!==undefined?{intensity:intensity??clip.transitionIn?.intensity}:{})},reason});return ops;
 }
 /** The cut nearest a time on the main track: the clip that starts there (never the first). */
 export function nearestCut(t:TimelineDocument,f:FootageIndex,time:number){const clips=resolve(t,f).clips.slice(1);let best:typeof clips[number]|undefined;for(const c of clips)if(!best||Math.abs(c.start-time)<Math.abs(best.start-time))best=c;return best;}

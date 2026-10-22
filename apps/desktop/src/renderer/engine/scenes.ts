@@ -10,12 +10,27 @@ export const legacyDocument=(a:Asset)=>fetch('dream-media://'+a.id+'/preview').t
 type Live={wrap:HTMLDivElement;iframe:HTMLIFrameElement;asset:Asset;ready:boolean;frame:number;playing:boolean;request:number;lastUsed:number;error?:string};
 
 /** A layer's mask (frame pixels) as a clip-path on its box: the frame point is taken back through the layer's transform, so
- * a wipe or a circle reveal crops a scene where the compositor crops footage. */
+ * a wipe or a circle reveal crops a scene where the compositor crops footage. An edge is the far side of a line (a huge
+ * square cut by it), a clock sweep a fan of points round its centre, stripes one polygon through every open stripe across
+ * the layer's box (joined along its edge, where the joins have no width). Scenes take edges without a feather (the frame
+ * model sees to it), so the hard line here is what Export draws too. */
 export function maskPath(layer:Pick<MediaLayer,'mask'|'transform'|'rect'>){
  const mask=layer.mask;if(!mask)return '';const [a,b,c,d,e,f]=layer.transform,det=a*d-b*c||1e-9;
  const local=(x:number,y:number)=>[(d*(x-e)-c*(y-f))/det-layer.rect.x,(-b*(x-e)+a*(y-f))/det-layer.rect.y];
- if(mask.kind==='rect'){const r=mask.rect;return 'polygon('+[[r.x,r.y],[r.x+r.w,r.y],[r.x+r.w,r.y+r.h],[r.x,r.y+r.h]].map(([x,y])=>local(x,y).map(v=>v.toFixed(2)+'px').join(' ')).join(',')+')';}
- const [x,y]=local(mask.cx,mask.cy);return `circle(${(mask.r/Math.sqrt(Math.abs(det))).toFixed(2)}px at ${x.toFixed(2)}px ${y.toFixed(2)}px)`;
+ const polygon=(points:number[][])=>'polygon('+(points.length?points:[[0,0],[0,0],[0,0]]).map(([x,y])=>local(x,y).map(v=>v.toFixed(2)+'px').join(' ')).join(',')+')';
+ if(mask.kind==='rect'){const r=mask.rect;return polygon([[r.x,r.y],[r.x+r.w,r.y],[r.x+r.w,r.y+r.h],[r.x,r.y+r.h]]);}
+ if(mask.kind==='circle'){const [x,y]=local(mask.cx,mask.cy);return `circle(${(mask.r/Math.sqrt(Math.abs(det))).toFixed(2)}px at ${x.toFixed(2)}px ${y.toFixed(2)}px)`;}
+ const R=1e5;
+ if(mask.kind==='edge'){const square=[[-R,-R],[R,-R],[R,R],[-R,R]],side=(p:number[])=>p[0]*mask.nx+p[1]*mask.ny-mask.d,kept:number[][]=[];
+  square.forEach((p,n)=>{const q=square[(n+1)%4],sp=side(p),sq=side(q);if(sp>=0)kept.push(p);if(sp*sq<0){const t=sp/(sp-sq);kept.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);}});return polygon(kept);}
+ if(mask.kind==='clock'){if(mask.sweep>=Math.PI*2)return '';const steps=Math.max(1,Math.ceil(mask.sweep/(Math.PI/36))),fan=[[mask.cx,mask.cy]];
+  for(let n=0;n<=steps;n++){const angle=mask.sweep*n/steps;fan.push([mask.cx+R*Math.sin(angle),mask.cy-R*Math.cos(angle)]);}return polygon(fan);}
+ if(mask.open>=1)return '';if(mask.open<=0)return polygon([]);
+ const corners=[[0,0],[1,0],[0,1],[1,1]].map(([u,v])=>[a*(layer.rect.x+u*layer.rect.w)+c*(layer.rect.y+v*layer.rect.h)+e,b*(layer.rect.x+u*layer.rect.w)+d*(layer.rect.y+v*layer.rect.h)+f]);
+ const along=(p:number[])=>mask.vertical?p[0]:p[1],across=(p:number[])=>mask.vertical?p[1]:p[0],lo=Math.min(...corners.map(along)),hi=Math.max(...corners.map(along)),from=Math.min(...corners.map(across)),to=Math.max(...corners.map(across));
+ const point=(u:number,v:number)=>mask.vertical?[u,v]:[v,u],points:number[][]=[];
+ for(let x=Math.floor(lo/mask.period)*mask.period;x<hi;x+=mask.period){const x1=x+mask.open*mask.period;points.push(point(x,from),point(x,to),point(x1,to),point(x1,from));}
+ return polygon(points);
 }
 
 export class SceneLayers{

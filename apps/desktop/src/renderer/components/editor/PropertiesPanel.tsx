@@ -107,11 +107,12 @@ function ClipProperties({p,clip,base,resolvedBase,edit,now,time,fps,disabled}:Co
  * the clips when they need more footage past the cut, as adding it does. */
 function TransitionFields({p,base,clipId,edit,now,disabled}:Omit<Common,'time'|'fps'>&{clipId:string}){
  const f=p.project.footage,shown=p.timeline.spine.find(c=>c.id===clipId)?.transitionIn,current=base.spine.find(c=>c.id===clipId)?.transitionIn,info=transitionInfo(shown?.type??'');
- const make=(type:string,durationSec?:number,direction?:Direction)=>transitionOps(base,f,clipId,type,durationSec,direction);
+ const make=(type:string,durationSec?:number,direction?:Direction,intensity?:number)=>transitionOps(base,f,clipId,type,durationSec,direction,intensity);
  return <Section title="Transition">
   <ChoiceField label="Type" value={shown?.type??'cut'} disabled={disabled} options={[{id:'cut',name:'None (cut)'},...TRANSITIONS.map(t=>({id:t.id,name:t.name}))]} onChange={type=>{try{now(make(type,type==='cut'?undefined:current&&current.type!=='cut'?current.durationSec:undefined),type==='cut'?'Remove transition':'Change transition');}catch(error){p.onError((error as Error).message);}}}/>
   {shown&&shown.type!=='cut'&&<NumberField label="Duration" value={shown.durationSec} min={.1} max={2} step={.05} unit="s" disabled={disabled} {...edit<number>('Change transition length',v=>make(shown.type,v,shown.direction))}/>}
   {shown&&info?.directional&&<Segmented label="Direction" value={shown.direction??'left'} disabled={disabled} options={DIRECTIONS.map(d=>({id:d,name:d[0].toUpperCase()+d.slice(1)}))} onChange={d=>{try{now(make(shown.type,shown.durationSec,d),'Change transition direction');}catch(error){p.onError((error as Error).message);}}}/>}
+  {shown&&info?.strength&&<NumberField label="Strength" value={Math.round((shown.intensity??1)*100)} min={0} max={100} step={1} unit="%" disabled={disabled} {...edit<number>('Change transition strength',v=>make(shown.type,shown.durationSec,shown.direction,v/100))}/>}
   {info&&<p className="prop-hint">{info.about}</p>}
  </Section>;
 }

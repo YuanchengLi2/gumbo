@@ -30,8 +30,19 @@ const pixel=(gl:WebGL2RenderingContext,x:number,y:number)=>{const out=new Uint8A
   // A heart sticker drawn at the centre, and a magenta tint on a darkened picture.
   sticker:{width:200,height:100,background:'#000000',layers:[{kind:'text',key:'s',component:'sticker',sticker:'heart',text:'',x:.5,y:.5,rotation:0,scale:1,opacity:1,color:'#ff0000',background:'#ffffff',fontSize:0,fontWeight:0,size:80,time:0} as any]},
   tint:{width:200,height:100,background:'#000000',layers:[media({grades:[{exposure:-1,contrast:1,saturation:1,temperature:0,tint:1}]}) as any]},
+  // Transition masks: the right side of an edge at x = 100, a clock hand swept half way round (the right half), stripes
+  // 50 px apart open by half.
+  maskEdge:{width:200,height:100,background:'#000000',layers:[media({mask:{kind:'edge',nx:1,ny:0,d:100,feather:0}}) as any]},
+  maskClock:{width:200,height:100,background:'#000000',layers:[media({mask:{kind:'clock',cx:100,cy:50,sweep:Math.PI}}) as any]},
+  stripes:{width:200,height:100,background:'#000000',layers:[media({mask:{kind:'stripes',period:50,open:.5,vertical:true}}) as any]},
+  // A full film burn whites the picture out; a light leak lights the blue half warm; a 60 px streak across the red/blue
+  // edge mixes them; a zoom blur on the picture moved 30 px right pulls red into the blue just past its edge.
+  burn:{width:200,height:100,background:'#000000',layers:[media({fx:{burn:1,phase:0,variant:0}}) as any]},
+  leak:{width:200,height:100,background:'#000000',layers:[media({fx:{leak:1,phase:.5,variant:2}}) as any]},
+  streak:{width:200,height:100,background:'#000000',layers:[media({fx:{streakX:60}}) as any]},
+  zoomBlur:{width:200,height:100,background:'#000000',layers:[media({transform:[1,0,0,1,30,0],fx:{zoomBlur:1}}) as any]},
  };
  c.draw(frames[name],()=>pic);
- return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50)};
+ return{left:pixel(gl,20,50),right:pixel(gl,180,50),middleLeft:pixel(gl,95,50),middleRight:pixel(gl,105,50),corner:pixel(gl,2,2),centre:pixel(gl,100,50),edge:pixel(gl,60,50),at140:pixel(gl,140,50)};
 };
 (window as any).ready=true;

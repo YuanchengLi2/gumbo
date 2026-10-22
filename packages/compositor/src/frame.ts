@@ -7,11 +7,15 @@ import type {FootageIndex,Asset} from '@dream/footage';
 export type Grade={exposure:number;contrast:number;saturation:number;temperature:number;
  /** Gumbo's filters: green (-1) to magenta (1), lifted blacks (0-1), a hue turn in degrees, a teal-and-orange split tone. */
  tint?:number;fade?:number;hue?:number;splitTone?:number};
-/** What a layer keeps, in frame pixels: a rectangle (wipes) or a circle (reveals). */
-export type Mask={kind:'rect';rect:Rect}|{kind:'circle';cx:number;cy:number;r:number};
+/** What a layer keeps, in frame pixels: a rectangle (wipes), a circle (reveals), the side of an edge at or past `d` along
+ * its normal, soft over `feather` px (diagonal and soft wipes), a clock hand's sweep from twelve (radians), or stripes
+ * open by `open` (0-1) of each `period` px, across x unless `vertical` is false. */
+export type Mask={kind:'rect';rect:Rect}|{kind:'circle';cx:number;cy:number;r:number}|{kind:'edge';nx:number;ny:number;d:number;feather:number}|{kind:'clock';cx:number;cy:number;sweep:number}|{kind:'stripes';period:number;open:number;vertical:boolean};
 /** Effects drawn on a layer's own pixels, in frame pixels where they have a size: vignette, grain, glow and scan lines
- * (0-1), the colour channels pulled apart (px), blocks (px), bands shifted sideways (0-1), and the seed that moves them. */
-export type Fx={vignette?:number;grain?:number;glow?:number;split?:number;scan?:number;pixel?:number;jitter?:number;seed?:number};
+ * (0-1), the colour channels pulled apart (px), blocks (px), bands shifted sideways (0-1), and the seed that moves them.
+ * Film burn, light leak and zoom blur are 0-1; streak is a motion blur along (streakX, streakY) px; phase (seconds) moves
+ * the burn and the leak smoothly and variant picks their shape. */
+export type Fx={vignette?:number;grain?:number;glow?:number;split?:number;scan?:number;pixel?:number;jitter?:number;seed?:number;burn?:number;leak?:number;zoomBlur?:number;streakX?:number;streakY?:number;phase?:number;variant?:number};
 /** A 2x3 affine transform [a,b,c,d,e,f]: x' = a*x + c*y + e, y' = b*x + d*y + f. */
 export type Matrix=[number,number,number,number,number,number];
 export type Rect={x:number;y:number;w:number;h:number};
@@ -55,10 +59,12 @@ const EXTRA=['tint','fade','hue','splitTone'] as const;
 /** A grade from values that may be missing; the filter fields are only present when they change something. */
 export const gradeOf=(g:Partial<Record<keyof Grade,unknown>>|undefined):Grade=>{const out:Grade={exposure:Number(g?.exposure??0),contrast:Number(g?.contrast??1),saturation:Number(g?.saturation??1),temperature:Number(g?.temperature??0)};for(const key of EXTRA){const v=Number(g?.[key]??0);if(v)out[key]=v;}return out;};
 const isNeutral=(g:Grade)=>g.exposure===0&&g.contrast===1&&g.saturation===1&&g.temperature===0&&EXTRA.every(key=>!g[key]);
-const mergeFx=(a:Fx|undefined,b:Fx|undefined):Fx|undefined=>{if(!a)return b;if(!b)return a;const out:Fx={...a};for(const [key,value] of Object.entries(b) as [keyof Fx,number][])out[key]=key==='seed'?value:Math.max(out[key]??0,value);return out;};
-/** Coded scenes play in their own documents in the preview, which can be placed, faded, cropped and masked but not
- * graded, blurred or given effects; a scene layer carries none of those, so the preview and Export draw it alike. */
+const mergeFx=(a:Fx|undefined,b:Fx|undefined):Fx|undefined=>{if(!a)return b;if(!b)return a;const out:Fx={...a};for(const [key,value] of Object.entries(b) as [keyof Fx,number][])out[key]=key==='seed'||key==='phase'||key==='variant'?value:key==='streakX'||key==='streakY'?(Math.abs(value)>Math.abs(out[key]??0)?value:out[key]):Math.max(out[key]??0,value);return out;};
+/** Coded scenes play in their own documents in the preview, which can be placed, faded, cropped and masked (with hard
+ * edges) but not graded, blurred or given effects; a scene layer carries none of those, so the preview and Export draw
+ * it alike. */
 const sceneSafe=(kind:MediaLayer['media'],o:{grades:Grade[];blur:number;fx?:Fx})=>kind==='scene'?{grades:[],blur:0,fx:undefined}:o;
+const sceneMask=(kind:MediaLayer['media'],mask:Mask|undefined):Mask|undefined=>kind==='scene'&&mask?.kind==='edge'?{...mask,feather:0}:mask;
 
 /** Where a source's pixels land in a frame-sized box, as object-fit and object-position place them, clipped to the box. */
 export function fitInBox(sourceW:number,sourceH:number,box:Rect,fit:'contain'|'cover',x=.5,y=.5):{uv:Rect;rect:Rect}{
@@ -134,36 +140,58 @@ function clipLayers(p:Prepared,clip:ResolvedClip,time:number,sourceTime:number,o
  const kind=mediaKind(asset);
  if(kind){const placed=fitInBox(asset.width,asset.height,box,look.fit,look.objectX,look.objectY);
   const effect=sceneSafe(kind,{grades:look.grades,blur:Math.max(blur,look.blur),fx:mergeFx(look.fx,fx)});
-  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:effect.grades,blur:effect.blur,...(effect.fx?{fx:effect.fx}:{}),...(mask?{mask}:{})});}
+  layers.push({kind:'media',key:clip.id,assetId:asset.id,media:kind,time:sourceTime,rate:clip.holdSec?0:clip.speed,frameIndex:frameOf(asset,kind,sourceTime),uv:placed.uv,rect:placed.rect,transform,opacity,grades:effect.grades,blur:effect.blur,...(effect.fx?{fx:effect.fx}:{}),...(mask?{mask:sceneMask(kind,mask)}:{})});}
  else if(asset.kind==='audio')layers.push({kind:'text',key:'audio:'+asset.id,component:'audio_card',text:asset.filename,x:.5,y:.5,rotation:0,scale:1,opacity:outerOpacity,color:'#cbd4e5',background:'#161c26',fontSize:42,fontWeight:400});
  return layers;
 }
 const sequenceFrame=(a:Asset,sourceTime:number)=>sequenceAt(sourceTime,a.sequence!.fps,a.sequence!.frameCount);
 
-/** A transition between two clips, centred on the cut and drawn over black. Crossfade, slide, whip and zoom through are
- * drawn as the player first drew them; Gumbo's library adds dips to black and white, a flash, wipes, a zoom out, a blur
- * dissolve, a spin, a circle reveal and a glitch. Wipes, slides and whips go the way their direction says (left by
- * default: the next shot comes in from the right). */
+/** A transition between two clips, centred on the cut and drawn over black. Crossfade, slide and zoom through are drawn as
+ * the player first drew them; Gumbo's library adds dips to black and white, a flash, wipes (hard, soft, diagonal, clock,
+ * split and blinds), a zoom out, a blur dissolve, a spin, a circle reveal, a glitch, a zoom blur, a film burn, a light
+ * leak, a shake cut, a flip and a pixelate. Directional ones go the way their direction says (left by default: the next
+ * shot comes in from the right). `intensity` scales how far the strong ones move, blur, burn or shake. */
 function transitionLayers(p:Prepared,before:ResolvedClip,after:ResolvedClip,time:number):Layer[]{
  const {width:W,height:H,fps}=p.timeline.settings,t=after.transitionIn!,frames=Math.max(1,Math.round(t.durationSec*fps)),start=(after.from-Math.round(t.durationSec*fps/2))/fps,frame=Math.round((time-start)*fps),k=Math.max(0,Math.min(1,frame/(frames-1||1)));
- const elapsed=Math.max(0,time-start),dir=t.direction??'left',[vx,vy]=dir==='left'?[-1,0]:dir==='right'?[1,0]:dir==='up'?[0,-1]:[0,1];
+ const elapsed=Math.max(0,time-start),dir=t.direction??'left',[vx,vy]=dir==='left'?[-1,0]:dir==='right'?[1,0]:dir==='up'?[0,-1]:[0,1],s=Math.max(0,Math.min(1,t.intensity??1)),px=H/1080;
  const outTime=Math.max(0,before.srcOut-t.durationSec*before.speed/2)+elapsed*before.speed,inTime=Math.max(0,after.srcIn-t.durationSec*after.speed/2)+elapsed*after.speed;
  type Look={outer?:Matrix;opacity?:number;blur?:number;mask?:Mask;fx?:Fx};
  const out=(o:Look={})=>clipLayers(p,before,time,outTime,o.outer??identity,o.opacity??1,o.blur??0,false,o.mask,o.fx);
  const into=(o:Look={})=>clipLayers(p,after,time,inTime,o.outer??identity,o.opacity??1,o.blur??0,false,o.mask,o.fx);
  const fill=(color:string,opacity:number):FillLayer=>({kind:'fill',color,rect:{x:0,y:0,w:W,h:H},transform:identity,opacity});
  const smooth=(x:number)=>x*x*(3-2*x),zoom=(s:number,turn=0)=>aboutCentre(W,H,rotation(turn),scaling(s,s));
+ const peak=Math.sin(k*Math.PI),mid=(a:number,b:number)=>smooth(Math.max(0,Math.min(1,(k-a)/(b-a)))),phase=elapsed,variant=after.from%7;
  switch(t.type){
   case 'dip_to_black':case 'dip_to_white':{const color=t.type==='dip_to_white'?'#ffffff':'#000000';return k<.5?[...out(),fill(color,smooth(k*2))]:[...into(),fill(color,smooth((1-k)*2))];}
-  case 'flash':return[...out(),...into({opacity:k}),fill('#ffffff',Math.sin(k*Math.PI)*.9)];
+  case 'flash':return[...out(),...into({opacity:k}),fill('#ffffff',peak*.9*s)];
   case 'wipe':{const rect=dir==='left'?{x:W*(1-k),y:0,w:W*k,h:H}:dir==='right'?{x:0,y:0,w:W*k,h:H}:dir==='up'?{x:0,y:H*(1-k),w:W,h:H*k}:{x:0,y:0,w:W,h:H*k};return[...out(),...into({mask:{kind:'rect',rect}})];}
-  case 'slide':case 'whip':{const blur=t.type==='whip'?Math.sin(k*Math.PI)*12:0;return[...out({outer:translate(vx*k*W,vy*k*H),blur}),...into({outer:translate(-vx*(1-k)*W,-vy*(1-k)*H),blur})];}
-  case 'zoom_through':return[...out({outer:zoom(1+k*.5),opacity:1-k}),...into({outer:zoom(1.5-.5*k),opacity:k})];
-  case 'zoom_out':return[...out({outer:zoom(1-.35*smooth(k)),opacity:1-k}),...into({outer:zoom(1.25-.25*smooth(k)),opacity:k})];
-  case 'blur':{const blur=Math.sin(k*Math.PI)*24*H/1080;return[...out({blur}),...into({opacity:k,blur})];}
-  case 'spin':return[...out({outer:zoom(1+k*.8,k*90),opacity:1-k}),...into({outer:zoom(1.8-.8*k,-(1-k)*90),opacity:k})];
+  case 'slide':return[...out({outer:translate(vx*k*W,vy*k*H)}),...into({outer:translate(-vx*(1-k)*W,-vy*(1-k)*H)})];
+  // A whip eases through the pan (fastest on the cut) and streaks both shots along the way they move, as a fast pan does.
+  case 'whip':{const e=smooth(k),fx:Fx={streakX:vx*peak*.12*W*s,streakY:vy*peak*.12*H*s};return[...out({outer:translate(vx*e*W,vy*e*H),fx}),...into({outer:translate(-vx*(1-e)*W,-vy*(1-e)*H),fx})];}
+  case 'cover':{const e=smooth(k);return[...out(),fill('#000000',.35*e),...into({outer:translate(-vx*(1-e)*W,-vy*(1-e)*H)})];}
+  case 'zoom_through':return[...out({outer:zoom(1+k*.5*s),opacity:1-k}),...into({outer:zoom(1+.5*s-.5*s*k),opacity:k})];
+  case 'zoom_out':return[...out({outer:zoom(1-.35*s*smooth(k)),opacity:1-k}),...into({outer:zoom(1+.25*s-.25*s*smooth(k)),opacity:k})];
+  case 'blur':{const blur=peak*24*px*s;return[...out({blur}),...into({opacity:k,blur})];}
+  case 'spin':return[...out({outer:zoom(1+k*.8*s,k*90*s),opacity:1-k}),...into({outer:zoom(1+.8*s-.8*s*k,-(1-k)*90*s),opacity:k})];
   case 'iris':return[...out(),...into({mask:{kind:'circle',cx:W/2,cy:H/2,r:smooth(k)*Math.hypot(W,H)/2}})];
-  case 'glitch':{const amount=Math.sin(k*Math.PI),fx:Fx={split:amount*18*H/1080,jitter:amount,seed:after.from+frame};return k<.5?out({fx}):into({fx});}
+  case 'glitch':{const fx:Fx={split:peak*18*px*s,jitter:peak*s,seed:after.from+frame};return k<.5?out({fx}):into({fx});}
+  // Rushes into the middle (accelerating) on a radial blur, then out of the next shot; the two meet in a short dissolve.
+  case 'zoom_blur':{const a=k*k,b=(1-k)*(1-k);return[...out({outer:zoom(1+.7*s*a),fx:{zoomBlur:s*Math.min(1,a*2)}}),...into({outer:zoom(1+.7*s*b),opacity:mid(.4,.6),fx:{zoomBlur:s*Math.min(1,b*2)}})];}
+  case 'film_burn':{const fx:Fx={burn:peak*s,phase,variant};return[...out({fx}),...into({opacity:mid(.35,.65),fx})];}
+  case 'light_leak':{const fx:Fx={leak:peak*s,phase,variant};return[...out({fx}),...into({opacity:mid(.3,.7),fx})];}
+  // A hard cut on the middle frame, the camera knocked about either side of it, hardest on the cut: a hit of a few
+  // per cent of the frame, zoomed in enough that no edge shows, streaked along the jolt.
+  case 'shake_cut':{const amp=Math.pow(peak,2)*s,jx=(chance(after.from*3+frame)-.5)*2,jy=(chance(after.from*5+frame+.5)-.5)*2,dx=jx*.045*W*amp,dy=jy*.045*H*amp,turn=jx*2.5*amp,r=turn*Math.PI/180;
+   const cover=Math.cos(r)+Math.max(W/H,H/W)*Math.abs(Math.sin(r))+.1*amp,outer=multiply(translate(dx,dy),aboutCentre(W,H,rotation(turn),scaling(cover,cover))),fx:Fx={streakX:dx*.6,streakY:dy*.6};return k<.5?out({outer,fx}):into({outer,fx});}
+  case 'clock_wipe':return[...out(),...into({mask:{kind:'clock',cx:W/2,cy:H/2,sweep:k*Math.PI*2}})];
+  case 'split':{const e=smooth(k),rect=vx?{x:W*(1-e)/2,y:0,w:W*e,h:H}:{x:0,y:H*(1-e)/2,w:W,h:H*e};return[...out(),...into({mask:{kind:'rect',rect}})];}
+  // An edge whose normal points at the corner the next shot comes from, swept across the frame's corners.
+  case 'diagonal':case 'smooth_wipe':{const [nx,ny]=t.type==='diagonal'?(dir==='left'?[1,1]:dir==='right'?[-1,-1]:dir==='up'?[-1,1]:[1,-1]).map(v=>v*Math.SQRT1_2):[0-vx,0-vy],feather=t.type==='smooth_wipe'?.12*Math.max(W,H):0;
+   const ends=[[0,0],[W,0],[0,H],[W,H]].map(([x,y])=>x*nx+y*ny),hi=Math.max(...ends)+feather,lo=Math.min(...ends)-feather;return[...out(),...into({mask:{kind:'edge',nx,ny,d:hi-(hi-lo)*smooth(k),feather}})];}
+  case 'blinds':return[...out(),...into({mask:{kind:'stripes',period:(vx?W:H)/8,open:smooth(k),vertical:!!vx}})];
+  // A card turning over: this shot narrows to an edge and the next opens from it, a little smaller in the middle of the turn.
+  case 'flip':{const turn=Math.abs(Math.cos(k*Math.PI)),z=1-.12*peak,m=aboutCentre(W,H,scaling(vx?turn*z:z,vx?z:turn*z));return k<.5?out({outer:m}):into({outer:m});}
+  case 'pixelate':{const fx:Fx={pixel:4*px+peak*56*px*s};return[...out({fx}),...into({opacity:mid(.4,.6),fx})];}
   default:return[...out(),...into({opacity:k})];
  }
 }

@@ -23,9 +23,13 @@ function samplePicture(){
 }
 const footage=():FootageIndex=>{const f=emptyFootage();f.assets=[AssetSchema.parse({id:'sample',filename:'sample',kind:'image',originalPath:'sample.png',durationSec:3,width:W,height:H,fps:30,hasAudio:false,fingerprint:'sample',status:'ready'})];return f;};
 const FOOTAGE=footage();
+const still=(id:string,holdSec:number,extra:object={})=>({id,assetId:'sample',srcIn:0,srcOut:3,holdSec,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},reason:'',...extra});
 /** A three-second edit of the sample with one piece on it. */
-function sampleEdit(o:{attached?:object[];framing?:object;picture?:boolean}):TimelineDocument{const t=emptyTimeline('library');
- return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:o.picture===false?[]:[{id:'clip',assetId:'sample',srcIn:0,srcOut:3,holdSec:3,speed:1,audio:{gainDb:0,fadeInSec:.01,fadeOutSec:.01,mute:false},...(o.framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...o.framing}}:{}),reason:''}],attached:o.attached??[]});}
+export function sampleEdit(o:{attached?:object[];framing?:object;picture?:boolean}):TimelineDocument{const t=emptyTimeline('library');
+ return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:o.picture===false?[]:[still('clip',3,o.framing?{framing:{mode:'fill',scale:1,x:.5,y:.5,...o.framing}}:{})],attached:o.attached??[]});}
+/** Two shots of the sample, the second mirrored and graded night-blue, with a transition on the cut at 1.2 s. */
+export function transitionEdit(transition:object):TimelineDocument{const t=emptyTimeline('library');
+ return TimelineSchema.parse({...t,settings:{...t.settings,width:W,height:H},spine:[still('a',1.2),still('b',1.2,{framing:{mode:'fill',scale:1,x:.5,y:.5,flipX:true,filter:'neon',filterIntensity:1},transitionIn:transition})],attached:[]});}
 const item=(component:string,type:string,params:Record<string,unknown>)=>({id:'piece',type,component,start:{kind:'project',at:'start',offsetSec:0},durationSec:3,layer:0,params,reason:''});
 
 let shared:Compositor|undefined;
@@ -38,7 +42,7 @@ function drawTile(canvas:HTMLCanvasElement,edit:TimelineDocument,time:number,bac
  for(const layer of frame.layers)if(layer.kind==='text')paintText(ctx,layer as TextLayer,W,H,scale);
 }
 /** A tile's picture: drawn once at rest, and played on a loop while the pointer is over it. */
-function EngineTile({edit,rest,loop=2.4,background}:{edit:TimelineDocument;rest:number;loop?:number;background?:string}){
+export function EngineTile({edit,rest,loop=2.4,background}:{edit:TimelineDocument;rest:number;loop?:number;background?:string}){
  const ref=useRef<HTMLCanvasElement>(null),[hover,setHover]=useState(false);
  useEffect(()=>{const canvas=ref.current;if(!canvas)return;if(!hover){drawTile(canvas,edit,rest,background);return;}
   let raf=0;const began=performance.now(),step=()=>{drawTile(canvas,edit,((performance.now()-began)/1000)%loop,background);raf=requestAnimationFrame(step);};step();return()=>cancelAnimationFrame(raf);},[edit,hover,rest,loop,background]);

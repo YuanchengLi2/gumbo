@@ -3,24 +3,38 @@
  * (numbers and drawing code), not copied artwork or presets. */
 
 /** Transitions into a clip (`transitionIn` on the incoming clip), centred on the cut and drawn over black. */
-export const TRANSITION_TYPES=['cut','crossfade','dip_to_black','dip_to_white','flash','wipe','slide','whip','zoom_through','zoom_out','blur','spin','iris','glitch'] as const;
+export const TRANSITION_TYPES=['cut','crossfade','dip_to_black','dip_to_white','flash','wipe','slide','whip','zoom_through','zoom_out','blur','spin','iris','glitch',
+ 'cover','zoom_blur','film_burn','light_leak','shake_cut','clock_wipe','split','diagonal','smooth_wipe','blinds','flip','pixelate'] as const;
 export type TransitionType=typeof TRANSITION_TYPES[number];
 export const DIRECTIONS=['left','right','up','down'] as const;
 export type Direction=typeof DIRECTIONS[number];
-export const TRANSITIONS:{id:Exclude<TransitionType,'cut'>;name:string;durationSec:number;directional?:boolean;about:string}[]=[
+/** `strength` marks the ones whose look `intensity` (0-1, full by default) scales: how far they move, blur, burn or shake. */
+export const TRANSITIONS:{id:Exclude<TransitionType,'cut'>;name:string;durationSec:number;directional?:boolean;strength?:boolean;about:string}[]=[
  {id:'crossfade',name:'Cross dissolve',durationSec:.5,about:'The next shot fades in over this one.'},
  {id:'dip_to_black',name:'Dip to black',durationSec:.8,about:'Fades out to black, then in from black.'},
  {id:'dip_to_white',name:'Dip to white',durationSec:.8,about:'Fades out to white, then in from white.'},
- {id:'flash',name:'Flash',durationSec:.4,about:'A quick white flash on the cut.'},
+ {id:'flash',name:'Flash',durationSec:.4,strength:true,about:'A quick white flash on the cut.'},
  {id:'wipe',name:'Wipe',durationSec:.6,directional:true,about:'A hard edge sweeps the next shot in.'},
  {id:'slide',name:'Slide',durationSec:.5,directional:true,about:'The next shot pushes this one off the frame.'},
- {id:'whip',name:'Whip pan',durationSec:.35,directional:true,about:'A fast blurred pan into the next shot.'},
- {id:'zoom_through',name:'Zoom in',durationSec:.5,about:'Zooms into this shot and out of the next.'},
- {id:'zoom_out',name:'Zoom out',durationSec:.5,about:'This shot shrinks away as the next one settles in.'},
- {id:'blur',name:'Blur dissolve',durationSec:.6,about:'Both shots blur through the dissolve.'},
- {id:'spin',name:'Spin',durationSec:.6,about:'Turns and zooms into the next shot.'},
+ {id:'whip',name:'Whip pan',durationSec:.35,directional:true,strength:true,about:'A fast pan into the next shot, streaked the way it moves.'},
+ {id:'zoom_through',name:'Zoom in',durationSec:.5,strength:true,about:'Zooms into this shot and out of the next.'},
+ {id:'zoom_out',name:'Zoom out',durationSec:.5,strength:true,about:'This shot shrinks away as the next one settles in.'},
+ {id:'blur',name:'Blur dissolve',durationSec:.6,strength:true,about:'Both shots blur through the dissolve.'},
+ {id:'spin',name:'Spin',durationSec:.6,strength:true,about:'Turns and zooms into the next shot.'},
  {id:'iris',name:'Circle reveal',durationSec:.7,about:'The next shot opens from a circle in the middle.'},
- {id:'glitch',name:'Glitch',durationSec:.4,about:'A digital break-up on the cut.'}];
+ {id:'glitch',name:'Glitch',durationSec:.4,strength:true,about:'A digital break-up on the cut.'},
+ {id:'cover',name:'Slide over',durationSec:.5,directional:true,about:'The next shot slides in over this one.'},
+ {id:'zoom_blur',name:'Zoom blur',durationSec:.45,strength:true,about:'Rushes into the middle with a radial blur and out of the next shot.'},
+ {id:'film_burn',name:'Film burn',durationSec:.9,strength:true,about:'The film burns out to orange and white, then into the next shot.'},
+ {id:'light_leak',name:'Light leak',durationSec:.9,strength:true,about:'Warm light washes across the cut.'},
+ {id:'shake_cut',name:'Shake cut',durationSec:.4,strength:true,about:'A hard cut hit by a camera shake.'},
+ {id:'clock_wipe',name:'Clock wipe',durationSec:.7,about:'The next shot sweeps round like a clock hand.'},
+ {id:'split',name:'Split',durationSec:.6,directional:true,about:'The next shot opens from the middle like doors (left or right: sideways; up or down: from top and bottom).'},
+ {id:'diagonal',name:'Diagonal wipe',durationSec:.6,directional:true,about:'A slanted edge sweeps the next shot in from a corner.'},
+ {id:'smooth_wipe',name:'Soft wipe',durationSec:.7,directional:true,about:'A wipe with a soft feathered edge.'},
+ {id:'blinds',name:'Blinds',durationSec:.7,directional:true,about:'The next shot opens in stripes.'},
+ {id:'flip',name:'Flip',durationSec:.5,directional:true,about:'The picture flips over like a card to the next shot.'},
+ {id:'pixelate',name:'Pixelate',durationSec:.6,strength:true,about:'Breaks into big pixels and resolves into the next shot.'}];
 export const transitionInfo=(type:string)=>TRANSITIONS.find(t=>t.id===type);
 
 /** A number an effect, filter or style can set, with its range for a slider. */
