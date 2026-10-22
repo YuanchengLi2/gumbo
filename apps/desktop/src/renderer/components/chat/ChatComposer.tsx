@@ -9,6 +9,7 @@ import {LabLogo} from './ModelLogos';
 import {GumboMark} from '../home/HomeScreen';
 import {useProviders,available,shortLabel,pickable,ROUX} from '../../models';
 import {useCreatorMentions} from './CreatorMentions';
+import {stopGuard} from './stop-guard';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
 type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
 
@@ -74,8 +75,9 @@ export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:Mo
 /** The value and onChange are the caller's when given; otherwise the box keeps the workspace draft (store/draft.ts). */
 export function ChatComposer(props:Props){const draft=useDraft(s=>props.value===undefined?s.text:''),p={...props,value:props.value??draft,onChange:props.onChange??setDraft};const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null),mentions=useCreatorMentions(textarea,p.value,p.onChange);
  // Send becomes Stop in the same place: a click in the very first moment after sending is the same click repeated, not a
- // decision to stop. Any later click stops at once (it waited 1.5 s, so a quick Stop did nothing).
- const stopShown=useRef(0);useEffect(()=>{if(p.active)stopShown.current=Date.now();},[p.active]);const stop=()=>{if(Date.now()-stopShown.current>=350)p.onStop?.();};
+ // decision to stop (stop-guard.ts). Any later click stops at once (it waited 1.5 s, so a quick Stop did nothing). The
+ // moment is taken before the frame that shows Stop: a passive effect could run after a queued second click.
+ const guard=useRef(stopGuard()).current;useLayoutEffect(()=>{if(p.active)guard.shown();},[p.active]);const stop=()=>{if(guard.allows())p.onStop?.();};
  const resize=()=>{const node=textarea.current;if(!node)return;node.style.height='auto';node.style.height=Math.min(p.home?280:200,Math.max(p.home?76:44,node.scrollHeight))+'px';};
  useLayoutEffect(resize,[p.value,p.home,p.attachments.length]);
  useLayoutEffect(()=>{const node=textarea.current;if(!node)return;let width=node.offsetWidth;const observer=new ResizeObserver(()=>{if(node.offsetWidth!==width){width=node.offsetWidth;resize();}});observer.observe(node);return()=>observer.disconnect();},[]);

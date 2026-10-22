@@ -11,6 +11,7 @@ import {useProjectSession} from './hooks/useProjectSession';
 
 import {useEditor} from './store/editor';
 import {useStable} from './memo';
+import {typing} from './manual/shortcuts';
 import {approvesPlan} from '@dream/contracts';
 import {selectionRefs} from '@dream/timeline';
 
@@ -51,7 +52,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  const [signIn,setSignIn]=useState(false);// A request picked in the onboarding or the welcome to a plan goes into the home screen's box.
  useEffect(()=>{const prompt=(e:Event)=>{setHomeInput(String((e as CustomEvent).detail??''));s.setRoute('home');};window.addEventListener('gumbo:prompt',prompt);return()=>window.removeEventListener('gumbo:prompt',prompt);},[]);
  useEffect(()=>{const open=()=>setSignIn(true);window.addEventListener('dream:sign-in',open);return()=>window.removeEventListener('dream:sign-in',open);},[]);
- const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),project=s.project,active=project?.aiStatus==='running',timeline=project?.timeline,footage=project?.footage;
+ const returned=useEditor(state=>state.returned);useEffect(()=>{if(returned!==null){setInput(value=>value.trim()?value:returned);useEditor.setState({returned:null});}},[returned]);const creating=useRef(false),sending=useRef(false),project=s.project,active=project?.aiStatus==='running',timeline=project?.timeline,footage=project?.footage;
  // Worked out once per edit: while Gumbo streams, the window draws again for every word.
  const duration=useMemo(()=>timeline&&footage?resolve(timeline,footage).durationSec:0,[timeline,footage]);
 
@@ -67,14 +68,15 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  // Every message is a new request; after a stop, the assistant decides whether it continues the stopped work.
  // The message shows and the composer clears at once; a failed send puts the text back.
  // A change asked for from a plan card sends its own text and leaves the composer alone.
- async function submit(override?:string){const text=(override??useDraft.getState().text).trim();if(!project||!text||active||s.busy)return false;if(!await requireSignIn())return false;const assetIds=override===undefined?s.attachments:[],store=useEditor.getState(),requestId=crypto.randomUUID();store.setPending({requestId,text,assetIds,selection:selectionRefs(project.timeline,project.footage,s.selected),createdAt:new Date().toISOString()});if(override===undefined){setInput('');s.setAttachments([]);}s.setSidebarTab('chat');
+ // The sign-in check is awaited before the box clears: a second click in that moment sent the message twice.
+ async function submit(override?:string){const text=(override??useDraft.getState().text).trim();if(!project||!text||active||s.busy||sending.current)return false;sending.current=true;let signedIn=false;try{signedIn=await requireSignIn();}finally{sending.current=false;}if(!signedIn)return false;const assetIds=override===undefined?s.attachments:[],store=useEditor.getState(),requestId=crypto.randomUUID();store.setPending({requestId,text,assetIds,selection:selectionRefs(project.timeline,project.footage,s.selected),createdAt:new Date().toISOString()});if(override===undefined){setInput('');s.setAttachments([]);}s.setSidebarTab('chat');
  // A go-ahead for a waiting plan approves it, and like leaving plan mode the composer goes back to editing automatically.
  const approval=project.aiStatus==='awaiting_approval'&&approvesPlan(text);if(approval&&store.permission==='plan')store.setPermission('auto');
  const result=await s.command({type:'message',text,selection:s.selected,assetIds,intent:approval?'auto':store.permission,model:store.model,requestId});if(!result&&useEditor.getState().pending?.requestId===requestId){useEditor.getState().setPending(null);if(override===undefined){setInput(text);s.setAttachments(assetIds);}}return !!result;}
 
  // Redo under a finished request sends that request again (chat/TurnActions).
  useEffect(()=>{const send=(e:Event)=>{void submit(String((e as CustomEvent).detail??''));};window.addEventListener('gumbo:send',send);return()=>window.removeEventListener('gumbo:send',send);});
- useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey,key=e.key.toLowerCase(),fps=project?.timeline.settings.fps??30;
+ useEffect(()=>{const key=(e:KeyboardEvent)=>{if(s.route!=='ai'||dialog||files||typing(e))return;if((e.target as HTMLElement).closest('button,summary')&&(e.code==='Space'||e.key==='Enter'))return;const mod=e.ctrlKey||e.metaKey,key=e.key.toLowerCase(),fps=project?.timeline.settings.fps??30;
   // Playback keys as OpenCut has them (manual/shortcuts.ts): Space or K plays, J and L step a second, arrows a frame
   // (Shift: five seconds), Home and End jump to the ends.
   if(e.code==='Space'||!mod&&!e.altKey&&key==='k'){e.preventDefault();player.current?.toggle();}else if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();seek(s.frame+(e.key==='ArrowRight'?1:-1)*(e.shiftKey?5*fps:1));}else if(!mod&&!e.altKey&&(key==='j'||key==='l')){e.preventDefault();seek(s.frame+(key==='l'?fps:-fps));}else if(e.key==='Home'||e.key==='End'){e.preventDefault();seek(e.key==='Home'?0:Number.MAX_SAFE_INTEGER);}else if(mod&&key==='z'){e.preventDefault();void s.command({type:e.shiftKey?'redo':'undo'});}else if(mod&&key==='y'){e.preventDefault();void s.command({type:'redo'});}else if(e.key==='Escape')s.setSelected([]);};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[s.route,s.frame,dialog,files,project?.versionId,active]);
