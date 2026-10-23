@@ -51,7 +51,8 @@ const newId=()=>'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8
 export function defaultMemoryLimit(){const gb=1024**3,device=(globalThis.navigator as {deviceMemory?:number}|undefined)?.deviceMemory;return Math.round(Math.min(4*gb,Math.max(1.5*gb,(device??8)*gb*.6)));}
 class Stopped extends Error{constructor(message:string,public kind:'stop'|'timeout'|'memory'){super(message);}}
 
-type Entry={id:string;command:string;started:number;controller:AbortController;done:Promise<ProcessResult>;output:()=>string};
+type Entry={id:string;command:string;started:number;timeoutMs:number;controller:AbortController;done:Promise<ProcessResult>;output:()=>string};
+const timedOut=(timeoutMs:number)=>new Stopped(`it ran past its ${Math.round(timeoutMs/1000)}s time limit. Run it with a longer timeoutMs, in the background, or on less material.`,'timeout');
 /** Runs commands like the desktop's run_command: each in its own shell over the sandbox's file system, with a time limit,
  * an output cap, a memory guard and a process id to wait on or stop. Runs in a worker in the app and under Node in tests. */
 export class Sandbox{
@@ -76,7 +77,7 @@ export class Sandbox{
    if(logPath&&logBytes<maxLog){const bytes=encoder.encode(text);const take=bytes.subarray(0,maxLog-logBytes);logBytes+=take.length;try{this.fs.appendFile(logPath,take);}catch{}if(logBytes>=maxLog)try{this.fs.appendFile(logPath,encoder.encode(`\n[log stopped at ${Math.round(maxLog/1048576)} MB]\n`));}catch{}}
   };
   const done=this.execute(id,request,controller,emit,started).then(result=>({...result,output:result.output??output,logPath}));
-  const entry:Entry={id,command:request.command,started,controller,done,output:()=>output};this.running.set(id,entry);
+  const entry:Entry={id,command:request.command,started,timeoutMs:request.timeoutMs??600000,controller,done,output:()=>output};this.running.set(id,entry);
   done.then(result=>{this.running.delete(id);this.finished.set(id,result);if(this.finished.size>100)this.finished.delete(this.finished.keys().next().value!);},()=>this.running.delete(id));
   return{id,done};
  }
@@ -87,7 +88,7 @@ export class Sandbox{
   if(tryStat(this.fs,cwd)?.type!=='directory'){emit(`sh: cd: ${request.cwd}: No such directory in the workspace\n`);return finish('failed',2);}
   const home=join(this.workspace,'.cache'),tmp=join(home,'tmp');try{mkdirp(this.fs,tmp);}catch{}
   const env={PATH:'/usr/local/bin:/usr/bin:/bin',HOME:home,TMPDIR:tmp,TMP:tmp,TEMP:tmp,SHELL:'/bin/sh',USER:'user',LOGNAME:'user',LANG:'C.UTF-8',TERM:'dumb',DREAM_WORKSPACE:this.workspace,DREAM_SANDBOX:'browser',...this.options.env,...request.env};
-  const timer=setTimeout(()=>controller.abort(new Stopped(`it ran past its ${Math.round(timeoutMs/1000)}s time limit. Run it with a longer timeoutMs, in the background, or on less material.`,'timeout')),timeoutMs);
+  const timer=setTimeout(()=>controller.abort(timedOut(timeoutMs)),timeoutMs);
   const baseline=this.fs.memoryBytes?.()??0;
   const used=()=>{let total=Math.max(0,(this.fs.memoryBytes?.()??0)-baseline);for(const bytes of this.memory.values())try{total+=bytes();}catch{}const heap=(globalThis.performance as {memory?:{usedJSHeapSize:number}}|undefined)?.memory?.usedJSHeapSize;return total+(heap??0);};
   const guard=setInterval(()=>{if(used()>limit)controller.abort(new Stopped(`this command used all ${(limit/1024**3).toFixed(1)} GB of memory a command may use, so it was stopped. Process media in smaller pieces (for example seek with -ss to each range and cut one range per ffmpeg run instead of one filter graph over a whole long file).`,'memory'));},500);
@@ -121,9 +122,10 @@ export class Sandbox{
   const result=await Promise.race([entry.done,new Promise<undefined>(resolve=>{timer=setTimeout(resolve,waitMs);})]);clearTimeout(timer);
   return result??{id,status:'running',output:entry.output().slice(-6000),runningSec:Math.round((Date.now()-entry.started)/1000),command:entry.command.slice(0,200)};
  }
- async stop(id:string,reason='Stopped.'):Promise<ProcessResult|undefined>{
+ /** Stops a command; `timeout` says the client stopped it for its time limit (while a program kept this worker busy). */
+ async stop(id:string,reason='Stopped.',timeout=false):Promise<ProcessResult|undefined>{
   const entry=this.running.get(id);if(!entry)return this.finished.get(id);
-  entry.controller.abort(new Stopped(reason.replace(/\.$/,''),'stop'));return entry.done;
+  entry.controller.abort(timeout?timedOut(entry.timeoutMs):new Stopped(reason.replace(/\.$/,''),'stop'));return entry.done;
  }
  stopAll(reason='Stopped.'){for(const id of[...this.running.keys()])void this.stop(id,reason);}
  list(){return[...this.running.values()].map(e=>({id:e.id,command:e.command.slice(0,200),runningSec:Math.round((Date.now()-e.started)/1000)}));}
