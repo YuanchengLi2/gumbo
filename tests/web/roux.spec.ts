@@ -26,6 +26,9 @@ test('Roux edits, looks, listens, reads the web and a granted folder in the brow
   expect(text(seen.l)).toContain('A steady test tone');expect(text(seen.l)).toMatch(/integratedLufs/);
   expect(text(seen.w)).toContain('Kickflip basics');expect(text(seen.w)).not.toContain('ignore()');
   expect(text(seen.c)).toMatch(/\/granted\/pretend-videos-[0-9a-f]{4}/);
+  // The run's log reaches the gateway by itself, as the gateway's edit-log route keeps it: by run, from the web.
+  await expect.poll(()=>run.gateway.editLogs.length).toBeGreaterThanOrEqual(1);
+  expect(run.gateway.editLogs[0]).toMatchObject({key:expect.stringMatching(/@/),appVersion:'0.3.0',platform:expect.stringMatching(/^web /),log:expect.any(Object)});
   expect(run.errors).toEqual([]);
  }finally{await run.gateway.close();}
 });

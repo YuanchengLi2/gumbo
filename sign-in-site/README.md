@@ -16,9 +16,21 @@ Gumbo's website, a static site on Vercel served at `https://usegumbo.app`:
   label, never email. To try it before deploying, run `pnpm dashboard` and open
   http://127.0.0.1:4317/site-dashboard/?api=/spend-dashboard (password from `.env.local`).
 
-Deploy from this folder with `npx vercel deploy --prod`. `vercel.json` keeps other sites from framing the pages and sends
-no referrer (the sign-in page's address carries the app's one-time callback). Supabase needs `http://127.0.0.1:**/callback**`
-in its redirect URLs, because Google and the emailed link return to the app there.
+- `/app/` Gumbo itself, the web app (apps/web), built into the deploy. It is not kept in this folder.
+
+Deploy with `npx tsx scripts/stage-web.ts`. It builds the web app for production, copies this folder (with `.vercel/`)
+and the build into `app/` of a git-free folder outside the repo, because Vercel won't deploy from this repo's git
+author. Then run `npx vercel deploy --prod --yes` there, as the script says. `vercel.json` keeps other sites from framing
+the pages and sends no referrer (the sign-in page's address carries the app's one-time callback). Under `/app/` it also:
+
+- makes the app cross-origin isolated (COOP same-origin, COEP credentialless), for SharedArrayBuffer;
+- serves `engine/host.html` at every scene and draft address, which the app's own pages may frame and read;
+- never caches the page or its service worker, and caches the hashed assets forever.
+
+Supabase needs these in its redirect URLs, because Google and the emailed link return there:
+
+- `http://127.0.0.1:**/callback**` for the desktop app;
+- `https://usegumbo.app/app/**` and `http://localhost:**/app/**` for the web app (supabase/config.toml).
 
 `https://usegumbo.app/download` is the link to share: `vercel.json` sends it to the newest Windows installer on the
 gumbo-releases repo (the same releases the app updates from), so it never needs changing when a version ships.

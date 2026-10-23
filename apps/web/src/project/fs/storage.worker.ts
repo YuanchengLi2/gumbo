@@ -11,7 +11,11 @@ const enoent=(path:string)=>new Failure('ENOENT',`ENOENT: no such file or direct
 
 const parts=(path:string)=>path.split('/').filter(p=>p&&p!=='.');
 function grantDb():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const r=indexedDB.open('gumbo-grants',1);r.onupgradeneeded=()=>r.result.createObjectStore('grants');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});}
-async function grantRoot(id:string):Promise<FileSystemDirectoryHandle>{const db=await grantDb();try{const handle=await new Promise<FileSystemDirectoryHandle|undefined>((resolve,reject)=>{const g=db.transaction('grants').objectStore('grants').get(id);g.onsuccess=()=>resolve(g.result);g.onerror=()=>reject(g.error);});if(!handle)throw enoent('/granted/'+id);return handle;}finally{db.close();}}
+async function grantRoot(id:string):Promise<FileSystemDirectoryHandle>{const db=await grantDb();try{const handle=await new Promise<FileSystemDirectoryHandle|undefined>((resolve,reject)=>{const g=db.transaction('grants').objectStore('grants').get(id);g.onsuccess=()=>resolve(g.result);g.onerror=()=>reject(g.error);});if(!handle)throw enoent('/granted/'+id);
+ // A kept folder needs allowing again on each visit (the page asks on the next message, browse or export): until then
+ // it is refused as such, never shown as empty or missing.
+ if(await (handle as any).queryPermission({mode:'readwrite'})!=='granted')throw new Failure('EACCES',`EACCES: permission denied, '/granted/${id}': the browser needs Gumbo allowed into this folder again. It asks the next time you send a message or export.`,'/granted/'+id);
+ return handle;}finally{db.close();}}
 /** The directory holding a path's last part, and that part's name. */
 async function parent(path:string,create=false):Promise<[FileSystemDirectoryHandle,string]>{
  const list=parts(path);if(!list.length)throw new Failure('EISDIR','EISDIR: the root is a directory',path);

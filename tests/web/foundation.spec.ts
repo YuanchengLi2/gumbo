@@ -25,6 +25,6 @@ test('signing in starts on usegumbo.app with a PKCE challenge and comes back to 
  await page.route('https://usegumbo.app/signin/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<p>sign-in page</p>'}));
  const [request]=await Promise.all([page.waitForRequest(r=>r.url().startsWith('https://usegumbo.app/signin/')),page.evaluate(()=>(window as any).dream.command({type:'account',action:'browser'}))]);
  const url=new URL(request.url());
- expect(url.searchParams.get('web')).toBe('http://localhost:5180/app/');
+ expect(url.searchParams.get('web')).toBe(new URL('/app/',page.url()).toString());
  expect(url.searchParams.get('challenge')).toMatch(/^[A-Za-z0-9_-]{43}$/);
 });

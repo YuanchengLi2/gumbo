@@ -4,17 +4,21 @@
  * session in storage uses it rather than spending its own. */
 type Session={access_token:string;refresh_token:string;expires_at:number;user:{id?:string;email?:string;is_anonymous?:boolean}};
 export class SignInRequired extends Error{constructor(){super('SIGN_IN_REQUIRED: Sign in to use Gumbo AI.');this.name='SignInRequired';}}
+/** This version of Gumbo on the web, and the platform its reports and edit logs name (the desktop's is "win32 x64"). */
+export const appVersion='0.3.0',platform=()=>`web ${navigator.platform}`;
 const sessionKey='gumbo-session',verifierKey='gumbo-sign-in-verifier';
 const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const gzipped=async(text:string)=>new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
 
 export class Account {
  private session:Session|null=null;private refreshing:Promise<void>|null=null;private generation=0;
- url=import.meta.env.DREAM_SUPABASE_URL??'https://qewguvfkkwvdoqptiljd.supabase.co';anonKey=import.meta.env.DREAM_SUPABASE_ANON_KEY??'';
+ // Set at build time (scripts/stage-web.ts); an empty line in .env.local counts as unset.
+ url=import.meta.env.DREAM_SUPABASE_URL||'https://qewguvfkkwvdoqptiljd.supabase.co';anonKey=import.meta.env.DREAM_SUPABASE_ANON_KEY||'';
  constructor(){
   this.session=this.saved();
-  // In development only, a local stand-in for Supabase and the gateway (the tests' fixture), as the desktop's cloud.json.
-  if(import.meta.env.DEV)try{const cloud=JSON.parse(localStorage.getItem('gumbo-cloud')??'null');if(typeof cloud?.url==='string'){this.url=cloud.url;this.anonKey=cloud.anonKey??'';}}catch{}
+  // In development (and a build for the tests, never deployed) only, a local stand-in for Supabase and the gateway (the
+  // tests' fixture), as the desktop's cloud.json.
+  if(import.meta.env.MODE!=='production')try{const cloud=JSON.parse(localStorage.getItem('gumbo-cloud')??'null');if(typeof cloud?.url==='string'){this.url=cloud.url;this.anonKey=cloud.anonKey??'';}}catch{}
  }
  get accountId(){return this.session?.user.id;}
  private saved():Session|null{try{return JSON.parse(localStorage.getItem(sessionKey)??'null');}catch{return null;}}
@@ -78,6 +82,16 @@ export class Account {
   if(!this.signedIn())return 401;
   try{const response=await fetch(`${this.gateway()}/edit-log`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/x-dream-json-gzip'},body:await gzipped(JSON.stringify(entry)),signal:AbortSignal.timeout(60_000)});await response.arrayBuffer().catch(()=>{});return response.status;}
   catch(error){return error instanceof SignInRequired?401:0;}
+ }
+ /** A run's log as the desktop's edit logs send it (main/edit-logs.ts): known by its request and when the run started
+  * (the gateway keeps one row per run), with this version and platform, and a summary alone when it is too big. Tried
+  * once more a minute later when the gateway could not be reached; the desktop's two-week queue on disk is not kept. */
+ async runLog(turnId:string,log:any,training:boolean,retry=true){
+  if(!turnId||!log||typeof log!=='object')return;
+  const size=JSON.stringify(log).length,{version,project,request,outcome,timing,cost,totals}=log;
+  const status=await this.editLog({key:`${turnId}@${timing?.runStartedAt??timing?.startedAt??'none'}`,turnId,appVersion,platform:platform(),training,
+   log:size<=1_900_000?log:{version,turnId,project,request:String(request??'').slice(0,4000),outcome,timing,cost,totals,tooLarge:size}});
+  if(retry&&(status===0||status>=500))setTimeout(()=>void this.runLog(turnId,log,training,false),60_000);
  }
  signout(){this.generation++;this.clear();return {signedIn:false};}
  async creators(query:string){if(!this.signedIn()||!query.trim())return{creators:[]};const response=await fetch(`${this.gateway()}/creators`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify({query})});const body=await response.json().catch(()=>({})) as any;return response.ok?body:{creators:[],error:body.error};}

@@ -3,6 +3,7 @@ import {PlayerFrames} from '../../../desktop/src/main/player-frames';
 import type {Account} from './account';
 import {publish} from './events';
 import {busy} from './awake';
+import {loadSettings} from './settings';
 
 /** The page's side of the project worker (src/project/project.worker.ts): what the desktop's main process does with
  * its project service (main/service.ts, main/index.ts route): sends commands and the project list's requests, passes
@@ -42,7 +43,7 @@ export class ProjectClient{
   if(data.event){const e=data.event;
    // A run's log is sent by itself (edit logs), as the desktop's route does, rather than reaching the editor.
    if(e.type==='ai.status')busy('roux',e.payload?.status==='running');
-   if(e.type==='ai.turn_end'){if(e.payload?.log)void this.account.editLog({turnId:e.payload.turnId,log:e.payload.log}).catch(()=>{});return;}
+   if(e.type==='ai.turn_end'){if(e.payload?.log)void this.account.runLog(e.payload.turnId,e.payload.log,!!loadSettings().improve).catch(()=>{});return;}
    publish(e.type,e.payload,e.projectId,e.turnId);return;}
   if(data.connection){const id=data.connection.id;try{this.post({connectionResult:{id,result:{url:this.account.gateway(),token:await this.account.token(),accountId:this.account.accountId}}});}catch(error){this.post({connectionResult:{id,error:(error as Error).message}});}return;}
   if(data.visual){this.post({visualResult:{id:data.visual.id,error:'Coded visuals are not available on the web yet.'}});return;}

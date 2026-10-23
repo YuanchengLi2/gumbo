@@ -9,6 +9,14 @@ export async function grantFolder(handle:FileSystemDirectoryHandle){
  try{await new Promise<void>((resolve,reject)=>{const t=db.transaction('grants','readwrite');t.objectStore('grants').put(handle,id);t.oncomplete=()=>resolve();t.onerror=()=>reject(t.error);});}finally{db.close();}
  return `/granted/${id}`;
 }
+/** Asks again for kept folders this visit has not been allowed into (each visit starts without permission; Chrome can
+ * offer "Allow on every visit"), for the folders among paths. The page calls it during the click or key press that
+ * needs them, since the browser asks only then. A folder the user turns down stays refused (EACCES in the storage worker). */
+export async function reallow(paths:string[]){
+ for(const id of new Set(paths.filter(p=>p.startsWith('/granted/')).map(p=>p.split('/')[2]))){
+  try{const handle=await grant(id) as any;if(await handle.queryPermission({mode:'readwrite'})==='prompt')await handle.requestPermission({mode:'readwrite'});}catch{}
+ }
+}
 async function grant(id:string):Promise<FileSystemDirectoryHandle>{
  const db=await grants();
  try{const handle=await new Promise<FileSystemDirectoryHandle|undefined>((resolve,reject)=>{const g=db.transaction('grants').objectStore('grants').get(id);g.onsuccess=()=>resolve(g.result);g.onerror=()=>reject(g.error);});if(!handle)throw new Error(`No access to ${id}: grant the folder again.`);return handle;}finally{db.close();}

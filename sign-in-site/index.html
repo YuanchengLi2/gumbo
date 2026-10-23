@@ -642,7 +642,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
 </head>
 <body>
 
-<div class="announce">The Gumbo beta is open for Windows.<a href="#make">Get it free ›</a></div>
+<div class="announce">Gumbo now runs in your browser. Nothing to install.<a href="/app/">Open Gumbo ›</a></div>
 
 <nav class="nav" aria-label="Main">
  <a class="logo" href="#top" aria-label="Gumbo home">
@@ -653,7 +653,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  <a class="link" href="#no-menu">No menu</a>
  <a class="link" href="#ask">What to ask</a>
  <a class="link" href="#faq">Questions</a>
- <a class="btn" href="#make">Get Gumbo free</a>
+ <a class="btn" href="/app/">Open Gumbo</a>
 </nav>
 
 <main id="top">
@@ -676,7 +676,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
     <div class="chips"><button type="button">Cut every um</button><button type="button">Make it feel like the 90s</button><button type="button">Draw our route on a map</button><button type="button">Make it better</button></div>
     <div class="reply" role="status"></div>
    </div>
-   <p class="avail">For Windows. Mac is on the stove.</p>
+   <p class="avail">Runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Nothing to install.</p>
   </div>
   <div class="kitchen" aria-hidden="true">
    <svg id="kitchen" viewBox="0 -40 1440 270" preserveAspectRatio="xMidYMid slice">
@@ -1272,19 +1272,19 @@ document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
  ask.querySelectorAll('.chips button').forEach(b=>b.addEventListener('click',()=>{box.value=b.textContent;grow();box.focus();}));
  if(n===0&&!calm){let i=0;setInterval(()=>{if(document.activeElement!==box&&!box.value){i=(i+1)%ideas.length;box.placeholder=ideas[i];}},3000);box.placeholder=ideas[0];}
  form.addEventListener('submit',e=>{e.preventDefault();const idea=box.value.trim();if(!idea){box.focus();return;}
-  reply.innerHTML='';const p=document.createElement('p');p.innerHTML='Gumbo can take that order. Leave your email and download the free beta to ask for <strong></strong> yourself.';
+  reply.innerHTML='';const p=document.createElement('p');p.innerHTML='Gumbo can take that order. Leave your email and open the free beta to ask for <strong></strong> yourself.';
   p.querySelector('strong').textContent='“'+idea.replace(/[.…\s]+$/,'')+'”';
-  // Signs up (the gateway's waitlist-join keeps the email and this first request), then hands over the download at once:
-  // the beta is open, so the moment someone is keen is the moment they get the app. The hidden website field is left
+  // Signs up (the gateway's waitlist-join keeps the email and this first request), then opens the way into Gumbo at once:
+  // the beta is open and runs in the browser, so the moment someone is keen is the moment they are in. The hidden website field is left
   // empty by people and filled by bots, which the gateway then ignores.
   const f=document.createElement('form');f.innerHTML='<input type="email" required placeholder="you@example.com" aria-label="Your email" autocomplete="email"><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0"><button class="btn" type="submit">Get Gumbo</button>';
-  const note=document.createElement('small');note.textContent='Free beta for Windows. No spam.';
+  const note=document.createElement('small');note.textContent='Free beta in your browser. No spam.';
   f.addEventListener('submit',async ev=>{ev.preventDefault();const email=f.querySelector('input[type=email]').value.trim(),button=f.querySelector('button');
    button.disabled=true;note.textContent='One moment…';
    try{const response=await fetch(WAITLIST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,firstAsk:idea,source:n===0?'top':'bottom',website:f.querySelector('[name=website]').value}),credentials:'omit'});
     const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'Something went wrong. Try again in a moment.');
-    const get=document.createElement('a');get.className='btn';get.href='/download';get.textContent='Download Gumbo for Windows';
-    f.replaceWith(get);note.textContent='You\'re in! Install it and sign in with '+email+'. You get free credits every month.';note.classList.add('done');}
+    const get=document.createElement('a');get.className='btn';get.href='/app/';get.textContent='Open Gumbo';
+    f.replaceWith(get);note.textContent='You\'re in! Open Gumbo and sign in with '+email+' to use the AI. You get free credits every month.';note.classList.add('done');}
    catch(error){button.disabled=false;note.textContent=error.message;}});
   reply.append(p,f,note);reply.classList.add('on');f.querySelector('input').focus();});
 });
@@ -1328,8 +1328,8 @@ const faqs=[
  ['Does Gumbo upload my videos?','No. Your projects and original files stay on your computer. To edit, Gumbo sends the AI the text it needs, like transcripts and timeline details, plus still frames from your project. A finished video is only uploaded if you choose Share.'],
  ['Can I still edit by hand?','Always. Every change lands on a real timeline you can drag, trim and undo, and there is a full manual editor when you want to take the knife yourself.'],
  ['Where does the music come from?','Gumbo composes an original score for your cut, or finds free-to-use tracks from libraries like Freesound and Jamendo.'],
- ['Does it work on Mac?','Gumbo runs on Windows today. Mac is on the stove.'],
- ['How do I get in?','The beta is open. Type what you\'d ask for first, leave your email, and download Gumbo right away. Sign in with the same email.']];
+ ['Does it work on Mac?','Yes. Gumbo runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Safari and Firefox are on the stove.'],
+ ['How do I get in?','The beta is open. Type what you\'d ask for first, leave your email, and open Gumbo right in your browser. Sign in with the same email to use the AI.']];
 const qs=document.getElementById('qs'),asked=document.getElementById('asked'),answer=document.getElementById('answer');
 const pick=i=>{[...qs.children].forEach((b,j)=>b.classList.toggle('on',j===i));asked.textContent=faqs[i][0];answer.textContent=faqs[i][1];};
 faqs.forEach(([q],i)=>{const b=document.createElement('button');b.className='q';b.type='button';b.textContent=q;b.addEventListener('click',()=>pick(i));qs.appendChild(b);});pick(0);

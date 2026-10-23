@@ -1,10 +1,11 @@
 import {scoreCatalog,sfxCatalog} from '@dream/procedural-media';
 import type {AppSettings} from '@dream/contracts';
-import {Account} from './account';
+import {Account,appVersion as version,platform} from './account';
 import {onEvent,publish} from './events';
 import {loadSettings,saveSettings} from './settings';
 import {ProjectClient} from './project';
 import {pickFiles,pickFolder,store} from './imports';
+import {reallow} from '../project/media/paths';
 import * as exporting from './export';
 import {serveScenes} from './engine';
 import * as scenes from './scenes';
@@ -16,7 +17,6 @@ import {keepStorage} from './awake';
  * say so until then. */
 export const account=new Account();
 const notYet=(what:string)=>()=>Promise.reject(new Error(`${what} is not available on the web yet.`));
-const version='0.3.0';
 // The settings the project service reads with every request (main/app-settings.ts settingsEnv).
 const settingsEnv=(s:AppSettings)=>({DREAM_CREATOR_PROFILE:JSON.stringify(s.profile),DREAM_DISABLED_PROVIDERS:s.disabledProviders.join(',')});
 let projects:ProjectClient|undefined;
@@ -34,12 +34,17 @@ async function accountCommand(c:{action?:string;query?:string;profile?:unknown;p
   case 'creators':return account.creators(c.query??'');
   case 'profile':return account.profile(c.profile);
   case 'checkout':case 'portal':{const url=await account.payPage(c.action,{plan:c.plan,packs:c.packs,flow:c.flow});window.open(url,'_blank','noopener');return{opened:true};}
-  case 'report':{const log=c.turnId?await service().command({type:'turn_log',turnId:c.turnId}).catch(()=>null):null;return account.report({turnId:c.turnId??'',note:c.note??'',kind:c.kind??'report',...(c.rating?{rating:c.rating}:{}),appVersion:version,platform:`web ${navigator.platform}`,log});}
+  case 'report':{const log=c.turnId?await service().command({type:'turn_log',turnId:c.turnId}).catch(()=>null):null;return account.report({turnId:c.turnId??'',note:c.note??'',kind:c.kind??'report',...(c.rating?{rating:c.rating}:{}),appVersion:version,platform:platform(),log});}
   default:return account.info();
  }
 }
+/** The folders granted for the computer's files, allowed again for this visit if the browser needs asking: called in
+ * the click or key press that sends Roux to work, browses or approves, since the browser asks only then. */
+async function allowComputer(){try{const grants=await service().host<{scope:string;path?:string}[]>('fileGrants');await reallow(grants.filter(g=>g.scope==='folder'&&g.path).map(g=>g.path!));}catch{}}
+const runsRoux=new Set(['message','retry','resume','generation_resume']);
 async function command(c:any){
  if(c?.type==='account')return accountCommand(c);
+ if(runsRoux.has(c?.type))await allowComputer();
  // Before a project is open, the providers come from the account (main/index.ts does the same).
  if(c?.type==='ai_providers'&&!openProject){const off=new Set(loadSettings().disabledProviders as string[]);return{...Object.fromEntries(Object.entries(await account.providers()).filter(([p,on])=>on===true&&!off.has(p))),anthropic:true};}
  const result=await service().command(c);if(result?.meta)openProject=true;return result;
@@ -55,21 +60,21 @@ export function createBridge(){
   setTheme:async(_theme:'light'|'dark',color?:string)=>{if(color)document.documentElement.style.background=color;},
   projects:()=>service().host('list'),
   projectAction:(id:string,action:string)=>service().host('action',{id,action}),
-  createProject:async(request:any)=>{const location=await service().host('allocate',{request});const state=await service().command({type:'create',...location,initialRequest:request});openProject=true;return state;},
+  createProject:async(request:any)=>{if(request?.text?.trim())await allowComputer();const location=await service().host('allocate',{request});const state=await service().command({type:'create',...location,initialRequest:request});openProject=true;return state;},
   // The computer's files are the folders the user grants (project/files.ts): allowing access means choosing a folder.
   fileGrants:()=>service().host('fileGrants'),
   grantComputer:async()=>{const path=await pickFolder('gumbo-files');return path?service().host('grantFolder',{path}):null;},
   revokeFileGrant:(id:string)=>service().host('revokeGrant',{id}),cancelFiles:(id:string)=>service().host('cancelFiles',{id}),
-  files:(request:unknown)=>service().host('files',{request}),
+  files:async(request:unknown)=>{await allowComputer();return service().host('files',{request});},
   // A decision on proposed changes resumes the run that waits for it (main/index.ts dream:decideFileChange).
-  decideFileChange:async(id:string,approve:boolean)=>{const proposal=await service().host<{projectId?:string}>('decideFile',{id,approve}),state=await service().command({type:'state'}).catch(()=>null);
+  decideFileChange:async(id:string,approve:boolean)=>{if(approve)await allowComputer();const proposal=await service().host<{projectId?:string}>('decideFile',{id,approve}),state=await service().command({type:'state'}).catch(()=>null);
    if(state?.meta?.id===proposal.projectId&&state?.aiStatus==='awaiting_file_permission')await service().command({type:'resume'});return proposal;},
   registerDropped:(files:File[])=>store(files),
   command,
   // Projects live in this browser: there is no folder to open; the home screen's list opens them.
   pickProject:async()=>null,pickMedia:()=>pickFiles(),mediaPath:(file:File)=>file.name,
   exportVideo:notYet('Exporting for other editors'),pickExportFolder:()=>exporting.pickExportFolder(),
-  beginExport:async(settings:unknown)=>exporting.beginExport(settings,await service().command({type:'state'})),exportChunk:exporting.exportChunk,
+  beginExport:async(settings:any)=>{if(typeof settings?.folder==='string')await reallow([settings.folder]);return exporting.beginExport(settings,await service().command({type:'state'}));},exportChunk:exporting.exportChunk,
   // Scene pictures: each scene draws itself in a hidden page (scenes.ts); its page gets its files from engine.ts.
   sceneFrame:(request:any)=>scenes.sceneFrame(request),closeScenes:async()=>scenes.closeScenes(),
   setFullScreen:async(on:boolean)=>{if(on&&!document.fullscreenElement)await document.documentElement.requestFullscreen().catch(()=>{});else if(!on&&document.fullscreenElement)await document.exitFullscreen().catch(()=>{});},
