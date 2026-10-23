@@ -255,6 +255,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@dream/web-ml':
+        specifier: workspace:*
+        version: link:../../packages/web-ml
       '@dream/web-sandbox':
         specifier: workspace:*
         version: link:../../packages/web-sandbox

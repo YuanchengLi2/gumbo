@@ -1,0 +1,44 @@
+import {test,expect,type Page} from '@playwright/test';
+import {resolve} from 'node:path';
+import {codeGateway} from '../fixtures/code-gateway';
+
+/** Phase 4 of Gumbo on the web: speech in imported footage is heard by Whisper in the browser (packages/web-ml) when
+ * this computer keeps up, with no account and no upload; a computer measured too slow has it heard by the gateway's
+ * transcription instead (here the scripted fixture, so nothing is paid for). The JFK recording is 11 seconds of speech. */
+const speech=resolve('artifacts/fixtures/whisper-jfk.wav');
+const state=(page:Page)=>page.evaluate(()=>(window as any).dream.command({type:'state'}));
+async function importSpeech(page:Page){
+ await page.evaluate(async url=>{
+  const dream=(window as any).dream,file=new File([await (await fetch(url)).blob()],'jfk.wav',{type:'audio/wav'});
+  const paths=await dream.registerDropped([file]);await dream.createProject({requestId:'web-speech',text:'',paths:[]});await dream.command({type:'import',paths,copy:true});
+ },'/app/@fs/'+speech.replace(/\\/g,'/'));
+}
+const transcription=async(page:Page)=>(await state(page)).jobs.find((j:any)=>j.step==='transcription');
+/** What the footage search finds for a word: the transcript is saved and indexed. */
+const found=async(page:Page,word:string)=>JSON.stringify(await page.evaluate(query=>(window as any).dream.command({type:'search',query}),word)).toLowerCase();
+
+test('speech is heard on this computer by Whisper, signed out',async({page})=>{
+ test.setTimeout(600_000);
+ const logs:string[]=[];page.on('console',m=>logs.push(m.text()));
+ await page.goto('/app/');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
+ await importSpeech(page);
+ // The model downloads once (about 100 MB), then the clip is heard.
+ await expect.poll(async()=>(await transcription(page))?.status,{timeout:540_000,intervals:[2000]}).toBe('complete');
+ for(const word of ['fellow','americans','country'])expect(await found(page,word)).toContain(word);
+ expect(logs.some(l=>l.includes('[speech] heard on this computer'))).toBe(true);
+});
+
+test('speech is heard in the cloud on a computer measured too slow',async({page})=>{
+ test.setTimeout(180_000);
+ const words='And so my fellow Americans'.split(' ').map((word,n)=>({word,start:.4+n*.45,end:.8+n*.45}));
+ const gateway=await codeGateway({words,script:()=>[]});
+ try{
+  await page.addInitScript(url=>{localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
+  await page.goto('/app/?code=fixture-code');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
+  // What an earlier measurement on this computer remembered.
+  await page.evaluate(async()=>{const profile=await (await navigator.storage.getDirectory()).getDirectoryHandle('profile',{create:true}),file=await (await profile.getFileHandle('speech-local.json',{create:true})).createWritable();await file.write(JSON.stringify({verdict:'cloud',reason:'Measured slower than half real time.'}));await file.close();});
+  await importSpeech(page);
+  await expect.poll(async()=>(await transcription(page))?.status,{timeout:120_000}).toBe('complete');
+  expect(await found(page,'fellow')).toContain('fellow');expect(await found(page,'country')).not.toContain('country');
+ }finally{await gateway.close();}
+});

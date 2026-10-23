@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dream/web-ml": "workspace:*",
     "@dream/web-sandbox": "workspace:*",
     "@mediabunny/aac-encoder": "1.60.0",
     "@mediabunny/mp3-encoder": "1.60.0",

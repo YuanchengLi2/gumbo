@@ -37,7 +37,8 @@ export function cloudWords(assetId:string,chunk:SpeechChunk,result:SpeechResult,
 /** Independent of media collection, proxy creation, full-length WAV and waveform work. */
 export class CloudSpeech {
  private active=0;private waiting:(()=>void)[]=[];
- constructor(private db:ProjectDB,private ffmpeg:string,private connection:(signal?:AbortSignal)=>Promise<AIConnection>,private publish:(type:string,payload:unknown)=>void,private fetcher:typeof fetch=fetch){}
+ constructor(private db:ProjectDB,private ffmpeg:string,private connection:(signal?:AbortSignal)=>Promise<AIConnection>,private publish:(type:string,payload:unknown)=>void,private fetcher:typeof fetch=(input,init)=>fetch(input,init)){}
+ // fetch is wrapped, not stored as is: called as this.fetcher(…) a browser's fetch throws "Illegal invocation".
  private async slot<T>(signal:AbortSignal,work:()=>Promise<T>):Promise<T>{
   signal.throwIfAborted();
   if(this.active>=3)await new Promise<void>((resolve,reject)=>{const next=()=>{signal.removeEventListener('abort',abort);resolve();};const abort=()=>{this.waiting=this.waiting.filter(w=>w!==next);reject(signal.reason);};signal.addEventListener('abort',abort,{once:true});this.waiting.push(next);});
@@ -91,7 +92,7 @@ export class CloudSpeech {
   }
   return{assetId:asset.id,startSec:start,endSec:end,language,translated:!!options.translate,lines};
  }
- private async request(bytes:Uint8Array,signal:AbortSignal,options:RangeOptions={}):Promise<SpeechResult>{
+ protected async request(bytes:Uint8Array,signal:AbortSignal,options:RangeOptions={}):Promise<SpeechResult>{
   const query=new URLSearchParams({...(options.language?{language:options.language}:{}),...(options.translate?{task:'translate'}:{})}).toString();
   for(let attempt=0;attempt<4;attempt++){
    // A dropped connection or a server error is retried with a growing wait, so one hiccup does not fail a long transcription.
