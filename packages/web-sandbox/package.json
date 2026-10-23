@@ -1,0 +1,33 @@
+{
+  "name": "@dream/web-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Roux's run_command in the browser: a virtual shell, Unix tools in JS, Pyodide, ffmpeg.wasm, node and esbuild-wasm in a Web Worker",
+  "exports": {
+    ".": "./src/index.ts",
+    "./worker": "./src/sandbox.worker.ts",
+    "./zenfs": "./src/fs/zenfs.ts"
+  },
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "test:browser": "playwright test --config playwright.config.ts"
+  },
+  "dependencies": {
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/core-mt": "0.12.10",
+    "@noble/hashes": "^2.0.0",
+    "esbuild-wasm": "0.25.12",
+    "fflate": "^0.8.2",
+    "pyodide": "314.0.7"
+  },
+  "peerDependencies": {
+    "@zenfs/core": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@zenfs/core": {"optional": true}
+  },
+  "devDependencies": {
+    "@zenfs/core": "^2.7.0"
+  }
+}
