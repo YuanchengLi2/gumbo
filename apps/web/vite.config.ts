@@ -1,23 +1,40 @@
-import {defineConfig} from 'vite';
+import {defineConfig,type Plugin} from 'vite';
 import react from '@vitejs/plugin-react';
 import {resolve} from 'node:path';
 import {aliases} from '../desktop/vite.shared';
 
 /** Gumbo on the web. The editor is the desktop renderer's code (apps/desktop/src/renderer, kept in place until the last
- * desktop release ships); src/bridge answers window.dream in the browser. Cross-origin isolation (COOP + COEP
- * credentialless) gives SharedArrayBuffer to ffmpeg.wasm, Pyodide and SQLite's OPFS storage, while still loading
- * creators' YouTube avatars. The site is served under /app on usegumbo.app. */
+ * desktop release ships); src/bridge answers window.dream in the browser. The project service
+ * (apps/project-service) runs unchanged in a worker, with Node's built-ins pointed at browser versions (src/project).
+ * Cross-origin isolation (COOP + COEP credentialless) gives SharedArrayBuffer to the synchronous file system, SQLite,
+ * ffmpeg.wasm and Pyodide, while still loading creators' YouTube avatars. The site is served under /app on usegumbo.app. */
 const isolation={'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'credentialless'};
+const project=(path:string)=>resolve(__dirname,'src/project',path);
+const node=project('shims/node.ts');
+const builtins:Record<string,string>={
+ 'node:fs':project('fs/sync-fs.ts'),'fs':project('fs/sync-fs.ts'),'node:fs/promises':project('shims/fs-promises.ts'),'fs/promises':project('shims/fs-promises.ts'),
+ 'node:path':'path-browserify','path':'path-browserify','node:crypto':project('shims/crypto.ts'),'crypto':project('shims/crypto.ts'),
+ 'node:child_process':project('shims/child-process.ts'),'better-sqlite3':project('shims/better-sqlite3.ts'),'sqlite-vec':project('shims/sqlite-vec.ts'),
+ ...Object.fromEntries(['os','zlib','util','timers/promises','stream','stream/promises','readline','module','vm','worker_threads','dns/promises','net'].flatMap(m=>[[`node:${m}`,node],[m,node]])),
+};
+/** Inside the project service only: modules whose desktop versions need what the web adds later. */
+function webModules():Plugin{
+ const service=resolve(__dirname,'../project-service/src').replace(/\\/g,'/');
+ const swaps:Record<string,string>={'./shot-index':project('web-shot-index.ts')};
+ return{name:'gumbo-web-modules',enforce:'pre',resolveId(source,importer){if(importer&&importer.replace(/\\/g,'/').startsWith(service)&&swaps[source])return swaps[source];return null;}};
+}
 export default defineConfig({
  base:'/app/',
  root:__dirname,
  envDir:resolve(__dirname,'../..'),
  envPrefix:['DREAM_SUPABASE_'],
- plugins:[react()],
- resolve:{alias:{...aliases,'@renderer':resolve(__dirname,'../desktop/src/renderer')},dedupe:['react','react-dom','remotion','@remotion/player']},
- optimizeDeps:{include:['react','react-dom/client','react/jsx-runtime','react/jsx-dev-runtime','zustand','lucide-react','zod','remotion','@remotion/player']},
+ // Fast refresh for the editor's own files only: the packages also run in the project worker, which has no window.
+ plugins:[webModules(),react({exclude:[/[\/]node_modules[\/]/,/[\/]packages[\/]/]})],
+ // Built-ins match whole names only: 'node:fs' must not also take 'node:fs/promises'.
+ resolve:{alias:[...Object.entries({...aliases,'@renderer':resolve(__dirname,'../desktop/src/renderer')}).map(([find,replacement])=>({find,replacement})),...Object.entries(builtins).map(([name,replacement])=>({find:new RegExp(`^${name}$`),replacement}))],dedupe:['react','react-dom','remotion','@remotion/player','mediabunny']},
+ optimizeDeps:{include:['react','react-dom/client','react/jsx-runtime','react/jsx-dev-runtime','zustand','lucide-react','zod','remotion','@remotion/player','buffer','path-browserify','@noble/hashes/sha2','@noble/hashes/legacy','fflate','source-map-js','mediabunny','@mediabunny/aac-encoder','@mediabunny/mp3-encoder'],exclude:['@sqlite.org/sqlite-wasm']},
  server:{port:5180,strictPort:true,headers:isolation,fs:{allow:[resolve(__dirname,'../..')]}},
  preview:{port:5181,strictPort:true,headers:isolation},
- worker:{format:'es'},
+ worker:{format:'es',plugins:()=>[webModules()]},
  build:{outDir:'dist',sourcemap:true,target:'es2022'}
 });

@@ -12,11 +12,20 @@ const types={mp4:'video/mp4',mov:'video/quicktime',m4v:'video/mp4',webm:'video/w
 const typeOf=file=>file.type||types[(file.name.split('.').pop()||'').toLowerCase()]||'application/octet-stream';
 
 function route(assetId,kind){return new Promise((resolve,reject)=>{const request=indexedDB.open('gumbo-media',1);request.onupgradeneeded=()=>request.result.createObjectStore('routes');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,get=db.transaction('routes').objectStore('routes').get(`${assetId}/${kind}`);get.onsuccess=()=>{db.close();resolve(get.result);};get.onerror=()=>{db.close();reject(get.error);};};});}
-async function opfsFile(path){let dir=await navigator.storage.getDirectory();const parts=path.split('/').filter(Boolean).map(decodeURIComponent);for(const part of parts.slice(0,-1))dir=await dir.getDirectoryHandle(part);return(await dir.getFileHandle(parts.at(-1))).getFile();}
-async function fileFor(found){if(!found)return null;if(found.opfs)return opfsFile(found.opfs);if(found.handle){if(await found.handle.queryPermission({mode:'read'})!=='granted')return 'denied';return found.handle.getFile();}return null;}
+function grant(id){return new Promise((resolve,reject)=>{const request=indexedDB.open('gumbo-grants',1);request.onupgradeneeded=()=>request.result.createObjectStore('grants');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,get=db.transaction('grants').objectStore('grants').get(id);get.onsuccess=()=>{db.close();resolve(get.result);};get.onerror=()=>{db.close();reject(get.error);};};});}
+/** A file by its path in this browser's storage (the project worker's paths): OPFS from its root, or /granted/<id>/…
+ * inside a folder the user granted, which needs its permission still in place. */
+async function fileAt(path){
+ const parts=path.split('/').filter(Boolean).map(decodeURIComponent);let dir,start=0;
+ if(parts[0]==='granted'){dir=await grant(parts[1]);if(!dir)return null;if(await dir.queryPermission({mode:'read'})!=='granted')return 'denied';start=2;}else dir=await navigator.storage.getDirectory();
+ for(const part of parts.slice(start,-1))dir=await dir.getDirectoryHandle(part);return(await dir.getFileHandle(parts.at(-1))).getFile();
+}
+async function fileFor(found){if(!found)return null;if(found.path)return fileAt(found.path);if(found.opfs)return fileAt(found.opfs);if(found.handle){if(await found.handle.queryPermission({mode:'read'})!=='granted')return 'denied';return found.handle.getFile();}return null;}
+/** The audio master is named .flac by the project service and holds WAV in the browser: its type comes from its bytes. */
+async function typeFor(file){if(/\.flac$/i.test(file.name)&&await file.slice(0,4).text()==='RIFF')return 'audio/wav';return typeOf(file);}
 
-function respond(file,request){
- const headers={'Content-Type':typeOf(file),'Accept-Ranges':'bytes','Cross-Origin-Resource-Policy':'same-origin','Cache-Control':'no-store'};
+async function respond(file,request){
+ const headers={'Content-Type':await typeFor(file),'Accept-Ranges':'bytes','Cross-Origin-Resource-Policy':'same-origin','Cache-Control':'no-store'};
  const range=/^bytes=(\d*)-(\d*)$/.exec(request.headers.get('Range')||'');
  if(!range)return new Response(request.method==='HEAD'?null:file,{status:200,headers:{...headers,'Content-Length':String(file.size)}});
  let start=range[1]===''?Math.max(0,file.size-Number(range[2])):Number(range[1]),end=range[1]===''||range[2]===''?file.size-1:Math.min(Number(range[2]),file.size-1);
@@ -29,7 +38,7 @@ self.addEventListener('fetch',event=>{
  event.respondWith((async()=>{
   try{
    const rest=url.pathname.slice((scope+'media/').length);
-   const file=rest.startsWith('opfs/')?await opfsFile(rest.slice(5)):await (async()=>{const [assetId,kind='original']=rest.split('/').map(decodeURIComponent);return fileFor(await route(assetId,kind));})();
+   const file=rest.startsWith('opfs/')?await fileAt(rest.slice(5)):await (async()=>{const [assetId,kind='original']=rest.split('/').map(decodeURIComponent);return fileFor(await route(assetId,kind));})();
    if(file==='denied')return new Response('Gumbo needs permission to read this file again: open the project to grant it.',{status:403});
    if(!file)return new Response('Not found',{status:404});
    return respond(file,event.request);

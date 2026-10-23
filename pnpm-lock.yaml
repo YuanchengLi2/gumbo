@@ -253,6 +253,30 @@ importers:
         specifier: ^1.2.1
         version: 1.2.2
 
+  apps/web:
+    dependencies:
+      '@mediabunny/aac-encoder':
+        specifier: 1.60.0
+        version: 1.60.0(mediabunny@1.60.0)
+      '@mediabunny/mp3-encoder':
+        specifier: 1.60.0
+        version: 1.60.0(mediabunny@1.60.0)
+      '@noble/hashes':
+        specifier: 1.8.0
+        version: 1.8.0
+      '@sqlite.org/sqlite-wasm':
+        specifier: 3.50.4-build1
+        version: 3.50.4-build1
+      buffer:
+        specifier: 6.0.3
+        version: 6.0.3
+      mediabunny:
+        specifier: 1.60.0
+        version: 1.60.0
+      path-browserify:
+        specifier: 1.0.1
+        version: 1.0.1
+
   packages/composition:
     dependencies:
       '@dream/footage':
@@ -1389,6 +1413,11 @@ packages:
     peerDependencies:
       mediabunny: ^1.0.0
 
+  '@mediabunny/aac-encoder@1.60.0':
+    resolution: {integrity: sha512-wevrs3VuwOKMmXkEn01KIwapKAe5QoGazWyND1B9pYUz+GC+wxfVcyv9kUfrpXDfy/xPhM7pOePCHSC9aw0k5A==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
   '@mediabunny/flac-encoder@1.56.1':
     resolution: {integrity: sha512-zbmorMVlF1izwtlz5mWnu7A1rJLM+V26I0pEFr9Td1EDTwE5uAGRSW+/UZlnjwj1t00Woe3Zonfh9kb7lRRBqg==}
     peerDependencies:
@@ -1396,6 +1425,11 @@ packages:
 
   '@mediabunny/mp3-encoder@1.56.1':
     resolution: {integrity: sha512-p66ovEq6mZt3ejje45NOju84hIJI4v8rHfsmc1D2J34ziV0USE8AdJBzmiwqxl6nZkIAQLNB19HzbVRcQfc51g==}
+    peerDependencies:
+      mediabunny: ^1.0.0
+
+  '@mediabunny/mp3-encoder@1.60.0':
+    resolution: {integrity: sha512-dcDS+hh0g6JBJissiTUkbRCjUFLM348qZQBGgsVawmr61CzJK9ZgN9f/9BzkVzTlhmxxriRx8jYCK+Anqx8mMQ==}
     peerDependencies:
       mediabunny: ^1.0.0
 
@@ -1484,6 +1518,10 @@ packages:
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@playwright/test@1.63.0':
     resolution: {integrity: sha512-oxMK4vllB9RK5NQ2l1pq1IfOf2AvnEuj/vYGDj0H2nMtmtZpKtCwt/l00GEO6xjGfpBNAvjovvYdCm50dRQkpQ==}
@@ -1879,6 +1917,10 @@ packages:
     peerDependenciesMeta:
       webpack-hot-middleware:
         optional: true
+
+  '@sqlite.org/sqlite-wasm@3.50.4-build1':
+    resolution: {integrity: sha512-Qig2Wso7gPkU1PtXwFzndh+CTRzrIFxVGqv6eCetjU7YqxlHItj+GvQYwYTppCRgAPawtRN/4AJcEgB9xDHGug==}
+    hasBin: true
 
   '@supabase/auth-js@2.117.2':
     resolution: {integrity: sha512-Z3WnGwrphYZubrLbxp5Iv0tLA9A5GhvKzJ/ZXglxqwd2QEH2R4dXRltjVJ8sIn4xEW2BSFIGT0yALVJIgZeDYw==}
@@ -3232,6 +3274,9 @@ packages:
   patch-console@2.0.0:
     resolution: {integrity: sha512-0YNdUceMdaQwoKce1gatDScmMo5pu/tfABfnzEqeG0gtTmd7mh/WcwgUjtAeOU7N8nFFlbQBnFK2gXW5fGvmMA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+
+  path-browserify@1.0.1:
+    resolution: {integrity: sha512-b7uo2UCUOYZcnF/3ID0lulOJi/bafxa1xPe7ZPsammBSpjSWQkjNxlt635YGS2MiR9GjvuXCtz2emr3jbsz98g==}
 
   path-exists@4.0.0:
     resolution: {integrity: sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==}
@@ -4860,6 +4905,10 @@ snapshots:
     dependencies:
       mediabunny: 1.56.1
 
+  '@mediabunny/aac-encoder@1.60.0(mediabunny@1.60.0)':
+    dependencies:
+      mediabunny: 1.60.0
+
   '@mediabunny/flac-encoder@1.56.1(mediabunny@1.56.1)':
     dependencies:
       mediabunny: 1.56.1
@@ -4867,6 +4916,10 @@ snapshots:
   '@mediabunny/mp3-encoder@1.56.1(mediabunny@1.56.1)':
     dependencies:
       mediabunny: 1.56.1
+
+  '@mediabunny/mp3-encoder@1.60.0(mediabunny@1.60.0)':
+    dependencies:
+      mediabunny: 1.60.0
 
   '@mediapipe/tasks-vision@0.10.17': {}
 
@@ -4935,6 +4988,8 @@ snapshots:
 
   '@next/swc-win32-x64-msvc@16.3.8':
     optional: true
+
+  '@noble/hashes@1.8.0': {}
 
   '@playwright/test@1.63.0':
     dependencies:
@@ -5378,6 +5433,8 @@ snapshots:
       error-stack-parser: 2.1.4
       html-entities: 2.6.0
       react-refresh: 0.18.0
+
+  '@sqlite.org/sqlite-wasm@3.50.4-build1': {}
 
   '@supabase/auth-js@2.117.2':
     dependencies:
@@ -6916,6 +6973,8 @@ snapshots:
     optional: true
 
   patch-console@2.0.0: {}
+
+  path-browserify@1.0.1: {}
 
   path-exists@4.0.0:
     optional: true
