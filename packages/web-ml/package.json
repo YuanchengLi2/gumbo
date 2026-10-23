@@ -1,0 +1,1 @@
+{"name":"@dream/web-ml","version":"0.1.0","private":true,"type":"module","exports":{".":"./src/index.ts","./worker":"./src/ml.worker.ts"},"scripts":{"test":"vitest run --config vitest.config.ts","test:browser":"vitest run --config vitest.browser.config.ts"},"dependencies":{"@dream/footage":"workspace:*","@huggingface/transformers":"4.3.1"}}
