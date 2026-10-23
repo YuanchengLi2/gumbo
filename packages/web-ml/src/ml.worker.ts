@@ -11,11 +11,13 @@ const post=(message:Reply)=>scope.postMessage(message);
 let wasmPaths:string|undefined;
 let model:{key:string;loading:Promise<LoadedWhisper>;listeners:Set<(p:Progress)=>void>;loadMs:number}|undefined;
 let queue:Promise<unknown>=Promise.resolve();
+/** What the last probe settled on (small proved too slow, so base); later requests use it unless they say otherwise. */
+let settled:Override={};
 // A transcription's audio may arrive while its model is still downloading: messages wait on the stream in order.
 const streams=new Map<number,Promise<StreamTranscription>>();
 
-const keyOf=(c:ModelChoice)=>`${c.repo}|${c.device}|${c.encoder}|${c.decoder}`;
-async function report(override?:Override):Promise<CapabilityReport>{const caps=await capabilities(),choice=chooseModel(caps,override);return{capabilities:caps,choice,cached:await isCached(choice)};}
+const keyOf=(c:ModelChoice)=>`${c.repo}|${c.device}|${c.decoderDevice}|${c.encoder}|${c.decoder}`;
+async function report(override?:Override):Promise<CapabilityReport>{const caps=await capabilities(),choice=chooseModel(caps,{...settled,...override});return{capabilities:caps,choice,cached:await isCached(choice)};}
 async function load(choice:ModelChoice,onProgress:(p:Progress)=>void){
  if(model?.key!==keyOf(choice)){
   const previous=model,listeners=new Set<(p:Progress)=>void>(),at=performance.now();
@@ -31,14 +33,17 @@ async function load(choice:ModelChoice,onProgress:(p:Progress)=>void){
 }
 const serial=(whisper:LoadedWhisper):DecodeWindow=>(samples,options)=>{const run=queue.then(()=>whisper.decode(samples,options));queue=run.catch(()=>{});return run;};
 
+const devices=(c:ModelChoice)=>c.device===c.decoderDevice?c.device:`encoder on ${c.device}, decoder on ${c.decoderDevice}`;
 async function probe(id:number,override?:Override,sample?:Float32Array):Promise<ProbeResult>{
  const base=await report(override),{whisper,loadMs}=await load(base.choice,progress=>post({type:'progress',id,progress}));
  const {encoderMs,tokenMs}=await whisper.benchmark(),rtf=estimateRtf(encoderMs,tokenMs);
  let measuredRtf:number|undefined;
  if(sample?.length){const stream=new StreamTranscription(serial(whisper));stream.push(sample);measuredRtf=(await stream.end()).rtf;}
  const effective=measuredRtf??rtf,verdict=effective<=LOCAL_RTF?'local':'cloud',pace=`${(1/Math.max(effective,1e-3)).toFixed(1)}x real time`;
+ // small too slow here: base takes about half the time (0.25 against 0.52 on an Iris Xe), so try it before the cloud.
+ if(verdict==='cloud'&&base.choice.size==='small'&&!override?.size){settled={...settled,size:'base'};return probe(id,{...override,size:'base'},sample);}
  return{...base,cached:true,loadMs,encoderMs:Math.round(encoderMs),tokenMs:Math.round(tokenMs*10)/10,rtf:Math.round(rtf*1000)/1000,...(measuredRtf!==undefined?{measuredRtf}:{}),verdict,
-  reason:`Whisper ${base.choice.size} on ${base.choice.device} runs about ${pace}`+(verdict==='local'?'.':'; the cloud is faster on this device.')};
+  reason:`Whisper ${base.choice.size} (${devices(base.choice)}) runs about ${pace}`+(verdict==='local'?'.':'; the cloud is faster on this device.')};
 }
 
 async function handle(request:Request){

@@ -4,7 +4,9 @@ export const SAMPLE_RATE=16000;
 export type ModelSize='base'|'small';
 export type Device='webgpu'|'wasm';
 export type DType='fp32'|'fp16'|'q8'|'q4'|'q4f16';
-export type ModelChoice={size:ModelSize;repo:string;device:Device;encoder:DType;decoder:DType;downloadMB:number};
+/** `device` runs the encoder (one big pass per window); `decoderDevice` the token-by-token decoder, which can be faster
+ * on the CPU than on an integrated GPU. */
+export type ModelChoice={size:ModelSize;repo:string;device:Device;decoderDevice:Device;encoder:DType;decoder:DType;downloadMB:number};
 export type Task='transcribe'|'translate';
 
 /** A word as heard: text with its punctuation, seconds from the start of the audio given, and the model's mean token

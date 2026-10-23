@@ -1,6 +1,6 @@
 import type {CapabilityReport,LocalSpeechResult,LocalWord,ModelChoice,ModelSize,Device,ProbeResult,Progress,TranscribeOptions} from './types';
 
-export type Override={size?:ModelSize;device?:Device};
+export type Override={size?:ModelSize;device?:Device;decoderDevice?:Device};
 /** Main thread → ML worker. `id` pairs a request with its replies; a transcription keeps its id from start to end. */
 export type Request=
  |{type:'configure';id:number;wasmPaths?:string}
