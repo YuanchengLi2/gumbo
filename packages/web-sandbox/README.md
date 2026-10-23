@@ -44,7 +44,8 @@ synchronous (Emscripten). The package includes three implementations:
 - `nodeLikeFS(fs)`, for anything with node's sync API.
 
 All three pass the same conformance tests. Pyodide and ffmpeg read and write the sandbox's files directly through an
-Emscripten file system (src/programs/emscripten-fs.ts). Nothing is copied in or out.
+Emscripten file system (src/programs/emscripten-fs.ts). Nothing is copied in or out. They see the workspace, `/tmp`
+and the folders given in `mounts` (the web app passes the project's `/Media`, where Roux's footage paths point).
 
 ## Hosting the wasm parts
 

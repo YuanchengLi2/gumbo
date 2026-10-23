@@ -52,7 +52,7 @@ function writeAll(path:string,data:Uint8Array,first:'w'|'a'|'wx'){
  for(let offset=0;offset<data.length;offset+=step)call({op:'write',path,mode:offset===0?first:'a',data:data.slice(offset,offset+step)});
 }
 export function writeFileSync(path:unknown,data:unknown,options?:unknown){
- if(typeof path==='number'){const fd=descriptor(path);writeAll(fd.path,toBytes(data,encodingOf(options)),'a');return;}
+ if(typeof path==='number'){writeSync(path,toBytes(data,encodingOf(options)));return;}
  const flag=typeof options==='object'&&options?(options as {flag?:string}).flag:undefined;writeAll(toPath(path),toBytes(data,encodingOf(options)),flag==='wx'?'wx':flag==='a'?'a':'w');
 }
 export function appendFileSync(path:unknown,data:unknown,options?:unknown){writeAll(toPath(path),toBytes(data,encodingOf(options)),'a');}
@@ -65,24 +65,34 @@ export function realpathSync(path:unknown){const at=toPath(path);call({op:'stat'
 realpathSync.native=realpathSync;
 export const constants={F_OK:0,R_OK:4,W_OK:2,X_OK:1,COPYFILE_EXCL:1,COPYFILE_FICLONE:2,O_RDONLY:0,O_WRONLY:1,O_RDWR:2,O_CREAT:64,O_EXCL:128};
 
-/** File descriptors: a path and a position. The project lock opens with 'wx'; fingerprints read in pieces. */
-const descriptors=new Map<number,{path:string;position:number}>();let nextFd=3;
+/** File descriptors: the storage worker's descriptor (which holds a file opened for writing), and this side's position.
+ * The project lock opens with 'wx'; fingerprints read in pieces; programs that seek (ffmpeg, Python in the sandbox)
+ * read and write at positions. */
+const descriptors=new Map<number,{path:string;position:number;remote:number;append:boolean}>();let nextFd=3;
 const descriptor=(fd:number)=>{const found=descriptors.get(fd);if(!found)fail({code:'EBADF',message:'EBADF: bad file descriptor'});return found;};
+/** node's numeric open flags as the string ones. */
+const flagName=(flags:number)=>{const access=flags&3,create=flags&64,exclusive=flags&128,truncate=flags&512,append=flags&1024;
+ if(append)return access===2?'a+':'a';if(exclusive)return access===2?'wx+':'wx';if(truncate||create)return access===2?'w+':'w';return access===2?'r+':access===1?'r+':'r';};
 export function openSync(path:unknown,flags:string|number='r'){
- const at=toPath(path),flag=typeof flags==='number'?((flags&128)?'wx':(flags&1)||(flags&2)?'w':'r'):flags;
- if(flag==='wx'||flag==='wx+')call({op:'write',path:at,mode:'wx',data:new Uint8Array()});
- else if(flag.startsWith('w'))call({op:'write',path:at,mode:'w',data:new Uint8Array()});
- else if(flag.startsWith('a')){if(!existsSync(at))call({op:'write',path:at,mode:'w',data:new Uint8Array()});}
- else call({op:'stat',path:at});
- const fd=nextFd++;descriptors.set(fd,{path:at,position:0});return fd;
+ const at=toPath(path),flag=typeof flags==='number'?flagName(flags):flags;
+ const remote=call({op:'open',path:at,flags:flag}).json.fd as number,fd=nextFd++;descriptors.set(fd,{path:at,position:0,remote,append:flag.startsWith('a')});return fd;
 }
-export function closeSync(fd:number){descriptors.delete(fd);}
+export function closeSync(fd:number){const d=descriptors.get(fd);if(!d)return;descriptors.delete(fd);call({op:'close',fd:d.remote});}
 export function fstatSync(fd:number){return statSync(descriptor(fd).path)!;}
-export function readSync(fd:number,buffer:Uint8Array,offset=0,length=buffer.byteLength-offset,position:number|null=null){
- const d=descriptor(fd),at=position??d.position,{data}=readRange(d.path,at,length);if(!data?.length)return 0;
- buffer.set(data.subarray(0,length),offset);if(position===null)d.position+=data.length;return Math.min(data.length,length);
+export function readSync(fd:number,buffer:Uint8Array,offset=0,length=buffer.byteLength-offset,position:number|bigint|null=null){
+ const d=descriptor(fd),at=position===null||position===undefined?d.position:Number(position);let total=0;
+ while(total<length){const {data}=call({op:'pread',fd:d.remote,position:at+total,length:length-total});if(!data?.length)break;buffer.set(data,offset+total);total+=data.length;}
+ if(position===null||position===undefined)d.position+=total;return total;
 }
-export function writeSync(fd:number,data:unknown){const d=descriptor(fd),chunk=toBytes(data);writeAll(d.path,chunk,'a');d.position+=chunk.length;return chunk.length;}
+/** writeSync(fd, buffer, offset?, length?, position?) and writeSync(fd, string, position?, encoding?), as in node. */
+export function writeSync(fd:number,data:unknown,a?:number|null,b?:number|string|null,c?:number|null){
+ const d=descriptor(fd);let chunk:Uint8Array,position:number|null|undefined;
+ if(typeof data==='string'){chunk=toBytes(data,typeof b==='string'?b:undefined);position=a;}
+ else{const all=toBytes(data),offset=a??0;chunk=all.subarray(offset,offset+(typeof b==='number'?b:all.length-offset));position=c;}
+ const at=d.append?null:position??d.position;call({op:'pwrite',fd:d.remote,position:at,data:chunk});
+ if(position===null||position===undefined)d.position+=chunk.length;return chunk.length;
+}
+export function ftruncateSync(fd:number,length=0){call({op:'ftruncate',fd:descriptor(fd).remote,length});}
 
 /** Streams, enough for the project service: reading in pieces (for await, pipeline) and writing in appends. */
 type Listener=(...args:any[])=>void;
@@ -111,4 +121,4 @@ export const createWriteStream=(path:unknown,options?:{flags?:string})=>new Writ
 const unsupported=(name:string)=>()=>{throw new Error(`fs.${name} is not available in the browser.`);};
 export const watch=unsupported('watch'),symlinkSync=unsupported('symlinkSync'),linkSync=unsupported('linkSync'),chmodSync=()=>undefined,utimesSync=()=>undefined;
 export const promises={} as Record<string,unknown>;
-export default {statSync,lstatSync,existsSync,accessSync,readdirSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,appendFileSync,unlinkSync,rmSync,rmdirSync,renameSync,copyFileSync,realpathSync,openSync,closeSync,fstatSync,readSync,writeSync,createReadStream,createWriteStream,constants,watch,promises};
+export default {statSync,lstatSync,existsSync,accessSync,readdirSync,mkdirSync,mkdtempSync,readFileSync,writeFileSync,appendFileSync,unlinkSync,rmSync,rmdirSync,renameSync,copyFileSync,realpathSync,openSync,closeSync,fstatSync,readSync,writeSync,ftruncateSync,createReadStream,createWriteStream,constants,watch,promises};

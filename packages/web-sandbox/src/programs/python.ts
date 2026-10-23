@@ -1,7 +1,7 @@
 import {CommandError,type Command,type CommandContext,type Host} from '../shell/types';
 import {EmptyInput} from '../shell/io';
 import {mountSandbox} from './emscripten-fs';
-import {mkdirp,decode} from '../fs/util';
+import {mkdirp,decode,tryStat} from '../fs/util';
 import type {SandboxAssets} from '../sandbox';
 
 /** Keep in step with package.json: the CDN folder for numpy, Pillow and the other wheels is named after it. */
@@ -76,6 +76,7 @@ function prepare(py:Pyodide,ctx:CommandContext){
  mountSandbox(py.FS,ctx.fs,workspace,codes);
  // /tmp too, so a file the shell wrote to /tmp is the one Python opens.
  try{mkdirp(ctx.fs,'/tmp');mountSandbox(py.FS,ctx.fs,'/tmp',codes);}catch{}
+ for(const folder of ctx.host.mounts??[])if(tryStat(ctx.fs,folder)?.type==='directory')mountSandbox(py.FS,ctx.fs,folder,codes);
  if(!ctx.cwd.startsWith(workspace+'/')&&ctx.cwd!==workspace&&ctx.cwd!=='/tmp'&&!ctx.cwd.startsWith('/tmp/')){const top='/'+ctx.cwd.split('/')[1];if(!['/lib','/dev','/proc','/home','/usr','/bin','/etc','/sys'].includes(top))mountSandbox(py.FS,ctx.fs,top,codes);}
  if(ctx.host.interrupt){Atomics.store(ctx.host.interrupt,0,0);py.setInterruptBuffer(ctx.host.interrupt);}
 }

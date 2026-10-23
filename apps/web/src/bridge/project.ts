@@ -6,8 +6,8 @@ import {publish} from './events';
 /** The page's side of the project worker (src/project/project.worker.ts): what the desktop's main process does with
  * its project service (main/service.ts, main/index.ts route): sends commands and the project list's requests, passes
  * the service's events to the editor, and answers what the service asks of its host: the account's connection and the
- * edit's frames now; code runs and coded visuals as their phases arrive. Its questions about the computer's files are
- * answered in the worker (project/files.ts). */
+ * edit's frames now; coded visuals as their phase arrives. Its questions about the computer's files and its commands
+ * are answered in the worker (project/files.ts, project/commands.ts). */
 type Pending={resolve:(value:any)=>void;reject:(error:Error)=>void};
 export class ProjectClient{
  private worker:Worker;private pending=new Map<string,Pending>();private hosted=new Map<string,Pending>();readonly ready:Promise<void>;
@@ -43,7 +43,6 @@ export class ProjectClient{
    if(e.type==='ai.turn_end'){if(e.payload?.log)void this.account.editLog({turnId:e.payload.turnId,log:e.payload.log}).catch(()=>{});return;}
    publish(e.type,e.payload,e.projectId,e.turnId);return;}
   if(data.connection){const id=data.connection.id;try{this.post({connectionResult:{id,result:{url:this.account.gateway(),token:await this.account.token(),accountId:this.account.accountId}}});}catch(error){this.post({connectionResult:{id,error:(error as Error).message}});}return;}
-  if(data.codeRun){this.post({codeResult:{id:data.codeRun.id,error:'Running code is not available on the web yet.'}});return;}
   if(data.visual){this.post({visualResult:{id:data.visual.id,error:'Coded visuals are not available on the web yet.'}});return;}
   if(data.reviewCancel){this.reviews.get(data.reviewCancel)?.abort();return;}
   if(data.review){void this.review(data.review);return;}

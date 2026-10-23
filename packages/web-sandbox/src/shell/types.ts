@@ -33,6 +33,8 @@ export interface Host{
  /** Shared memory a stop writes to, so Python can raise KeyboardInterrupt while it runs. */
  interrupt?:Int32Array;
  workspace:string;
+ /** Folders beside the workspace that programs mount too (SandboxOptions.mounts). */
+ mounts?:string[];
  [key:string]:unknown;
 }
 /** Thrown by a command that wants to leave with a status (usage errors), printed as "name: message". */

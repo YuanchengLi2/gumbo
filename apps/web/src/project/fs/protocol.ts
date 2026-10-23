@@ -14,6 +14,12 @@ export type FsOp=
  |{op:'unlink';path:string}
  |{op:'rm';path:string;recursive:boolean;force:boolean}
  |{op:'rename';from:string;to:string}
- |{op:'copy';from:string;to:string;exclusive:boolean};
+ |{op:'copy';from:string;to:string;exclusive:boolean}
+ // Descriptors (node's open flags): reads and writes at a position, as programs that seek (ffmpeg, Python) make them.
+ |{op:'open';path:string;flags:string}
+ |{op:'pread';fd:number;position:number;length:number}
+ |{op:'pwrite';fd:number;position:number|null;data:Uint8Array}
+ |{op:'ftruncate';fd:number;length:number}
+ |{op:'close';fd:number};
 export type FsStat={kind:'file'|'directory';size:number;mtimeMs:number};
 export type FsError={code:string;message:string;path?:string;syscall?:string};

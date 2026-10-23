@@ -38,9 +38,53 @@ async function exists(path:string){try{await entry(path);return true;}catch{retu
 async function copyFile(from:string,to:string){const source=await (await fileHandle(from)).getFile(),target=await fileHandle(to,true),writer=await target.createWritable();await source.stream().pipeTo(writer);}
 async function copyTree(from:string,to:string){const source=await directory(from);await directory(to,true);for await(const [name,handle] of (source as any).entries())handle.kind==='file'?await copyFile(`${from}/${name}`,`${to}/${name}`):await copyTree(`${from}/${name}`,`${to}/${name}`);}
 
+/** Open descriptors. A file opened for writing in this site's storage holds a sync access handle, which reads and writes
+ * at any position without copying the file (a writable stream copies it on every write); descriptors on one path share
+ * it, and the path's other calls go through it while it is held. A granted folder's file has no such handle: it is
+ * written through a writable stream at the position, which is slower. */
+type Held={access:FileSystemSyncAccessHandle;users:number;modified:number};
+const descriptors=new Map<number,{path:string;write:boolean;append:boolean}>(),held=new Map<string,Held>();let nextFd=1;
+const ebusy=(path:string)=>new Failure('EBUSY',`EBUSY: resource busy or locked, open '${path}'`,path);
+async function hold(path:string,create:boolean):Promise<Held|undefined>{
+ if(parts(path)[0]==='granted')return undefined;
+ const found=held.get(path);if(found){found.users++;return found;}
+ const file=await fileHandle(path,create);let access:FileSystemSyncAccessHandle;
+ try{access=await (file as any).createSyncAccessHandle();}catch(error){if((error as DOMException).name==='NoModificationAllowedError')throw ebusy(path);throw error;}
+ const entry={access,users:1,modified:Date.now()};held.set(path,entry);return entry;
+}
+function release(path:string){const found=held.get(path);if(found&&--found.users<=0){found.access.flush();found.access.close();held.delete(path);}}
+async function open(path:string,flags:string){
+ const write=/[wa+]/.test(flags),create=/[wa]/.test(flags);
+ if(flags.includes('x')&&await exists(path))throw new Failure('EEXIST',`EEXIST: file already exists, open '${path}'`,path);
+ if(!create&&!await exists(path))throw enoent(path);
+ const holding=write?await hold(path,create):undefined;
+ if(write&&!holding&&create&&!await exists(path)){const writer=await (await fileHandle(path,true)).createWritable();await writer.close();}
+ if(flags.startsWith('w')){if(holding){holding.access.truncate(0);holding.modified=Date.now();}else if(write){const writer=await (await fileHandle(path,true)).createWritable();await writer.close();}}
+ const fd=nextFd++;descriptors.set(fd,{path,write,append:flags.startsWith('a')});return fd;
+}
+const described=(fd:number)=>{const found=descriptors.get(fd);if(!found)throw new Failure('EBADF','EBADF: bad file descriptor');return found;};
+async function sizeOf(path:string){const holding=held.get(path);return holding?holding.access.getSize():(await (await fileHandle(path)).getFile()).size;}
+async function readAt(path:string,position:number,length:number){
+ const holding=held.get(path),count=Math.max(0,Math.min(length,CAPACITY-4096));
+ if(holding){const buffer=new Uint8Array(count);const read=holding.access.read(buffer,{at:position});return buffer.subarray(0,read);}
+ const file=await (await fileHandle(path)).getFile();return new Uint8Array(await file.slice(position,Math.min(file.size,position+count)).arrayBuffer());
+}
+async function writeAt(path:string,position:number|null,data:Uint8Array){
+ const holding=held.get(path);
+ if(holding){const at=position??holding.access.getSize();holding.access.write(data as Uint8Array<ArrayBuffer>,{at});holding.modified=Date.now();return;}
+ const target=await fileHandle(path,true),writer=await target.createWritable({keepExistingData:true});
+ await writer.seek(position??(await target.getFile()).size);await writer.write(data as Uint8Array<ArrayBuffer>);await writer.close();
+}
+
 async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
  switch(request.op){
-  case 'stat':{const found=await entry(request.path);if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};const file=await found.getFile();return{json:{kind:'file',size:file.size,mtimeMs:file.lastModified} satisfies FsStat};}
+  case 'stat':{const holding=held.get(request.path);if(holding)return{json:{kind:'file',size:holding.access.getSize(),mtimeMs:holding.modified} satisfies FsStat};
+   const found=await entry(request.path);if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};const file=await found.getFile();return{json:{kind:'file',size:file.size,mtimeMs:file.lastModified} satisfies FsStat};}
+  case 'open':return{json:{fd:await open(request.path,request.flags)}};
+  case 'pread':{const {path}=described(request.fd);return{json:{size:await sizeOf(path)},data:await readAt(path,request.position,request.length)};}
+  case 'pwrite':{const d=described(request.fd);if(!d.write)throw new Failure('EBADF','EBADF: bad file descriptor, write');await writeAt(d.path,d.append?null:request.position,request.data);return{};}
+  case 'ftruncate':{const d=described(request.fd),holding=held.get(d.path);if(holding){holding.access.truncate(request.length);holding.modified=Date.now();}else{const writer=await (await fileHandle(d.path)).createWritable({keepExistingData:true});await writer.truncate(request.length);await writer.close();}return{};}
+  case 'close':{const d=descriptors.get(request.fd);if(d){descriptors.delete(request.fd);if(d.write)release(d.path);}return{};}
   case 'readdir':{const dir=await directory(request.path),list:{name:string;kind:string}[]=[];for await(const [name,h] of (dir as any).entries())list.push({name,kind:h.kind});return{json:list};}
   case 'mkdir':{
    if(!request.recursive){const [dir,name]=await parent(request.path);try{await dir.getDirectoryHandle(name);throw new Failure('EEXIST',`EEXIST: file already exists, mkdir '${request.path}'`,request.path);}catch(error){if(error instanceof Failure)throw error;}await dir.getDirectoryHandle(name,{create:true});return{};}
@@ -48,9 +92,11 @@ async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
    for(let i=start;i<list.length;i++){try{dir=await dir.getDirectoryHandle(list[i]);}catch(error){if((error as DOMException).name==='TypeMismatchError')throw new Failure('EEXIST',`EEXIST: file already exists, mkdir '${request.path}'`,request.path);dir=await dir.getDirectoryHandle(list[i],{create:true});made??='/'+list.slice(0,i+1).join('/');}}
    return{json:made??null};
   }
-  case 'read':{const file=await (await fileHandle(request.path)).getFile(),end=Math.min(file.size,request.offset+Math.min(request.length,CAPACITY-4096));return{json:{size:file.size},data:new Uint8Array(await file.slice(request.offset,end).arrayBuffer())};}
+  case 'read':{if(held.has(request.path))return{json:{size:await sizeOf(request.path)},data:await readAt(request.path,request.offset,request.length)};
+   const file=await (await fileHandle(request.path)).getFile(),end=Math.min(file.size,request.offset+Math.min(request.length,CAPACITY-4096));return{json:{size:file.size},data:new Uint8Array(await file.slice(request.offset,end).arrayBuffer())};}
   case 'write':{
    if(request.mode==='wx'&&await exists(request.path))throw new Failure('EEXIST',`EEXIST: file already exists, open '${request.path}'`,request.path);
+   const holding=held.get(request.path);if(holding){if(request.mode==='w')holding.access.truncate(0);await writeAt(request.path,null,request.data);return{};}
    const target=await fileHandle(request.path,true),writer=await target.createWritable({keepExistingData:request.mode==='a'});
    if(request.mode==='a'){const size=(await target.getFile()).size;await writer.seek(size);}
    await writer.write(request.data as Uint8Array<ArrayBuffer>);await writer.close();return{};

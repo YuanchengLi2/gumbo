@@ -1,7 +1,7 @@
 import {CommandError,type Command,type CommandContext,type Host} from '../shell/types';
 import {EmptyInput} from '../shell/io';
 import {mountSandbox} from './emscripten-fs';
-import {mkdirp} from '../fs/util';
+import {mkdirp,tryStat} from '../fs/util';
 import {join} from '../path';
 import type {SandboxAssets} from '../sandbox';
 
@@ -67,6 +67,7 @@ async function run(ctx:CommandContext,tool:'ffmpeg'|'ffprobe'):Promise<number>{
  return exclusive(async()=>{
   const FS=core.FS,workspace=ctx.host.workspace;
   mountSandbox(FS,ctx.fs,workspace);mkdirp(ctx.fs,'/tmp');mountSandbox(FS,ctx.fs,'/tmp');
+  for(const folder of ctx.host.mounts??[])if(tryStat(ctx.fs,folder)?.type==='directory')mountSandbox(FS,ctx.fs,folder);
   if(!ctx.cwd.startsWith(workspace)&&!ctx.cwd.startsWith('/tmp'))mountSandbox(FS,ctx.fs,'/'+ctx.cwd.split('/')[1]);
   FS.chdir(ctx.cwd);
   const tmp=join(workspace,'.cache','tmp');mkdirp(ctx.fs,tmp);const temps:string[]=[];let stdoutFile:string|undefined;

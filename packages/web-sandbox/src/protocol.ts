@@ -1,7 +1,7 @@
 import type {ProcessResult,RunRequest,RunningProcess,SandboxAssets} from './sandbox';
 
 /** What the page may set for the worker's sandbox: everything serializable in SandboxOptions. */
-export interface WorkerOptions{workspace?:string;env?:Record<string,string>;maxOutputChars?:number;memoryLimitBytes?:number;logDir?:string;maxLogBytes?:number;waitMs?:number;assets?:SandboxAssets}
+export interface WorkerOptions{workspace?:string;mounts?:string[];env?:Record<string,string>;maxOutputChars?:number;memoryLimitBytes?:number;logDir?:string;maxLogBytes?:number;waitMs?:number;assets?:SandboxAssets}
 export type FsOp={op:'read';path:string}|{op:'write';path:string;data:Uint8Array|string}|{op:'list';path:string}|{op:'stat';path:string}|{op:'mkdir';path:string}|{op:'remove';path:string};
 /** Page → worker. Each carries an id the reply echoes. */
 export type Request=

@@ -18,10 +18,11 @@ const builtins:Record<string,string>={
  ...Object.fromEntries(['os','zlib','util','timers/promises','stream','stream/promises','readline','module','vm','worker_threads','dns/promises','net'].flatMap(m=>[[`node:${m}`,node],[m,node]])),
 };
 /** Inside the project service only: modules whose desktop versions do their work another way on the web (listening mixes
- * with the export's mixer instead of an ffmpeg filter graph; web pages are read through the gateway). */
+ * with the export's mixer instead of an ffmpeg filter graph; web pages are read through the gateway; commands run in the
+ * browser sandbox, which has its own tools). */
 function webModules():Plugin{
  const service=resolve(__dirname,'../project-service/src').replace(/\\/g,'/');
- const swaps:Record<string,string>={'./edit-audio':project('web-edit-audio.ts'),'./web-fetch':project('web-fetch.ts')};
+ const swaps:Record<string,string>={'./edit-audio':project('web-edit-audio.ts'),'./web-fetch':project('web-fetch.ts'),'./workspace-environment':project('web-workspace-environment.ts')};
  return{name:'gumbo-web-modules',enforce:'pre',resolveId(source,importer){if(importer&&importer.replace(/\\/g,'/').startsWith(service)&&swaps[source])return swaps[source];return null;}};
 }
 /** In development the page may also reach servers on this computer (the tests' stand-in for Supabase and the gateway). */

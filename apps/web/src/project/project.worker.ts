@@ -7,13 +7,15 @@ import {connectPrograms} from './shims/child-process';
 import {startHost,host,hostUpdate} from './host';
 import {startFiles,files} from './files';
 import {connectionAnswer} from './connection';
+import {runCode,cancelCode} from './commands';
 import {syncRoutes} from './routes';
 
 /** The project worker: Gumbo's project service (apps/project-service/src/main.ts, unchanged) in the browser. It starts
  * the storage worker (synchronous files over OPFS) and the media worker (ffmpeg and ffprobe's commands), opens SQLite,
  * then loads the service. Messages: {boot:{env}} first; {host:{id,action,args}} for the project list and the computer's
  * files; anything else is the service's own protocol (commands, connection answers), as the desktop's utility process
- * receives it. What the service asks about the computer's files is answered here (files.ts), not by the page. */
+ * receives it. What the service asks about the computer's files is answered here (files.ts), and its commands run in
+ * the browser sandbox from here (commands.ts), not by the page. */
 const post=(message:unknown)=>(self as unknown as Worker).postMessage(message);
 let booted:Promise<void>|undefined,openFolder:string|undefined,openId:string|undefined;
 const fileRequests=new Map<string,AbortController>();
@@ -39,7 +41,7 @@ async function answerFile(data:{id:string;request:any;context:any}){
 }
 async function boot(env:Record<string,string>){
  await exclusive();
- Object.assign(process.env,{DREAM_FFMPEG:'ffmpeg',DREAM_FFPROBE:'ffprobe',DREAM_INGEST_BINARY:'',DREAM_WHISPER_BINARY:'',DREAM_WHISPER_MODEL:'',...env});
+ Object.assign(process.env,{DREAM_RUNTIME:'browser',DREAM_FFMPEG:'ffmpeg',DREAM_FFPROBE:'ffprobe',DREAM_INGEST_BINARY:'',DREAM_WHISPER_BINARY:'',DREAM_WHISPER_MODEL:'',...env});
  await connectFs(new Worker(new URL('./fs/storage.worker.ts',import.meta.url),{type:'module'}));
  connectPrograms(new Worker(new URL('./media/media.worker.ts',import.meta.url),{type:'module'}));
  await initSqlite();
@@ -53,6 +55,8 @@ async function boot(env:Record<string,string>){
   const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;openId=state.meta.id;hostUpdate(state);}
   if(message?.file){void answerFile(message.file);return;}
   if(message?.fileCancel){fileRequests.get(message.fileCancel)?.abort();return;}
+  if(message?.codeRun){void runCode(message.codeRun,{folder:openFolder,id:openId},deliver);return;}
+  if(message?.codeCancel){cancelCode(message.codeCancel);return;}
   const footage=state?.footage??(message?.event?.type==='state.delta'?message.event.payload?.changes?.footage:undefined);
   if(footage?.assets)releaseStaged(footage.assets);
   outgoing=outgoing.then(async()=>{if(footage?.assets)await syncRoutes(footage.assets);send(message);});};

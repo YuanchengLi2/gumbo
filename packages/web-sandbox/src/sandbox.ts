@@ -27,6 +27,8 @@ export interface SandboxAssets{
 export interface SandboxOptions{
  /** The project folder commands start in (cwd "." resolves here). */
  workspace?:string;
+ /** Folders beside the workspace that the programs (ffmpeg, Python) see too, as the shell does: a project's media. */
+ mounts?:string[];
  env?:Record<string,string>;
  maxOutputChars?:number;
  /** The most memory one command may use (its programs' wasm heaps and the JS it allocates). */
@@ -61,7 +63,7 @@ export class Sandbox{
  constructor(public fs:SandboxFS,public options:SandboxOptions={}){
   this.workspace=options.workspace??'/workspace';mkdirp(fs,this.workspace);
   const commands=new Map<string,Command>(Object.entries({...unixTools,...options.programs}));
-  this.host={commands,unavailable,fetch:options.fetch,timeLeft:()=>Infinity,reportMemory:(name,bytes)=>{this.memory.set(name,bytes);},interrupt:options.interrupt,workspace:this.workspace,assets:options.assets};
+  this.host={commands,unavailable,fetch:options.fetch,timeLeft:()=>Infinity,reportMemory:(name,bytes)=>{this.memory.set(name,bytes);},interrupt:options.interrupt,workspace:this.workspace,mounts:options.mounts??[],assets:options.assets};
  }
  /** Names a command can run: the Unix tools and the programs. */
  commands(){return[...this.host.commands.keys()].sort();}
