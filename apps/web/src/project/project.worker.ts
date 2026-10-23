@@ -5,14 +5,18 @@ import {connectFs,mkdirSync,existsSync,rmSync} from './fs/sync-fs';
 import {initSqlite} from './shims/better-sqlite3';
 import {connectPrograms} from './shims/child-process';
 import {startHost,host,hostUpdate} from './host';
+import {startFiles,files} from './files';
+import {connectionAnswer} from './connection';
 import {syncRoutes} from './routes';
 
 /** The project worker: Gumbo's project service (apps/project-service/src/main.ts, unchanged) in the browser. It starts
  * the storage worker (synchronous files over OPFS) and the media worker (ffmpeg and ffprobe's commands), opens SQLite,
- * then loads the service. Messages: {boot:{env}} first; {host:{id,action,args}} for the project list; anything else is
- * the service's own protocol (commands, connection and file answers), as the desktop's utility process receives it. */
+ * then loads the service. Messages: {boot:{env}} first; {host:{id,action,args}} for the project list and the computer's
+ * files; anything else is the service's own protocol (commands, connection answers), as the desktop's utility process
+ * receives it. What the service asks about the computer's files is answered here (files.ts), not by the page. */
 const post=(message:unknown)=>(self as unknown as Worker).postMessage(message);
-let booted:Promise<void>|undefined,openFolder:string|undefined;
+let booted:Promise<void>|undefined,openFolder:string|undefined,openId:string|undefined;
+const fileRequests=new Map<string,AbortController>();
 /** One project service per browser: SQLite's files open in one place only. The lock lives as long as this worker, so a
  * reloaded page's new worker waits for the old one to stop, and a second tab waits until the first closes. */
 function exclusive(){
@@ -26,6 +30,13 @@ function exclusive(){
 function releaseStaged(assets:Asset[]){
  for(const asset of assets){const from=asset.source?.path;if(!from?.startsWith('/imports/')||asset.originalPath===from)continue;const folder=from.slice(0,from.lastIndexOf('/'));if(existsSync(folder))rmSync(folder,{recursive:true,force:true});}
 }
+/** The service's question about the computer's files (main/service.ts file), answered as the desktop's main does. */
+async function answerFile(data:{id:string;request:any;context:any}){
+ const controller=new AbortController();fileRequests.set(data.id,controller);
+ try{deliver({fileResult:{id:data.id,result:await files.request(data.request,data.context,controller.signal)}});}
+ catch(error){deliver({fileResult:{id:data.id,error:(error as Error).message}});}
+ finally{fileRequests.delete(data.id);}
+}
 async function boot(env:Record<string,string>){
  await exclusive();
  Object.assign(process.env,{DREAM_FFMPEG:'ffmpeg',DREAM_FFPROBE:'ffprobe',DREAM_INGEST_BINARY:'',DREAM_WHISPER_BINARY:'',DREAM_WHISPER_MODEL:'',...env});
@@ -33,13 +44,15 @@ async function boot(env:Record<string,string>){
  connectPrograms(new Worker(new URL('./media/media.worker.ts',import.meta.url),{type:'module'}));
  await initSqlite();
  for(const folder of ['/tmp','/profile','/Dream/Projects'])mkdirSync(folder,{recursive:true});
- startHost();
+ startFiles();startHost();
  const send=(process as any).parentPort.postMessage.bind((process as any).parentPort);
  // States it reports also refresh the project list and the service worker's media routes (routes.ts), before they leave:
  // the editor asks for the media as soon as it sees them. Messages keep their order (state deltas are numbered).
  let outgoing=Promise.resolve();
  (process as any).parentPort.postMessage=(message:any)=>{
-  const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;hostUpdate(state);}
+  const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;openId=state.meta.id;hostUpdate(state);}
+  if(message?.file){void answerFile(message.file);return;}
+  if(message?.fileCancel){fileRequests.get(message.fileCancel)?.abort();return;}
   const footage=state?.footage??(message?.event?.type==='state.delta'?message.event.payload?.changes?.footage:undefined);
   if(footage?.assets)releaseStaged(footage.assets);
   outgoing=outgoing.then(async()=>{if(footage?.assets)await syncRoutes(footage.assets);send(message);});};
@@ -49,6 +62,7 @@ self.onmessage=async(event:MessageEvent)=>{
  const data=event.data;
  if(data?.boot){booted??=boot(data.boot.env??{});try{await booted;post({booted:true});}catch(error){post({bootError:String((error as Error)?.stack??error)});}return;}
  await booted;
- if(data?.host){const {id,action,args}=data.host;try{post({hostResult:{id,result:host(action,args,openFolder)}});}catch(error){post({hostResult:{id,error:(error as Error).message}});}return;}
+ if(data?.host){const {id,action,args}=data.host;try{post({hostResult:{id,result:await host(action,args,{folder:openFolder,id:openId})}});}catch(error){post({hostResult:{id,error:(error as Error).message}});}return;}
+ if(connectionAnswer(data))return;
  deliver(data);
 };

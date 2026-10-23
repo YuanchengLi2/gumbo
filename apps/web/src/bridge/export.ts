@@ -2,7 +2,8 @@ import {Input,BlobSource,ALL_FORMATS,EncodedPacketSink,EncodedVideoPacketSource,
 import {resolve} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import {ExportSettingsSchema,outputSize,audioExtension,safeName,type ExportSettings} from '../../../desktop/src/main/export-settings';
-import {fileAt,writable,exists,remove,grantFolder} from '../project/media/paths';
+import {fileAt,writable,exists,remove} from '../project/media/paths';
+import {pickFolder} from './imports';
 import type {SoundRequest} from '../export/sound';
 import {publish} from './events';
 
@@ -94,9 +95,6 @@ export const cancelExport=()=>stop('cancelled','The export was cancelled.');
 export function failExport(id:string,message:string){if(job?.id===id)stop('failed',String(message||'The video could not be drawn.').slice(0,2000));}
 
 /** A folder on the computer to export into, kept for later exports (the desktop's folder dialog). */
-export async function pickExportFolder(){
- try{const handle=await (window as any).showDirectoryPicker({id:'gumbo-exports',mode:'readwrite',startIn:'videos'}) as FileSystemDirectoryHandle;return grantFolder(handle);}
- catch(error){if((error as DOMException).name==='AbortError')return null;throw error;}
-}
+export const pickExportFolder=()=>pickFolder('gumbo-exports');
 /** "Show in folder": an export kept in this site's storage is downloaded again; one in the user's own folder is already there. */
 export async function reveal(path:string){if(typeof path==='string'&&inStorage(path)&&await exists(path))await download(path);}

@@ -6,6 +6,7 @@ import {handleAI} from './ai.ts';
 import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
+import {handleFetchUrl} from './fetch-url.ts';
 import {handleCreators} from './creators.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
@@ -43,9 +44,9 @@ Deno.serve(async(req)=>{
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
  const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
- // The paid beta: what costs money (the AI, transcription, media search, sharing, checkout) is for accounts invited from
- // the waitlist. Anyone can sign in and see where they stand.
- if(['ai','count-tokens','transcribe','media-search','creators','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
+ // The paid beta: what costs money (the AI, transcription, media search, sharing, checkout) or reads the web for the
+ // agent is for accounts invited from the waitlist. Anyone can sign in and see where they stand.
+ if(['ai','count-tokens','transcribe','media-search','fetch-url','creators','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
@@ -73,6 +74,8 @@ Deno.serve(async(req)=>{
   if(action==='creators'){const allow=async()=>{const {data:account}=await db.from('dream_accounts').select('plan').eq('id',user.id).single();const limit=(PLANS as any)[account?.plan??'free']?.limits?.creatorSearches??0;const {data:used,error}=await db.rpc('dream_use_allowance',{p_account:user.id,p_kind:'creator_search',p_limit:limit});return{ok:!error&&Number(used)>=0,limit};};
    const result=await handleCreators(body,{key:Deno.env.get('YOUTUBE_API_KEY'),allow});return json(result.body,result.status);}
   // Free-to-use music, sound, footage and images for the agent (see media-search.ts).
+  // Web pages for the agent's fetch_url in the browser, which cannot read other sites itself (fetch-url.ts).
+  if(action==='fetch-url'){const result=await handleFetchUrl(body,{fetch,resolve:async host=>[...await Deno.resolveDns(host,'A').catch(()=>[]),...await Deno.resolveDns(host,'AAAA').catch(()=>[])]});return json(result.body,result.status);}
   if(action==='media-search'){const result=await handleMediaSearch(body,{keys:Object.fromEntries(Object.entries(mediaKeys).map(([id,secret])=>[id,Deno.env.get(secret)]))});return json(result.body,result.status);}
   // Paying, on Stripe's pages: Checkout for a plan or credits, the portal to manage the plan (billing.ts).
   // Paying is closed during the free beta (no plans, no credit top-ups) until DREAM_PAYMENTS_OPEN=1; the portal stays so

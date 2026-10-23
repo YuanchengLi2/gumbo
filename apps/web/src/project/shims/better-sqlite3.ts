@@ -18,6 +18,8 @@ export async function initSqlite(){
 /** Each database takes a slot, with another for its journal; the pool grows ahead of need, since opening is synchronous. */
 async function keepRoom(){if(pool.getCapacity()-pool.getFileCount()<8)await pool.addCapacity(16);}
 export const databaseFiles=()=>pool.getFileNames();
+/** Removes the databases (and their journals) kept under a folder, whose own files are deleted separately. */
+export function removeDatabases(prefix:string){for(const name of pool.getFileNames())if(name.startsWith(prefix))pool.unlink(name);}
 
 const asBuffer=(value:unknown)=>value instanceof Uint8Array?Buffer.from(value.buffer,value.byteOffset,value.byteLength):value;
 function row(stmt:any){const out:Record<string,unknown>={};for(let i=0;i<stmt.columnCount;i++)out[stmt.getColumnName(i)]=asBuffer(stmt.get(i));return out;}

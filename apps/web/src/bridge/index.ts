@@ -4,7 +4,7 @@ import {Account} from './account';
 import {onEvent,publish} from './events';
 import {loadSettings,saveSettings} from './settings';
 import {ProjectClient} from './project';
-import {pickFiles,store} from './imports';
+import {pickFiles,pickFolder,store} from './imports';
 import * as exporting from './export';
 
 /** window.dream in the browser: what the desktop app's preload and main process answer (preload/index.ts, main/index.ts),
@@ -53,8 +53,14 @@ export function createBridge(){
   projects:()=>service().host('list'),
   projectAction:(id:string,action:string)=>service().host('action',{id,action}),
   createProject:async(request:any)=>{const location=await service().host('allocate',{request});const state=await service().command({type:'create',...location,initialRequest:request});openProject=true;return state;},
-  fileGrants:async()=>[],grantComputer:notYet('Opening a folder'),revokeFileGrant:async()=>undefined,cancelFiles:async()=>undefined,
-  files:notYet('Browsing files'),decideFileChange:notYet('File changes'),
+  // The computer's files are the folders the user grants (project/files.ts): allowing access means choosing a folder.
+  fileGrants:()=>service().host('fileGrants'),
+  grantComputer:async()=>{const path=await pickFolder('gumbo-files');return path?service().host('grantFolder',{path}):null;},
+  revokeFileGrant:(id:string)=>service().host('revokeGrant',{id}),cancelFiles:(id:string)=>service().host('cancelFiles',{id}),
+  files:(request:unknown)=>service().host('files',{request}),
+  // A decision on proposed changes resumes the run that waits for it (main/index.ts dream:decideFileChange).
+  decideFileChange:async(id:string,approve:boolean)=>{const proposal=await service().host<{projectId?:string}>('decideFile',{id,approve}),state=await service().command({type:'state'}).catch(()=>null);
+   if(state?.meta?.id===proposal.projectId&&state?.aiStatus==='awaiting_file_permission')await service().command({type:'resume'});return proposal;},
   registerDropped:(files:File[])=>store(files),
   command,
   // Projects live in this browser: there is no folder to open; the home screen's list opens them.
@@ -64,7 +70,7 @@ export function createBridge(){
   sceneFrame:notYet('Scene frames'),closeScenes:async()=>undefined,
   setFullScreen:async(on:boolean)=>{if(on&&!document.fullscreenElement)await document.documentElement.requestFullscreen().catch(()=>{});else if(!on&&document.fullscreenElement)await document.exitFullscreen().catch(()=>{});},
   settings:async()=>loadSettings(),saveSettings:async(patch:unknown)=>{const next=saveSettings(patch);service().config({settings:settingsEnv(next)});return next;},
-  openFolder:async()=>undefined,framesResult:async()=>undefined,sceneStill:notYet('Scene stills'),
+  openFolder:async()=>undefined,framesResult:async(id:string,result:unknown)=>service().framesResult(id,result),sceneStill:notYet('Scene stills'),
   finishExport:exporting.finishExport,failExport:async(id:string,message:string)=>exporting.failExport(id,message),cancelExport:async()=>exporting.cancelExport(),
   reveal:(path:string)=>exporting.reveal(path),shareExport:notYet('Sharing'),
   // Browsers driven by tests skip the welcome questions, as the desktop's headless runs do.

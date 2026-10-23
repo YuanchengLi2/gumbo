@@ -11,7 +11,11 @@ const gzipped=async(text:string)=>new Uint8Array(await new Response(new Blob([te
 export class Account {
  private session:Session|null=null;private refreshing:Promise<void>|null=null;private generation=0;
  url=import.meta.env.DREAM_SUPABASE_URL??'https://qewguvfkkwvdoqptiljd.supabase.co';anonKey=import.meta.env.DREAM_SUPABASE_ANON_KEY??'';
- constructor(){this.session=this.saved();}
+ constructor(){
+  this.session=this.saved();
+  // In development only, a local stand-in for Supabase and the gateway (the tests' fixture), as the desktop's cloud.json.
+  if(import.meta.env.DEV)try{const cloud=JSON.parse(localStorage.getItem('gumbo-cloud')??'null');if(typeof cloud?.url==='string'){this.url=cloud.url;this.anonKey=cloud.anonKey??'';}}catch{}
+ }
  get accountId(){return this.session?.user.id;}
  private saved():Session|null{try{return JSON.parse(localStorage.getItem(sessionKey)??'null');}catch{return null;}}
  private save(session:Session){this.session=session;localStorage.setItem(sessionKey,JSON.stringify(session));}
