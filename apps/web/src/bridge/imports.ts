@@ -1,4 +1,5 @@
 import {grantFolder} from '../project/media/paths';
+import {keepStorage} from './awake';
 
 /** Footage on the web: files the user picks or drops are copied into this browser's private storage (/imports/<id>/
  * <name>), and the project service imports them from there by path, as it imports from the desktop's disk. The copy
@@ -9,6 +10,7 @@ async function folder(path:string[]){let dir=await navigator.storage.getDirector
 /** A file's name made safe as a path part (no slashes), keeping its extension. */
 const safe=(name:string)=>name.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(-180)||'media';
 export async function store(files:File[]):Promise<string[]>{
+ void keepStorage();
  const paths:string[]=[];
  for(const file of files){
   const id=crypto.randomUUID().slice(0,8),name=safe(file.name),dir=await folder(['imports',id]),handle=await dir.getFileHandle(name,{create:true}),writer=await handle.createWritable();

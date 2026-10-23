@@ -6,6 +6,7 @@ import {fileAt,writable,exists,remove} from '../project/media/paths';
 import {pickFolder} from './imports';
 import type {SoundRequest} from '../export/sound';
 import {publish} from './events';
+import {busy} from './awake';
 
 /** The desktop main process's half of an export (main/engine-export.ts), in the page. The editor draws and encodes the
  * video with the engine (renderer/engine/export.ts, unchanged) and hands it over in pieces, written to a file in this
@@ -38,7 +39,7 @@ export async function beginExport(raw:unknown,state:ProjectState){
  if(settings.audio)next.audioPath=await freePath(folder,settings.name||state.meta.name,audioExtension(settings));
  // The sound is mixed while the picture renders; it needs little of what the picture uses.
  if(next.videoPath){next.sound=sound({timeline:state.timeline,footage:state.footage,output:`${next.workDir}/sound.m4a`,format:'aac',workDir:next.workDir},next.abort.signal);next.sound.catch(()=>{});}
- job=next;
+ job=next;busy('export',true);
  const {width,height,fps}=state.timeline.settings,size=outputSize(settings,width,height);
  return{id,video:next.videoPath?{...size,fps:settings.fps==='source'?fps:settings.fps,codec:settings.codec,quality:settings.quality,container:settings.format}:undefined};
 }
@@ -88,8 +89,8 @@ export async function finishExport(id:string,timing?:unknown){
  }catch(error){for(const path of written)await remove(path).catch(()=>{});publish('export.progress',{status:abort.signal.aborted?'cancelled':'failed',progress:0,error:(error as Error).message});throw error;}
  finally{await cleanup(current);}
 }
-async function cleanup(ended:Job){if(job===ended)job=undefined;await ended.out?.abort().catch(()=>{});ended.out=undefined;await remove(ended.workDir).catch(()=>{});}
-function stop(status:'cancelled'|'failed',message:string){const ended=job;if(!ended)return;job=undefined;ended.abort.abort();void (ended.sound??Promise.resolve()).catch(()=>{}).finally(()=>cleanup(ended));publish('export.progress',{status,progress:0,...(status==='failed'?{error:message}:{})});}
+async function cleanup(ended:Job){if(job===ended)job=undefined;busy('export',false);await ended.out?.abort().catch(()=>{});ended.out=undefined;await remove(ended.workDir).catch(()=>{});}
+function stop(status:'cancelled'|'failed',message:string){const ended=job;if(!ended)return;job=undefined;busy('export',false);ended.abort.abort();void (ended.sound??Promise.resolve()).catch(()=>{}).finally(()=>cleanup(ended));publish('export.progress',{status,progress:0,...(status==='failed'?{error:message}:{})});}
 export const cancelExport=()=>stop('cancelled','The export was cancelled.');
 /** The editor could not draw the video (a clip it cannot decode): the export stops with its reason. */
 export function failExport(id:string,message:string){if(job?.id===id)stop('failed',String(message||'The video could not be drawn.').slice(0,2000));}

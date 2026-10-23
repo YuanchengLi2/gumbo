@@ -4,7 +4,7 @@ import type {Asset} from '@dream/footage';
 import {connectFs,mkdirSync,existsSync,rmSync} from './fs/sync-fs';
 import {initSqlite} from './shims/better-sqlite3';
 import {connectPrograms} from './shims/child-process';
-import {startHost,host,hostUpdate} from './host';
+import {startHost,host,hostUpdate,trackAssets,trackDraft} from './host';
 import {startFiles,files} from './files';
 import {connectionAnswer} from './connection';
 import {runCode,cancelCode} from './commands';
@@ -58,7 +58,9 @@ async function boot(env:Record<string,string>){
   if(message?.codeRun){void runCode(message.codeRun,{folder:openFolder,id:openId},deliver);return;}
   if(message?.codeCancel){cancelCode(message.codeCancel);return;}
   const footage=state?.footage??(message?.event?.type==='state.delta'?message.event.payload?.changes?.footage:undefined);
-  if(footage?.assets)releaseStaged(footage.assets);
+  if(footage?.assets){releaseStaged(footage.assets);trackAssets(footage.assets);}
+  // A draft scene is kept here for its page, as the desktop's main keeps it; the editor does not get the event.
+  if(message?.event?.type==='scene.draft'){trackDraft(message.event.payload);return;}
   outgoing=outgoing.then(async()=>{if(footage?.assets)await syncRoutes(footage.assets);send(message);});};
  await import('../../../project-service/src/main');
 }

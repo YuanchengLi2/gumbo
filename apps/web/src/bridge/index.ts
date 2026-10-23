@@ -6,6 +6,9 @@ import {loadSettings,saveSettings} from './settings';
 import {ProjectClient} from './project';
 import {pickFiles,pickFolder,store} from './imports';
 import * as exporting from './export';
+import {serveScenes} from './engine';
+import * as scenes from './scenes';
+import {keepStorage} from './awake';
 
 /** window.dream in the browser: what the desktop app's preload and main process answer (preload/index.ts, main/index.ts),
  * answered here. Projects, import and editing run in the project worker (the desktop's project service, unchanged);
@@ -44,7 +47,7 @@ async function command(c:any){
 
 export function createBridge(){
  const base=import.meta.env.BASE_URL;
- service();
+ service();serveScenes(service);void keepStorage();
  return {
   web:true,
   // The service worker's routes for what the desktop serves from dream-media:// and dream-engine:// (sw.js).
@@ -67,10 +70,11 @@ export function createBridge(){
   pickProject:async()=>null,pickMedia:()=>pickFiles(),mediaPath:(file:File)=>file.name,
   exportVideo:notYet('Exporting for other editors'),pickExportFolder:()=>exporting.pickExportFolder(),
   beginExport:async(settings:unknown)=>exporting.beginExport(settings,await service().command({type:'state'})),exportChunk:exporting.exportChunk,
-  sceneFrame:notYet('Scene frames'),closeScenes:async()=>undefined,
+  // Scene pictures: each scene draws itself in a hidden page (scenes.ts); its page gets its files from engine.ts.
+  sceneFrame:(request:any)=>scenes.sceneFrame(request),closeScenes:async()=>scenes.closeScenes(),
   setFullScreen:async(on:boolean)=>{if(on&&!document.fullscreenElement)await document.documentElement.requestFullscreen().catch(()=>{});else if(!on&&document.fullscreenElement)await document.exitFullscreen().catch(()=>{});},
   settings:async()=>loadSettings(),saveSettings:async(patch:unknown)=>{const next=saveSettings(patch);service().config({settings:settingsEnv(next)});return next;},
-  openFolder:async()=>undefined,framesResult:async(id:string,result:unknown)=>service().framesResult(id,result),sceneStill:notYet('Scene stills'),
+  openFolder:async()=>undefined,framesResult:async(id:string,result:unknown)=>service().framesResult(id,result),sceneStill:(request:any)=>scenes.sceneStill(request),
   finishExport:exporting.finishExport,failExport:async(id:string,message:string)=>exporting.failExport(id,message),cancelExport:async()=>exporting.cancelExport(),
   reveal:(path:string)=>exporting.reveal(path),shareExport:notYet('Sharing'),
   // Browsers driven by tests skip the welcome questions, as the desktop's headless runs do.

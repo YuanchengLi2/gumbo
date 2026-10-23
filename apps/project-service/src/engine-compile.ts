@@ -44,7 +44,9 @@ export async function compileScene(root:string,options:{entry:string;mode?:'publ
   build.onLoad({filter:BINARY},args=>{
    const real=realpathSync(args.path);if(!inside(real))return{errors:[{text:`Scenes can only use files in src/, resources/ and installed packages.`}]};
    const rel=toPosix(relative(workspace,real)),key=rel.startsWith('resources/')?rel.slice('resources/'.length):'@'+rel;imported.set(key,rel);
-   return{contents:`module.exports=${JSON.stringify('files/'+key.split('/').map(encodeURIComponent).join('/'))};`,loader:'js'};
+   // The file's URL relative to the scene document, or the blob URL its host gives on the web (runtime/api/files.ts).
+   const url=JSON.stringify('files/'+key.split('/').map(encodeURIComponent).join('/'));
+   return{contents:`module.exports=(globalThis.__dreamUrls||{})[${url}]||${url};`,loader:'js'};
   });
   build.onLoad({filter:/\.(tsx?|jsx?|mjs|cjs|css|json)$/},args=>{
    if(args.namespace!=='file')return;const real=realpathSync(args.path);

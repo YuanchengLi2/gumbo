@@ -3,7 +3,8 @@ import {EngineView,type PlayerRef} from '../../engine/EngineView';
 import {resolve} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import type {ExportProgress} from '@dream/contracts';
-import {X,FolderOpen,Check,Film,Share2,Play,Pause} from 'lucide-react';
+import {X,FolderOpen,Check,Film,Share2,Play,Pause,Download} from 'lucide-react';
+import {onWeb,folderLabel} from '../../platform';
 
 export type ExportChoices={name:string;folder:string;video:boolean;resolution:'source'|'480'|'720'|'1080'|'1440'|'2160';quality:'lower'|'recommended'|'higher';codec:'h264'|'hevc';format:'mp4'|'mov';fps:'source'|24|25|30|50|60;audio:boolean;audioFormat:'mp3'|'wav'|'aac'};
 const resolutions=[['480','480p'],['720','720p'],['1080','1080p'],['1440','2K'],['2160','4K']] as const;
@@ -48,7 +49,7 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
    </div>
    <div className="export-form">
     {row('Name',<input value={c.name} disabled={running} onChange={e=>set({name:e.target.value})}/>)}
-    {row('Export to',<span className="export-folder" title={c.folder}><span>{c.folder}</span><button type="button" aria-label="Choose folder" disabled={running} onClick={async()=>{const picked=await window.dream.pickExportFolder(c.folder);if(picked)set({folder:picked});}}><FolderOpen size={15}/></button></span>)}
+    {row('Export to',<span className="export-folder" title={folderLabel(c.folder)}><span>{folderLabel(c.folder)}</span><button type="button" aria-label="Choose folder" disabled={running} onClick={async()=>{const picked=await window.dream.pickExportFolder(c.folder);if(picked)set({folder:picked});}}><FolderOpen size={15}/></button></span>)}
     <div className="export-section"><label className="export-toggle"><input type="checkbox" checked={c.video} disabled={running} onChange={e=>set({video:e.target.checked})}/><strong>Video</strong></label>
      {row('Resolution',select(resolutionValue,sizes,v=>set({resolution:v}),!c.video))}
      {row('Bit rate',select(c.quality,qualities,v=>set({quality:v}),!c.video))}
@@ -65,7 +66,7 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
   <footer className="export-foot">
    {running?<div className="export-bar"><progress max={1} value={p.progress?.progress??0}/></div>:failed?<span className="export-error">{p.progress?.status==='cancelled'?'Export cancelled':p.progress?.error}</span>:done?<span className="export-meta">{(p.progress?.paths??[p.progress?.path]).filter(Boolean).map(path=>path!.split(/[\\/]/).pop()).join(' · ')}</span>:<span className="export-meta">Duration {clock(duration)} <i/> Size about {size}</span>}
    <span className="spacer"/>
-   {running?<button className="button secondary" onClick={p.onCancel}>Cancel</button>:done?<>{p.progress?.path?.match(/\.(mp4|mov)$/)&&<button className="button secondary" onClick={p.onShare}><Share2 size={15}/>Share link</button>}<button className="button secondary" onClick={()=>window.dream.reveal(p.progress!.path!)}><FolderOpen size={15}/>Open folder</button><button className="button primary" onClick={p.onClose}>Done</button></>:<><button className="button secondary" onClick={p.onClose}>Cancel</button><button className="button primary" disabled={!c.video&&!c.audio} onClick={()=>p.onExport(c)}>Export</button></>}
+   {running?<button className="button secondary" onClick={p.onCancel}>Cancel</button>:done?<>{p.progress?.path?.match(/\.(mp4|mov)$/)&&<button className="button secondary" onClick={p.onShare}><Share2 size={15}/>Share link</button>}{!onWeb()?<button className="button secondary" onClick={()=>window.dream.reveal(p.progress!.path!)}><FolderOpen size={15}/>Open folder</button>:!p.progress!.path!.startsWith('/granted/')&&<button className="button secondary" onClick={()=>window.dream.reveal(p.progress!.path!)}><Download size={15}/>Download again</button>}<button className="button primary" onClick={p.onClose}>Done</button></>:<><button className="button secondary" onClick={p.onClose}>Cancel</button><button className="button primary" disabled={!c.video&&!c.audio} onClick={()=>p.onExport(c)}>Export</button></>}
   </footer>
  </section>;
 }

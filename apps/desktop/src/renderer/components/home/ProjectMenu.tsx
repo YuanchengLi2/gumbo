@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Pin,PinOff,FolderOpen,Archive,ArchiveRestore,Trash2,X,ArrowUpRight,ListX} from 'lucide-react';
 import type {ProjectSummary,ProjectAction} from '@dream/contracts';
+import {onWeb} from '../../platform';
 
 /** A project's menu on right-click (in the sidebar or on its card): open, pin, show in folder, archive, remove from the
  * list, delete. Delete asks first, in the app, and says the folder goes to the Recycle Bin. */
@@ -21,7 +22,7 @@ export function ProjectMenu(p:{at:MenuAt|null;onClose:()=>void;onOpen:(project:P
   {at&&project&&<div ref={menu} className="project-menu" role="menu" aria-label={`${project.name} options`} style={{left:pos.x,top:pos.y}}>
    <button type="button" role="menuitem" onClick={()=>{p.onClose();p.onOpen(project);}}><ArrowUpRight size={15}/>Open</button>
    {!project.archived&&<button type="button" role="menuitem" onClick={()=>act(project.pinned?'unpin':'pin')}>{project.pinned?<PinOff size={15}/>:<Pin size={15}/>}{project.pinned?'Unpin':'Pin to top'}</button>}
-   <button type="button" role="menuitem" disabled={project.missing} onClick={()=>act('reveal')}><FolderOpen size={15}/>Show in folder</button>
+   {!onWeb()&&<button type="button" role="menuitem" disabled={project.missing} onClick={()=>act('reveal')}><FolderOpen size={15}/>Show in folder</button>}
    <button type="button" role="menuitem" onClick={()=>act(project.archived?'unarchive':'archive')}>{project.archived?<ArchiveRestore size={15}/>:<Archive size={15}/>}{project.archived?'Unarchive':'Archive'}</button>
    <hr/>
    <button type="button" role="menuitem" onClick={()=>act('forget')}><ListX size={15}/>Remove from list</button>

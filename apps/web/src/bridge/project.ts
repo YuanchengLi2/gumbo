@@ -2,6 +2,7 @@ import {ReviewRenderRequestSchema,ReviewImagesSchema} from '@dream/contracts';
 import {PlayerFrames} from '../../../desktop/src/main/player-frames';
 import type {Account} from './account';
 import {publish} from './events';
+import {busy} from './awake';
 
 /** The page's side of the project worker (src/project/project.worker.ts): what the desktop's main process does with
  * its project service (main/service.ts, main/index.ts route): sends commands and the project list's requests, passes
@@ -40,6 +41,7 @@ export class ProjectClient{
   if(data.id&&this.pending.has(data.id)&&('result' in data||'error' in data)){const p=this.pending.get(data.id)!;this.pending.delete(data.id);data.error?p.reject(new Error(data.error)):p.resolve(data.result);return;}
   if(data.event){const e=data.event;
    // A run's log is sent by itself (edit logs), as the desktop's route does, rather than reaching the editor.
+   if(e.type==='ai.status')busy('roux',e.payload?.status==='running');
    if(e.type==='ai.turn_end'){if(e.payload?.log)void this.account.editLog({turnId:e.payload.turnId,log:e.payload.log}).catch(()=>{});return;}
    publish(e.type,e.payload,e.projectId,e.turnId);return;}
   if(data.connection){const id=data.connection.id;try{this.post({connectionResult:{id,result:{url:this.account.gateway(),token:await this.account.token(),accountId:this.account.accountId}}});}catch(error){this.post({connectionResult:{id,error:(error as Error).message}});}return;}

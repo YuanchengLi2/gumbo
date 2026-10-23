@@ -33,7 +33,7 @@ test('speech is heard in the cloud on a computer measured too slow',async({page}
  const words='And so my fellow Americans'.split(' ').map((word,n)=>({word,start:.4+n*.45,end:.8+n*.45}));
  const gateway=await codeGateway({words,script:()=>[]});
  try{
-  await page.addInitScript(url=>{localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
+  await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
   await page.goto('/app/?code=fixture-code');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
   // What an earlier measurement on this computer remembered.
   await page.evaluate(async()=>{const profile=await (await navigator.storage.getDirectory()).getDirectoryHandle('profile',{create:true}),file=await (await profile.getFileHandle('speech-local.json',{create:true})).createWritable();await file.write(JSON.stringify({verdict:'cloud',reason:'Measured slower than half real time.'}));await file.close();});

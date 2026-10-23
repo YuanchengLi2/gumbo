@@ -2,6 +2,7 @@ import React from 'react';
 import {Film,FolderOpen,Smartphone,Scissors,Plane,Captions,ArrowUpRight,Plus,Loader2,Pin,ChevronRight} from 'lucide-react';
 import {ProjectMenu,type MenuAt} from './ProjectMenu';
 import {useWorking} from '../../working';
+import {onWeb} from '../../platform';
 import type {ProjectSummary,ProjectAction} from '@dream/contracts';
 import {ChatComposer,type Attachment} from '../chat/ChatComposer';
 import {useEditor} from '../../store/editor';
@@ -53,7 +54,8 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <div className="home-brand"><GumboMark/><span>Gumbo</span>{plan&&<span className="home-brand-plan">{plan}</span>}</div>
    <nav className="home-nav">
     <button type="button" className="home-new" onClick={newVideo}><Plus size={16}/>New video</button>
-    <button type="button" onClick={()=>p.onOpen()}><FolderOpen size={16}/>Open project</button>
+    {/* On the web projects live in the browser: they open from the list, not from a folder. */}
+    {!onWeb()&&<button type="button" onClick={()=>p.onOpen()}><FolderOpen size={16}/>Open project</button>}
    </nav>
    <div className="home-lists">
     {pinned.length>0&&<section className="home-recents" aria-label="Pinned projects"><h2><Pin size={11}/>Pinned</h2>{pinned.map(item)}</section>}

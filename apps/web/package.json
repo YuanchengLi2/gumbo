@@ -19,6 +19,7 @@
     "@sqlite.org/sqlite-wasm": "3.50.4-build1",
     "buffer": "6.0.3",
     "mediabunny": "1.60.0",
+    "modern-screenshot": "4.7.0",
     "path-browserify": "1.0.1"
   }
 }

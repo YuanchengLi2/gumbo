@@ -1,5 +1,6 @@
 import {Buffer} from 'buffer';
 import {gzipSync as gzip,gunzipSync as gunzip,deflateSync as deflate,inflateSync as inflate} from 'fflate';
+import {esbuild} from './esbuild';
 /** The small Node built-ins the project service touches, for the browser. Each export names its module; vite.config.ts
  * points node:os, node:zlib, node:util, node:timers/promises, node:stream, node:stream/promises, node:readline,
  * node:module, node:vm, node:worker_threads, node:dns/promises and node:net here. What only runs with the agent
@@ -47,7 +48,8 @@ const notYet=(what:string)=>{throw new Error(`${what} is not available in the br
 export class Worker{constructor(){notYet('A background worker');}}
 export const parentPort=null,workerData=undefined,isMainThread=true;
 export class Script{constructor(){notYet('Running scripts');}}
-export const createRequire=()=>(id:string)=>notYet(`Loading ${id}`);
+/** require() for what the project service loads that way: esbuild, for compiling scenes (shims/esbuild.ts). */
+export const createRequire=()=>(id:string)=>id==='esbuild'?esbuild:notYet(`Loading ${id}`);
 export const lookup=async()=>notYet('Looking up addresses');
 export const isIP=(value:string)=>/^\d{1,3}(\.\d{1,3}){3}$/.test(value)?4:/^[0-9a-f:]+$/i.test(value)&&value.includes(':')?6:0;
 export default {homedir,tmpdir,totalmem,platform,gzipSync,gunzipSync,isDeepStrictEqual,promisify,setTimeout,Transform,pipeline,createInterface,Worker,Script,createRequire,lookup,isIP};

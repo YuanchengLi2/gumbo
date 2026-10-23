@@ -4,11 +4,14 @@ import {track,suspendedResource} from '../pending';
  * export server both serve with these routes, so the same compiled scene works in both. */
 const encodePath=(path:string)=>path.replace(/\\/g,'/').replace(/^\.?\/+/,'').replace(/^resources\//,'').split('/').map(encodeURIComponent).join('/');
 
+/** Gumbo on the web keeps project files in the browser's own storage, which a sandboxed scene cannot fetch by path: its
+ * host page gives blob URLs for them, by these same paths (globalThis.__dreamUrls). Elsewhere the paths are served. */
+const mapped=(path:string)=>(globalThis as {__dreamUrls?:Record<string,string>}).__dreamUrls?.[path]??path;
 /** An imported project asset (video, image or audio) by its asset ID. */
-export const asset=(id:string)=>'media/'+encodeURIComponent(id);
+export const asset=(id:string)=>mapped('media/'+encodeURIComponent(id));
 export const useAsset=asset;
 /** A file from the workspace resources/ folder, e.g. resource('logos/brand.png'). */
-export const resource=(path:string)=>'files/'+encodePath(path);
+export const resource=(path:string)=>mapped('files/'+encodePath(path));
 export const staticFile=resource;
 
 /** Reads a JSON or text file from resources/ before the frame is drawn. */
