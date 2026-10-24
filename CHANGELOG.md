@@ -5,6 +5,11 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-24 · Share how you made a video
+After exporting, click Share link to get a page you can send anyone. It shows your video next to the requests you
+typed and a few stills of the footage it started from ("3 clips · 1:36 of footage"), so people can see how you made
+it. A button there lets them try Gumbo themselves, with your first request already filled in.
+
 ## 2026-10-24 · "Stumped or broken? Let me know" under the chat box
 If a prompt fails or something doesn't work, click "Stumped or broken? Let me know" under the box you type requests
 in. Write a few words about what went wrong and, if you like, your email so I can tell you when it's fixed. You don't

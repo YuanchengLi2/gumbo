@@ -20,6 +20,7 @@ import {useDraft,setDraft} from './store/draft';
 
 import {AIWorkspace} from './components/workspace/AIWorkspace';
 import {ExportDialog,type ExportChoices} from './components/export/ExportDialog';
+import {ShareDialog} from './components/export/ShareDialog';
 import {runExport,stopExports} from './engine/export-job';
 import {useChatShortcuts} from './shortcuts';
 import {useTheme} from './theme';
@@ -49,7 +50,7 @@ function LayoutSwitch({locked}:{locked:boolean}){const layout=useEditor(s=>locke
   return <button key={id} type="button" role="radio" aria-checked={layout===id} aria-disabled={closed||undefined} title={closed?'The editor opens when Gumbo finishes editing':undefined} onClick={()=>{if(!closed)choose(id);}}>
    {id==='gumbo'?<span className="layout-switch-mark"><GumboMark/></span>:closed?<Lock size={14}/>:<Scissors size={14}/>}{id==='gumbo'?'Gumbo':'Editor'}</button>;})}</div>;}
 
-export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),setInput=setDraft,[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>(storedHomePaths),[homeIncoming,setHomeIncoming]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
+export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),setInput=setDraft,[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>(storedHomePaths),[homeIncoming,setHomeIncoming]=useState<string[]>([]);
  const [signIn,setSignIn]=useState(false);
  // The home box's files outlive the page: signing in on the web leaves it and comes back.
  useEffect(()=>keepHomePaths(homePaths),[homePaths]);
@@ -109,17 +110,7 @@ export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null)
  {files&&<FileAccessPanel onClose={()=>setFiles(false)} onImport={paths=>void attach(paths)} onError={s.setError} onGranted={()=>{const current=useEditor.getState().project;if(current?.aiStatus==='awaiting_file_permission'&&current.experience?.fileWait?.kind==='permission'){setFiles(false);void s.command({type:'resume'});}}}/>}
 
  {dialog==='export'&&project&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget&&s.progress?.status!=='rendering')setDialog(null);}}><ExportDialog project={project} frame={s.frame} progress={s.progress} onClose={()=>{setDialog(null);if(s.progress?.status!=='rendering')s.setProgress(null);}} onExport={choices=>void exportVideo(choices)} onCancel={()=>{exportAbort.current?.abort();stopExports();void window.dream.cancelExport();}} onTimeline={()=>void exportVideo('timeline')} onShare={()=>setDialog('share')}/></div>}
- {dialog&&dialog!=='export'&&<div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setDialog(null);}}><section className="dialog" role="dialog" aria-label={dialog}><div className="dialog-header"><h2>{dialog==='share'?'Share your video':'Export video'}</h2><button className="icon-button" aria-label="Close dialog" onClick={()=>setDialog(null)}><X size={20}/></button></div>
-
- 
-
-
-
- {dialog==='share'&&<><p>Upload your completed MP4 and create a viewing link.</p>{share&&<input className="share-url" readOnly value={share}/>}<div className="dialog-actions"><button className="button primary" onClick={async()=>{try{const result=await window.dream.shareExport();if(result)setShare(result.url);}catch(error){s.setError((error as Error).message);}}}><Share2 size={16}/>Create link</button>{share&&<button className="button secondary" onClick={()=>navigator.clipboard.writeText(share)}>Copy link</button>}</div></>}
-
- 
-
- </section></div>}
+ {dialog==='share'&&project&&<ShareDialog project={project} onClose={()=>setDialog(null)}/>}
 
  </main>;
 

@@ -7,6 +7,7 @@ import {ProjectClient} from './project';
 import {pickFiles,pickFolder,store} from './imports';
 import {reallow} from '../project/media/paths';
 import * as exporting from './export';
+import {shareExport} from './share';
 import {serveScenes} from './engine';
 import * as scenes from './scenes';
 import {cloudScene,sceneJob,prerenderScenes} from './cloud-scenes';
@@ -87,7 +88,7 @@ export function createBridge(){
   settings:async()=>loadSettings(),saveSettings:async(patch:unknown)=>{const next=saveSettings(patch);service().config({settings:settingsEnv(next)});return next;},
   openFolder:async()=>undefined,framesResult:async(id:string,result:unknown)=>service().framesResult(id,result),sceneStill:(request:any)=>scenes.sceneStill(request),
   finishExport:exporting.finishExport,failExport:async(id:string,message:string)=>exporting.failExport(id,message),cancelExport:async()=>exporting.cancelExport(),
-  reveal:(path:string)=>exporting.reveal(path),shareExport:notYet('Sharing'),
+  reveal:(path:string)=>exporting.reveal(path),shareExport:async(story?:unknown)=>shareExport(account,await service().command({type:'state'}),story),
   // Browsers driven by tests skip the welcome questions, as the desktop's headless runs do.
   runtime:async()=>({...(navigator.webdriver?{automated:true}:{}),web:true,ffmpeg:true,ffprobe:true,python:false,whisper:false,models:false,platform:'web',memoryGb:(navigator as any).deviceMemory??8,version,projectsFolder:'This browser',logsFolder:''}),
   // The site always serves the newest version: nothing to update or restart into.

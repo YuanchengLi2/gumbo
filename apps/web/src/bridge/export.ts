@@ -16,6 +16,8 @@ import {busy} from './awake';
 type Job={id:string;state:ProjectState;settings:ExportSettings;videoPath?:string;audioPath?:string;temp?:string;out?:FileSystemWritableFileStream;
  workDir:string;sound?:Promise<boolean>;abort:AbortController};
 let job:Job|undefined;
+/** The last video exported from each session, for Share link (share.ts). */
+export let lastExport:{projectId:string;path:string}|undefined;
 let worker:Worker|undefined;const answers=new Map<string,{resolve:(v:boolean)=>void;reject:(e:Error)=>void}>();
 /** Mixes the sound in the worker; cancelled with the export. */
 function sound(request:SoundRequest,signal:AbortSignal){
@@ -82,6 +84,7 @@ export async function finishExport(id:string,timing?:unknown){
   if(current.audioPath){publish('export.progress',{status:'rendering',progress:1,phase:'Saving the audio'});
    if(await sound({timeline:state.timeline,footage:state.footage,output:current.audioPath,format:settings.audioFormat,workDir:current.workDir},abort.signal))written.push(current.audioPath);
    else if(!current.videoPath)throw new Error('This edit has no sound to export.');}
+  if(current.videoPath)lastExport={projectId:state.meta.id,path:current.videoPath};
   console.info('[export]',{project:state.meta.name,paths:written,settings,finishMs:Math.round(performance.now()-began),render:timing});
   // What was saved in this site's storage also goes to the computer's Downloads, where people look for an export.
   for(const path of written)if(inStorage(path))await download(path);

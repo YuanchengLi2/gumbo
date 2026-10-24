@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Made with Gumbo</title>
+<meta name="description" content="See how this video was edited with Gumbo: the footage it started from, the exact requests, and the result.">
+<meta property="og:title" content="Made with Gumbo">
+<meta property="og:description" content="See how this video was edited by typing what was wanted. Try it yourself, free in your browser.">
+<meta property="og:image" content="https://usegumbo.app/media/vietnam-short-poster.jpg">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#9A3412">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFF8EE'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFF8EE'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+/* A share link (gateway share-create and view, share.ts): what the edit started from, what was asked, what came out. */
+.share{padding:48px 0 96px}
+.share .wrap{max-width:1040px}
+.share h1{font-size:clamp(34px,5vw,56px);margin-top:14px;max-width:760px}
+.share .lead{margin:14px 0 0;color:var(--muted);font-size:18px;max-width:620px}
+.story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.25fr);gap:22px;margin-top:40px;align-items:start}
+.step{border:1.5px solid var(--line);border-radius:20px;background:var(--white);padding:18px}
+.step h2{font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.stills{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stills img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:8px;background:var(--line)}
+.facts{margin:12px 0 0;font:500 15px var(--sans);color:var(--ink)}
+.facts small{display:block;color:var(--muted);font-weight:400;margin-top:2px}
+.prompts{display:flex;flex-direction:column;gap:10px}
+.prompt{background:var(--cream,#fff8ee);border:1.5px solid var(--line);border-radius:14px 14px 14px 4px;padding:11px 13px;font:400 15px/1.5 var(--sans);color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.result video{width:100%;max-height:70vh;border-radius:12px;background:#111;display:block}
+.cta{margin-top:40px;display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.cta p{flex-basis:100%;color:var(--muted);margin:0 0 4px}
+.status{color:var(--muted);margin-top:32px}
+@media(max-width:860px){.story{grid-template-columns:1fr}.result{order:-1}}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Main">
+ <a class="logo" href="/" aria-label="Gumbo home">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="#2A1A12" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>
+  Gumbo
+ </a>
+ <div class="links"><a class="link" href="/features/">Features</a><a class="link" href="/use-cases/">Use cases</a><a class="link" href="/pricing/">Pricing</a><a class="link" href="/community/">Community</a></div>
+ <a class="btn" href="/app/?try=1">Try Gumbo free</a>
+</nav>
+
+<main class="share">
+ <div class="wrap">
+  <span class="eyebrow">Made with Gumbo</span>
+  <h1 id="title">See how this video was made</h1>
+  <p class="lead" id="lead">No timeline, no keyframes: just what was asked for, in plain words.</p>
+  <p class="status" id="status">Loading…</p>
+  <div class="story" id="story" hidden>
+   <section class="step" id="before" hidden><h2>Started with</h2><div class="stills" id="stills"></div><p class="facts" id="facts"></p></section>
+   <section class="step" id="asked" hidden><h2>Asked Gumbo</h2><div class="prompts" id="prompts"></div></section>
+   <section class="step result"><h2>Got</h2><video id="video" controls playsinline preload="metadata"></video></section>
+  </div>
+  <div class="cta" id="cta" hidden>
+   <p>Gumbo edits video when you tell it what you want. It runs in your browser, nothing to install.</p>
+   <a class="btn" id="try" href="/app/?try=1">Try this yourself, free</a>
+   <a class="link" href="/">What else can it do?</a>
+  </div>
+ </div>
+</main>
+
+<footer><div class="wrap">
+ <span>© 2026 Gumbo</span>
+ <a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:yuanchengli612@gmail.com">Contact</a>
+</div></footer>
+
+<script>
+// The link's token (?t=) is the secret that opens it: the gateway's view answers with the video's address (an hour long)
+// and its story. Trying it opens Gumbo's try mode with the first request filled in.
+// On this computer only, ?api= points the page at a stand-in for the gateway's view, to try the page.
+const local=['localhost','127.0.0.1'].includes(location.hostname),API=local&&new URL(location.href).searchParams.get('api')||'https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/view';
+const $=id=>document.getElementById(id);
+const clock=s=>{s=Math.round(s);const h=Math.floor(s/3600),m=Math.floor(s%3600/60),r=String(s%60).padStart(2,'0');return h?`${h}:${String(m).padStart(2,'0')}:${r}`:`${m}:${r}`;};
+const lengthWords=s=>s>=3600?`${(s/3600).toFixed(1).replace(/\.0$/,'')} hours`:s>=90?`${Math.round(s/60)} minutes`:`${Math.round(s)} seconds`;
+// "a 17-second video", "a 3-minute video".
+const lengthOf=s=>s>=3600?`${(s/3600).toFixed(1).replace(/\.0$/,'')}-hour`:s>=90?`${Math.round(s/60)}-minute`:`${Math.round(s)}-second`;
+(async()=>{
+ const token=new URL(location.href).searchParams.get('t');
+ if(!token){$('status').textContent='This link is missing its code. Ask for the link again.';return;}
+ let share;
+ try{const response=await fetch(`${API}?token=${encodeURIComponent(token)}`);share=await response.json();if(!response.ok)throw new Error(share.error);}
+ catch{$('status').textContent='This video is no longer shared, or the link is wrong.';return;}
+ $('status').hidden=true;$('story').hidden=false;$('cta').hidden=false;
+ if(share.title){$('title').textContent=share.title;document.title=`${share.title} · Made with Gumbo`;}
+ const source=share.source,after=share.durationSec;
+ if(source&&source.durationSec>0&&after>0)$('lead').textContent=`Gumbo turned ${lengthWords(source.durationSec)} of footage into a ${lengthOf(after)} video, from ${share.prompts?.length===1?'one request':`${share.prompts?.length||'a few'} requests`} in plain words.`;
+ if(source){$('before').hidden=false;
+  for(const src of source.stills??[]){const img=document.createElement('img');img.src=src;img.alt='';$('stills').append(img);}
+  if(!source.stills?.length)$('stills').hidden=true;
+  $('facts').innerHTML='';const line=document.createElement('span');line.textContent=`${source.clips} ${source.clips===1?'clip':'clips'} · ${clock(source.durationSec)}`;
+  const note=document.createElement('small');note.textContent='of footage to start from';$('facts').append(line,note);}
+ if(share.prompts?.length){$('asked').hidden=false;for(const text of share.prompts){const p=document.createElement('div');p.className='prompt';p.textContent=text;$('prompts').append(p);}
+  const t=new URL('/app/',location.origin);t.searchParams.set('try','1');t.searchParams.set('prompt',share.prompts[0]);$('try').href=t.pathname+t.search;}
+ $('video').src=share.url;
+})();
+</script>
+</body>
+</html>

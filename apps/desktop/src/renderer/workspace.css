@@ -974,3 +974,4 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .feedback-send{background:var(--n100);color:var(--n0);border-radius:8px;padding:6px 14px}.feedback-send:disabled{background:var(--n10);opacity:1}
 .feedback-error{font-size:11px;color:#a24a36}.feedback-thanks{font-size:12px;color:var(--n58);padding:4px 2px}
 .home-composer .feedback-anchor{justify-content:center;padding-top:10px}.home-composer .feedback-box{right:50%;transform:translateX(50%);bottom:calc(100% + 8px)}
+.share-dialog .share-url{margin-top:16px;font-size:12px;background:var(--n1);color:var(--n80)}.share-error{margin-top:12px;font-size:12px;color:#a24a36}
