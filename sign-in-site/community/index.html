@@ -158,13 +158,16 @@ function signIn(){try{sessionStorage.setItem('gumbo-return',JSON.stringify({path
 
 const el=(tag,props={},...children)=>{const node=document.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='class')node.className=v;else if(k.startsWith('on'))node.addEventListener(k.slice(2),v);else if(v!==undefined&&v!==false)node.setAttribute(k,v===true?'':v);}for(const c of children.flat())if(c!=null&&c!==false)node.append(c);return node;};
 const ago=iso=>{const s=(Date.now()-Date.parse(iso))/1000;if(s<60)return 'just now';if(s<3600)return `${Math.floor(s/60)} min ago`;if(s<86400)return `${Math.floor(s/3600)} h ago`;if(s<7*86400)return `${Math.floor(s/86400)} d ago`;return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});};
-/** A post's words: paragraphs and "- " lists, as text. */
+/** A post's words: paragraphs and "- " lists, as text. As in Markdown, lines run on into one paragraph or list item
+ * (CHANGELOG.md wraps its lines) and a blank line starts a new paragraph. */
 function words(text){
- const box=el('div',{class:'body'});let list=null;
+ const box=el('div',{class:'body'});let list=null,block=null;
  for(const line of String(text||'').split('\n')){
   const item=/^\s*[-*]\s+(.*)$/.exec(line);
-  if(item){list??=box.appendChild(el('ul'));list.append(el('li',{},item[1]));continue;}
-  list=null;if(line.trim())box.append(el('p',{},line));
+  if(!line.trim()){list=block=null;continue;}
+  if(item){list??=box.appendChild(el('ul'));block=list.appendChild(el('li',{},item[1]));continue;}
+  if(block){block.append(' '+line.trim());continue;}
+  block=box.appendChild(el('p',{},line.trim()));
  }
  return box;
 }
