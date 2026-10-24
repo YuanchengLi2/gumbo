@@ -59,59 +59,22 @@ document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
   form.querySelector('.send').classList.add('press');openWith(idea);});
 });
 
-// Use cases: one tab per kind of video, each with what you'd type and what Gumbo hands back. They take turns until
-// someone picks one; their example requests open Gumbo with that request.
-(function useCases(){
- const cases=[
-  {id:'youtube',icon:'film',name:'YouTubers',sub:'Long videos, cut tight',title:'Weekly uploads, without the weekend lost.',
-   text:'Drop in the raw recording and say what it should feel like. Gumbo cuts the rambles, adds chapters and B-roll, and leaves every cut on your timeline.',
-   you:'Tighten my 20-minute video. Cut the rambles, add a title for each chapter and B-roll where I mention places.',
-   reply:'Done. It runs 14:52 now, down from 20:14.',chg:['41 rambles and retakes cut','6 chapter titles','B-roll on 12 mentions'],
-   asks:['Punch in on every joke','Captions for the whole thing','A faster first 30 seconds']},
-  {id:'podcast',icon:'mic',name:'Podcasts and talks',sub:'Clips from long recordings',title:'One long talk. A week of Shorts.',
-   text:'Gumbo listens to the whole recording, finds the moments worth sharing, and turns them into vertical clips with captions.',
-   you:'Find the three best moments and make Shorts with captions.',
-   reply:'Here are three Shorts, 30 to 55 seconds each.',chg:['3 vertical Shorts','Captions, word by word','Ums and pauses out'],
-   asks:['Cut every um','Level both mics','A title card with the guest\'s name']},
-  {id:'travel',icon:'pin',name:'Travel and vlogs',sub:'Trips into stories',title:'Hundreds of clips. One recap worth watching.',
-   text:'Gumbo watches every clip, picks the best shots and cuts them to music, maps and titles included.',
-   you:'Make a 40-second recap of my trip, cut to the music.',
-   reply:'A 40-second vertical recap: 25 shots on the beat and an original score.',chg:['Route map, Hà Nội to Hạ Long','Original score','A title for each city'],
-   asks:['Draw our route on a map','Make it feel like the 90s','Slow motion on the best shot']},
-  {id:'business',icon:'tag',name:'Small business',sub:'Ads and product videos',title:'Your product, in an ad by lunch.',
-   text:'Turn a phone clip into an ad with your price, your logo and a reason to tap. Then ask for every size you post.',
-   you:'Turn this product clip into a 15-second ad with the price and our logo.',
-   reply:'A 15-second ad with a price tag, your logo and an end card.',chg:['Price tag on the hero shot','Logo, bottom right','"Shop now" end card'],
-   asks:['Make the logo smaller','A countdown to the sale','A square one for Instagram']},
-  {id:'teach',icon:'type',name:'Teachers and courses',sub:'Lessons people finish',title:'Lessons that get to the point.',
-   text:'Gumbo removes the false starts, labels each step and puts captions under everything, so a recording becomes a lesson.',
-   you:'Clean up my lesson recording and label each step.',
-   reply:'Pauses and false starts are out, and each of the 7 steps has a label.',chg:['Pauses and false starts cut','7 step labels','Captions throughout'],
-   asks:['Zoom in when I point at the slide','A chapter list at the start','Make it under 10 minutes']}];
- const root=document.getElementById('uc'),tabs=document.getElementById('ucTabs'),stage=document.getElementById('ucStage');if(!root)return;
- let current=0,timer=null,touched=false;const ms=7000;root.style.setProperty('--uc-time',ms+'ms');
- const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;};
- cases.forEach((c,i)=>{const b=el('button','uc-tab');b.type='button';b.setAttribute('role','tab');b.id='uc-'+c.id;b.setAttribute('aria-controls','ucStage');
-  const ic=el('i');ic.innerHTML=icon(c.icon);const t=el('span');t.append(c.name,el('small',null,c.sub));b.append(ic,t,el('span','timer'));
-  b.addEventListener('click',()=>{touched=true;root.classList.add('paused');show(i);});tabs.appendChild(b);});
- function show(i){
-  current=i;const c=cases[i];[...tabs.children].forEach((b,j)=>{b.setAttribute('aria-selected',String(j===i));b.tabIndex=j===i?0:-1;});
-  stage.setAttribute('aria-labelledby','uc-'+c.id);stage.replaceChildren();
-  const win=el('div','uc-win uc-pane'),top=el('div','uc-top');top.append(el('i'),el('i'),el('i'),el('span',null,c.name));
-  const chat=el('div','uc-chat'),you=el('div','uc-you',c.you),g=el('div','uc-gumbo');g.append(el('b',null,'Gumbo'),c.reply);
-  const chg=el('div','uc-chg');c.chg.forEach(x=>chg.appendChild(el('span',null,x)));g.appendChild(chg);chat.append(you,g);const input=el('div','uc-input');input.append(el('span',null,'Ask for a change…'));const send=el('span','send');send.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';input.appendChild(send);win.append(top,chat,input);
-  const side=el('div','uc-side uc-pane');side.append(el('h3',null,c.title),el('p',null,c.text),el('h4',null,'Or ask'));
-  const asks=el('div','uc-asks');c.asks.forEach(a=>{const b=el('button',null,a);b.type='button';b.addEventListener('click',()=>openWith(a));asks.appendChild(b);});
-  const go=el('a','btn','Try it on your footage');go.href='/app/';side.append(asks,go);
-  stage.append(win,side);
-  clearTimeout(timer);if(!touched&&!calm)timer=setTimeout(()=>show((current+1)%cases.length),ms);
- }
- tabs.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(e.key))return;e.preventDefault();touched=true;root.classList.add('paused');
-  const next=(current+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:cases.length-1))%cases.length;show(next);tabs.children[next].focus();});
- if(calm)root.classList.add('paused');
- // The rotation starts when the section is in view, so the first case is the one people see first.
- show(0);clearTimeout(timer);whenSeen(root,()=>{if(!touched&&!calm)timer=setTimeout(()=>show(1),ms);},.4);
+// Videos on these pages play only while on screen, and wait for the page to settle before loading.
+(function videos(){
+ const all=[...document.querySelectorAll('.ask-tile video,.uc-tile video')];if(!all.length)return;
+ const ob=new IntersectionObserver(es=>{for(const e of es){const v=e.target;if(e.isIntersecting){if(v.preload==='none')v.preload='auto';if(v.closest('.t-slow'))v.playbackRate=.4;if(!calm)v.play().catch(()=>{});}else v.pause();}},{threshold:.2});
+ all.forEach(v=>ob.observe(v));
 })();
+
+// The captions tile: one word at a time, the important ones in yellow.
+(function captions(){
+ const cap=document.querySelector('.t-caps .cap');if(!cap)return;
+ const words=['you','have','to','try','this','soup'],hot=new Set(['try','soup']);let n=0;
+ const show=()=>{const w=words[n++%words.length];cap.textContent=w;cap.classList.toggle('hot',hot.has(w));};show();if(!calm)setInterval(show,520);
+})();
+
+// Use cases: each tile opens Gumbo with its request.
+document.querySelectorAll('.uc-tile[data-request]').forEach(t=>t.addEventListener('click',()=>openWith(t.dataset.request)));
 
 // Pricing: Max comes in two sizes, as in the app.
 (function maxSize(){

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Features — Gumbo</title>
-<meta name="description" content="Everything a video editor does, one sentence away: cuts, captions, music, titles and graphics, looks, creator styles and a real timeline.">
+<meta name="description" content="Gumbo has no feature list: ask for any edit in your own words and it builds it on a real timeline. Captions, cuts, looks, titles, maps, music and more.">
 <meta property="og:title" content="Features — Gumbo">
-<meta property="og:description" content="Everything a video editor does, one sentence away: cuts, captions, music, titles and graphics, looks, creator styles and a real timeline.">
+<meta property="og:description" content="Gumbo has no feature list: ask for any edit in your own words and it builds it on a real timeline. Captions, cuts, looks, titles, maps, music and more.">
 <meta property="og:image" content="https://usegumbo.app/media/vietnam-short-poster.jpg">
 <meta name="theme-color" content="#9A3412">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFF8EE'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFF8EE'/><path d='M24 23c-2.6-3 2.6-5.2 0-8.6M32 23c-2.6-3 2.6-5.2 0-8.6M40 23c-2.6-3 2.6-5.2 0-8.6' fill='none' stroke='%232A1A12' stroke-width='3.2' stroke-linecap='round'/></svg>">
@@ -30,44 +30,64 @@
 </nav>
 
 <main class="page">
+
  <div class="wrap">
-  <section class="features" id="features">
-   <div class="center reveal">
-    <span class="eyebrow">Features</span>
-    <h2 class="h2" style="margin-top:18px">Everything an editor does.<br><em>Just say it.</em></h2>
-    <p class="lead">No panels to learn. Each of these is one sentence away, and every result lands on a timeline you can change.</p>
+  <header class="phead reveal">
+   <span class="eyebrow">Features</span>
+   <h1>No feature list.<em>Just ask.</em></h1>
+   <p class="lead">Other editors hand you a menu of effects. Gumbo watches your footage and builds whatever you describe, so everything below is a taste, not a limit.</p>
+   <div class="cta"><a class="btn" href="/app/">Open Gumbo</a><a class="btn ghost" href="#asks">See it take orders</a></div>
+  </header>
+
+  <section class="asks" id="asks">
+   <div class="center reveal"><span class="eyebrow">One trip, a dozen asks</span><h2 class="h2" style="margin-top:18px">Same footage. <em>Anything you say.</em></h2>
+    <p class="lead">Each of these is one sentence typed into Gumbo, applied to the same Vietnam footage.</p></div>
+   <div class="asks-grid">
+    <figure class="ask-tile t-vhs reveal"><video src="/media/loops/f08.mp4" muted loop playsinline preload="none"></video><div class="fx"></div><q>Make it feel like a 90s camcorder.</q></figure>
+    <figure class="ask-tile t-caps reveal"><video src="/media/loops/f05.mp4" muted loop playsinline preload="none"></video><div class="fx"><b class="cap"></b></div><q>Big bold captions, one word at a time.</q></figure>
+    <figure class="ask-tile t-bw reveal"><video src="/media/loops/f07.mp4" muted loop playsinline preload="none"></video><div class="fx"></div><q>Black and white, a little moody.</q></figure>
+    <figure class="ask-tile t-slow reveal"><video src="/media/loops/f01.mp4" muted loop playsinline preload="none"></video><div class="fx"><span class="badge">0.4×</span></div><q>Slow down on the lanterns.</q></figure>
+    <figure class="ask-tile t-title reveal"><video src="/media/loops/f11.mp4" muted loop playsinline preload="none"></video><div class="fx"><div class="ttl"><small>AND FINALLY</small><strong>HA LONG BAY</strong></div></div><q>Title it “And finally, Ha Long Bay”.</q></figure>
+    <figure class="ask-tile t-pop reveal"><video src="/media/loops/f09.mp4" muted loop playsinline preload="none"></video><div class="fx"></div><q>Make the colors pop.</q></figure>
+    <figure class="ask-tile t-punch reveal"><video src="/media/loops/f05.mp4" muted loop playsinline preload="none"></video><div class="fx"></div><q>Punch in on the noodles.</q></figure>
+    <figure class="ask-tile t-map reveal"><video src="/media/loops/f02.mp4" muted loop playsinline preload="none"></video><div class="fx"><svg viewBox="0 0 90 160" preserveAspectRatio="none"><path class="route" d="M18 132 C 30 104, 62 112, 58 86 S 24 58, 40 40 S 70 30, 72 22"/><circle cx="18" cy="132" r="3.2"/><circle class="end" cx="72" cy="22" r="3.6"/></svg><span class="pin a">Hội An</span><span class="pin b">Hạ Long</span></div><q>Draw our route on a map.</q></figure>
+    <figure class="ask-tile t-split reveal"><video src="/media/loops/f07.mp4" muted loop playsinline preload="none"></video><video class="second" src="/media/loops/f09.mp4" muted loop playsinline preload="none"></video><div class="fx"><span class="badge top">Before</span><span class="badge bottom">After</span></div><q>Before and after, one above the other.</q></figure>
+    <figure class="ask-tile t-warm reveal"><video src="/media/loops/f11.mp4" muted loop playsinline preload="none"></video><div class="fx"></div><q>A warm sunset grade.</q></figure>
+    <figure class="ask-tile t-progress reveal"><video src="/media/loops/f01.mp4" muted loop playsinline preload="none"></video><div class="fx"><i class="bar"></i></div><q>A progress bar for Shorts.</q></figure>
+    <figure class="ask-tile t-blur reveal"><video src="/media/loops/f07.mp4" muted loop playsinline preload="none"></video><div class="fx"><i class="blurbox"></i></div><q>Blur the license plates.</q></figure>
    </div>
-   <div class="fgrid">
-    <article class="fcard reveal"><span class="fi" data-i="cut"></span><h3>Cuts that land</h3><p>Dead air, ums, retakes and slow bits come out, and cuts land on the beat.</p><q>Cut every um and long pause.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="cc"></span><h3>Captions</h3><p>Word-timed captions from your own speech, styled the way you describe.</p><q>Big bold captions, one word at a time.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="music"></span><h3>Music and sound</h3><p>An original score composed for your cut, or free-to-use tracks and sound effects.</p><q>Music that builds to the ending.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="motion"></span><h3>Titles and graphics</h3><p>Titles, maps, lower thirds and effects written for your video. No template library.</p><q>Draw our route on a map.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="palette"></span><h3>Looks and color</h3><p>Match two cameras, set a mood, or go full 90s camcorder.</p><q>Make the drone shots match my phone.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="zoom"></span><h3>Finds any moment</h3><p>It watches every shot and hears every word, so you can point at things the way you'd say them.</p><q>Use the part where she laughs.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="star"></span><h3>Creator styles</h3><p>Type @ and a YouTube channel. Gumbo studies its pacing, captions and music, and edits yours that way.</p><q>Edit it like my favorite vlogger.</q></article>
-    <article class="fcard reveal"><span class="fi" data-i="layers"></span><h3>A real timeline</h3><p>Every change is a block you can drag, trim or undo, with a full manual editor when you want the knife.</p><q>Keep the cuts, undo the music.</q></article>
-   </div>
-   <div class="fstrip reveal">
-    <span><i data-i="phone"></i>Vertical, square or wide</span><span><i data-i="film"></i>Export up to 4K</span><span><i data-i="screen"></i>Runs in your browser</span><span><i data-i="lock"></i>Footage stays on your computer</span>
-   </div>
+   <p class="asks-more reveal">That's twelve. People ask for thousands of others: <em>“make the logo smaller”, “cut every um”, “a countdown before the drop”, “three Shorts from my talk”.</em></p>
   </section>
-
-
-  <section class="how2">
-   <div class="center reveal">
-    <span class="eyebrow">How it works</span>
-    <h2 class="h2" style="margin-top:18px">It doesn't pick from a menu. <em>It makes the edit.</em></h2>
-   </div>
-   <div class="steps">
-    <article class="step reveal"><span class="num">01</span><h3>It watches and listens</h3><p>Every shot and every word, so you can say “the part where she laughs” and it knows where that is.</p></article>
-    <article class="step reveal"><span class="num">02</span><h3>It builds what's missing</h3><p>Titles, maps and effects are written for your request, so you're never limited to a template library.</p></article>
-    <article class="step reveal"><span class="num">03</span><h3>It lands on your timeline</h3><p>Every change is a block you can drag, trim or undo, and you can keep asking until it's right.</p></article>
-   </div>
-   <div class="privacy reveal"><i data-i="lock"></i><div><h3>Your footage <em>stays yours.</em></h3><p>Originals stay on your computer. The AI only sees what it needs, like stills and words, and your data is never sold.</p></div><a href="/privacy/">Privacy policy ›</a></div>
-  </section>
-
  </div>
 
+ <section class="panel roux hood-panel" style="margin-top:130px"><div class="wrap">
+  <div class="center reveal"><span class="eyebrow" style="color:rgba(255,248,238,.6)">Under the hood</span><h2 style="margin-top:18px">Why it can do <em>whatever you ask.</em></h2></div>
+  <div class="hood">
+   <article class="reveal"><div class="hv shots"><img src="/media/clips/00.jpg" alt="" loading="lazy"><img src="/media/clips/03.jpg" alt="" loading="lazy"><img src="/media/clips/06.jpg" alt="" loading="lazy"><img src="/media/clips/09.jpg" alt="" loading="lazy"><img src="/media/clips/12.jpg" alt="" loading="lazy"><img src="/media/clips/15.jpg" alt="" loading="lazy"><img src="/media/clips/18.jpg" alt="" loading="lazy"><img src="/media/clips/21.jpg" alt="" loading="lazy"><span class="found">the red lanterns · 0:14</span></div><h3>It sees every shot</h3><p>Every clip is watched and indexed, so “the part with the red lanterns” finds the right moment.</p></article>
+   <article class="reveal"><div class="hv words"><p><time>0:41</time>and honestly the <mark>best soup</mark> of the whole trip</p><p><time>0:46</time>okay, um, let's go</p><p><time>0:52</time>look at the <mark>lanterns</mark> over the river</p></div><h3>It hears every word</h3><p>Speech is transcribed with word timing, for captions, clean cuts and finding what someone said.</p></article>
+   <article class="reveal"><div class="hv code"><pre><span class="c">// route-map.tsx, written for this edit</span>
+<span class="k">const</span> route = <span class="f">map</span>(<span class="s">"Hội An"</span>, <span class="s">"Hạ Long"</span>)
+route.<span class="f">draw</span>({ seconds: <span class="n">2.4</span> })</pre></div><h3>It writes what's missing</h3><p>Titles, maps, graphics and effects are written as code for your request, then land on the timeline.</p></article>
+   <article class="reveal"><div class="hv check"><span><i data-i="check"></i>Watched the cut it made</span><span><i data-i="check"></i>Two titles came up blank</span><span><i data-i="check"></i>Found why and fixed them</span><span class="ok"><i data-i="check"></i>Checked again: all good</span></div><h3>It checks the result</h3><p>It looks at what it published and fixes what's off before handing it back to you.</p></article>
+  </div>
+ </div></section>
+
+ <div class="wrap">
+  <section class="toolbox">
+   <div class="toolbox-head reveal"><span class="eyebrow">Still a real editor</span><h2 class="h2" style="margin-top:18px">Take the knife <em>whenever you want.</em></h2>
+    <p class="lead">Everything Gumbo does lands on a timeline you can change by hand. Ask, tweak, ask again.</p></div>
+   <ul class="tools reveal">
+    <li><i data-i="layers"></i><span><b>A real timeline</b>Tracks for video, overlays, music and sound. Drag, trim and split.</span></li>
+    <li><i data-i="clock"></i><span><b>Undo anything</b>Every change Gumbo makes is a step you can undo, or go back to any earlier version.</span></li>
+    <li><i data-i="cc"></i><span><b>Captions</b>Timed to each word, styled the way you describe.</span></li>
+    <li><i data-i="music"></i><span><b>Music and sound effects</b>Original scores and effects, made for the cut.</span></li>
+    <li><i data-i="phone"></i><span><b>Any shape</b>Vertical, square or wide, from the same project.</span></li>
+    <li><i data-i="film"></i><span><b>Export up to 4K</b>H.264 or HEVC, MP4 or MOV, your frame rate.</span></li>
+    <li><i data-i="star"></i><span><b>Creator styles</b>Type @ and a YouTube channel to edit in its style.</span></li>
+    <li><i data-i="lock"></i><span><b>Footage stays yours</b>Originals stay on your computer. <a href="/privacy/">Privacy</a></span></li>
+   </ul>
+  </section>
+ </div>
  <section class="make" id="make"><div class="wrap make-grid">
   <div class="reveal">
    <h2>What will you <em>ask for first?</em></h2>
