@@ -4,7 +4,7 @@ import type {Registry} from './registry';
 import {live,setLive} from './live';
 
 // Animation frames stop in hidden documents (a background tab, an off-screen preview); a timer keeps frames moving.
-const raf=()=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,100);requestAnimationFrame(()=>{clearTimeout(timer);resolve();});});
+const raf=()=>new Promise<void>(resolve=>{const timer=setTimeout(resolve,16);requestAnimationFrame(()=>{clearTimeout(timer);resolve();});});
 const FRAME_TIMEOUT_MS=55_000;
 export const post=(message:Record<string,unknown>)=>parent.postMessage({dreamScene:true,...message},'*');
 

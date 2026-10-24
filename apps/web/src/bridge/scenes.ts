@@ -49,8 +49,24 @@ function bgra(bitmap:ImageBitmap,width:number,height:number){
  for(let i=0;i<rgba.length;i+=4){const a=rgba[i+3];out[i]=rgba[i+2]*a/255+.5|0;out[i+1]=rgba[i+1]*a/255+.5|0;out[i+2]=rgba[i]*a/255+.5|0;out[i+3]=a;}
  return out;
 }
+/** Export asks for a scene's frames in order, and a scene page takes about a fifth of a second a frame (its picture-taker
+ * copies the page's styles in JavaScript). So once frames come in order, the ones after are drawn ahead, each page
+ * drawing every AHEAD-th frame; the pages are other origins with processes of their own, so they draw at the same time. */
+const AHEAD=4;
+type Ahead={next:number;frames:Map<number,Promise<ImageBitmap>>;queues:Promise<unknown>[]};
+const ahead=new Map<string,Ahead>();
+function drawOn(a:Ahead,key:string,source:Source,width:number,height:number,frame:number,fps:number){
+ const n=frame%AHEAD,run=a.queues[n].then(()=>draw(n?`${key}#${n}`:key,source,width,height,frame,fps));a.queues[n]=run.catch(()=>{});return run;
+}
 export async function sceneFrame(request:{key:string;source:Source;width:number;height:number;frame:number;fps:number}){
- const {key,source,width,height,frame,fps}=request,bitmap=await draw(key,source,width,height,frame,fps);
+ const {key,source,width,height,frame,fps}=request;
+ let a=ahead.get(key);const inOrder=a?.next===frame;
+ if(!a){a={next:frame,frames:new Map(),queues:Array.from({length:AHEAD},()=>Promise.resolve())};ahead.set(key,a);}
+ for(const [f,drawing] of a.frames)if(f<frame||f>=frame+AHEAD){a.frames.delete(f);void drawing.then(b=>b.close(),()=>{});}
+ const drawing=a.frames.get(frame)??drawOn(a,key,source,width,height,frame,fps);a.frames.delete(frame);
+ if(inOrder)for(let f=frame+1;f<frame+AHEAD;f++)if(!a.frames.has(f)){const next=drawOn(a,key,source,width,height,f,fps);next.catch(()=>{});a.frames.set(f,next);}
+ a.next=frame+1;
+ const bitmap=await drawing;
  return{width,height,paint:++paints,data:bgra(bitmap,width,height),logs:[] as string[]};
 }
 /** One small still of a scene for the timeline, as a JPEG data URL `thumbWidth` wide; its page is closed after. */
@@ -64,4 +80,7 @@ export async function sceneStill(request:{source:Source;width:number;height:numb
  }finally{close(key);}
 }
 function close(key:string){const page=pages.get(key);if(!page)return;pages.delete(key);for(const w of page.waiting.values()){clearTimeout(w.timer);w.reject(new Error('The scene was closed.'));}page.iframe.remove();}
-export function closeScenes(){for(const key of[...pages.keys()])close(key);}
+export function closeScenes(){
+ for(const a of ahead.values())for(const drawing of a.frames.values())void drawing.then(b=>b.close(),()=>{});ahead.clear();
+ for(const key of[...pages.keys()])close(key);
+}

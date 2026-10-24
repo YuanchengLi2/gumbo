@@ -10,7 +10,7 @@ const CHUNKS=['core','three','d3','icons','noise'];
 const engine=location.pathname.slice(0,location.pathname.indexOf('/engine/')+'/engine/'.length);
 const post=(message,transfer=[])=>parent.postMessage({dreamScene:true,...message},'*',transfer);
 const encode=path=>path.split('/').map(encodeURIComponent).join('/');
-let loaded=false,capture;
+let loaded=false,capture,taker;
 
 function load({config,version,bundle,files,media}){
  if(loaded)return;loaded=true;
@@ -39,9 +39,12 @@ async function picture({requestId,width,height}){
  // would be another origin it cannot read, so none is made and every computed style is copied instead.
  const create=document.createElement;
  try{
-  capture??=import(`${engine}capture.js`);const {domToCanvas}=await capture;
+  capture??=import(`${engine}capture.js`);const {createContext,domToCanvas}=await capture;
   document.createElement=function(name,...rest){if(String(name).toLowerCase()==='iframe')throw new Error('No helper frames in a scene picture.');return create.call(this,name,...rest);};
-  const canvas=await domToCanvas(document.getElementById('root'),{width,height,scale:1,backgroundColor:null,timeout:30000});
+  // One picture-taker for every frame of an export: its fonts, images and default styles are worked out once, not again
+  // for each frame (each frame cost half a second when it started over).
+  if(!taker||taker.width!==width||taker.height!==height)taker={width,height,context:await createContext(document.getElementById('root'),{width,height,scale:1,backgroundColor:null,timeout:30000,autoDestruct:false})};
+  const canvas=await domToCanvas(taker.context);
   const bitmap=await createImageBitmap(canvas);post({type:'picture',requestId,bitmap},[bitmap]);
  }catch(error){post({type:'picture',requestId,error:String(error&&error.message||error)});}
  finally{document.createElement=create;}
