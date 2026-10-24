@@ -43,11 +43,14 @@ export function createInterface({input}:{input:AsyncIterable<Uint8Array|string>}
  const decoder=new TextDecoder();let closed=false;
  return{async*[Symbol.asyncIterator](){let rest='';for await(const chunk of input){if(closed)return;rest+=typeof chunk==='string'?chunk:decoder.decode(chunk,{stream:true});const lines=rest.split(/\r?\n/);rest=lines.pop()!;for(const line of lines)yield line;}if(rest&&!closed)yield rest;},close(){closed=true;(input as any).destroy?.();},on(){return this;}};
 }
-// Workers and scripts arrive with the agent's sandbox (Phase 3): until then they say so. (Programs: child-process.ts.)
+// What has no browser version says so. Worker threads have their web versions where they are used (music and sound:
+// web-procedural-client.ts); commands run in the browser sandbox (child-process.ts).
 const notYet=(what:string)=>{throw new Error(`${what} is not available in the browser yet.`);};
 export class Worker{constructor(){notYet('A background worker');}}
 export const parentPort=null,workerData=undefined,isMainThread=true;
-export class Script{constructor(){notYet('Running scripts');}}
+// vm.Script compiles without running, which scene-source.ts uses to check a scene's JavaScript: a Function made from
+// the code parses it the same way and is never called.
+export class Script{constructor(code:string){new Function(code);}}
 /** require() for what the project service loads that way: esbuild, for compiling scenes (shims/esbuild.ts). */
 export const createRequire=()=>(id:string)=>id==='esbuild'?esbuild:notYet(`Loading ${id}`);
 export const lookup=async()=>notYet('Looking up addresses');

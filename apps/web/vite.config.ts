@@ -22,10 +22,10 @@ const builtins:Record<string,string>={
 };
 /** Inside the project service only: modules whose desktop versions do their work another way on the web (listening mixes
  * with the export's mixer instead of an ffmpeg filter graph; web pages are read through the gateway; commands run in the
- * browser sandbox, which has its own tools; speech is heard by Whisper in the browser when the computer keeps up). */
+ * browser sandbox, which has its own tools; speech is heard in the cloud, or by Whisper in the browser; music and sound effects are composed in a web worker). */
 function webModules():Plugin{
  const service=resolve(__dirname,'../project-service/src').replace(/\\/g,'/');
- const swaps:Record<string,string>={'./edit-audio':project('web-edit-audio.ts'),'./web-fetch':project('web-fetch.ts'),'./workspace-environment':project('web-workspace-environment.ts'),'./speech':project('web-speech.ts')};
+ const swaps:Record<string,string>={'./edit-audio':project('web-edit-audio.ts'),'./web-fetch':project('web-fetch.ts'),'./workspace-environment':project('web-workspace-environment.ts'),'./speech':project('web-speech.ts'),'./procedural-client':project('web-procedural-client.ts')};
  return{name:'gumbo-web-modules',enforce:'pre',resolveId(source,importer){if(importer&&importer.replace(/\\/g,'/').startsWith(service)&&swaps[source])return swaps[source];return null;}};
 }
 /** In development, and in a build made for the tests (--mode test, never deployed), the page may also reach servers on
