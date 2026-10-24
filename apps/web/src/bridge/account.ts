@@ -65,6 +65,8 @@ export class Account {
  }
  gateway(){return `${this.url}/functions/v1/dream-gateway`;}
  private async get(route:string,missing:string){if(!this.signedIn())return null;const response=await fetch(`${this.gateway()}/${route}`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??missing);return body;}
+ /** A pass for quick render's cloud scene drawing, or why there is none (gateway scene-render.ts). */
+ scenePass(){return this.get('scene-render-pass','Quick render is unavailable.');}
  async info(){if(!this.signedIn())return {signedIn:false,email:'',configured:!!this.anonKey};const response=await fetch(`${this.gateway()}/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Gumbo AI is currently unavailable.');return {signedIn:true,email:this.session?.user.email??'',...body};}
  usage(){return this.get('usage','Usage is unavailable.');}
  billing(){return this.get('billing','Billing is unavailable.');}

@@ -9,6 +9,7 @@ import {reallow} from '../project/media/paths';
 import * as exporting from './export';
 import {serveScenes} from './engine';
 import * as scenes from './scenes';
+import {cloudScene,sceneJob} from './cloud-scenes';
 import {keepStorage} from './awake';
 
 /** window.dream in the browser: what the desktop app's preload and main process answer (preload/index.ts, main/index.ts),
@@ -79,6 +80,8 @@ export function createBridge(){
   beginExport:async(settings:any)=>{if(typeof settings?.folder==='string')await reallow([settings.folder]);return exporting.beginExport(settings,await service().command({type:'state'}));},exportChunk:exporting.exportChunk,
   // Scene pictures: each scene draws itself in a hidden page (scenes.ts); its page gets its files from engine.ts.
   sceneFrame:(request:any)=>scenes.sceneFrame(request),closeScenes:async()=>scenes.closeScenes(),
+  // Quick render: a scene of an export drawn in the cloud (cloud-scenes.ts); {unavailable} when this account has none.
+  cloudScene:(request:any)=>cloudScene(account,service,request),sceneJob:(assetId:string)=>sceneJob(service,assetId),
   setFullScreen:async(on:boolean)=>{if(on&&!document.fullscreenElement)await document.documentElement.requestFullscreen().catch(()=>{});else if(!on&&document.fullscreenElement)await document.exitFullscreen().catch(()=>{});},
   settings:async()=>loadSettings(),saveSettings:async(patch:unknown)=>{const next=saveSettings(patch);service().config({settings:settingsEnv(next)});return next;},
   openFolder:async()=>undefined,framesResult:async(id:string,result:unknown)=>service().framesResult(id,result),sceneStill:(request:any)=>scenes.sceneStill(request),

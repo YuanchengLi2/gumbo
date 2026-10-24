@@ -1,5 +1,5 @@
 import './decoder-fix';
-import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample,type InputVideoTrack} from 'mediabunny';
+import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,BlobSource,ALL_FORMATS,VideoSampleSink,type VideoSample,type InputVideoTrack} from 'mediabunny';
 import {MEDIA} from '@dream/config';
 import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';
@@ -28,7 +28,7 @@ export async function decodedAsPlayed(track:InputVideoTrack){
 }
 /** Where an export's drawing time went, in milliseconds, for the export log: decoding footage, drawing scenes in their
  * windows, loading stills, compositing, and encoding (which includes waiting for the encoder to take the frame). */
-export type RenderTiming={frames:number;totalMs:number;decodeMs:number;sceneMs:number;stillMs:number;drawMs:number;encodeMs:number;scenes:{asked:number;drawn:number;unchanged:number;repeated:number}};
+export type RenderTiming={frames:number;totalMs:number;decodeMs:number;sceneMs:number;stillMs:number;drawMs:number;encodeMs:number;scenes:{asked:number;drawn:number;unchanged:number;repeated:number};cloud?:{scenes:number;failed:number;ms:number}};
 
 /** Delivers a clip's source frames in order: the frame showing at each requested source time, decoding forward and only
  * starting over when time goes back. A source that ends early keeps its last frame. */
@@ -47,6 +47,35 @@ class Reader{
  close(){void this.iterator?.return();this.current?.close();this.upcoming?.close();}
 }
 
+type CloudScene={fps:number;chunks:{start:number;end:number;video:Blob}[]};
+/** Quick render (window.dream.cloudScene, on the web): the export's scenes drawn in the cloud before it starts, all at
+ * once; a scene the cloud could not draw (or with no quick render for this account) is drawn here, frame by frame. */
+async function cloudScenes(p:ReturnType<typeof prepare>,signal:AbortSignal){
+ const ask=(window as any).dream?.cloudScene as ((request:Record<string,unknown>)=>Promise<CloudScene|{unavailable:string}>)|undefined,drawn=new Map<string,CloudScene>();
+ const began=performance.now();let failed=0;
+ if(!ask)return{drawn,failed,ms:0};
+ const used=new Set([...p.resolved.clips.map(c=>c.assetId),...p.resolved.items.flatMap(i=>i.source?[i.source.assetId]:[])]);
+ const scenes=[...used].map(id=>p.assets.get(id)).filter((a):a is Asset=>!!a?.scene&&a.scene.format==='engine');
+ await Promise.all(scenes.map(async asset=>{const fps=asset.fps||30;
+  try{const answer=await ask({assetId:asset.id,width:asset.width,height:asset.height,fps,frames:Math.max(1,Math.round(asset.durationSec*fps)),signal});if('chunks' in answer)drawn.set(asset.id,answer);}
+  catch(error){failed++;if(!signal.aborted)console.warn('[export] quick render failed; the scene is drawn here:',(error as Error).message);}}));
+ return{drawn,failed,ms:Math.round(performance.now()-began)};
+}
+/** A cloud-drawn scene's frames, from the piece of WebM holding each; a piece is let go once the export is past it. */
+class CloudFrames{
+ private open=new Map<string,{chunk:number;input:Input;reader:Reader}>();
+ constructor(private scenes:Map<string,CloudScene>){}
+ has(assetId:string){return this.scenes.has(assetId);}
+ async picture(layer:MediaLayer,asset:Asset){
+  const scene=this.scenes.get(asset.id)!,frame=layer.frameIndex??0,found=scene.chunks.findIndex(c=>frame<c.end),n=found<0?scene.chunks.length-1:found,chunk=scene.chunks[n];
+  let entry=this.open.get(layer.key);
+  if(entry?.chunk!==n){entry?.reader.close();entry?.input.dispose?.();const input=new Input({source:new BlobSource(chunk.video),formats:ALL_FORMATS}),track=await input.getPrimaryVideoTrack();
+   if(!track)throw new Error(`Scene ${asset.filename}: quick render sent no frames.`);entry={chunk:n,input,reader:new Reader(new VideoSampleSink(track))};this.open.set(layer.key,entry);}
+  const sample=await entry.reader.at((frame-chunk.start)/scene.fps+1e-4);return sample?.toCanvasImageSource();
+ }
+ close(){for(const {reader,input} of this.open.values()){reader.close();input.dispose?.();}this.open.clear();}
+}
+
 export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
  const began=performance.now(),spent={decodeMs:0,sceneMs:0,stillMs:0,drawMs:0,encodeMs:0},since=(at:number)=>performance.now()-at;
  const p=prepare({timeline:job.timeline,footage:job.footage}),total=Math.max(1,Math.round(p.resolved.durationSec*job.fps));
@@ -54,6 +83,7 @@ export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
  const output=new Output({format:job.container==='mov'?new MovOutputFormat():new Mp4OutputFormat(),target:new StreamTarget(new WritableStream({write:chunk=>job.write(chunk.data,chunk.position)}),{chunked:true})});
  const source=new CanvasSource(canvas,{codec:job.codec==='hevc'?'hevc':'avc',bitrate:videoBitrate(job),keyFrameInterval:2,hardwareAcceleration:'prefer-hardware',latencyMode:'quality'});
  output.addVideoTrack(source,{frameRate:job.fps});await output.start();
+ const cloud=await cloudScenes(p,job.signal),cloudFrames=new CloudFrames(cloud.drawn);
  const scenes=new SceneCaptures(),inputs=new Map<string,{input:Input;sink:Promise<VideoSampleSink|undefined>}>(),readers=new Map<string,{reader:Reader;last:number}>(),images=new Map<string,ImageBitmap>();
  const sink=(asset:Asset)=>{let entry=inputs.get(asset.id);if(!entry){const input=new Input({source:new UrlSource(originalUrl(asset)),formats:ALL_FORMATS});entry={input,sink:input.getPrimaryVideoTrack().then(async track=>track&&await track.canDecode()?new VideoSampleSink(await decodedAsPlayed(track)):undefined)};inputs.set(asset.id,entry);}return entry.sink;};
  // A source this computer cannot decode (a format WebCodecs does not read) uses the playback copy made at import.
@@ -66,7 +96,7 @@ export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
     if(layer.media==='video'){let entry=readers.get(layer.key);
      if(!entry){const s=await sink(asset)??await playbackSink(asset);if(!s)throw new Error(`${asset.filename} has no video this computer can decode.`);entry={reader:new Reader(s),last:n};readers.set(layer.key,entry);}
      entry.last=n;const sample=await entry.reader.at(layer.time);if(sample)pictures.set(layer,sample.toCanvasImageSource());spent.decodeMs+=since(at);}
-    else if(layer.media==='scene'){pictures.set(layer,await scenes.picture(layer,asset));spent.sceneMs+=since(at);}
+    else if(layer.media==='scene'){const picture=cloudFrames.has(asset.id)?await cloudFrames.picture(layer,asset):await scenes.picture(layer,asset);if(picture)pictures.set(layer,picture);spent.sceneMs+=since(at);}
     else{pictures.set(layer,await image(layer.media==='sequence'?previewUrl(asset)+'&frame='+(layer.frameIndex??0):previewUrl(asset)));spent.stillMs+=since(at);}}
    let at=performance.now();compositor.draw(frame,layer=>pictures.get(layer));spent.drawMs+=since(at);
    at=performance.now();await source.add(time,1/job.fps);spent.encodeMs+=since(at);
@@ -76,7 +106,7 @@ export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
   }
   const at=performance.now();source.close();await output.finalize();spent.encodeMs+=since(at);
   const round=(ms:number)=>Math.round(ms);
-  return{frames:total,totalMs:round(since(began)),decodeMs:round(spent.decodeMs),sceneMs:round(spent.sceneMs),stillMs:round(spent.stillMs),drawMs:round(spent.drawMs),encodeMs:round(spent.encodeMs),scenes:{...scenes.counts}};
+  return{frames:total,totalMs:round(since(began)),decodeMs:round(spent.decodeMs),sceneMs:round(spent.sceneMs),stillMs:round(spent.stillMs),drawMs:round(spent.drawMs),encodeMs:round(spent.encodeMs),scenes:{...scenes.counts},cloud:{scenes:cloud.drawn.size,failed:cloud.failed,ms:cloud.ms}};
  }catch(error){await output.cancel().catch(()=>{});throw error;}
- finally{scenes.close();for(const {reader} of readers.values())reader.close();for(const b of images.values())b.close();for(const {input} of inputs.values())input.dispose?.();for(const input of fallback.values())input.dispose?.();compositor.dispose();}
+ finally{scenes.close();cloudFrames.close();for(const {reader} of readers.values())reader.close();for(const b of images.values())b.close();for(const {input} of inputs.values())input.dispose?.();for(const input of fallback.values())input.dispose?.();compositor.dispose();}
 }

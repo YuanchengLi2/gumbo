@@ -7,6 +7,7 @@ import {providerSecrets} from './providers.ts';
 import {handleTranscription} from './transcribe.ts';
 import {handleMediaSearch,mediaKeys} from './media-search.ts';
 import {handleFetchUrl} from './fetch-url.ts';
+import {sceneRenderPass} from './scene-render.ts';
 import {handleCreators} from './creators.ts';
 import {usageSummary} from './usage-summary.ts';
 import {tokenActivity} from './activity.ts';
@@ -49,6 +50,8 @@ Deno.serve(async(req)=>{
  if(['ai','count-tokens','transcribe','media-search','fetch-url','creators','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
+ // Quick render: a pass for the cloud scene renderer, for the plans that have it (scene-render.ts).
+ if(action==='scene-render-pass'){const {data}=await db.from('dream_accounts').select('plan,is_admin').eq('id',user.id).single();const result=await sceneRenderPass(user,data,name=>Deno.env.get(name));return json(result.body,result.status);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.
  if(action==='usage'){const since=new Date(Date.now()-30*86_400_000);
   const {data:rows}=await db.from('dream_usage').select('model,cost_usd,reserved_usd,status,created_at').eq('user_id',user.id).gte('created_at',since.toISOString()).limit(50000);
