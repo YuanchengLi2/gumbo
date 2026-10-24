@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Community — Gumbo</title>
+<meta name="description" content="What's new in Gumbo, and a board where you post ideas, bugs and questions, reply and upvote what should come next.">
+<meta property="og:title" content="Community — Gumbo">
+<meta property="og:description" content="What's new in Gumbo, and a board where you post ideas, bugs and questions, reply and upvote what should come next.">
+<meta property="og:image" content="https://usegumbo.app/media/vietnam-short-poster.jpg">
+<meta name="theme-color" content="#9A3412">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='16' fill='%23FFF8EE'/><path d='M10 30h44c0 13-9.8 23-22 23S10 43 10 30z' fill='%23E2552A'/><path d='M28 35.5l9.5 5.5-9.5 5.5z' fill='%23FFF8EE'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/site.css">
+<style>
+/* The community page: what's new (CHANGELOG.md, published as updates) and the board, in the site's kitchen colours. */
+.community{padding:56px 0 96px}
+.community .wrap{max-width:820px}
+.community h1{font-size:clamp(40px,6vw,64px);margin-top:16px}
+.community .lead{margin:18px 0 0;color:var(--muted);font-size:18px;max-width:560px}
+.tabs{display:flex;gap:6px;margin:36px 0 22px;border-bottom:1.5px solid var(--line)}
+.tabs button{appearance:none;border:0;background:none;font:600 16px var(--sans);color:var(--muted);padding:10px 4px;margin-right:18px;cursor:pointer;border-bottom:2.5px solid transparent;margin-bottom:-1.5px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--chili)}
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px}
+.toolbar .spacer{flex:1}
+.pill{appearance:none;border:1.5px solid var(--line);background:transparent;color:var(--muted);font:500 14px var(--sans);padding:6px 12px;border-radius:999px;cursor:pointer}
+.pill[aria-pressed=true]{border-color:var(--ink);color:var(--ink);background:var(--white)}
+.write{border:1.5px solid var(--ink);border-radius:18px;background:var(--white);padding:16px;margin-bottom:22px}
+.write input,.write textarea,.write select{width:100%;font:400 16px/1.5 var(--sans);color:var(--ink);border:1.5px solid var(--line);border-radius:10px;background:var(--cream);padding:9px 12px;outline:none}
+.write input:focus,.write textarea:focus,.write select:focus{border-color:var(--ink)}
+.write textarea{min-height:90px;resize:vertical;margin-top:8px}
+.write .row{display:flex;gap:8px;align-items:center;margin-top:10px}
+.write select{width:auto}
+.write .hint{color:var(--faint);font-size:14px;margin-right:auto}
+.button{appearance:none;border:1.5px solid var(--ink);background:var(--ink);color:var(--cream);font:600 15px var(--sans);padding:9px 18px;border-radius:11px;cursor:pointer}
+.button:hover{background:var(--chili);border-color:var(--chili)}
+.button.quiet{background:transparent;color:var(--ink)}
+.button.quiet:hover{background:var(--card);border-color:var(--ink)}
+.button:disabled{opacity:.5;cursor:default}
+.signin{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1.5px dashed var(--line);border-radius:18px;padding:16px 18px;margin-bottom:22px;color:var(--muted)}
+.signin p{margin:0;flex:1;min-width:200px}
+.posts{display:flex;flex-direction:column;gap:12px}
+.post{display:flex;gap:14px;border:1.5px solid var(--line);border-radius:18px;background:var(--white);padding:16px 18px}
+.post.update{background:var(--card);border-color:transparent}
+.vote{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;width:52px;height:58px;border:1.5px solid var(--line);border-radius:12px;background:var(--cream);color:var(--ink);font:600 15px var(--sans);cursor:pointer}
+.vote svg{width:16px;height:16px}
+.vote[aria-pressed=true]{background:var(--peach);border-color:var(--ink)}
+.vote:hover{border-color:var(--ink)}
+.post-main{flex:1;min-width:0}
+.post h3{font:600 18px/1.35 var(--sans);letter-spacing:-.01em;margin:0}
+.post h3 button{appearance:none;border:0;background:none;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.post h3 button:hover{text-decoration:underline}
+.meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:6px;color:var(--faint);font-size:14px}
+.tag{font-size:12.5px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--cream);color:var(--muted)}
+.tag.planned{background:var(--butter);color:var(--ink)}.tag.in_progress{background:var(--peach);color:var(--ink)}.tag.shipped{background:#D9EBD3;color:#24461B}.tag.closed{background:var(--line);color:var(--muted)}
+.body{margin-top:10px;color:var(--ink);font-size:16px;overflow-wrap:anywhere}
+.body p{margin:0 0 8px}.body ul{margin:0 0 8px;padding-left:20px}.body li{margin:2px 0}
+.post:not(.open) .body{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.thread{margin-top:14px;border-top:1.5px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.answer{font-size:15px}.answer b{font-weight:600}
+.reply-form{display:flex;gap:8px;align-items:flex-end}
+.reply-form textarea{flex:1;min-height:42px;height:42px;font:400 15px/1.5 var(--sans);color:var(--ink);border:1.5px solid var(--line);border-radius:10px;background:var(--cream);padding:9px 12px;resize:vertical;outline:none}
+.reply-form textarea:focus{border-color:var(--ink)}
+.owner{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px;color:var(--muted)}
+.owner select{font:500 14px var(--sans);border:1.5px solid var(--line);border-radius:8px;background:var(--cream);padding:4px 8px}
+.link-button{appearance:none;border:0;background:none;color:var(--muted);font:500 14px var(--sans);cursor:pointer;padding:0}
+.link-button:hover{color:var(--ink);text-decoration:underline}
+.empty,.status{color:var(--muted);text-align:center;padding:30px 10px}
+.error{color:#9A3412;font-size:14px;margin-top:8px}
+@media (max-width:520px){.post{gap:10px;padding:14px}.vote{width:44px;height:52px}.write .row{flex-wrap:wrap}.write .hint{width:100%}}
+</style>
+</head>
+<body>
+
+<nav class="nav" aria-label="Main">
+ <a class="logo" href="/" aria-label="Gumbo home">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="#2A1A12" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>
+  Gumbo
+ </a>
+ <div class="links"><a class="link" href="/features/">Features</a><a class="link" href="/use-cases/">Use cases</a><a class="link" href="/pricing/">Pricing</a><a class="link" href="/community/" aria-current="page">Community</a></div>
+ <a class="btn" href="/app/">Open Gumbo</a>
+</nav>
+
+<main class="community">
+ <div class="wrap">
+  <span class="eyebrow">Community</span>
+  <h1>What's new, and <em>what's next</em></h1>
+  <p class="lead">Everything that changes in Gumbo, and a board where you tell us what to build. Post an idea or a bug, reply, and upvote what you want most.</p>
+
+  <div class="tabs" role="tablist" aria-label="Community">
+   <button type="button" role="tab" id="tab-board" aria-controls="board" aria-selected="true">Board</button>
+   <button type="button" role="tab" id="tab-new" aria-controls="updates" aria-selected="false">What's new</button>
+  </div>
+
+  <section id="board" role="tabpanel" aria-labelledby="tab-board">
+   <div id="writer"></div>
+   <div class="toolbar" aria-label="Show">
+    <button type="button" class="pill" data-filter="all" aria-pressed="true">All</button>
+    <button type="button" class="pill" data-filter="planned" aria-pressed="false">Planned</button>
+    <button type="button" class="pill" data-filter="in_progress" aria-pressed="false">In progress</button>
+    <button type="button" class="pill" data-filter="shipped" aria-pressed="false">Shipped</button>
+    <span class="spacer"></span>
+    <button type="button" class="pill" data-sort="top" aria-pressed="true">Top</button>
+    <button type="button" class="pill" data-sort="new" aria-pressed="false">New</button>
+   </div>
+   <div class="posts" id="board-posts"><p class="status">Loading…</p></div>
+  </section>
+
+  <section id="updates" role="tabpanel" aria-labelledby="tab-new" hidden>
+   <div class="posts" id="update-posts"><p class="status">Loading…</p></div>
+  </section>
+ </div>
+</main>
+
+<footer><div class="wrap">
+ <span>© 2026 Gumbo</span>
+ <a href="/privacy/">Privacy</a><a href="/terms/">Terms</a><a href="mailto:yuanchengli612@gmail.com">Contact</a>
+</div></footer>
+
+<script>
+// The page reads and writes the community tables (supabase/migrations/202610240001_community.sql) through Supabase's REST
+// API, as the visitor: signed out with the public key, signed in with the session Gumbo's web app keeps on this site
+// (localStorage 'gumbo-session', apps/web/src/bridge/account.ts). Signing in goes through the app, which brings the
+// visitor back here (returnToSite in apps/web/src/bridge/index.ts). Everything people wrote is shown as text, never HTML.
+const SUPABASE='https://qewguvfkkwvdoqptiljd.supabase.co';
+const ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFld2d1dmZra3d2ZG9xcHRpbGpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNTY0NTEsImV4cCI6MjEwNjgzMjQ1MX0.clOcsG8wKKXvQb2Ozl3zFsx6p2pXRlCLBgc3KGGvAtU';
+const KINDS={idea:'Idea',bug:'Bug',question:'Question',update:'Update'};
+const STATUSES={open:'Open',planned:'Planned',in_progress:'In progress',shipped:'Shipped',closed:'Closed'};
+const state={posts:[],mine:new Set(),admin:false,filter:'all',sort:'top',open:new Set(),replies:new Map()};
+
+// The session the app keeps: refreshed here when it is about to run out, and saved back for the app.
+const saved=()=>{try{return JSON.parse(localStorage.getItem('gumbo-session')||'null');}catch{return null;}};
+let refreshing=null;
+async function session(){
+ const s=saved();if(!s||s.user?.is_anonymous)return null;
+ if(s.expires_at>Date.now()/1000+60)return s;
+ refreshing??=(async()=>{try{
+  const response=await fetch(`${SUPABASE}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:ANON,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.refresh_token})});
+  if(!response.ok)return null;const next=await response.json();
+  const fresh={access_token:next.access_token,refresh_token:next.refresh_token,expires_at:next.expires_at??Math.floor(Date.now()/1000)+(next.expires_in??3600),user:next.user??s.user};
+  // Another tab may have refreshed first; the newer one wins.
+  const now=saved();if(now&&now.expires_at>fresh.expires_at)return now;
+  localStorage.setItem('gumbo-session',JSON.stringify(fresh));return fresh;
+ }catch{return null;}finally{setTimeout(()=>{refreshing=null;},0);}})();
+ return refreshing;
+}
+async function api(path,{method='GET',body,prefer}={}){
+ const s=await session(),headers={apikey:ANON,Authorization:`Bearer ${s?.access_token||ANON}`};
+ if(body!==undefined)headers['Content-Type']='application/json';if(prefer)headers.Prefer=prefer;
+ const response=await fetch(`${SUPABASE}/rest/v1/${path}`,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+ if(!response.ok){const reason=await response.json().catch(()=>({}));throw new Error((reason.message||'').replace(/^.*?: /,'')||'That didn’t work. Try again.');}
+ // return=minimal answers with no body (201 or 204).
+ const text=await response.text();return text?JSON.parse(text):null;
+}
+function signIn(){try{sessionStorage.setItem('gumbo-return',JSON.stringify({path:location.pathname+location.hash,at:Date.now()}));}catch{}location.href='/app/?signin=1';}
+
+const el=(tag,props={},...children)=>{const node=document.createElement(tag);for(const [k,v] of Object.entries(props)){if(k==='class')node.className=v;else if(k.startsWith('on'))node.addEventListener(k.slice(2),v);else if(v!==undefined&&v!==false)node.setAttribute(k,v===true?'':v);}for(const c of children.flat())if(c!=null&&c!==false)node.append(c);return node;};
+const ago=iso=>{const s=(Date.now()-Date.parse(iso))/1000;if(s<60)return 'just now';if(s<3600)return `${Math.floor(s/60)} min ago`;if(s<86400)return `${Math.floor(s/3600)} h ago`;if(s<7*86400)return `${Math.floor(s/86400)} d ago`;return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});};
+/** A post's words: paragraphs and "- " lists, as text. */
+function words(text){
+ const box=el('div',{class:'body'});let list=null;
+ for(const line of String(text||'').split('\n')){
+  const item=/^\s*[-*]\s+(.*)$/.exec(line);
+  if(item){list??=box.appendChild(el('ul'));list.append(el('li',{},item[1]));continue;}
+  list=null;if(line.trim())box.append(el('p',{},line));
+ }
+ return box;
+}
+const arrow=()=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.innerHTML='<path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>';return svg;};
+
+async function vote(post){
+ if(!await session()){signIn();return;}
+ const had=state.mine.has(post.id);
+ // Shown at once; put back if it fails.
+ had?state.mine.delete(post.id):state.mine.add(post.id);post.votes+=had?-1:1;draw();
+ try{had?await api(`dream_community_votes?post_id=eq.${post.id}`,{method:'DELETE'}):await api('dream_community_votes',{method:'POST',body:{post_id:post.id},prefer:'return=minimal'});}
+ catch{had?state.mine.add(post.id):state.mine.delete(post.id);post.votes+=had?1:-1;draw();}
+}
+async function openThread(post){
+ if(state.open.has(post.id)){state.open.delete(post.id);draw();return;}
+ state.open.add(post.id);draw();
+ try{state.replies.set(post.id,await api(`dream_community_replies?post_id=eq.${post.id}&select=id,author,author_name,body,created_at&order=created_at`));}catch{state.replies.set(post.id,[]);}
+ draw();
+}
+function postCard(post){
+ const open=state.open.has(post.id),replies=state.replies.get(post.id);
+ const card=el('article',{class:`post ${post.kind==='update'?'update':''} ${open?'open':''}`,id:`post-${post.id}`},
+  el('button',{type:'button',class:'vote','aria-pressed':String(state.mine.has(post.id)),'aria-label':`Upvote “${post.title}”, ${post.votes} votes`,onclick:()=>vote(post)},arrow(),String(post.votes)),
+  el('div',{class:'post-main'},
+   el('h3',{},el('button',{type:'button','aria-expanded':String(open),onclick:()=>openThread(post)},post.title)),
+   el('div',{class:'meta'},
+    post.kind!=='update'&&el('span',{class:'tag'},KINDS[post.kind]),
+    post.kind!=='update'&&post.status!=='open'&&el('span',{class:`tag ${post.status}`},STATUSES[post.status]),
+    el('span',{},`${post.author_name} · ${ago(post.created_at)}`),
+    el('button',{type:'button',class:'link-button',onclick:()=>openThread(post)},post.replies===1?'1 reply':`${post.replies} replies`)),
+   words(post.body),
+   open&&thread(post,replies)));
+ return card;
+}
+function thread(post,replies){
+ const box=el('div',{class:'thread'});
+ if(state.admin){
+  const status=el('select',{'aria-label':'Status'},...Object.entries(STATUSES).map(([v,label])=>el('option',{value:v,selected:post.status===v},label)));
+  status.addEventListener('change',async()=>{try{await api(`dream_community_posts?id=eq.${post.id}`,{method:'PATCH',body:{status:status.value},prefer:'return=minimal'});post.status=status.value;draw();}catch(e){alert(e.message);}});
+  box.append(el('div',{class:'owner'},'Status',status,el('button',{type:'button',class:'link-button',onclick:async()=>{if(!confirm('Remove this post and its replies?'))return;try{await api(`dream_community_posts?id=eq.${post.id}`,{method:'DELETE'});state.posts=state.posts.filter(p=>p.id!==post.id);draw();}catch(e){alert(e.message);}}},'Remove')));
+ }
+ if(!replies)box.append(el('p',{class:'status'},'Loading replies…'));
+ else for(const r of replies)box.append(el('div',{class:'answer'},el('div',{},el('b',{},r.author_name),' ',el('span',{class:'meta',style:'display:inline'},ago(r.created_at))),words(r.body),
+  state.admin&&el('button',{type:'button',class:'link-button',onclick:async()=>{try{await api(`dream_community_replies?id=eq.${r.id}`,{method:'DELETE'});state.replies.set(post.id,replies.filter(x=>x.id!==r.id));post.replies--;draw();}catch(e){alert(e.message);}}},'Remove')));
+ const text=el('textarea',{'aria-label':'Your reply',placeholder:'Write a reply…',maxlength:'4000'}),error=el('p',{class:'error',hidden:true});
+ const form=el('form',{class:'reply-form'},text,el('button',{type:'submit',class:'button'},'Reply'));
+ form.addEventListener('submit',async e=>{e.preventDefault();if(!await session()){signIn();return;}const body=text.value.trim();if(!body){text.focus();return;}
+  try{const [reply]=await api('dream_community_replies?select=id,author,author_name,body,created_at',{method:'POST',body:{post_id:post.id,body},prefer:'return=representation'});state.replies.set(post.id,[...(state.replies.get(post.id)||[]),reply]);post.replies++;draw();}
+  catch(err){error.textContent=err.message;error.hidden=false;}});
+ box.append(form,error);return box;
+}
+async function writer(){
+ const box=document.getElementById('writer');box.replaceChildren();
+ if(!await session()){box.append(el('div',{class:'signin'},el('p',{},'Sign in with your Gumbo account to post, reply and upvote.'),el('button',{type:'button',class:'button',onclick:signIn},'Sign in')));return;}
+ const kind=el('select',{'aria-label':'Kind of post'},...Object.entries(KINDS).filter(([k])=>k!=='update'||state.admin).map(([v,label])=>el('option',{value:v},label)));
+ const title=el('input',{'aria-label':'Title',placeholder:'What should Gumbo do?',maxlength:'140'}),body=el('textarea',{'aria-label':'Details',placeholder:'Details, examples, what you tried (optional)',maxlength:'8000'}),error=el('p',{class:'error',hidden:true});
+ const send=el('button',{type:'submit',class:'button'},'Post');
+ const form=el('form',{class:'write'},title,body,el('div',{class:'row'},el('span',{class:'hint'},'Posted under your Google name, or “Gumbo user”.'),kind,send),error);
+ form.addEventListener('submit',async e=>{e.preventDefault();error.hidden=true;if(title.value.trim().length<3){title.focus();return;}send.disabled=true;
+  try{const [post]=await api('dream_community_posts?select=*',{method:'POST',body:{kind:kind.value,title:title.value.trim(),body:body.value.trim()},prefer:'return=representation'});state.posts.unshift(post);title.value='';body.value='';draw();}
+  catch(err){error.textContent=err.message;error.hidden=false;}finally{send.disabled=false;}});
+ box.append(form);
+}
+function draw(){
+ const board=state.posts.filter(p=>p.kind!=='update'&&(state.filter==='all'?p.status!=='closed':p.status===state.filter))
+  .sort((a,b)=>state.sort==='top'?b.votes-a.votes||b.created_at.localeCompare(a.created_at):b.created_at.localeCompare(a.created_at));
+ const updates=state.posts.filter(p=>p.kind==='update').sort((a,b)=>b.created_at.localeCompare(a.created_at));
+ document.getElementById('board-posts').replaceChildren(...(board.length?board.map(postCard):[el('p',{class:'empty'},state.filter==='all'?'No posts yet. Be the first to say what Gumbo should do next.':'Nothing here yet.')]));
+ document.getElementById('update-posts').replaceChildren(...(updates.length?updates.map(postCard):[el('p',{class:'empty'},'No updates yet.')]));
+}
+async function load(){
+ try{
+  const s=await session();
+  const [posts,mine,admin]=await Promise.all([api('dream_community_posts?select=*&order=created_at.desc&limit=500'),s?api('dream_community_votes?select=post_id').catch(()=>[]):[],s?api(`dream_accounts?select=is_admin&id=eq.${s.user.id}`).catch(()=>[]):[]]);
+  state.posts=posts;state.mine=new Set(mine.map(v=>v.post_id));state.admin=!!admin[0]?.is_admin;
+  await writer();draw();
+  await openLinked();
+ }catch(error){for(const id of ['board-posts','update-posts'])document.getElementById(id).replaceChildren(el('p',{class:'status'},'The board could not load. Refresh to try again.'));}
+}
+/** A link to one post (#post-<id>) opens it. */
+async function openLinked(){
+ const linked=/^#post-([0-9a-f-]{36})$/.exec(location.hash)?.[1],post=linked&&state.posts.find(p=>p.id===linked);if(!post)return;
+ choose(post.kind==='update'?'new':'board');if(!state.open.has(post.id))await openThread(post);document.getElementById(`post-${post.id}`)?.scrollIntoView({block:'center'});
+}
+addEventListener('hashchange',()=>void openLinked());
+function choose(tab){
+ for(const [name,panel] of [['board','board'],['new','updates']]){document.getElementById(`tab-${name}`).setAttribute('aria-selected',String(name===tab));document.getElementById(panel).hidden=name!==tab;}
+ if(location.hash!=='#'+tab&&!location.hash.startsWith('#post-'))history.replaceState(null,'',tab==='board'?location.pathname:'#new');
+}
+document.getElementById('tab-board').addEventListener('click',()=>choose('board'));
+document.getElementById('tab-new').addEventListener('click',()=>choose('new'));
+for(const b of document.querySelectorAll('[data-filter]'))b.addEventListener('click',()=>{state.filter=b.dataset.filter;for(const o of document.querySelectorAll('[data-filter]'))o.setAttribute('aria-pressed',String(o===b));draw();});
+for(const b of document.querySelectorAll('[data-sort]'))b.addEventListener('click',()=>{state.sort=b.dataset.sort;for(const o of document.querySelectorAll('[data-sort]'))o.setAttribute('aria-pressed',String(o===b));draw();});
+if(location.hash==='#new')choose('new');
+load();
+</script>
+</body>
+</html>

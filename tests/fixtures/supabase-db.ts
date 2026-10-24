@@ -12,8 +12,8 @@ export async function supabaseDb(){
    if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated; end if;
    if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role; end if;
   end $$;
-  create schema auth;create table auth.users(id uuid primary key,email text,is_anonymous boolean not null default false);
-  create function auth.uid() returns uuid language sql stable as $f$ select null::uuid $f$;
+  create schema auth;create table auth.users(id uuid primary key,email text,is_anonymous boolean not null default false,raw_user_meta_data jsonb not null default '{}');
+  create function auth.uid() returns uuid language sql stable as $f$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $f$;
   create schema storage;create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);`);
  const folder=join(__dirname,'..','..','supabase','migrations');
  for(const file of readdirSync(folder).filter(f=>f.endsWith('.sql')).sort()){

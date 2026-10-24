@@ -1,4 +1,4 @@
-import {createBridge,finishPendingSignIn} from './bridge';
+import {createBridge,finishPendingSignIn,returnToSite} from './bridge';
 import {missing,unsupportedPage} from './gate';
 import './web.css';
 
@@ -11,6 +11,7 @@ async function start(){
  await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`,{scope:import.meta.env.BASE_URL,type:'module'});
  await navigator.serviceWorker.ready;
  await finishPendingSignIn();
+ if(await returnToSite())return;
  await import('./editor');
 }
 void start();

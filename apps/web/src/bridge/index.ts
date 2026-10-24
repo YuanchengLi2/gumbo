@@ -93,6 +93,19 @@ export function createBridge(){
  };
 }
 
+/** The site's community page signs its visitors in through here (sign-in returns only to /app): it leaves where it was
+ * in this tab's storage and opens /app/?signin=1. Signed in, or once signing in is done, the visitor goes back there;
+ * true when the page is leaving. A return older than 15 minutes (a sign-in given up) is forgotten. */
+export async function returnToSite(){
+ const here=new URL(location.href),asked=here.searchParams.has('signin');
+ if(asked){here.searchParams.delete('signin');history.replaceState(history.state,'',here.toString());}
+ let back:{path?:unknown;at?:unknown}|null=null;try{back=JSON.parse(sessionStorage.getItem('gumbo-return')??'null');}catch{}
+ const path=typeof back?.path==='string'&&/^\/community\/[^\s]*$/.test(back.path)&&typeof back.at==='number'&&Date.now()-back.at<15*60_000?back.path:null;
+ if(!path){try{sessionStorage.removeItem('gumbo-return');}catch{}return false;}
+ if(account.signedIn()){sessionStorage.removeItem('gumbo-return');location.replace(path);return true;}
+ if(asked){location.assign(await account.beginSignIn());return true;}
+ return false;
+}
 /** Finishes a sign-in this page came back from, and tells the editor (the event the desktop sends after its callback). */
 export async function finishPendingSignIn(){
  try{if(await account.finishSignIn())publish('account.signed_in',await account.info());}
