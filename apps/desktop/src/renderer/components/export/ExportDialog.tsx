@@ -60,7 +60,8 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
     <div className="export-section"><label className="export-toggle"><input type="checkbox" checked={c.audio} disabled={running} onChange={e=>set({audio:e.target.checked})}/><strong>Audio</strong></label>
      {row('Format',select(c.audioFormat,[['mp3','MP3'],['wav','WAV'],['aac','AAC']] as const,v=>set({audioFormat:v}),!c.audio))}
     </div>
-    <button type="button" className="export-xml" disabled={running} onClick={p.onTimeline}>Editable timeline for Premiere or Resolve (XML)</button>
+    {/* On the web the footage lives in the browser's own storage, where Premiere or Resolve can't find it. */}
+    {!onWeb()&&<button type="button" className="export-xml" disabled={running} onClick={p.onTimeline}>Editable timeline for Premiere or Resolve (XML)</button>}
    </div>
   </div>
   <footer className="export-foot">

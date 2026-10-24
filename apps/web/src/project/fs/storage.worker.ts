@@ -76,6 +76,9 @@ async function readAt(path:string,position:number,length:number){
 async function writeAt(path:string,position:number|null,data:Uint8Array){
  const holding=held.get(path);
  if(holding){const at=position??holding.access.getSize();holding.access.write(data as Uint8Array<ArrayBuffer>,{at});holding.modified=Date.now();return;}
+ // In this site's storage, a sync access handle held just for this write: a writable stream that keeps the data would
+ // copy the whole file first, every time (a copy written a megabyte at a time took minutes).
+ const brief=await hold(path,true);if(brief)try{brief.access.write(data as Uint8Array<ArrayBuffer>,{at:position??brief.access.getSize()});return;}finally{release(path);}
  const target=await fileHandle(path,true),writer=await target.createWritable({keepExistingData:true});
  await writer.seek(position??(await target.getFile()).size);await writer.write(data as Uint8Array<ArrayBuffer>);await writer.close();
 }
@@ -87,7 +90,7 @@ async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
   case 'open':return{json:{fd:await open(request.path,request.flags)}};
   case 'pread':{const {path}=described(request.fd);return{json:{size:await sizeOf(path)},data:await readAt(path,request.position,request.length)};}
   case 'pwrite':{const d=described(request.fd);if(!d.write)throw new Failure('EBADF','EBADF: bad file descriptor, write');await writeAt(d.path,d.append?null:request.position,request.data);return{};}
-  case 'ftruncate':{const d=described(request.fd),holding=held.get(d.path);if(holding){holding.access.truncate(request.length);holding.modified=Date.now();}else{const writer=await (await fileHandle(d.path)).createWritable({keepExistingData:true});await writer.truncate(request.length);await writer.close();}return{};}
+  case 'ftruncate':{const d=described(request.fd),holding=held.get(d.path);if(holding){holding.access.truncate(request.length);holding.modified=Date.now();}else{const brief=await hold(d.path,false);if(brief)try{brief.access.truncate(request.length);}finally{release(d.path);}else{const writer=await (await fileHandle(d.path)).createWritable({keepExistingData:true});await writer.truncate(request.length);await writer.close();}}return{};}
   case 'close':{const d=descriptors.get(request.fd);if(d){descriptors.delete(request.fd);if(d.write)release(d.path);}return{};}
   case 'readdir':{const dir=await directory(request.path),list:{name:string;kind:string}[]=[];for await(const [name,h] of (dir as any).entries())list.push({name,kind:h.kind});return{json:list};}
   case 'mkdir':{
@@ -101,6 +104,8 @@ async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
   case 'write':{
    if(request.mode==='wx'&&await exists(request.path))throw new Failure('EEXIST',`EEXIST: file already exists, open '${request.path}'`,request.path);
    const holding=held.get(request.path);if(holding){if(request.mode==='w')holding.access.truncate(0);await writeAt(request.path,null,request.data);return{};}
+   // Appending in this site's storage writes in place (writeAt); a writable stream would copy the file first.
+   if(request.mode==='a'&&parts(request.path)[0]!=='granted'){await writeAt(request.path,null,request.data);return{};}
    const target=await fileHandle(request.path,true),writer=await target.createWritable({keepExistingData:request.mode==='a'});
    if(request.mode==='a'){const size=(await target.getFile()).size;await writer.seek(size);}
    await writer.write(request.data as Uint8Array<ArrayBuffer>);await writer.close();return{};

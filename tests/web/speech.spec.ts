@@ -2,9 +2,9 @@ import {test,expect,type Page} from '@playwright/test';
 import {resolve} from 'node:path';
 import {codeGateway} from '../fixtures/code-gateway';
 
-/** Phase 4 of Gumbo on the web: speech in imported footage is heard by Whisper in the browser (packages/web-ml) when
- * this computer keeps up, with no account and no upload; a computer measured too slow has it heard by the gateway's
- * transcription instead (here the scripted fixture, so nothing is paid for). The JFK recording is 11 seconds of speech. */
+/** Speech in imported footage on the web: signed in, the gateway's transcription hears it (here the scripted fixture,
+ * so nothing is paid for), which takes seconds; signed out, Whisper in the browser (packages/web-ml) hears it, with no
+ * account and no upload. The JFK recording is 11 seconds of speech. */
 const speech=resolve('artifacts/fixtures/whisper-jfk.wav');
 const state=(page:Page)=>page.evaluate(()=>(window as any).dream.command({type:'state'}));
 async function importSpeech(page:Page){
@@ -28,17 +28,17 @@ test('speech is heard on this computer by Whisper, signed out',async({page})=>{
  expect(logs.some(l=>l.includes('[speech] heard on this computer'))).toBe(true);
 });
 
-test('speech is heard in the cloud on a computer measured too slow',async({page})=>{
+test('speech is heard in the cloud when signed in, without loading Whisper',async({page})=>{
  test.setTimeout(180_000);
  const words='And so my fellow Americans'.split(' ').map((word,n)=>({word,start:.4+n*.45,end:.8+n*.45}));
  const gateway=await codeGateway({words,script:()=>[]});
  try{
   await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
   await page.goto('/app/?code=fixture-code');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
-  // What an earlier measurement on this computer remembered.
-  await page.evaluate(async()=>{const profile=await (await navigator.storage.getDirectory()).getDirectoryHandle('profile',{create:true}),file=await (await profile.getFileHandle('speech-local.json',{create:true})).createWritable();await file.write(JSON.stringify({verdict:'cloud',reason:'Measured slower than half real time.'}));await file.close();});
-  await importSpeech(page);
-  await expect.poll(async()=>(await transcription(page))?.status,{timeout:120_000}).toBe('complete');
+  const models:string[]=[];page.on('request',r=>{if(/huggingface|onnx|whisper/i.test(r.url())&&!r.url().includes('jfk'))models.push(r.url());});
+  const started=Date.now();await importSpeech(page);
+  await expect.poll(async()=>(await transcription(page))?.status,{timeout:60_000}).toBe('complete');
+  expect(Date.now()-started).toBeLessThan(30_000);expect(models).toEqual([]);
   expect(await found(page,'fellow')).toContain('fellow');expect(await found(page,'country')).not.toContain('country');
  }finally{await gateway.close();}
 });

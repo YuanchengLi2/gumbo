@@ -1,11 +1,13 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {createPortal} from 'react-dom';
-import {ArrowLeft,ArrowRight,ExternalLink,Check} from 'lucide-react';
+import {ArrowLeft,ArrowRight,ExternalLink,Check,Sparkles} from 'lucide-react';
 import type {OnboardingAnswers} from '@dream/contracts';
 import {GumboMark} from '../home/HomeScreen';
 import {useAccount,signInFinished} from '../../account';
 import {useBilling,billingReady,onPlanRise,watchBilling} from '../../billing';
 import {PlanChooser,usePay} from '../billing/Upgrade';
+import {firstAsk,forgetFirstAsk,deliverFirstAsk} from '../../first-ask';
+import {onWeb} from '../../platform';
 import {onboarded,markOnboarded,saveAnswers,sendAnswers,accountAnswers,restoreAnswers,makes,experiences,sources,startersFor,type MakeId} from '../../profile';
 
 /** The first time Gumbo opens on a computer, a few screens before home, as Claude's onboarding has them: a welcome, the
@@ -20,8 +22,9 @@ export function OnboardingLayer(){
  const [step,setStep]=useState<Step|null>(null),[answers,setAnswers]=useState<OnboardingAnswers>({name:'',makes:[]}),[returning,setReturning]=useState(false);
  const account=useAccount(),signedIn=!!account?.signedIn,billing=useBilling(),b=billingReady(billing)?billing:null,{opened,error:payError,pay}=usePay();
  const [signInUrl,setSignInUrl]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
- const finish=()=>{markOnboarded();setStep(null);};
- useEffect(()=>{watchBilling();void sendAnswers();void window.dream.runtime().then(r=>{if(r.onboarding||!r.automated&&!onboarded())setStep('welcome');},()=>{if(!onboarded())setStep('welcome');});},[]);
+ // A request typed on usegumbo.app before Gumbo opened waits in the home screen's box once this ends (first-ask.ts).
+ const finish=()=>{markOnboarded();setStep(null);deliverFirstAsk();};
+ useEffect(()=>{watchBilling();void sendAnswers();void window.dream.runtime().then(r=>{if(r.onboarding||!r.automated&&!onboarded())setStep('welcome');else deliverFirstAsk();},()=>{if(!onboarded())setStep('welcome');else deliverFirstAsk();});},[]);
  // Answers given before signing in go to the account at sign-in.
  useEffect(()=>window.dream.onEvent(event=>{if(event.type==='account.signed_in')void sendAnswers();}),[]);
  // A plan bought on the plans step ends the onboarding: the welcome to the plan takes over.
@@ -48,7 +51,8 @@ export function OnboardingLayer(){
  const toggle=(id:MakeId)=>setAnswers(a=>({...a,makes:a.makes.includes(id)?a.makes.filter(m=>m!==id):[...a.makes,id]}));
  const previous:Partial<Record<Step,Step>>={account:'welcome',name:signedIn?'welcome':'account',makes:'name',experience:'makes',heard:'experience',improve:'heard',plan:'improve'};
  const at=progress.indexOf(step),first=answers.name.trim().split(/\s+/)[0];
- const pick=(text:string)=>{window.dispatchEvent(new CustomEvent('gumbo:prompt',{detail:text}));finish();};
+ const ask=firstAsk();
+ const pick=(text:string)=>{forgetFirstAsk();window.dispatchEvent(new CustomEvent('gumbo:prompt',{detail:text}));finish();};
 
  return createPortal(<div className="onboarding" role="dialog" aria-modal="true" aria-label="Welcome to Gumbo">
   <div className="onboarding-drag" aria-hidden="true"/>
@@ -59,15 +63,15 @@ export function OnboardingLayer(){
 
    {step==='welcome'&&<>
     <GumboMark/><h1>Welcome to Gumbo</h1>
-    <p>Edit videos by saying what you want. A few quick questions first, so Gumbo fits the videos you make.</p>
+    <p>{ask?<>Gumbo will make <strong>“{ask.replace(/[.…\s]+$/,'')}”</strong> for you. A few quick questions first, so it fits the videos you make.</>:'Edit videos by saying what you want. A few quick questions first, so Gumbo fits the videos you make.'}</p>
     <button type="button" className="onboarding-primary" onClick={start}>Get started<ArrowRight size={16}/></button>
    </>}
 
    {step==='account'&&<>
-    <h1>{signInUrl?'Continue in your browser':'Create your account'}</h1>
-    <p>{signInUrl?'Sign in on the page that opened, with Google or your email. Gumbo carries on as soon as you finish.':'Gumbo AI needs an account. Your browser opens to sign in with Google or your email; new here, it makes your account.'}</p>
+    <h1>{signInUrl&&!onWeb()?'Continue in your browser':'Create your account'}</h1>
+    <p>{onWeb()?'Gumbo AI needs an account. Sign in with Google or your email; new here, it makes your account, and you come straight back here.':signInUrl?'Sign in on the page that opened, with Google or your email. Gumbo carries on as soon as you finish.':'Gumbo AI needs an account. Your browser opens to sign in with Google or your email; new here, it makes your account.'}</p>
     {error&&<p className="onboarding-error" role="alert">{error}</p>}
-    {!signInUrl?<button type="button" className="onboarding-primary" disabled={busy} onClick={()=>void openSignIn()}><ExternalLink size={15}/>{busy?'Opening…':'Sign in with your browser'}</button>
+    {!signInUrl?<button type="button" className="onboarding-primary" disabled={busy} onClick={()=>void openSignIn()}>{!onWeb()&&<ExternalLink size={15}/>}{busy?'Opening…':onWeb()?'Sign in':'Sign in with your browser'}</button>
      :<div className="onboarding-waiting" role="status"><span className="sign-in-spinner" aria-hidden="true"/>Waiting for you to sign in…<button type="button" onClick={()=>void openSignIn()}>Open the page again</button></div>}
     <button type="button" className="onboarding-skip" onClick={()=>setStep('name')}>Skip for now: editing by hand needs no account</button>
    </>}
@@ -119,8 +123,8 @@ export function OnboardingLayer(){
    {step==='ready'&&<>
     <GumboMark/><h1>{returning?`Welcome back${first?`, ${first}`:''}`:`You’re all set${first?`, ${first}`:''}`}</h1>
     <p>{answers.experience==='pro'?'Say what you want and Gumbo cuts it on a real timeline. Open the Editor at the top of a project any time to work frame by frame.':'Add your clips and say what you want. Gumbo cuts it on a real timeline you can watch, change and export.'}</p>
-    <h2>Start with one of these</h2>
-    <div className="welcome-prompts">{startersFor(answers.makes).map(([Icon,title,text])=><button key={title} type="button" onClick={()=>pick(text)}><b><Icon size={14}/>{title}</b><span>{text}</span><ArrowRight size={14}/></button>)}</div>
+    <h2>{ask?'Start with your request':'Start with one of these'}</h2>
+    <div className="welcome-prompts">{ask&&<button type="button" onClick={()=>pick(ask)}><b><Sparkles size={14}/>Your request</b><span>{ask}</span><ArrowRight size={14}/></button>}{startersFor(answers.makes).map(([Icon,title,text])=><button key={title} type="button" onClick={()=>pick(text)}><b><Icon size={14}/>{title}</b><span>{text}</span><ArrowRight size={14}/></button>)}</div>
     <button type="button" className="onboarding-primary" onClick={finish}>Start creating</button>
    </>}
   </main>

@@ -53,7 +53,9 @@ em{font-style:italic}
 .nav a.link{font-size:15px;font-weight:500;color:var(--muted);text-decoration:none;padding:8px 11px;border-radius:9px}
 .nav a.link:hover{color:var(--ink);background:rgba(42,26,18,.05)}
 .nav .btn{height:44px;padding:0 18px;font-size:15px;margin-left:8px}
-@media (max-width:760px){.nav{margin:14px 12px 0;padding:7px 7px 7px 14px}.nav a.link{display:none}.nav .btn{height:40px;padding:0 14px;font-size:14.5px}}
+.nav .links{display:flex;gap:2px}
+@media (max-width:760px){.nav{margin:14px 12px 0;padding:7px 7px 7px 14px;flex-wrap:wrap;row-gap:2px}.nav .btn{height:40px;padding:0 14px;font-size:14.5px}
+ .nav .links{order:3;width:100%;justify-content:center;border-top:1.5px solid var(--line);padding-top:4px;margin-top:4px}.nav a.link{font-size:14px;padding:6px 10px}}
 
 /* The prompt bar: ask for any edit */
 .ask{width:min(640px,100%);margin:0 auto;text-align:left}
@@ -79,23 +81,12 @@ em{font-style:italic}
 @media (max-width:520px){.reply form{flex-direction:column}.bar textarea{font-size:16px}.chips button{font-size:13.5px;padding:6px 11px}}
 
 /* Hero */
-.hero{text-align:center;padding:70px 0 0}
-.hero h1{font-size:clamp(54px,8.4vw,116px);margin-top:20px}
+.hero{text-align:center;padding:84px 0 0}
+.hero h1{font-size:clamp(54px,8.4vw,116px);margin-top:0}
 .hero h1 em{display:block}
 .hero h1 .caret{display:inline-block;width:.055em;height:.74em;margin-left:.05em;vertical-align:-.02em;background:var(--chili);border-radius:2px;animation:blink 1.1s steps(1) infinite}
 .hero .wrap{position:relative}
 .hero .ask{margin-top:40px}
-/* Requests stuck around the headline, bobbing like notes on a pass */
-.stickers{display:none}
-@media (min-width:1200px){.stickers{display:block;position:absolute;inset:0;pointer-events:none}}
-.st{position:absolute;display:inline-flex;align-items:center;gap:10px;padding:7px 14px 7px 7px;border:1.5px solid var(--ink);border-radius:14px;background:var(--white);font:600 14px var(--sans);white-space:nowrap;box-shadow:0 18px 30px -20px rgba(42,26,18,.55);animation:bob 5s ease-in-out infinite}
-.st i{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--peach)}
-.st i svg{width:17px;height:17px}
-.st.s1{left:10px;top:70px;rotate:-6deg}
-.st.s2{left:60px;top:250px;rotate:4deg;animation-delay:-1.4s}.st.s2 i{background:var(--butter)}
-.st.s3{right:20px;top:90px;rotate:5deg;animation-delay:-2.6s}.st.s3 i{background:var(--blush)}
-.st.s4{right:70px;top:260px;rotate:-4deg;animation-delay:-3.8s}.st.s4 i{background:var(--chili);color:var(--cream)}
-@keyframes bob{50%{transform:translateY(-9px)}}
 .hero .avail{font-size:14px;color:var(--muted);margin-top:16px}
 .kitchen{position:relative;height:270px;margin-top:4px}
 .kitchen svg{position:absolute;inset:0;width:100%;height:100%}
@@ -637,6 +628,106 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
 .js .reveal:not(.in){opacity:0;transform:translateY(22px)}
 .reveal{transition:opacity .7s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.js .reveal:not(.in){opacity:1;transform:none}.l-title strong{clip-path:none}.l-map .route{stroke-dashoffset:0}.l-map .rider{offset-distance:100%}.l-tag .price{transform:rotate(-4deg)}.titlecard strong{clip-path:none}.thread>*{opacity:1;transform:none}}
+
+/* Features: everything an editor does, each one a sentence away */
+.features{padding:150px 0 0}
+.features .center h2 em{background:linear-gradient(transparent 68%,var(--butter) 68%);padding:0 .06em}
+.features .center .lead{color:var(--muted)}
+.fgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:64px}
+.fcard{position:relative;display:flex;flex-direction:column;border-radius:26px;background:var(--white);border:1.5px solid var(--line);padding:24px 22px 20px;transition:border-color .2s,transform .2s,box-shadow .2s}
+.fcard:hover{border-color:var(--ink);transform:translateY(-3px);box-shadow:0 22px 40px -30px rgba(42,26,18,.5)}
+.fcard .fi{display:grid;place-items:center;width:44px;height:44px;border-radius:13px;background:var(--peach);border:1.5px solid var(--ink)}
+.fcard .fi svg{width:21px;height:21px}
+.fcard:nth-child(8n+2) .fi{background:var(--butter)}.fcard:nth-child(8n+3) .fi{background:var(--blush)}.fcard:nth-child(8n+4) .fi{background:var(--chili);color:var(--cream)}
+.fcard:nth-child(8n+5) .fi{background:var(--butter)}.fcard:nth-child(8n+6) .fi{background:var(--chili);color:var(--cream)}.fcard:nth-child(8n+7) .fi{background:var(--peach)}.fcard:nth-child(8n+8) .fi{background:var(--blush)}
+.fcard h3{font-size:27px;line-height:1.08;margin-top:20px}
+.fcard p{margin:10px 0 0;font-size:15px;line-height:1.5;color:var(--muted);flex:1}
+.fcard q{display:block;margin-top:18px;padding-top:14px;border-top:1.5px dashed var(--line);font:500 13.5px/1.4 var(--sans);color:var(--ink);quotes:none}
+.fcard q::before{content:'Try  ';font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--paprika)}
+.fstrip{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-top:22px}
+.fstrip span{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;background:var(--card);font:600 14px var(--sans)}
+.fstrip i{display:grid;width:17px;height:17px}.fstrip i svg{width:17px;height:17px}
+@media (max-width:1060px){.fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.fgrid{grid-template-columns:1fr}.features{padding-top:110px}}
+
+/* Use cases: pick who you are, see what you'd ask and what comes back */
+.uses{padding:150px 0 0}
+.uses .center h2 em{background:linear-gradient(transparent 68%,var(--blush) 68%);padding:0 .06em}
+.uses .center .lead{color:var(--muted)}
+.uc{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;margin-top:64px;align-items:stretch}
+.uc-tabs{display:flex;flex-direction:column;gap:8px}
+.uc-tab{appearance:none;display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:14px 16px;border-radius:18px;border:1.5px solid var(--line);background:transparent;color:var(--ink);font:600 17px var(--sans);cursor:pointer;position:relative;overflow:hidden;transition:background .2s,border-color .2s}
+.uc-tab i{flex:none;display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--card);transition:background .2s,color .2s}
+.uc-tab i svg{width:19px;height:19px}
+.uc-tab small{display:block;font-weight:500;font-size:13.5px;color:var(--muted);margin-top:1px}
+.uc-tab:hover{border-color:var(--ink)}
+.uc-tab[aria-selected=true]{background:var(--ink);border-color:var(--ink);color:var(--cream)}
+.uc-tab[aria-selected=true] i{background:var(--chili);color:var(--cream)}
+.uc-tab[aria-selected=true] small{color:rgba(255,248,238,.66)}
+.uc-tab .timer{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--chili)}
+.uc-tab[aria-selected=true] .timer{animation:ucTimer var(--uc-time,7s) linear forwards}
+.uc.paused .uc-tab .timer{animation:none;width:0}
+@keyframes ucTimer{to{width:100%}}
+.uc-stage{border-radius:30px;background:var(--card);padding:30px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:26px;min-height:440px}
+.uc-win{border-radius:20px;background:var(--white);border:1.5px solid var(--ink);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 26px 50px -36px rgba(42,26,18,.6)}
+.uc-top{display:flex;align-items:center;gap:6px;padding:11px 14px;border-bottom:1.5px solid var(--line);font:600 13px var(--sans);color:var(--muted)}
+.uc-top i{width:10px;height:10px;border-radius:50%;background:var(--line)}.uc-top span{margin-left:8px}
+.uc-chat{flex:1;display:flex;flex-direction:column;gap:12px;padding:20px 18px}
+.uc-you{align-self:flex-end;max-width:88%;padding:11px 15px;border-radius:18px 18px 6px 18px;background:var(--ink);color:var(--cream);font-size:15.5px;line-height:1.45}
+.uc-gumbo{align-self:flex-start;max-width:94%;padding:13px 15px;border-radius:18px 18px 18px 6px;background:var(--card);font-size:15.5px;line-height:1.45}
+.uc-gumbo b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--paprika);margin-bottom:4px}
+.uc-chg{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.uc-chg span{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;background:var(--white);border:1.5px solid var(--line);font:600 12.5px var(--sans)}
+.uc-chg span::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--chili)}
+.uc-input{display:flex;align-items:center;gap:10px;margin:0 14px 14px;padding:8px 8px 8px 14px;border:1.5px solid var(--line);border-radius:16px;font-size:14.5px;color:var(--faint)}
+.uc-input span:first-child{flex:1}.uc-input .send{flex:none;width:32px;height:32px;cursor:default}.uc-input .send svg{width:15px;height:15px}
+.uc-side{display:flex;flex-direction:column}
+.uc-side h3{font-size:clamp(34px,3.2vw,44px);line-height:1.02}
+.uc-side p{margin:14px 0 0;font-size:16px;line-height:1.55;color:var(--muted)}
+.uc-side h4{margin:26px 0 10px;font:700 12px var(--sans);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.uc-asks{display:flex;flex-wrap:wrap;gap:8px}
+.uc-asks button{appearance:none;border:1.5px solid var(--ink);background:var(--white);color:var(--ink);font:500 14px var(--sans);padding:7px 13px;border-radius:999px;cursor:pointer;transition:background .15s}
+.uc-asks button:hover{background:var(--peach)}
+.uc-side .btn{margin-top:auto;align-self:flex-start}
+.uc-pane{animation:rise .45s cubic-bezier(.2,.8,.2,1)}
+@media (max-width:1000px){.uc{grid-template-columns:1fr}.uc-tabs{flex-direction:row;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.uc-tabs::-webkit-scrollbar{display:none}.uc-tab{width:auto;flex:none;padding:10px 14px}.uc-tab small{display:none}.uc-tab i{width:32px;height:32px}}
+@media (max-width:760px){.uc-stage{grid-template-columns:1fr;padding:18px;border-radius:24px}.uc-side .btn{margin-top:22px}.uses{padding-top:110px}}
+
+/* Pricing: free during the beta, and what the plans will be */
+.pricing{padding:150px 0 0}
+.pricing .center h2 em{background:linear-gradient(transparent 68%,var(--peach) 68%);padding:0 .06em}
+.pricing .center .lead{color:var(--muted)}
+.beta-note{display:flex;align-items:center;gap:14px;max-width:760px;margin:40px auto 0;padding:14px 18px;border-radius:18px;background:var(--butter);border:1.5px solid var(--ink);font-size:15.5px;line-height:1.45}
+.beta-note i{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--ink);color:var(--butter)}.beta-note i svg{width:18px;height:18px}
+.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:22px;align-items:stretch}
+.plan{position:relative;display:flex;flex-direction:column;border-radius:28px;background:var(--white);border:1.5px solid var(--line);padding:30px 28px 28px}
+.plan.featured{background:var(--roux);color:var(--cream);border-color:var(--roux);box-shadow:0 34px 60px -38px rgba(42,26,18,.8)}
+.plan .tag{position:absolute;top:-13px;left:28px;padding:5px 12px;border-radius:999px;background:var(--chili);color:var(--cream);font:700 11.5px var(--sans);letter-spacing:.1em;text-transform:uppercase}
+.plan-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.plan-head h3{font-size:38px}
+.plan small{display:block;margin-top:6px;font-size:15px;color:var(--muted)}
+.plan.featured small{color:rgba(255,248,238,.66)}
+.size{display:inline-flex;padding:3px;border-radius:999px;background:rgba(255,248,238,.12)}
+.size button{appearance:none;border:0;background:transparent;color:rgba(255,248,238,.75);font:600 13px var(--sans);padding:5px 12px;border-radius:999px;cursor:pointer}
+.size button[aria-checked=true]{background:var(--cream);color:var(--ink)}
+.price{display:flex;align-items:baseline;gap:6px;margin-top:22px;font-family:var(--serif);font-size:64px;line-height:1;letter-spacing:-.03em}
+.price span{font:500 15px var(--sans);letter-spacing:0;color:var(--muted)}
+.plan.featured .price span{color:rgba(255,248,238,.66)}
+.plan ul{list-style:none;margin:24px 0 0;padding:22px 0 0;border-top:1.5px dashed var(--line);display:grid;gap:11px;flex:1;align-content:start}
+.plan.featured ul{border-top-color:rgba(255,248,238,.2)}
+.plan li{display:grid;grid-template-columns:20px 1fr;gap:10px;font-size:15px;line-height:1.45}
+.plan li i{display:grid;width:18px;height:18px;margin-top:2px;color:var(--paprika)}.plan li i svg{width:18px;height:18px}
+.plan.featured li i{color:var(--peach)}
+.plan li b{font-weight:700}
+.plan .btn{margin-top:26px;width:100%}
+.plan .btn.ghost{background:transparent}
+.plan.featured .btn{background:var(--chili);border-color:var(--chili);color:var(--cream)}.plan.featured .btn:hover{background:var(--paprika2)}
+.plan .soon{display:block;margin-top:10px;text-align:center;font-size:13px;color:var(--muted)}.plan.featured .soon{color:rgba(255,248,238,.6)}
+.price-foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:16px}
+.price-foot div{border-radius:22px;background:var(--card);padding:20px 22px;font-size:15px;line-height:1.5;color:var(--muted)}
+.price-foot strong{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+@media (max-width:980px){.plans,.price-foot{grid-template-columns:1fr;max-width:520px;margin-left:auto;margin-right:auto}.plan.featured{order:-1}}
+@media (max-width:560px){.pricing{padding-top:110px}.beta-note{align-items:flex-start}}
 </style>
 <script>document.documentElement.classList.add('js')</script>
 </head>
@@ -649,23 +740,13 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
   <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 30h44c0 13-9.8 23-22 23S10 43 10 30z" fill="#E2552A"/><path d="M28 35.5l9.5 5.5-9.5 5.5z" fill="#FFF8EE"/><g fill="none" stroke="#2A1A12" stroke-width="3.2" stroke-linecap="round"><path d="M24 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M32 23c-2.6-3 2.6-5.2 0-8.6"/><path d="M40 23c-2.6-3 2.6-5.2 0-8.6"/></g></svg>
   Gumbo
  </a>
- <a class="link" href="#demo">See it</a>
- <a class="link" href="#no-menu">No menu</a>
- <a class="link" href="#ask">What to ask</a>
- <a class="link" href="#faq">Questions</a>
+ <div class="links"><a class="link" href="#features">Features</a><a class="link" href="#use-cases">Use cases</a><a class="link" href="#pricing">Pricing</a></div>
  <a class="btn" href="/app/">Open Gumbo</a>
 </nav>
 
 <main id="top">
  <header class="hero">
   <div class="wrap">
-   <span class="eyebrow">Gumbo · AI video editor</span>
-   <div class="stickers" aria-hidden="true">
-    <span class="st s1"><i data-i="zoom"></i>Punch in on the punchline</span>
-    <span class="st s2"><i data-i="tag"></i>Freeze and tag the price</span>
-    <span class="st s3"><i data-i="vhs"></i>Like a 90s camcorder</span>
-    <span class="st s4"><i data-i="music"></i>Music that builds</span>
-   </div>
    <h1>Type anything.<span class="caret" aria-hidden="true"></span><em>Get the edit.</em></h1>
    <div class="ask" data-ask>
     <form class="bar">
@@ -674,7 +755,6 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
      <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
     <div class="chips"><button type="button">Cut every um</button><button type="button">Make it feel like the 90s</button><button type="button">Draw our route on a map</button><button type="button">Make it better</button></div>
-    <div class="reply" role="status"></div>
    </div>
    <p class="avail">Runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Nothing to install.</p>
   </div>
@@ -884,6 +964,41 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  </div></section>
 
  <div class="wrap">
+  <section class="features" id="features">
+   <div class="center reveal">
+    <span class="eyebrow">Features</span>
+    <h2 class="h2" style="margin-top:18px">Everything an editor does.<br><em>Just say it.</em></h2>
+    <p class="lead">No panels to learn. Each of these is one sentence away, and every result lands on a timeline you can change.</p>
+   </div>
+   <div class="fgrid">
+    <article class="fcard reveal"><span class="fi" data-i="cut"></span><h3>Cuts that land</h3><p>Dead air, ums, retakes and slow bits come out, and cuts land on the beat.</p><q>Cut every um and long pause.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="cc"></span><h3>Captions</h3><p>Word-timed captions from your own speech, styled the way you describe.</p><q>Big bold captions, one word at a time.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="music"></span><h3>Music and sound</h3><p>An original score composed for your cut, or free-to-use tracks and sound effects.</p><q>Music that builds to the ending.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="motion"></span><h3>Titles and graphics</h3><p>Titles, maps, lower thirds and effects written for your video. No template library.</p><q>Draw our route on a map.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="palette"></span><h3>Looks and color</h3><p>Match two cameras, set a mood, or go full 90s camcorder.</p><q>Make the drone shots match my phone.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="zoom"></span><h3>Finds any moment</h3><p>It watches every shot and hears every word, so you can point at things the way you'd say them.</p><q>Use the part where she laughs.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="star"></span><h3>Creator styles</h3><p>Type @ and a YouTube channel. Gumbo studies its pacing, captions and music, and edits yours that way.</p><q>Edit it like my favorite vlogger.</q></article>
+    <article class="fcard reveal"><span class="fi" data-i="layers"></span><h3>A real timeline</h3><p>Every change is a block you can drag, trim or undo, with a full manual editor when you want the knife.</p><q>Keep the cuts, undo the music.</q></article>
+   </div>
+   <div class="fstrip reveal">
+    <span><i data-i="phone"></i>Vertical, square or wide</span><span><i data-i="film"></i>Export up to 4K</span><span><i data-i="screen"></i>Runs in your browser</span><span><i data-i="lock"></i>Footage stays on your computer</span>
+   </div>
+  </section>
+
+  <section class="uses" id="use-cases">
+   <div class="center reveal">
+    <span class="eyebrow">Use cases</span>
+    <h2 class="h2" style="margin-top:18px">Whatever you make, <em>ask for it.</em></h2>
+    <p class="lead">Pick what you make and see what you'd type, and what Gumbo hands back.</p>
+   </div>
+   <div class="uc reveal" id="uc">
+    <div class="uc-tabs" role="tablist" aria-label="Use cases" id="ucTabs"></div>
+    <div class="uc-stage" role="tabpanel" id="ucStage" aria-live="polite"></div>
+   </div>
+  </section>
+ </div>
+
+ <div class="wrap">
   <section class="making" id="making">
    <div class="center reveal">
     <span class="eyebrow">Behind the Short</span>
@@ -960,17 +1075,54 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
     <g transform="translate(232 18)" stroke="#2A1A12" stroke-width="2" stroke-linecap="round"><path d="M0 -10v6M0 4v6M-10 0h6M4 0h6"/></g>
     <text x="96" y="22" font-family="Figtree,sans-serif" font-size="11" font-weight="600" fill="#6B5446">stills + words</text>
    </svg></div>
-   <div class="seals"><span class="seal"><i data-i="screen"></i>Edits on your PC</span><span class="seal"><i data-i="lock"></i>Originals stay put</span><span class="seal"><i data-i="trash"></i>Delete any time</span></div>
+   <div class="seals"><span class="seal"><i data-i="screen"></i>Edits in your browser</span><span class="seal"><i data-i="lock"></i>Originals stay put</span><span class="seal"><i data-i="trash"></i>Delete any time</span></div>
   </section>
   <div class="perks reveal">
    <h3>Be one of the <em>first to ask.</em></h3>
    <ul>
     <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg><span><strong>A direct line to the kitchen.</strong> Talk to the people building Gumbo, not a help desk.</span></li>
     <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span><strong>Stump it.</strong> The requests it gets wrong are the ones we fix first.</span></li>
-    <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><strong>First in line.</strong> New features, and Mac when it's ready, reach you first.</span></li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="#FFD5BC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><strong>First in line.</strong> New features reach you first, and Safari and Firefox when they're ready.</span></li>
    </ul>
-   <a class="btn" href="#make" id="seat">Save my seat</a>
+   <a class="btn" href="#make" id="seat">Ask for my first edit</a>
   </div>
+ </div>
+
+ <div class="wrap">
+  <section class="pricing" id="pricing">
+   <div class="center reveal">
+    <span class="eyebrow">Pricing</span>
+    <h2 class="h2" style="margin-top:18px">Start free. <em>Pay for the AI only.</em></h2>
+    <p class="lead">Editing by hand, playback and export are always free. Credits pay for the AI's work on your requests.</p>
+   </div>
+   <div class="beta-note reveal"><i data-i="spark"></i><span><strong>Free during the beta.</strong> Every account gets free credits each month while Gumbo is in beta. Paid plans open soon, at these prices.</span></div>
+   <div class="plans reveal">
+    <article class="plan">
+     <div class="plan-head"><h3>Free</h3></div><small>To try Gumbo</small>
+     <div class="price">$0<span>/month</span></div>
+     <ul><li><i data-i="check"></i><span><b>20 credits</b> a month, about five AI edits</span></li><li><i data-i="check"></i><span>Unlimited editing by hand</span></li><li><i data-i="check"></i><span>Export up to 4K</span></li><li><i data-i="check"></i><span>10 creator searches a month</span></li></ul>
+     <a class="btn ghost" href="/app/">Open Gumbo</a>
+    </article>
+    <article class="plan">
+     <div class="plan-head"><h3>Pro</h3></div><small>For regular videos</small>
+     <div class="price">$25<span>/month</span></div>
+     <ul><li><i data-i="check"></i><span><b>1,250 credits</b> a month, over 60x Free</span></li><li><i data-i="check"></i><span>200 creator searches a month</span></li><li><i data-i="check"></i><span>Remembers your style across 6 projects</span></li><li><i data-i="check"></i><span>Extra credits any time</span></li><li><i data-i="check"></i><span>Change or cancel any time</span></li></ul>
+     <a class="btn" href="/app/">Start free</a><span class="soon">Paid plans open after the beta</span>
+    </article>
+    <article class="plan featured" id="maxPlan">
+     <span class="tag">Most popular</span>
+     <div class="plan-head"><h3>Max</h3><div class="size" role="radiogroup" aria-label="Max size"><button type="button" role="radio" aria-checked="true" data-size="max">5x</button><button type="button" role="radio" aria-checked="false" data-size="max20">20x</button></div></div><small>For weekly creators and studios</small>
+     <div class="price"><span class="amt" style="font:inherit;color:inherit;letter-spacing:inherit">$100</span><span>/month</span></div>
+     <ul><li><i data-i="check"></i><span><b class="cr">4,500 credits</b> a month, <span class="x">3.6x</span> Pro</span></li><li><i data-i="check"></i><span><span class="cs">1,000</span> creator searches a month</span></li><li><i data-i="check"></i><span class="mem">Remembers your style across 20 projects</span></li><li><i data-i="check"></i><span>Extra credits any time</span></li><li><i data-i="check"></i><span>Change or cancel any time</span></li></ul>
+     <a class="btn" href="/app/">Start free</a><span class="soon">Paid plans open after the beta</span>
+    </article>
+   </div>
+   <div class="price-foot reveal">
+    <div><strong>What's a credit?</strong>One credit is a cent of AI work. A quick fix uses a little, a whole edit from raw footage uses more.</div>
+    <div><strong>Need a few more?</strong>500 credits for $10 on any plan. They never expire.</div>
+    <div><strong>No surprises.</strong>Gumbo shows what every request used, and a free account is never charged.</div>
+   </div>
+  </section>
  </div>
 
  <section class="faq" id="faq"><div class="wrap">
@@ -985,7 +1137,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
  <section class="make" id="make"><div class="wrap make-grid">
   <div class="reveal">
    <h2>What will you <em>ask for first?</em></h2>
-   <p class="lead">Type it here, and we'll send you an invite so you can ask Gumbo for real.</p>
+   <p class="lead">Type it here and Gumbo opens with it, ready to make it for real.</p>
    <div class="ask" data-ask>
     <form class="bar">
      <span class="plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
@@ -993,7 +1145,6 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
      <button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
     <div class="chips"><button type="button">Shorts from my podcast</button><button type="button">A recap of my trip</button><button type="button">A 90s camcorder look</button></div>
-    <div class="reply" role="status"></div>
    </div>
   </div>
  </div></section>
@@ -1260,34 +1411,83 @@ const orders=[
  whenSeen(line,type,.2);
 })();
 
-// The prompt bars: type an edit; Gumbo answers by asking where to send your invite.
-// No server: the invite request opens an email with the request and address filled in.
-const WAITLIST='https://qewguvfkkwvdoqptiljd.supabase.co/functions/v1/dream-gateway/waitlist-join';
+// The prompt bars: type an edit and Gumbo opens with it (/app/?ask=…). The app keeps it through its onboarding and
+// sign-in, then puts it in its box, ready to send.
 const ideas=['Cut every um…','Draw our route on a map…','Make it feel like the 90s…','Three Shorts from my talk…','Make the logo smaller…','Make it better…'];
+const openWith=idea=>{location.href='/app/?ask='+encodeURIComponent(idea.slice(0,2000));};
 document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
- const form=ask.querySelector('form'),box=ask.querySelector('textarea'),reply=ask.querySelector('.reply');
+ const form=ask.querySelector('form'),box=ask.querySelector('textarea');
  const grow=()=>{box.style.height='40px';box.style.height=Math.min(box.scrollHeight,140)+'px';};
  box.addEventListener('input',grow);
  box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
  ask.querySelectorAll('.chips button').forEach(b=>b.addEventListener('click',()=>{box.value=b.textContent;grow();box.focus();}));
  if(n===0&&!calm){let i=0;setInterval(()=>{if(document.activeElement!==box&&!box.value){i=(i+1)%ideas.length;box.placeholder=ideas[i];}},3000);box.placeholder=ideas[0];}
  form.addEventListener('submit',e=>{e.preventDefault();const idea=box.value.trim();if(!idea){box.focus();return;}
-  reply.innerHTML='';const p=document.createElement('p');p.innerHTML='Gumbo can take that order. Leave your email and open the free beta to ask for <strong></strong> yourself.';
-  p.querySelector('strong').textContent='“'+idea.replace(/[.…\s]+$/,'')+'”';
-  // Signs up (the gateway's waitlist-join keeps the email and this first request), then opens the way into Gumbo at once:
-  // the beta is open and runs in the browser, so the moment someone is keen is the moment they are in. The hidden website field is left
-  // empty by people and filled by bots, which the gateway then ignores.
-  const f=document.createElement('form');f.innerHTML='<input type="email" required placeholder="you@example.com" aria-label="Your email" autocomplete="email"><input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0"><button class="btn" type="submit">Get Gumbo</button>';
-  const note=document.createElement('small');note.textContent='Free beta in your browser. No spam.';
-  f.addEventListener('submit',async ev=>{ev.preventDefault();const email=f.querySelector('input[type=email]').value.trim(),button=f.querySelector('button');
-   button.disabled=true;note.textContent='One moment…';
-   try{const response=await fetch(WAITLIST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,firstAsk:idea,source:n===0?'top':'bottom',website:f.querySelector('[name=website]').value}),credentials:'omit'});
-    const body=await response.json().catch(()=>({}));if(!response.ok)throw new Error(body.error||'Something went wrong. Try again in a moment.');
-    const get=document.createElement('a');get.className='btn';get.href='/app/';get.textContent='Open Gumbo';
-    f.replaceWith(get);note.textContent='You\'re in! Open Gumbo and sign in with '+email+' to use the AI. You get free credits every month.';note.classList.add('done');}
-   catch(error){button.disabled=false;note.textContent=error.message;}});
-  reply.append(p,f,note);reply.classList.add('on');f.querySelector('input').focus();});
+  form.querySelector('.send').classList.add('press');openWith(idea);});
 });
+
+// Use cases: one tab per kind of video, each with what you'd type and what Gumbo hands back. They take turns until
+// someone picks one; their example requests open Gumbo with that request.
+(function useCases(){
+ const cases=[
+  {id:'youtube',icon:'film',name:'YouTubers',sub:'Long videos, cut tight',title:'Weekly uploads, without the weekend lost.',
+   text:'Drop in the raw recording and say what it should feel like. Gumbo cuts the rambles, adds chapters and B-roll, and leaves every cut on your timeline.',
+   you:'Tighten my 20-minute video. Cut the rambles, add a title for each chapter and B-roll where I mention places.',
+   reply:'Done. It runs 14:52 now, down from 20:14.',chg:['41 rambles and retakes cut','6 chapter titles','B-roll on 12 mentions'],
+   asks:['Punch in on every joke','Captions for the whole thing','A faster first 30 seconds']},
+  {id:'podcast',icon:'mic',name:'Podcasts and talks',sub:'Clips from long recordings',title:'One long talk. A week of Shorts.',
+   text:'Gumbo listens to the whole recording, finds the moments worth sharing, and turns them into vertical clips with captions.',
+   you:'Find the three best moments and make Shorts with captions.',
+   reply:'Here are three Shorts, 30 to 55 seconds each.',chg:['3 vertical Shorts','Captions, word by word','Ums and pauses out'],
+   asks:['Cut every um','Level both mics','A title card with the guest\'s name']},
+  {id:'travel',icon:'pin',name:'Travel and vlogs',sub:'Trips into stories',title:'Hundreds of clips. One recap worth watching.',
+   text:'Gumbo watches every clip, picks the best shots and cuts them to music, maps and titles included.',
+   you:'Make a 40-second recap of my trip, cut to the music.',
+   reply:'A 40-second vertical recap: 25 shots on the beat and an original score.',chg:['Route map, Hà Nội to Hạ Long','Original score','A title for each city'],
+   asks:['Draw our route on a map','Make it feel like the 90s','Slow motion on the best shot']},
+  {id:'business',icon:'tag',name:'Small business',sub:'Ads and product videos',title:'Your product, in an ad by lunch.',
+   text:'Turn a phone clip into an ad with your price, your logo and a reason to tap. Then ask for every size you post.',
+   you:'Turn this product clip into a 15-second ad with the price and our logo.',
+   reply:'A 15-second ad with a price tag, your logo and an end card.',chg:['Price tag on the hero shot','Logo, bottom right','"Shop now" end card'],
+   asks:['Make the logo smaller','A countdown to the sale','A square one for Instagram']},
+  {id:'teach',icon:'type',name:'Teachers and courses',sub:'Lessons people finish',title:'Lessons that get to the point.',
+   text:'Gumbo removes the false starts, labels each step and puts captions under everything, so a recording becomes a lesson.',
+   you:'Clean up my lesson recording and label each step.',
+   reply:'Pauses and false starts are out, and each of the 7 steps has a label.',chg:['Pauses and false starts cut','7 step labels','Captions throughout'],
+   asks:['Zoom in when I point at the slide','A chapter list at the start','Make it under 10 minutes']}];
+ const root=document.getElementById('uc'),tabs=document.getElementById('ucTabs'),stage=document.getElementById('ucStage');if(!root)return;
+ let current=0,timer=null,touched=false;const ms=7000;root.style.setProperty('--uc-time',ms+'ms');
+ const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!=null)n.textContent=text;return n;};
+ cases.forEach((c,i)=>{const b=el('button','uc-tab');b.type='button';b.setAttribute('role','tab');b.id='uc-'+c.id;b.setAttribute('aria-controls','ucStage');
+  const ic=el('i');ic.innerHTML=icon(c.icon);const t=el('span');t.append(c.name,el('small',null,c.sub));b.append(ic,t,el('span','timer'));
+  b.addEventListener('click',()=>{touched=true;root.classList.add('paused');show(i);});tabs.appendChild(b);});
+ function show(i){
+  current=i;const c=cases[i];[...tabs.children].forEach((b,j)=>{b.setAttribute('aria-selected',String(j===i));b.tabIndex=j===i?0:-1;});
+  stage.setAttribute('aria-labelledby','uc-'+c.id);stage.replaceChildren();
+  const win=el('div','uc-win uc-pane'),top=el('div','uc-top');top.append(el('i'),el('i'),el('i'),el('span',null,c.name));
+  const chat=el('div','uc-chat'),you=el('div','uc-you',c.you),g=el('div','uc-gumbo');g.append(el('b',null,'Gumbo'),c.reply);
+  const chg=el('div','uc-chg');c.chg.forEach(x=>chg.appendChild(el('span',null,x)));g.appendChild(chg);chat.append(you,g);const input=el('div','uc-input');input.append(el('span',null,'Ask for a change…'));const send=el('span','send');send.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';input.appendChild(send);win.append(top,chat,input);
+  const side=el('div','uc-side uc-pane');side.append(el('h3',null,c.title),el('p',null,c.text),el('h4',null,'Or ask'));
+  const asks=el('div','uc-asks');c.asks.forEach(a=>{const b=el('button',null,a);b.type='button';b.addEventListener('click',()=>openWith(a));asks.appendChild(b);});
+  const go=el('a','btn','Try it on your footage');go.href='/app/';side.append(asks,go);
+  stage.append(win,side);
+  clearTimeout(timer);if(!touched&&!calm)timer=setTimeout(()=>show((current+1)%cases.length),ms);
+ }
+ tabs.addEventListener('keydown',e=>{if(!['ArrowRight','ArrowDown','ArrowLeft','ArrowUp'].includes(e.key))return;e.preventDefault();touched=true;root.classList.add('paused');
+  const next=(current+(e.key==='ArrowRight'||e.key==='ArrowDown'?1:cases.length-1))%cases.length;show(next);tabs.children[next].focus();});
+ if(calm)root.classList.add('paused');
+ // The rotation starts when the section is in view, so the first case is the one people see first.
+ show(0);clearTimeout(timer);whenSeen(root,()=>{if(!touched&&!calm)timer=setTimeout(()=>show(1),ms);},.4);
+})();
+
+// Pricing: Max comes in two sizes, as in the app.
+(function maxSize(){
+ const plan=document.getElementById('maxPlan');if(!plan)return;
+ const sizes={max:{amt:'$100',cr:'4,500 credits',x:'3.6x',cs:'1,000',mem:'Remembers your style across 20 projects'},max20:{amt:'$200',cr:'18,000 credits',x:'14x',cs:'5,000',mem:'Remembers your style across all your projects'}};
+ plan.querySelectorAll('[data-size]').forEach(b=>b.addEventListener('click',()=>{const v=sizes[b.dataset.size];
+  plan.querySelectorAll('[data-size]').forEach(o=>o.setAttribute('aria-checked',String(o===b)));
+  for(const k of Object.keys(v))plan.querySelector('.'+k).textContent=v[k];}));
+})();
 
 // What to ask: each request types itself in when its card comes on screen.
 document.querySelectorAll('[data-type]').forEach(h=>{
@@ -1325,11 +1525,11 @@ document.getElementById('seat').addEventListener('click',e=>{e.preventDefault();
 const faqs=[
  ['Is there anything it can\'t do?','It works with your footage plus whatever it can build or find: titles, graphics, effects, music and free-to-use stock. It can\'t film shots you don\'t have. Bigger requests take a few minutes instead of seconds, and if something can\'t be done, it tells you.'],
  ['Do I need to learn how to prompt?','No. Type it the way you\'d text a friend who edits. Short, long, vague or oddly specific all work, and you can point at things the way you\'d describe them, like "the bit where she laughs".'],
- ['Does Gumbo upload my videos?','No. Your projects and original files stay on your computer. To edit, Gumbo sends the AI the text it needs, like transcripts and timeline details, plus still frames from your project. A finished video is only uploaded if you choose Share.'],
+ ['Does Gumbo upload my videos?','No. Your projects and original files stay on your computer, in your browser\'s own storage. To edit, Gumbo sends the AI the text it needs, like transcripts and timeline details, plus still frames from your project. A finished video is only uploaded if you choose Share.'],
  ['Can I still edit by hand?','Always. Every change lands on a real timeline you can drag, trim and undo, and there is a full manual editor when you want to take the knife yourself.'],
  ['Where does the music come from?','Gumbo composes an original score for your cut, or finds free-to-use tracks from libraries like Freesound and Jamendo.'],
  ['Does it work on Mac?','Yes. Gumbo runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Safari and Firefox are on the stove.'],
- ['How do I get in?','The beta is open. Type what you\'d ask for first, leave your email, and open Gumbo right in your browser. Sign in with the same email to use the AI.']];
+ ['How do I get in?','The beta is open. Type what you\'d ask for first and Gumbo opens in your browser with it. Sign in with Google or your email to use the AI.']];
 const qs=document.getElementById('qs'),asked=document.getElementById('asked'),answer=document.getElementById('answer');
 const pick=i=>{[...qs.children].forEach((b,j)=>b.classList.toggle('on',j===i));asked.textContent=faqs[i][0];answer.textContent=faqs[i][1];};
 faqs.forEach(([q],i)=>{const b=document.createElement('button');b.className='q';b.type='button';b.textContent=q;b.addEventListener('click',()=>pick(i));qs.appendChild(b);});pick(0);
