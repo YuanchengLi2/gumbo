@@ -84,7 +84,7 @@ def web():
             raise HTTPException(403, str(error))
         began = time.time()
         parts = chunks(frames)
-        videos = list(render_chunk.starmap([(job, start, end) for start, end in parts]))
+        videos = [video async for video in render_chunk.starmap.aio([(job, start, end) for start, end in parts])]
         print(f"{account}: {frames} frames at {job.get('width')}x{job.get('height')} in {len(parts)} chunks, {time.time() - began:.1f}s")
         return {"fps": job["fps"], "chunks": [{"start": start, "end": end, "webm": base64.b64encode(video).decode()} for (start, end), video in zip(parts, videos)]}
 

@@ -21,6 +21,8 @@ const ffmpegPath=process.env.FFMPEG??(()=>{try{return createRequire(import.meta.
 
 const browser=await chromium.launch({channel:process.env.SCENE_BROWSER_CHANNEL||undefined,args:['--disable-gpu-vsync','--force-color-profile=srgb','--hide-scrollbars']});
 const encoder=spawn(ffmpegPath,['-v','error','-y','-f','image2pipe','-framerate',String(fps),'-c:v','png','-i','-',
+ // BT.709, said in the file: the export reads it back that way (untagged, it was converted as BT.601 and colours shifted).
+ '-vf','scale=out_color_matrix=bt709:out_range=tv','-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709','-color_range','tv',
  '-c:v','libvpx-vp9','-pix_fmt','yuva420p','-b:v','0','-crf','24','-deadline','realtime','-cpu-used','8','-row-mt','1','-auto-alt-ref','0','-an',outPath],{stdio:['pipe','inherit','inherit']});
 const encoded=new Promise((resolve,reject)=>{encoder.on('error',reject);encoder.on('exit',code=>code===0?resolve():reject(new Error(`ffmpeg exited ${code}`)));});
 const write=data=>new Promise((resolve,reject)=>encoder.stdin.write(data,error=>error?reject(error):resolve()));
