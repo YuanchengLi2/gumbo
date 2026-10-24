@@ -66,6 +66,10 @@ test('import, edit, play and export in the browser, kept across a reload',async(
   const tiny=(file:string)=>execFileSync(ffmpeg!,['-v','error','-ss','3','-i',file,'-frames:v','1','-vf','scale=32:18','-f','rawvideo','-pix_fmt','rgb24','-']);
   const a=tiny(saved),b=tiny(fixture);let difference=0;for(let i=0;i<a.length;i++)difference+=Math.abs(a[i]-b[i]);
   expect(difference/a.length).toBeLessThan(12);
+  // Signed out exports carry the free plan's "Edited with Gumbo" in the bottom-right corner over the last seconds only.
+  const corner=(file:string,at:number)=>execFileSync(ffmpeg!,['-v','error','-ss',String(at),'-i',file,'-frames:v','1','-vf','crop=iw*0.2:ih*0.07:iw*0.8:ih*0.91,scale=96:16','-f','rawvideo','-pix_fmt','rgb24','-']);
+  const changed=(at:number)=>{const x=corner(saved,at),y=corner(fixture,at);let d=0;for(let i=0;i<x.length;i++)d+=Math.abs(x[i]-y[i]);return d/x.length;};
+  expect(changed(2)).toBeLessThan(6);expect(changed(5.8)).toBeGreaterThan(8);
   const log=spawnSync(ffmpeg!,['-hide_banner','-nostats','-i',saved,'-af','ebur128=peak=true','-f','null','-']).stderr.toString();
   const loudness=Number(/I:\s*(-?[\d.]+) LUFS/.exec(log.slice(log.lastIndexOf('Summary:')))?.[1]);
   expect(loudness).toBeGreaterThan(-15.5);expect(loudness).toBeLessThan(-12.5);

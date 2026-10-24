@@ -5,6 +5,11 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-24 · Free plan videos end with "Edited with Gumbo"
+Videos exported on the free plan now show a small "Edited with Gumbo" in the bottom-right corner for their last couple
+of seconds. It fades in and stays out of the way of your edit. Paid plans export without it. The export window says
+when your video will have it.
+
 ## 2026-10-24 · Community: what's new, a board for ideas, and replies
 There's a new Community page at usegumbo.app/community. It shows everything that changes in Gumbo, and has a board
 where you can post an idea, a bug or a question, reply to other people, and upvote what you'd like next. You'll see

@@ -5,6 +5,8 @@ import type {ProjectState} from '@dream/project-db';
 import type {ExportProgress} from '@dream/contracts';
 import {X,FolderOpen,Check,Film,Share2,Play,Pause,Download} from 'lucide-react';
 import {onWeb,folderLabel,canPickFolders} from '../../platform';
+import {useAccount} from '../../account';
+import {watermarked} from '../../engine/watermark';
 
 export type ExportChoices={name:string;folder:string;video:boolean;resolution:'source'|'480'|'720'|'1080'|'1440'|'2160';quality:'lower'|'recommended'|'higher';codec:'h264'|'hevc';format:'mp4'|'mov';fps:'source'|24|25|30|50|60;audio:boolean;audioFormat:'mp3'|'wav'|'aac'};
 const resolutions=[['480','480p'],['720','720p'],['1080','1080p'],['1440','2K'],['2160','4K']] as const;
@@ -19,7 +21,7 @@ const remembered=():Partial<ExportChoices>=>{try{return JSON.parse(localStorage.
  * time); the name, folder, video and audio settings on the right; the length and an estimated size beside Export.
  * Progress shows over the video, then where the files went. Playback pauses while exporting, which draws in this window. */
 export function ExportDialog(p:{project:ProjectState;frame:number;progress:ExportProgress|null;onClose:()=>void;onExport:(choices:ExportChoices)=>void;onCancel:()=>void;onTimeline:()=>void;onShare:()=>void}){
- const t=p.project.timeline,{width,height,fps}=t.settings,short=Math.min(width,height),duration=resolve(t,p.project.footage).durationSec;
+ const account=useAccount(),t=p.project.timeline,{width,height,fps}=t.settings,short=Math.min(width,height),duration=resolve(t,p.project.footage).durationSec;
  const [c,setC]=useState<ExportChoices>(()=>({name:p.project.meta.name,folder:p.project.meta.folder.replace(/[\\/]+$/,'')+(p.project.meta.folder.includes('\\')?'\\':'/')+'Exports',video:true,resolution:'source',quality:'recommended',codec:'h264',format:'mp4',fps:'source',audio:false,audioFormat:'mp3',...remembered()}));
  const set=(patch:Partial<ExportChoices>)=>setC(old=>{const next={...old,...patch};try{const {name,folder,...kept}=next;localStorage.setItem('dream-export',JSON.stringify(kept));}catch{}return next;});
  const target=c.resolution==='source'?short:Math.min(short,Number(c.resolution)),outW=Math.round(width*target/short/2)*2,outH=Math.round(height*target/short/2)*2,outFps=c.fps==='source'?fps:c.fps;
@@ -62,6 +64,7 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
     </div>
     {/* On the web the footage lives in the browser's own storage, where Premiere or Resolve can't find it. */}
     {!onWeb()&&<button type="button" className="export-xml" disabled={running} onClick={p.onTimeline}>Editable timeline for Premiere or Resolve (XML)</button>}
+    {c.video&&watermarked(account?.plan)&&<p className="export-note">Free plan videos end with a small "Edited with Gumbo" in the corner.</p>}
    </div>
   </div>
   <footer className="export-foot">

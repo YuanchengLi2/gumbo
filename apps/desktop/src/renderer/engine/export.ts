@@ -6,6 +6,7 @@ import type {TimelineDocument} from '@dream/timeline';
 import type {FootageIndex,Asset} from '@dream/footage';
 import {previewUrl} from './player';
 import {SceneCaptures} from './scenes';
+import {watermarkLayer} from './watermark';
 
 /** Export, as CapCut does it: each output frame is drawn by the same compositor the player uses, from source frames decoded
  * exactly (WebCodecs, on the graphics card), and encoded by the graphics card's H.264 or HEVC encoder straight from the
@@ -17,7 +18,9 @@ export type VideoJob={timeline:TimelineDocument;footage:FootageIndex;width:numbe
   * in parallel (export-segments.ts). */
  frames?:{start:number;end:number};
  /** Scenes already drawn in the cloud, shared by an export's segments; asked for here when not given. */
- cloudScenes?:Map<string,CloudScene>};
+ cloudScenes?:Map<string,CloudScene>;
+ /** The free plan's "Edited with Gumbo" over the last seconds (watermark.ts). */
+ watermark?:boolean};
 
 // Bits per pixel each frame for each bit rate choice (HEVC needs about 40% less), the same figures the window estimates with.
 const BPP={lower:.05,recommended:.1,higher:.16};
@@ -98,6 +101,7 @@ export async function renderVideo(job:VideoJob):Promise<RenderTiming>{
   let told=0;const first=Math.max(0,Math.min(total-1,job.frames?.start??0)),last=Math.max(first+1,Math.min(total,job.frames?.end??total));
   for(let n=first;n<last;n++){
    job.signal.throwIfAborted();const time=n/job.fps,frame=frameAt(p,time),pictures=new Map<MediaLayer,Picture>();
+   if(job.watermark){const mark=watermarkLayer(time,p.resolved.durationSec,frame.width,frame.height);if(mark)frame.layers.push(mark);}
    for(const layer of frame.layers){if(layer.kind!=='media')continue;const asset=p.assets.get(layer.assetId);if(!asset)continue;const at=performance.now();
     if(layer.media==='video'){let entry=readers.get(layer.key);
      if(!entry){const s=await sink(asset)??await playbackSink(asset);if(!s)throw new Error(`${asset.filename} has no video this computer can decode.`);entry={reader:new Reader(s),last:n};readers.set(layer.key,entry);}
