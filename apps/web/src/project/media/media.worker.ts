@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import '@renderer/engine/decoder-fix';
 import {runProgram} from './programs';
 
 /** The media worker: runs the ffmpeg and ffprobe commands the project service spawns (programs.ts) and streams their

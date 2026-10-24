@@ -103,7 +103,7 @@
 .ai-stage .manual-timeline-scroll::-webkit-scrollbar{width:8px;height:6px}
 .ai-stage .manual-timeline-scroll::-webkit-scrollbar-thumb{background:var(--n11);border-radius:4px}
 .ai-stage .manual-timeline-scroll::-webkit-scrollbar-track{background:transparent}
-.ai-stage .manual-ruler{background:var(--n0);border-bottom:0}
+.ai-stage .manual-ruler,.ai-stage .manual-ruler-corner{background:var(--n0);border-bottom:0}
 .ai-stage .manual-ruler>span{border-left-color:var(--n13);color:var(--n34);font-size:10px}
 /* Tracks: no lines between them; the lane is the background. */
 .ai-stage .manual-track{border-bottom:0}

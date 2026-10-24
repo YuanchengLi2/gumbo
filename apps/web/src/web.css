@@ -11,6 +11,9 @@ body:has(.web-unsupported){background:#111}
 .web-folder.add:hover{border-style:solid}
 .web-folders.in-menu{margin:2px 8px 6px 31px}
 
+/* A tab has no window buttons: the project's header drops the room the desktop app keeps above it for them. */
+.platform-web .workspace-header{height:60px;min-height:60px;padding-top:0}
+
 /* Phones (Android Chrome): the project stacks instead of sitting side by side. The picture on top, the chat or media
    below it at full width, and a header with icons only. */
 @media (max-width:700px){
@@ -19,9 +22,22 @@ body:has(.web-unsupported){background:#111}
  .platform-web .layout-switch button{font-size:0;gap:0;padding:0 11px}
  .platform-web .workspace-header .button.primary{font-size:0;gap:0;padding:0 12px}
  .platform-web .workspace-header .icon-button:has(.lucide-undo2,.lucide-redo2){display:none}
+ /* The switch sits in the row after the name instead of over it, centred on the window. */
+ .platform-web .layout-switch{position:static;transform:none;flex:none}
  .platform-web .ai-workspace{display:flex;flex-direction:column}
  .platform-web .ai-workspace>*:not(.sidebar):not(.ai-stage){display:none}
- .platform-web .ai-workspace>.ai-stage{order:-1;flex:none;height:min(44vh,360px);padding:10px 10px 6px;gap:8px}
+ .platform-web .ai-workspace>.ai-stage:not(.editor-layout){order:-1;flex:none;height:min(44vh,360px);padding:10px 10px 6px;gap:8px}
+ /* The editor: the picture on top, then the tools (their tabs in a row) and the selected item's settings, over the
+    timeline. The panels can't be resized by dragging here. */
+ .platform-web .ai-workspace>.editor-layout{flex:1;min-height:0}
+ .platform-web .editor-layout .editor-top.with-properties{display:flex;flex-direction:column}
+ .platform-web .editor-layout .editor-resizer,.platform-web .editor-layout>.timeline-resizer{display:none}
+ .platform-web .editor-layout .editor-preview{order:-1;flex:none;height:min(34vh,280px);display:flex;flex-direction:column}
+ .platform-web .editor-layout .editor-preview>.project-player{padding:8px 10px 4px}
+ .platform-web .editor-layout .editor-assets{flex:3 1 0;min-height:0;flex-direction:column;border-top:1px solid var(--n7)}
+ .platform-web .editor-layout .editor-rail{width:auto;flex-direction:row;padding:4px 6px;overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--n5)}
+ .platform-web .editor-layout .editor-properties{flex:2 1 0;min-height:0;border-top:1px solid var(--n7)}
+ .platform-web .editor-layout>.manual-timeline{flex-basis:26%}
  .platform-web .ai-workspace>.sidebar{flex:1;min-height:0;width:auto;padding:0 12px 10px;border-top:1px solid var(--n7)}
  .platform-web .dialog-actions{flex-wrap:wrap;justify-content:flex-end}
  /* Home: the sidebar becomes a bar along the top, with Gumbo, New video and the account; the project lists are on the page. */

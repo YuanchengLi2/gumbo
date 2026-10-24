@@ -1,3 +1,4 @@
+import './decoder-fix';
 import {Input,UrlSource,ALL_FORMATS,VideoSampleSink} from 'mediabunny';
 import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';
 import type {TimelineDocument} from '@dream/timeline';

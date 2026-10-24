@@ -33,6 +33,7 @@ import {OnboardingLayer} from './components/onboarding/Onboarding';
 import {FileAccessPanel} from './components/files/FileAccessPanel';
 import {SignInDialog} from './components/account/SignInDialog';
 import {requireSignIn} from './account';
+import {homePaths as storedHomePaths,keepHomePaths} from './first-ask';
 
 
 
@@ -48,8 +49,10 @@ function LayoutSwitch({locked}:{locked:boolean}){const layout=useEditor(s=>locke
   return <button key={id} type="button" role="radio" aria-checked={layout===id} aria-disabled={closed||undefined} title={closed?'The editor opens when Gumbo finishes editing':undefined} onClick={()=>{if(!closed)choose(id);}}>
    {id==='gumbo'?<span className="layout-switch-mark"><GumboMark/></span>:closed?<Lock size={14}/>:<Scissors size={14}/>}{id==='gumbo'?'Gumbo':'Editor'}</button>;})}</div>;}
 
-export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),setInput=setDraft,[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>([]),[homeIncoming,setHomeIncoming]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
+export function App(){const s=useProjectSession(),player=useRef<PlayerRef>(null),exportAbort=useRef<AbortController|null>(null),[dialog,setDialog]=useState<'export'|'share'|null>(null),[files,setFiles]=useState(false),setInput=setDraft,[homeInput,setHomeInput]=useState(''),[homePaths,setHomePaths]=useState<string[]>(storedHomePaths),[homeIncoming,setHomeIncoming]=useState<string[]>([]),[share,setShare]=useState<string|null>(null);
  const [signIn,setSignIn]=useState(false);
+ // The home box's files outlive the page: signing in on the web leaves it and comes back.
+ useEffect(()=>keepHomePaths(homePaths),[homePaths]);
  // Files chosen for the home box show there at once, while the web copies them in (media.incoming; ProjectMedia does the same).
  const route=useRef(s.route);route.current=s.route;
  useEffect(()=>window.dream.onEvent((event:any)=>{if(event.type!=='media.incoming'||route.current!=='home')return;setHomeIncoming(old=>event.payload?.failed?[]:[...old,...(event.payload?.files??[]).map((f:{name:string})=>f.name)]);}),[]);// A request picked in the onboarding or the welcome to a plan goes into the home screen's box.

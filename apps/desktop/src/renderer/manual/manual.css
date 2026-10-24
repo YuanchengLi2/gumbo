@@ -8,6 +8,8 @@
 .manual-timeline-scroll { flex:1; min-height:0; overflow:auto; position:relative; scrollbar-color:var(--n66) var(--editor-bg); scrollbar-width:thin; overscroll-behavior:contain}
 .manual-timeline-content { position:relative; min-width:100%; touch-action:none; user-select:none}
 .manual-ruler { position:sticky; top:0; margin-left:56px; left:auto!important; height:30px; background:var(--editor-panel); border-bottom:1px solid var(--editor-border); z-index:12; cursor:crosshair}
+/* The ruler row's corner over the track labels: scrolled sideways, the ruler and playhead go under it as the clips go under the labels. */
+.manual-ruler-corner { position:sticky; top:0; left:0; height:30px; margin-bottom:-30px; background:var(--editor-panel); border-bottom:1px solid var(--editor-border); z-index:17}
 .manual-ruler>span { position:absolute; font-size:10px; font-variant-numeric:tabular-nums; color:var(--editor-muted); top:7px; padding-left:4px; border-left:1px solid var(--n59); height:23px; white-space:nowrap}
 .manual-track { position:absolute; left:0; right:0; border-bottom:1px solid var(--editor-border)}
 .manual-track-label { position:sticky; left:0; height:100%; z-index:16; background:var(--editor-panel); border-right:1px solid var(--editor-border); display:flex; flex-direction:column; justify-content:center; gap:5px; padding:0 11px}

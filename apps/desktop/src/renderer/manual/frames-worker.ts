@@ -1,3 +1,4 @@
+import '../engine/decoder-fix';
 import {Input,UrlSource,ALL_FORMATS,CanvasSink} from 'mediabunny';
 
 /** Decodes the frames filmstrips and chat tiles show, off the window's thread: a frame is drawn on a canvas the graphics

@@ -1,3 +1,4 @@
+import './decoder-fix';
 import {Output,Mp4OutputFormat,MovOutputFormat,StreamTarget,CanvasSource,Input,UrlSource,ALL_FORMATS,VideoSampleSink,type VideoSample,type InputVideoTrack} from 'mediabunny';
 import {MEDIA} from '@dream/config';
 import {prepare,frameAt,Compositor,type MediaLayer,type Picture} from '@dream/compositor';

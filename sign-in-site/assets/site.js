@@ -49,14 +49,14 @@ const whenSeen=(node,fn,threshold=.3)=>{const ob=new IntersectionObserver(es=>{i
 const ideas=['Cut every um…','Draw our route on a map…','Make it feel like the 90s…','Three Shorts from my talk…','Make the logo smaller…','Make it better…'];
 const openWith=idea=>{location.href='/app/?ask='+encodeURIComponent(idea.slice(0,2000));};
 document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
- const form=ask.querySelector('form'),box=ask.querySelector('textarea');
+ const form=ask.querySelector('form'),box=ask.querySelector('textarea'),open=window.gumboAsk?.(ask)??openWith;
  const grow=()=>{box.style.height='40px';box.style.height=Math.min(box.scrollHeight,140)+'px';};
  box.addEventListener('input',grow);
  box.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit();}});
  ask.querySelectorAll('.chips button').forEach(b=>b.addEventListener('click',()=>{box.value=b.textContent;grow();box.focus();}));
  if(n===0&&!calm){let i=0;setInterval(()=>{if(document.activeElement!==box&&!box.value){i=(i+1)%ideas.length;box.placeholder=ideas[i];}},3000);box.placeholder=ideas[0];}
  form.addEventListener('submit',e=>{e.preventDefault();const idea=box.value.trim();if(!idea){box.focus();return;}
-  form.querySelector('.send').classList.add('press');openWith(idea);});
+  form.querySelector('.send').classList.add('press');void open(idea);});
 });
 
 // Videos on these pages play only while on screen, and wait for the page to settle before loading.
