@@ -37,6 +37,19 @@ test('the editing screen works on a phone, scrolled, and shows a clicked clip',a
  await page.locator(`[data-item-id="${second}"]`).dispatchEvent('pointerup',{button:0,bubbles:true});
  await expect(time).toHaveText('0:06 / 0:18',{timeout:5000});
 
+ // @ in the box: a piece of the timeline joins the selected items and the preview goes to it; media is attached, and
+ // neither leaves an @ in the message.
+ await page.getByRole('button',{name:'Clear selection'}).click();
+ await page.getByRole('button',{name:'Chat'}).first().click();
+ const ask=page.getByRole('textbox',{name:'Ask Gumbo to edit'});await ask.click();await ask.pressSequentially('make @');
+ const menu=page.getByRole('listbox',{name:'Mention'});await expect(menu.getByText('On the timeline')).toBeVisible();
+ await menu.getByRole('option',{name:/^Clip 3/}).click();
+ await expect(ask).toHaveValue('make ');await expect(time).toHaveText('0:12 / 0:18');
+ await expect(page.locator('[aria-label="Selected timeline items"]')).toContainText('source.mp4');
+ await ask.pressSequentially('@sour');await menu.getByRole('option',{name:/source\.mp4/}).filter({hasText:'Video'}).first().click();
+ await expect(ask).toHaveValue('make ');await expect(page.locator('.sidebar .attachment-list')).toContainText('source.mp4');
+ await shot(page,'mentions');
+
  // Scrolled sideways, the ruler goes under the labels' corner as the clips go under the labels.
  await page.locator('.manual-timeline-scroll').first().evaluate(el=>{el.scrollLeft=120;});await page.waitForTimeout(300);
  const corner=await box(page,'.manual-ruler-corner'),label=await box(page,'.manual-track-label');

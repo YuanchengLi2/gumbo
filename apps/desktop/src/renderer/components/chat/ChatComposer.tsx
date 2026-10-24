@@ -9,10 +9,10 @@ import {modelInfo,typicalCost,type ModelInfo} from '@dream/config';
 import {LabLogo} from './ModelLogos';
 import {GumboMark} from '../home/HomeScreen';
 import {useProviders,available,shortLabel,pickable,ROUX} from '../../models';
-import {useCreatorMentions} from './CreatorMentions';
+import {useCreatorMentions,type MentionPicks} from './CreatorMentions';
 import {stopGuard} from './stop-guard';
 export type Attachment={id:string;name:string;asset?:import('@dream/footage').Asset};
-type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode};
+type Props={value?:string;onChange?:(value:string)=>void;onSubmit:()=>void;onUpload:()=>void;onMedia?:()=>void;attachments:Attachment[];onRemove:(id:string)=>void;busy?:boolean;active?:boolean;onStop?:()=>void;home?:boolean;permission?:Permission;onPermission?:(value:Permission)=>void;model?:ModelChoice;onModel?:(value:ModelChoice)=>void;context?:React.ReactNode;picks?:MentionPicks};
 
 export const permissions:{id:Permission;label:string;short:string;detail:string;icon:React.ReactNode}[]=[
  {id:'auto',label:'Edit automatically',short:'Edit',detail:'Gumbo changes the project as it works. Changes to files on your computer still ask first.',icon:<PencilLine size={14}/>},
@@ -79,7 +79,7 @@ export function ModelMenu({value,onChange}:{value:ModelChoice;onChange:(value:Mo
 
 
 /** The value and onChange are the caller's when given; otherwise the box keeps the workspace draft (store/draft.ts). */
-export function ChatComposer(props:Props){const draft=useDraft(s=>props.value===undefined?s.text:''),p={...props,value:props.value??draft,onChange:props.onChange??setDraft};const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null),mentions=useCreatorMentions(textarea,p.value,p.onChange);
+export function ChatComposer(props:Props){const draft=useDraft(s=>props.value===undefined?s.text:''),p={...props,value:props.value??draft,onChange:props.onChange??setDraft};const [menu,setMenu]=useState(false),textarea=useRef<HTMLTextAreaElement>(null),mentions=useCreatorMentions(textarea,p.value,p.onChange,p.picks);
  // Send becomes Stop in the same place: a click in the very first moment after sending is the same click repeated, not a
  // decision to stop (stop-guard.ts). Any later click stops at once (it waited 1.5 s, so a quick Stop did nothing). The
  // moment is taken before the frame that shows Stop: a passive effect could run after a queued second click.
