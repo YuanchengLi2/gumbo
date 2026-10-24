@@ -35,7 +35,7 @@ export class Dirent{constructor(public name:string,private kind:string,public pa
 
 export function statSync(path:unknown,options?:{throwIfNoEntry?:boolean}):Stats|undefined{try{return new Stats(call({op:'stat',path:toPath(path)}).json);}catch(error){if(options?.throwIfNoEntry===false&&(error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}}
 export const lstatSync=statSync;
-export function existsSync(path:unknown){try{call({op:'stat',path:toPath(path)});return true;}catch{return false;}}
+export function existsSync(path:unknown){try{call({op:'stat',path:toPath(path),exists:true});return true;}catch{return false;}}
 export function accessSync(path:unknown){call({op:'stat',path:toPath(path)});}
 export function readdirSync(path:unknown,options?:{withFileTypes?:boolean}|string):any[]{const at=toPath(path),list=call({op:'readdir',path:at}).json as {name:string;kind:string}[];list.sort((a,b)=>a.name<b.name?-1:a.name>b.name?1:0);return typeof options==='object'&&options?.withFileTypes?list.map(e=>new Dirent(e.name,e.kind,at)):list.map(e=>e.name);}
 export function mkdirSync(path:unknown,options?:{recursive?:boolean}|number){return call({op:'mkdir',path:toPath(path),recursive:typeof options==='object'&&!!options?.recursive}).json??undefined;}

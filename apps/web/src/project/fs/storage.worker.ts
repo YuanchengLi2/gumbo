@@ -16,13 +16,20 @@ async function grantRoot(id:string):Promise<FileSystemDirectoryHandle>{const db=
  // it is refused as such, never shown as empty or missing.
  if(await (handle as any).queryPermission({mode:'readwrite'})!=='granted')throw new Failure('EACCES',`EACCES: permission denied, '/granted/${id}': the browser needs Gumbo allowed into this folder again. It asks the next time you send a message or export.`,'/granted/'+id);
  return handle;}finally{db.close();}}
+/** Folders in this site's storage already found, by path. Each step of a path is a separate lookup (about a millisecond),
+ * so every file call walked from the root again: a stat took about 7 ms and an edit in the hand editor, which checks its
+ * media's files each time, a third of a second. Removing or renaming forgets a folder and what is under it; a folder
+ * removed by another worker shows up as a failed call, which is tried once more from the root (handle, below). */
+const folders=new Map<string,FileSystemDirectoryHandle>();let fromCache=false;
+const forget=(path:string)=>{const key=parts(path).join('/');for(const k of [...folders.keys()])if(k===key||k.startsWith(key+'/'))folders.delete(k);};
 /** The directory holding a path's last part, and that part's name. */
 async function parent(path:string,create=false):Promise<[FileSystemDirectoryHandle,string]>{
  const list=parts(path);if(!list.length)throw new Failure('EISDIR','EISDIR: the root is a directory',path);
  let dir:FileSystemDirectoryHandle,start=0;
  if(list[0]==='granted'){if(list.length<2)throw new Failure('EISDIR','EISDIR: illegal operation on a directory',path);dir=await grantRoot(list[1]);start=2;if(list.length===2)throw new Failure('EISDIR','EISDIR: illegal operation on a directory',path);}
- else dir=await navigator.storage.getDirectory();
- for(const part of list.slice(start,-1)){try{dir=await dir.getDirectoryHandle(part,{create});}catch(error){throw (error as DOMException).name==='TypeMismatchError'?new Failure('ENOTDIR',`ENOTDIR: not a directory, '${path}'`,path):enoent(path);}}
+ else{const key=list.slice(0,-1).join('/'),known=folders.get(key);if(known){fromCache=true;return [known,list.at(-1)!];}dir=await navigator.storage.getDirectory();}
+ for(let n=start;n<list.length-1;n++){try{dir=await dir.getDirectoryHandle(list[n],{create});}catch(error){throw (error as DOMException).name==='TypeMismatchError'?new Failure('ENOTDIR',`ENOTDIR: not a directory, '${path}'`,path):enoent(path);}
+  if(start===0)folders.set(list.slice(0,n+1).join('/'),dir);}
  return [dir,list.at(-1)!];
 }
 async function directory(path:string,create=false):Promise<FileSystemDirectoryHandle>{
@@ -86,7 +93,9 @@ async function writeAt(path:string,position:number|null,data:Uint8Array){
 async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
  switch(request.op){
   case 'stat':{const holding=held.get(request.path);if(holding)return{json:{kind:'file',size:holding.access.getSize(),mtimeMs:holding.modified} satisfies FsStat};
-   const found=await entry(request.path);if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};const file=await found.getFile();return{json:{kind:'file',size:file.size,mtimeMs:file.lastModified} satisfies FsStat};}
+   const found=await entry(request.path);if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};
+   // Whether it exists is all existsSync asks: the file's size and time need it opened.
+   if(request.exists)return{json:{kind:'file',size:0,mtimeMs:0} satisfies FsStat};const file=await found.getFile();return{json:{kind:'file',size:file.size,mtimeMs:file.lastModified} satisfies FsStat};}
   case 'open':return{json:{fd:await open(request.path,request.flags)}};
   case 'pread':{const {path}=described(request.fd);return{json:{size:await sizeOf(path)},data:await readAt(path,request.position,request.length)};}
   case 'pwrite':{const d=described(request.fd);if(!d.write)throw new Failure('EBADF','EBADF: bad file descriptor, write');await writeAt(d.path,d.append?null:request.position,request.data);return{};}
@@ -130,6 +139,11 @@ function answer(status:0|1,json:unknown,data?:Uint8Array){
 }
 self.onmessage=async(event:MessageEvent)=>{
  if(event.data?.init){const shared=event.data.init as SharedArrayBuffer;ctl=new Int32Array(shared,0,4);bytes=new Uint8Array(shared);(self as unknown as Worker).postMessage({ready:true});return;}
- try{const result=await handle(event.data as FsOp);answer(0,result.json,result.data);}
+ const request=event.data as FsOp;
+ // What this call removes or renames is forgotten first. A call that creates or writes and failed through a remembered
+ // folder (which another worker may have removed) is tried once more from the root; a read that misses there is a miss.
+ if(request.op==='rm'||request.op==='unlink')forget(request.path);if(request.op==='rename'){forget(request.from);forget(request.to);}
+ const creates=['mkdir','write','open','copy','rename'].includes(request.op);
+ try{fromCache=false;let result;try{result=await handle(request);}catch(error){if(!fromCache||!creates)throw error;folders.clear();fromCache=false;result=await handle(request);}answer(0,result.json,result.data);}
  catch(error){const failure:FsError=error instanceof Failure?{code:error.code,message:error.message,path:error.path}:{code:'EIO',message:(error as Error)?.message??String(error)};answer(1,failure);}
 };

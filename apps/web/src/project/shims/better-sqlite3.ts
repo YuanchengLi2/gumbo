@@ -52,6 +52,13 @@ export default class Database{
   this.name=filename;this.readonly=!!options.readonly;
   if((options.readonly||options.fileMustExist)&&!pool.getFileNames().includes(filename))throw Object.assign(new Error(`unable to open database file: ${filename}`),{code:'SQLITE_CANTOPEN'});
   this.handle=new pool.OpfsSAHPoolDb(filename);void keepRoom();
+  // One worker owns the pool, so each database keeps its lock: SQLite then trusts its page cache instead of checking the
+  // file before every statement (a small read cost a millisecond, and an edit by hand made about a hundred), and can
+  // keep a write-ahead log without shared memory, so a commit appends once instead of journaling and rewriting pages.
+  // An edit by hand went from about 320 ms to under 100. A database opened only to read keeps the lock too, which a
+  // write-ahead database needs here.
+  this.handle.exec('PRAGMA locking_mode=EXCLUSIVE;');
+  if(!this.readonly&&this.handle.selectValue('PRAGMA journal_mode=WAL;')!=='wal')this.handle.exec('PRAGMA journal_mode=TRUNCATE;');
   this.handle.createFunction({name:'vec_distance_cosine',deterministic:true,xFunc:(_ctx:unknown,a:Uint8Array,b:Uint8Array)=>{
    const x=new Float32Array(a.slice().buffer),y=new Float32Array(b.slice().buffer);let dot=0,nx=0,ny=0;for(let i=0;i<Math.min(x.length,y.length);i++){dot+=x[i]*y[i];nx+=x[i]*x[i];ny+=y[i]*y[i];}return nx&&ny?1-dot/Math.sqrt(nx*ny):1;}});
  }
@@ -61,9 +68,8 @@ export default class Database{
  /** Whether a transaction is open, by SQLite's own account (a BEGIN run through exec counts, as in better-sqlite3). */
  get inTransaction(){return this.open&&capi.sqlite3_get_autocommit(this.handle.pointer)===0;}
  pragma(source:string,options?:{simple?:boolean}){
-  // The pool has no shared memory for WAL: the database keeps its default journal, and checkpoints have nothing to do.
-  if(/^\s*journal_mode\s*=\s*wal/i.test(source))return options?.simple?'delete':[{journal_mode:'delete'}];
-  if(/^\s*wal_checkpoint/i.test(source))return options?.simple?0:[];
+  // The journal mode is set when the database opens (above): asking for WAL again answers what it is.
+  if(/^\s*journal_mode\s*=\s*wal/i.test(source)){const mode=this.handle.selectValue('PRAGMA journal_mode') as string;return options?.simple?mode:[{journal_mode:mode}];}
   const rows=this.handle.selectObjects(`PRAGMA ${source}`) as Record<string,unknown>[];return options?.simple?(rows[0]?Object.values(rows[0])[0]:undefined):rows;
  }
  transaction<A extends unknown[],R>(fn:(...args:A)=>R){
@@ -75,7 +81,8 @@ export default class Database{
   return Object.assign(run,{deferred:run,immediate:run,exclusive:run});
  }
  loadExtension(){/* sqlite-vec: its one function used here is registered in the constructor. */}
- async backup(destination:string){writeFileSync(destination,pool.exportFile(this.name));return{totalPages:0,remainingPages:0};}
+ // The copy is of the database file itself, so what the write-ahead log still holds is moved into it first.
+ async backup(destination:string){if(!this.readonly)this.handle.exec('PRAGMA wal_checkpoint(TRUNCATE);');writeFileSync(destination,pool.exportFile(this.name));return{totalPages:0,remainingPages:0};}
  function(){throw new Error('Custom SQL functions are not available in the browser build.');}
  close(){if(!this.open)return this;for(const s of this.statements.values())s.finalize();this.statements.clear();this.handle.close();this.open=false;return this;}
 }

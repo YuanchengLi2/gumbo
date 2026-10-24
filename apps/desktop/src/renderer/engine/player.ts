@@ -40,12 +40,12 @@ export class EnginePlayer implements PlayerRef{
  private videos=new Map<string,Video>();private images=new Map<string,HTMLImageElement>();private sounds=new Map<string,Sound>();
  private audio?:AudioContext;private master?:GainNode;private muted=false;private playing=false;private anchor={time:0,at:0};private time=0;private raf=0;private lastDraw=0;private dirty=true;
  private events=new EventTarget();private stopped=false;private lastFrame=-1;
- private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;
+ private scenes?:SceneLayers;private over?:Compositor;private layerCache=new Map<number,MediaLayer[]>();private resized:ResizeObserver;private shownWidth=0;
  private pool=new Map<string,number>();private poolAt=-1;private peekAt?:number;
  constructor(readonly canvas:HTMLCanvasElement,private layers?:{scenes:HTMLElement;overlay:HTMLCanvasElement}){this.compositor=compositorOf(canvas);if(layers)this.scenes=new SceneLayers(layers.scenes);this.loop=this.loop.bind(this);this.raf=requestAnimationFrame(this.loop);
   // A paused frame is drawn again when the preview changes size: the canvas at its new size, and coded scenes placed at
   // the new scale (they kept the old one, so dragging the timeline divider showed more or less of a graphic).
-  this.resized=new ResizeObserver(()=>{this.dirty=true;});this.resized.observe(canvas);}
+  this.resized=new ResizeObserver(entries=>{const box=entries.at(-1)?.contentRect;if(box)this.shownWidth=box.width;this.dirty=true;});this.resized.observe(canvas);}
  /** A new revision of the edit: the frames and sound follow it without interrupting playback. */
  setProject(timeline:TimelineDocument,footage:FootageIndex){
   this.prepared=prepare({timeline,footage});this.layerCache.clear();this.poolAt=-1;this.fps=timeline.settings.fps;this.duration=Math.max(1/this.fps,this.prepared.resolved.durationSec);
@@ -185,7 +185,9 @@ export class EnginePlayer implements PlayerRef{
   this.over??=compositorOf(overlay,{transparent:true});this.over.draw({...frame,background:'transparent',layers:above},l=>this.picture(l));overlay.style.visibility='visible';
  }
  /** The canvas draws at the size it is shown, in device pixels, never above the project's own size. */
- private fit(){const box=this.canvas.getBoundingClientRect(),{width,height}=this.prepared.timeline.settings,k=Math.min(1,(box.width*devicePixelRatio)/width)||1,w=Math.max(2,Math.round(width*k)),h=Math.max(2,Math.round(height*k));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
+ // The canvas's width on screen, as its observer last reported it: measuring it each frame made the browser lay out the
+ // whole page every frame while anything else changed (zooming the timeline stuttered).
+ private fit(){const shown=this.shownWidth||this.canvas.getBoundingClientRect().width,{width,height}=this.prepared.timeline.settings,k=Math.min(1,(shown*devicePixelRatio)/width)||1,w=Math.max(2,Math.round(width*k)),h=Math.max(2,Math.round(height*k));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}}
  redraw(){this.dirty=true;}
  destroy(){this.stopped=true;cancelAnimationFrame(this.raf);this.resized.disconnect();for(const v of this.videos.values()){v.el.pause();v.el.removeAttribute('src');v.el.load();}for(const s of this.sounds.values()){s.el.pause();s.el.removeAttribute('src');}this.videos.clear();this.sounds.clear();void this.audio?.close();this.compositor.forget();this.over?.forget();this.scenes?.destroy();}
 }

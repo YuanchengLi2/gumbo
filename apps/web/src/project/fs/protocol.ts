@@ -6,7 +6,7 @@ export const HEADER=16;
 /** The most bytes one answer carries; larger reads are asked for in pieces. */
 export const CAPACITY=8*1024*1024;
 export type FsOp=
- |{op:'stat';path:string}
+ |{op:'stat';path:string;exists?:boolean}
  |{op:'readdir';path:string}
  |{op:'mkdir';path:string;recursive:boolean}
  |{op:'read';path:string;offset:number;length:number}

@@ -51,8 +51,12 @@ async function boot(env:Record<string,string>){
  // States it reports also refresh the project list and the service worker's media routes (routes.ts), before they leave:
  // the editor asks for the media as soon as it sees them. Messages keep their order (state deltas are numbered).
  let outgoing=Promise.resolve();
+ // The project list (its name, length and picture on the home screen) follows the latest state a moment later, off the
+ // way of the state to the editor: writing it before each one held every edit up by its file writes.
+ let listed:any,listTimer:ReturnType<typeof setTimeout>|undefined;
+ const listLater=(state:any)=>{listed=state;clearTimeout(listTimer);listTimer=setTimeout(()=>hostUpdate(listed),400);};
  (process as any).parentPort.postMessage=(message:any)=>{
-  const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;openId=state.meta.id;hostUpdate(state);}
+  const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;openId=state.meta.id;listLater(state);}
   if(message?.file){void answerFile(message.file);return;}
   if(message?.fileCancel){fileRequests.get(message.fileCancel)?.abort();return;}
   if(message?.codeRun){void runCode(message.codeRun,{folder:openFolder,id:openId},deliver);return;}
