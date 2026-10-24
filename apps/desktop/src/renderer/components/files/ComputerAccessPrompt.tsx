@@ -2,6 +2,7 @@ import React,{useState} from 'react';
 import {Computer} from 'lucide-react';
 import type {CommandFn} from '../../hooks/useProjectSession';
 import {useEditor} from '../../store/editor';
+import {onWeb} from '../../platform';
 
 export function ComputerAccessPrompt({command}:{command:CommandFn}){
  const [busy,setBusy]=useState(false),[error,setError]=useState('');
@@ -12,5 +13,5 @@ export function ComputerAccessPrompt({command}:{command:CommandFn}){
    if(!await command({type:'resume'}))setError('Access is allowed. Continue the request to try again.');
   }
  }catch(error){setError((error as Error).message);}finally{setBusy(false);}};
- return <section className="permission-prompt" aria-label="Computer access approval"><h3><Computer size={17}/> Let Gumbo find the files</h3><p>Allow Gumbo to search, read, and use files across this computer for your requests. You won’t need to select each file yourself.</p><p>Relevant content may be sent to Gumbo AI. Access stays enabled until you revoke it in Computer files.</p><button className="button primary" disabled={busy} onClick={()=>void allow()}>{busy?'Continuing…':'Allow computer access'}</button>{error&&<p role="alert">{error}</p>}</section>;
+ return <section className="permission-prompt" aria-label="Computer access approval"><h3><Computer size={17}/> Let Gumbo find the files</h3><p>{onWeb()?'Choose a folder Gumbo can search, read and use for your requests, like Videos or Desktop. You can add more in Computer files.':'Allow Gumbo to search, read, and use files across this computer for your requests. You won’t need to select each file yourself.'}</p><p>Relevant content may be sent to Gumbo AI. Access stays enabled until you revoke it in Computer files.</p><button className="button primary" disabled={busy} onClick={()=>void allow()}>{busy?'Continuing…':'Allow computer access'}</button>{error&&<p role="alert">{error}</p>}</section>;
 }

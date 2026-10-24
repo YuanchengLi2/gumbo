@@ -4,7 +4,7 @@ import {resolve} from '@dream/timeline';
 import type {ProjectState} from '@dream/project-db';
 import type {ExportProgress} from '@dream/contracts';
 import {X,FolderOpen,Check,Film,Share2,Play,Pause,Download} from 'lucide-react';
-import {onWeb,folderLabel} from '../../platform';
+import {onWeb,folderLabel,canPickFolders} from '../../platform';
 
 export type ExportChoices={name:string;folder:string;video:boolean;resolution:'source'|'480'|'720'|'1080'|'1440'|'2160';quality:'lower'|'recommended'|'higher';codec:'h264'|'hevc';format:'mp4'|'mov';fps:'source'|24|25|30|50|60;audio:boolean;audioFormat:'mp3'|'wav'|'aac'};
 const resolutions=[['480','480p'],['720','720p'],['1080','1080p'],['1440','2K'],['2160','4K']] as const;
@@ -49,7 +49,7 @@ export function ExportDialog(p:{project:ProjectState;frame:number;progress:Expor
    </div>
    <div className="export-form">
     {row('Name',<input value={c.name} disabled={running} onChange={e=>set({name:e.target.value})}/>)}
-    {row('Export to',<span className="export-folder" title={folderLabel(c.folder)}><span>{folderLabel(c.folder)}</span><button type="button" aria-label="Choose folder" disabled={running} onClick={async()=>{const picked=await window.dream.pickExportFolder(c.folder);if(picked)set({folder:picked});}}><FolderOpen size={15}/></button></span>)}
+    {row('Export to',<span className="export-folder" title={folderLabel(c.folder)}><span>{folderLabel(c.folder)}</span>{canPickFolders()&&<button type="button" aria-label="Choose folder" disabled={running} onClick={async()=>{const picked=await window.dream.pickExportFolder(c.folder);if(picked)set({folder:picked});}}><FolderOpen size={15}/></button>}</span>)}
     <div className="export-section"><label className="export-toggle"><input type="checkbox" checked={c.video} disabled={running} onChange={e=>set({video:e.target.checked})}/><strong>Video</strong></label>
      {row('Resolution',select(resolutionValue,sizes,v=>set({resolution:v}),!c.video))}
      {row('Bit rate',select(c.quality,qualities,v=>set({quality:v}),!c.video))}

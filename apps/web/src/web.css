@@ -2,3 +2,35 @@
 .web-unsupported h1{font-size:24px;margin:0 0 12px}
 .web-unsupported a{color:#e2552a}
 body:has(.web-unsupported){background:#111}
+/* Computer files on the web: the folders Gumbo can use, each removable, and a way to add more (FileAccessPanel). */
+.web-folders{display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 14px}
+.web-folder{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border:1px solid var(--n18,rgba(127,127,127,.25));border-radius:999px;font-size:12px}
+.web-folder button{display:grid;place-items:center;width:18px;height:18px;border:0;border-radius:50%;background:transparent;color:inherit;opacity:.6;cursor:pointer}
+.web-folder button:hover{opacity:1;background:rgba(127,127,127,.18)}
+.web-folder.add{padding:0 12px 0 9px;background:transparent;color:inherit;cursor:pointer;border-style:dashed}
+.web-folder.add:hover{border-style:solid}
+.web-folders.in-menu{margin:2px 8px 6px 31px}
+
+/* Phones (Android Chrome): the project stacks instead of sitting side by side. The picture on top, the chat or media
+   below it at full width, and a header with icons only. */
+@media (max-width:700px){
+ .platform-web .workspace-header{height:56px;min-height:56px;padding:0 10px;gap:4px}
+ .platform-web .project-title{flex:1;width:auto;min-width:0;font-size:16px;padding:6px 4px}
+ .platform-web .layout-switch button{font-size:0;gap:0;padding:0 11px}
+ .platform-web .workspace-header .button.primary{font-size:0;gap:0;padding:0 12px}
+ .platform-web .workspace-header .icon-button:has(.lucide-undo2,.lucide-redo2){display:none}
+ .platform-web .ai-workspace{display:flex;flex-direction:column}
+ .platform-web .ai-workspace>*:not(.sidebar):not(.ai-stage){display:none}
+ .platform-web .ai-workspace>.ai-stage{order:-1;flex:none;height:min(44vh,360px);padding:10px 10px 6px;gap:8px}
+ .platform-web .ai-workspace>.sidebar{flex:1;min-height:0;width:auto;padding:0 12px 10px;border-top:1px solid var(--n7)}
+ .platform-web .dialog-actions{flex-wrap:wrap;justify-content:flex-end}
+ /* Home: the sidebar becomes a bar along the top, with Gumbo, New video and the account; the project lists are on the page. */
+ .platform-web .home-screen{display:flex;flex-direction:column}
+ .platform-web .home-side{display:flex;flex-direction:row;align-items:center;gap:6px;padding:8px 10px;border-right:0;border-bottom:1px solid var(--n7)}
+ .platform-web .home-side .home-brand{margin:0;height:36px;flex:1}
+ .platform-web .home-side .home-nav{flex-direction:row;margin:0;white-space:nowrap}
+ .platform-web .home-side .home-lists,.platform-web .home-side .home-side-resize{display:none}
+ .platform-web .home-side .home-side-foot{margin:0;padding:0;border:0}
+ .platform-web .fig-home-main{flex:1;min-height:0;overflow:auto}
+ .platform-web .home-drag{display:none}
+}

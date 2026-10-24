@@ -21,10 +21,19 @@ export async function store(files:File[]):Promise<string[]>{
 /** A folder on the computer the user chooses, kept so it can be read and written by path (/granted/<name>-<id>); null
  * when they cancel. The picker remembers where it was last for each purpose. */
 export async function pickFolder(purpose:'gumbo-files'|'gumbo-exports'):Promise<string|null>{
+ if(!canPickFolders())throw new Error('This browser can’t share folders. Add footage with Add media, and exports download.');
  try{return await grantFolder(await (window as any).showDirectoryPicker({id:purpose,mode:'readwrite',startIn:'videos'}));}
  catch(error){if((error as DOMException).name==='AbortError')return null;throw error;}
 }
+/** Phones and tablets (Android Chrome) have no folder picker and no file picker API. */
+export const canPickFolders=()=>typeof (window as any).showDirectoryPicker==='function';
+/** The plain file input, where the picker API is missing: the files it gives are copied in just the same. */
+function chooseWithInput():Promise<File[]>{
+ return new Promise(resolve=>{const input=document.createElement('input');input.type='file';input.multiple=true;input.accept=Object.entries(MEDIA_TYPES).flatMap(([type,ends])=>[type,...ends]).join(',');
+  input.addEventListener('change',()=>resolve([...(input.files??[])]),{once:true});input.addEventListener('cancel',()=>resolve([]),{once:true});input.click();});
+}
 export async function pickFiles():Promise<string[]>{
+ if(typeof (window as any).showOpenFilePicker!=='function'){const files=await chooseWithInput();return files.length?store(files):[];}
  try{const handles=await (window as any).showOpenFilePicker({multiple:true,excludeAcceptAllOption:false,types:[{description:'Video, audio and images',accept:MEDIA_TYPES}]}) as FileSystemFileHandle[];return store(await Promise.all(handles.map(h=>h.getFile())));}
  catch(error){if((error as DOMException).name==='AbortError')return [];throw error;}
 }

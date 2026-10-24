@@ -1,4 +1,5 @@
 import React,{useState,useRef,useLayoutEffect,useEffect} from 'react';
+import {onWeb,webFolders,computerGrant,folderLabel,canPickFolders} from '../../platform';
 import {useDraft,setDraft} from '../../store/draft';
 import {MediaTile} from '../media/MediaTile';
 import {ArrowUp,Plus,X,Upload,FolderOpen,Computer,Square,ListChecks,PencilLine,MessageCircle,ChevronDown,Check,Sparkles,Zap,Crown,Wand2,Cpu} from 'lucide-react';
@@ -28,15 +29,20 @@ function usePopover(){
 
 
 function PermissionMenu({value,onChange}:{value:Permission;onChange:(value:Permission)=>void}){
- const menu=usePopover(),current=permissions.find(p=>p.id===value)??permissions[0],[computer,setComputer]=useState<{id:string}|null|undefined>();
- useEffect(()=>{if(!menu.open)return;window.dream.fileGrants().then((grants:any[])=>setComputer(grants.find(g=>g.scope==='computer')??null)).catch(()=>setComputer(undefined));},[menu.open]);
- const toggleComputer=async()=>{try{if(computer)await window.dream.revokeFileGrant(computer.id);else await window.dream.grantComputer();const grants=await window.dream.fileGrants();setComputer(grants.find((g:any)=>g.scope==='computer')??null);}catch{}};
+ const menu=usePopover(),current=permissions.find(p=>p.id===value)??permissions[0],[computer,setComputer]=useState<{id:string}|null|undefined>(),[folders,setFolders]=useState<{id:string;path?:string}[]>([]);
+ const refresh=async()=>{const grants=await window.dream.fileGrants();setComputer(computerGrant(grants)??null);setFolders(webFolders(grants));};
+ useEffect(()=>{if(!menu.open)return;refresh().catch(()=>setComputer(undefined));},[menu.open]);
+ // On the web, turning it off stops using every folder chosen for it (platform.ts webFolders).
+ const toggleComputer=async()=>{try{if(computer){const grants=await window.dream.fileGrants();for(const g of onWeb()?webFolders(grants):[computer])await window.dream.revokeFileGrant(g.id);}else await window.dream.grantComputer();await refresh();}catch{}};
+ // On the web each folder is chosen in the browser's picker: more can be added, and each removed.
+ const addFolder=async()=>{try{await window.dream.grantComputer();await refresh();}catch{}},removeFolder=async(id:string)=>{try{await window.dream.revokeFileGrant(id);await refresh();}catch{}};
  return <div className="composer-popover-anchor" ref={menu.ref}>
   <button type="button" className={'composer-chip permission-chip '+value} aria-label={'Permissions: '+current.label} aria-haspopup="menu" aria-expanded={menu.open} onClick={()=>menu.setOpen(!menu.open)}>{current.icon}<span>{current.short}</span><ChevronDown size={12}/></button>
   {menu.open&&<div className="composer-popover permission-menu" role="menu" aria-label="Permissions">
    <header>Permissions<kbd>{shortcutHints.mode} · Ctrl+1/2/3</kbd></header>
    {permissions.map(p=><button key={p.id} type="button" role="menuitemradio" aria-checked={p.id===value} className={p.id===value?'selected':''} onClick={()=>{onChange(p.id);menu.setOpen(false);}}><span className="permission-icon">{p.icon}</span><span><strong>{p.label}</strong><small>{p.detail}</small></span>{p.id===value&&<Check size={14} className="permission-check"/>}</button>)}
-   {computer!==undefined&&<div className="permission-computer"><Computer size={14}/><span><strong>Search this computer</strong><small>{computer?'Gumbo can find and read your files.':'Gumbo only uses files you add.'}</small></span><button type="button" className={'switch'+(computer?' on':'')} role="switch" aria-checked={!!computer} aria-label="Allow searching this computer" onClick={()=>void toggleComputer()}><i/></button></div>}
+   {computer!==undefined&&canPickFolders()&&<div className="permission-computer"><Computer size={14}/><span><strong>{onWeb()?'Search your folders':'Search this computer'}</strong><small>{onWeb()?(computer?'Gumbo can find and read files in these folders.':'Choose folders Gumbo can search, like Videos or Desktop.'):computer?'Gumbo can find and read your files.':'Gumbo only uses files you add.'}</small></span><button type="button" className={'switch'+(computer?' on':'')} role="switch" aria-checked={!!computer} aria-label={onWeb()?'Allow searching your folders':'Allow searching this computer'} onClick={()=>void toggleComputer()}><i/></button></div>}
+   {onWeb()&&computer&&<div className="web-folders in-menu">{folders.map(f=><span key={f.id} className="web-folder"><FolderOpen size={13}/>{folderLabel(f.path!)}<button type="button" aria-label={`Stop using ${folderLabel(f.path!)}`} onClick={()=>void removeFolder(f.id)}><X size={12}/></button></span>)}<button type="button" className="web-folder add" onClick={()=>void addFolder()}><Plus size={13}/>Add a folder</button></div>}
   </div>}
  </div>;
 }

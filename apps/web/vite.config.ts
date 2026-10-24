@@ -78,15 +78,15 @@ function sceneEngine():Plugin{
  * development server serves them. */
 function testFiles():Plugin{const repo=resolve(__dirname,'../..');return{name:'gumbo-test-files',configurePreviewServer(server){if(process.env.GUMBO_TEST_FILES!=='1')return;server.middlewares.use('/app/@fs/',(req,res,next)=>{
  const file=resolve(decodeURIComponent((req.url??'').split('?')[0]).replace(/^\//,''));if(!file.startsWith(repo)||!existsSync(file))return next();for(const [key,value] of Object.entries(isolation))res.setHeader(key,value);createReadStream(file).pipe(res);});}};}
-export default defineConfig({
+export default defineConfig(({command})=>({
  base:'/app/',
  root:__dirname,
  envDir:resolve(__dirname,'../..'),
  envPrefix:['DREAM_SUPABASE_'],
  // The project service reads its settings from process.env as they are set at run time (the worker's process, globals.ts);
  // a build would otherwise put a fixed empty object in its place. Left as a lookup, as in development; NODE_ENV keeps its
- // own fixed value.
- define:{'process.env':'process.env'},
+ // own fixed value. Builds only: in development nothing is replaced, and the page's own Vite client has no process.
+ define:command==='build'?{'process.env':'process.env'}:{},
  // Fast refresh for the editor's own files only: the packages also run in the project worker, which has no window.
  plugins:[webModules(),localServers(),onnxRuntime(),sceneEngine(),testFiles(),react({exclude:[/[\/]node_modules[\/]/,/[\/]packages[\/]/]})],
  // Built-ins match whole names only: 'node:fs' must not also take 'node:fs/promises'.
@@ -96,4 +96,4 @@ export default defineConfig({
  preview:{port:5181,strictPort:true,headers:isolation},
  worker:{format:'es',plugins:()=>[webModules()]},
  build:{outDir:'dist',sourcemap:false,target:'es2022'}
-});
+}));
