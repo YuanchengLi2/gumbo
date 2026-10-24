@@ -28,6 +28,8 @@ test('import, edit, play and export in the browser, kept across a reload',async(
  await page.getByRole('button',{name:'Media'}).first().click();
  await page.evaluate(async url=>{const file=new File([await (await fetch(url)).blob()],'source.mp4',{type:'video/mp4'}),data=new DataTransfer();data.items.add(file);
   const panel=document.querySelector<HTMLElement>('.project-media')!;for(const type of ['dragover','drop'])panel.dispatchEvent(new DragEvent(type,{bubbles:true,cancelable:true,dataTransfer:data}));},'/app/@fs/'+fixture.replace(/\\/g,'/'));
+ // It shows at once, before it is copied in and imported.
+ await expect(page.locator('.project-media .asset-card').first()).toBeVisible({timeout:1000});
  await expect.poll(async()=>{const s=await state(page);return Object.fromEntries(s.jobs.filter((j:any)=>['playback_audio','waveform','preview_proxy','loudness','thumbnail'].includes(j.step)).map((j:any)=>[j.step,j.status]));},{timeout:90_000})
   .toEqual({playback_audio:'complete',waveform:'complete',preview_proxy:'complete',loudness:'complete',thumbnail:'complete'});
  const asset=(await state(page)).footage.assets[0];

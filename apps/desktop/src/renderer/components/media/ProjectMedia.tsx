@@ -1,4 +1,4 @@
-import React,{useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {MEDIA} from '@dream/config';
 import {Search,Plus,Film,Music2,Check,Sparkles,Upload,AlertCircle,LoaderCircle} from 'lucide-react';
 import type {Asset} from '@dream/footage';
@@ -17,15 +17,26 @@ const clock=(sec:number)=>{if(sec<1)return sec.toFixed(1)+'s';const s=Math.round
  * the editor layout (onAdd) a card's + puts it on the timeline at the playhead, as OpenCut's media panel does. */
 export function ProjectMedia(p:{project:ProjectState;selected:string[];onSelect:(ids:string[])=>void;onImport:()=>void;onImportFiles?:(paths:string[])=>void;command:CommandFn;onAdd?:(assetId:string)=>void}){
  const [query,setQuery]=useState(''),[filter,setFilter]=useState<Filter>('all'),[dropping,setDropping]=useState(false);
+ // Files on their way in show at once, as cards of their own, until each arrives as media: on the web they are first
+ // copied into the browser's storage (media.incoming from the bridge). An import that fails clears them.
+ const [incoming,setIncoming]=useState<{name:string;kind:string;known:Set<string>;at:number}[]>([]),ids=useRef(new Set<string>());
+ ids.current=new Set(p.project.footage.assets.map(a=>a.id));
+ useEffect(()=>window.dream.onEvent((event:any)=>{if(event.type!=='media.incoming')return;
+  if(event.payload?.failed){setIncoming([]);return;}
+  const known=new Set(ids.current),at=Date.now();setIncoming(list=>[...list,...(event.payload?.files??[]).map((f:{name:string;kind:string})=>({...f,known,at}))]);}),[]);
  const assets=p.project.footage.assets.filter(a=>a.generated?.role!=='stem'),count=(f:Filter)=>f==='all'?assets.length:assets.filter(a=>groupOf(a)===f).length;
  const shown=assets.filter(a=>(filter==='all'||groupOf(a)===filter)&&a.filename.toLowerCase().includes(query.trim().toLowerCase()));
+ const pending=incoming.filter(f=>Date.now()-f.at<180_000&&!p.project.footage.assets.some(a=>!f.known.has(a.id)&&a.filename===f.name));
+ useEffect(()=>{if(incoming.length&&!pending.length)setIncoming([]);},[incoming.length,pending.length]);
  const toggle=(id:string)=>p.onSelect(p.selected.includes(id)?p.selected.filter(x=>x!==id):[...p.selected,id]);
  const files=(e:React.DragEvent)=>[...e.dataTransfer.types].includes('Files');
  return <div className={'project-media'+(dropping?' dropping':'')} onDragOver={e=>{if(files(e)){e.preventDefault();e.dataTransfer.dropEffect='copy';setDropping(true);}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node))setDropping(false);}} onDrop={e=>{if(!files(e))return;e.preventDefault();e.stopPropagation();setDropping(false);void window.dream.registerDropped([...e.dataTransfer.files]).then(paths=>{if(paths.length)p.onImportFiles?.(paths);});}}>
   <div className="media-toolbar"><label className="media-search"><Search size={14}/><input aria-label="Search media" placeholder="Search media" value={query} onChange={e=>setQuery(e.target.value)}/></label><button className="media-import" onClick={p.onImport}><Plus size={14}/>Import</button></div>
   {assets.length>0&&<div className="media-filters">{filters.filter(f=>f.id==='all'||count(f.id)>0).map(f=><button key={f.id} aria-pressed={filter===f.id} onClick={()=>setFilter(f.id)}>{f.label}<small>{count(f.id)}</small></button>)}</div>}
-  <div className="asset-grid">{shown.map(a=><AssetCard key={a.id} asset={a} project={p.project} selected={p.selected.includes(a.id)} onToggle={()=>toggle(a.id)} command={p.command} onAdd={p.onAdd&&(()=>p.onAdd!(a.id))}/>)}</div>
-  {!assets.length&&<button className="media-empty" onClick={p.onImport}><Upload size={22}/><strong>Drop videos, images or audio here</strong><small>or click to import. Files are copied into this project.</small></button>}
+  <div className="asset-grid">{pending.map((f,n)=><article key={`incoming-${n}-${f.name}`} className={`asset-card incoming kind-${f.kind}`} aria-busy="true">
+    <div className="asset-select"><div className="asset-image"><span className="asset-icon">{f.kind==='audio'?<Music2 size={18}/>:<Film size={18}/>}</span></div><strong>{f.name}</strong></div>
+    <div className="asset-state"><i className="spin"><LoaderCircle size={11}/></i>Adding…</div></article>)}{shown.map(a=><AssetCard key={a.id} asset={a} project={p.project} selected={p.selected.includes(a.id)} onToggle={()=>toggle(a.id)} command={p.command} onAdd={p.onAdd&&(()=>p.onAdd!(a.id))}/>)}</div>
+  {!assets.length&&!pending.length&&<button className="media-empty" onClick={p.onImport}><Upload size={22}/><strong>Drop videos, images or audio here</strong><small>or click to import. Files are copied into this project.</small></button>}
   {assets.length>0&&!shown.length&&<p className="media-none">Nothing matches{query.trim()?` “${query.trim()}”`:''}.</p>}
   {p.selected.length>0&&<div className="media-selection"><span><strong>{p.selected.length} selected</strong> · sent with your next message</span><button onClick={()=>p.onSelect([])}>Clear</button></div>}
   {dropping&&<div className="media-drop" aria-hidden="true"><Upload size={22}/>Drop to import</div>}

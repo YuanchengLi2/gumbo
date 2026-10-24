@@ -97,6 +97,11 @@ export function ftruncateSync(fd:number,length=0){call({op:'ftruncate',fd:descri
 /** Streams, enough for the project service: reading in pieces (for await, pipeline) and writing in appends. */
 type Listener=(...args:any[])=>void;
 class Emitter{private listeners=new Map<string,Listener[]>();on(type:string,fn:Listener){this.listeners.set(type,[...(this.listeners.get(type)??[]),fn]);return this;}once(type:string,fn:Listener){const wrap=(...a:any[])=>{this.off(type,wrap);fn(...a);};return this.on(type,wrap);}off(type:string,fn:Listener){this.listeners.set(type,(this.listeners.get(type)??[]).filter(f=>f!==fn));return this;}removeListener(type:string,fn:Listener){return this.off(type,fn);}emit(type:string,...args:any[]){for(const fn of this.listeners.get(type)??[])fn(...args);return(this.listeners.get(type)?.length??0)>0;}}
+/** A turn of the worker's event loop. Each read blocks the worker until the storage worker answers, so a stream read
+ * that only awaited a microtask between pieces kept the worker from every message until the whole file was read: an
+ * import's copy held up the next import, its state and every command behind it. */
+const turns=new MessageChannel(),waiting:(()=>void)[]=[];turns.port1.onmessage=()=>waiting.shift()?.();
+const nextTurn=()=>new Promise<void>(resolve=>{waiting.push(resolve);turns.port2.postMessage(0);});
 export class ReadStream extends Emitter{
  readonly path:string;private position:number;private end:number;private chunk:number;destroyed=false;
  constructor(path:unknown,options?:{start?:number;end?:number;highWaterMark?:number}){super();this.path=toPath(path);this.position=options?.start??0;this.end=options?.end===undefined?Infinity:options.end+1;this.chunk=Math.min(options?.highWaterMark??1024*1024,CAPACITY-4096);}
@@ -105,7 +110,7 @@ export class ReadStream extends Emitter{
  override on(type:string,fn:Listener){super.on(type,fn);if(type==='data'&&!this.flowing){this.flowing=true;void this.flow();}return this;}
  private async flow(){try{for await(const chunk of this)this.emit('data',chunk);this.emit('end');this.emit('close');}catch(error){this.emit('error',error);}}
  async*[Symbol.asyncIterator](){
-  while(!this.destroyed&&this.position<this.end){const {json,data}=readRange(this.path,this.position,Math.min(this.chunk,this.end-this.position));if(!data?.length)break;this.position+=data.length;yield Buffer.from(data.buffer,data.byteOffset,data.byteLength);if(this.position>=json.size)break;await Promise.resolve();}
+  while(!this.destroyed&&this.position<this.end){const {json,data}=readRange(this.path,this.position,Math.min(this.chunk,this.end-this.position));if(!data?.length)break;this.position+=data.length;yield Buffer.from(data.buffer,data.byteOffset,data.byteLength);if(this.position>=json.size)break;await nextTurn();}
  }
  destroy(){this.destroyed=true;return this;}
 }

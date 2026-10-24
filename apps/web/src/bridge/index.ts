@@ -47,7 +47,9 @@ async function command(c:any){
  if(runsRoux.has(c?.type))await allowComputer();
  // Before a project is open, the providers come from the account (main/index.ts does the same).
  if(c?.type==='ai_providers'&&!openProject){const off=new Set(loadSettings().disabledProviders as string[]);return{...Object.fromEntries(Object.entries(await account.providers()).filter(([p,on])=>on===true&&!off.has(p))),anthropic:true};}
- const result=await service().command(c);if(result?.meta)openProject=true;return result;
+ // A failed import clears the cards shown for its files (media.incoming, imports.ts).
+ let result;try{result=await service().command(c);}catch(error){if(c?.type==='import')publish('media.incoming',{files:[],failed:true});throw error;}
+ if(result?.meta)openProject=true;return result;
 }
 
 export function createBridge(){

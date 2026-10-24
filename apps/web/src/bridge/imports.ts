@@ -1,5 +1,6 @@
 import {grantFolder} from '../project/media/paths';
 import {keepStorage} from './awake';
+import {publish} from './events';
 
 /** Footage on the web: files the user picks or drops are copied into this browser's private storage (/imports/<id>/
  * <name>), and the project service imports them from there by path, as it imports from the desktop's disk. The copy
@@ -11,11 +12,15 @@ async function folder(path:string[]){let dir=await navigator.storage.getDirector
 const safe=(name:string)=>name.replace(/[\\/:*?"<>|\u0000-\u001f]/g,'_').slice(-180)||'media';
 export async function store(files:File[]):Promise<string[]>{
  void keepStorage();
+ // The editor shows each file at once, while it is copied in and imported (media.incoming; ProjectMedia).
+ publish('media.incoming',{files:files.map(file=>({name:safe(file.name),kind:file.type.split('/')[0]||'video'}))});
  const paths:string[]=[];
- for(const file of files){
-  const id=crypto.randomUUID().slice(0,8),name=safe(file.name),dir=await folder(['imports',id]),handle=await dir.getFileHandle(name,{create:true}),writer=await handle.createWritable();
-  await file.stream().pipeTo(writer);paths.push(`/imports/${id}/${name}`);
- }
+ try{
+  for(const file of files){
+   const id=crypto.randomUUID().slice(0,8),name=safe(file.name),dir=await folder(['imports',id]),handle=await dir.getFileHandle(name,{create:true}),writer=await handle.createWritable();
+   await file.stream().pipeTo(writer);paths.push(`/imports/${id}/${name}`);
+  }
+ }catch(error){publish('media.incoming',{files:[],failed:true});throw error;}
  return paths;
 }
 /** A folder on the computer the user chooses, kept so it can be read and written by path (/granted/<name>-<id>); null
