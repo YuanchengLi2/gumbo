@@ -14,6 +14,8 @@ import {tokenActivity} from './activity.ts';
 import {handleReport,supabaseReportPorts} from './reports.ts';
 import {handleEditLog,supabaseEditLogPorts} from './edit-logs.ts';
 import {handleWaitlistJoin,supabaseWaitlistPorts,waitlistAlert,WAITLISTED} from './waitlist.ts';
+import {shareStory} from './share.ts';
+import {handleFeedback,supabaseFeedbackPorts,feedbackAlert} from './feedback.ts';
 import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts,PLANS,PAYMENTS_CLOSED} from './billing.ts';
@@ -40,8 +42,15 @@ Deno.serve(async(req)=>{
   catch(error){console.error('Stripe webhook failed',error);return json({error:(error as Error).message},500);}}
  // The waitlist on usegumbo.app (waitlist.ts): no account needed.
  if(action==='waitlist-join'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';const result=await handleWaitlistJoin(body,address,{...supabaseWaitlistPorts(db),alert:waitlistAlert(name=>Deno.env.get(name))});return json(result.body,result.status);}
+ // Feedback from under the prompt box (feedback.ts): no account needed; a signed-in sender is known by their account.
+ if(action==='feedback'&&req.method==='POST'){let body:unknown={};try{body=await req.json();}catch{}const address=req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()||req.headers.get('cf-connecting-ip')||'unknown';
+  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,''),{data:signed}=bearer?await db.auth.getUser(bearer):{data:null};
+  const result=await handleFeedback(body,address,signed?.user?.id??null,{...supabaseFeedbackPorts(db),alert:feedbackAlert(name=>Deno.env.get(name))});return json(result.body,result.status);}
  if(action==='login-start'&&req.method==='POST'){const body=await req.json();const email=String(body.email??'').trim().toLowerCase();const {data}=await db.from('dream_invites').select('email').eq('email',email).maybeSingle();return data?json({allowed:true}):json({error:'Use the email address on your beta invitation.'},403);}
- if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('title,object_key').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,60);return error?json({error:'Video unavailable'},404):json({title:data.title,url:signed.signedUrl});}
+ if(action==='view'){const token=new URL(req.url).searchParams.get('token');if(!token)return json({error:'Missing share token'},400);const {data}=await db.from('dream_shares').select('id,title,object_key,prompts,source,duration_sec,views').eq('token_hash',await sha(token)).eq('status','ready').maybeSingle();if(!data)return json({error:'Video unavailable'},404);
+  // The address lasts an hour, long enough to watch; the page asks again when it is opened again. Each opening counts as a view.
+  const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,3600);if(error)return json({error:'Video unavailable'},404);await db.from('dream_shares').update({views:(data.views??0)+1}).eq('id',data.id);
+  return json({title:data.title,url:signed.signedUrl,prompts:data.prompts??[],source:data.source??null,durationSec:data.duration_sec===null?null:Number(data.duration_sec)});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
  const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
  const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
@@ -95,7 +104,7 @@ Deno.serve(async(req)=>{
   if(action==='ai'){const result=await handleAI(body,user.id,{db,deepseekThinking:Deno.env.get('DREAM_DEEPSEEK_THINKING')??'auto',key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)),deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE')});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
   if(action==='share-create'){
    const id=crypto.randomUUID(),token=crypto.randomUUID()+crypto.randomUUID(),key=`${user.id}/${id}.mp4`;
-   const {error}=await db.from('dream_shares').insert({id,user_id:user.id,token_hash:await sha(token),object_key:key,title:String(body.title??'Dream video').slice(0,200)});if(error)throw error;
+   const story=shareStory(body);const {error}=await db.from('dream_shares').insert({id,user_id:user.id,token_hash:await sha(token),object_key:key,title:String(body.title??'Gumbo video').slice(0,200),prompts:story.prompts,source:story.source,duration_sec:story.durationSec});if(error)throw error;
    const {data:signed,error:uploadError}=await db.storage.from('dream-exports').createSignedUploadUrl(key);if(uploadError)throw uploadError;
    return json({id,token,objectKey:key,uploadUrl:signed.signedUrl});
   }

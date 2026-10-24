@@ -73,6 +73,13 @@ export class Account {
  activity(){return this.get('activity','Activity is unavailable.');}
  async profile(answers?:unknown){if(!this.signedIn())return null;const auth={Authorization:`Bearer ${await this.token()}`};const response=await fetch(`${this.gateway()}/profile`,answers?{method:'POST',headers:{...auth,'Content-Type':'application/json'},body:JSON.stringify(answers)}:{headers:auth});if(response.status===404||response.status===405)return{unavailable:true};const body=await response.json().catch(()=>({})) as any;if(!response.ok)throw new Error(body.error??'Your answers could not be saved.');return body;}
  async payPage(action:'checkout'|'portal',request:{plan?:string;packs?:number;flow?:string}={}){const response=await fetch(`${this.gateway()}/billing-${action}`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(request)});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Paying is unavailable right now.');return String(body.url);}
+ /** "Stumped or broken?" under the prompt box (gateway feedback.ts): sent signed in or not; signed in, it carries the
+  * account so the owner knows who wrote. */
+ async feedback(entry:{note:string;email?:string;context?:Record<string,unknown>;appVersion:string;platform:string}){
+  const headers:Record<string,string>={'Content-Type':'application/json'};if(this.signedIn()){const token=await this.token().catch(()=>'');if(token)headers.Authorization=`Bearer ${token}`;}
+  const response=await fetch(`${this.gateway()}/feedback`,{method:'POST',headers,body:JSON.stringify(entry),signal:AbortSignal.timeout(15000)});
+  const body=await response.json().catch(()=>({})) as {error?:string};if(!response.ok)throw new Error(body.error??'Your note could not be sent. Try again in a moment.');return{sent:true};
+ }
  async report(report:{turnId:string;note:string;kind?:'report'|'feedback'|'training';rating?:'up'|'down';appVersion:string;platform:string;log:unknown}){
   if(!this.signedIn())throw new Error('Sign in to send a log.');
   const response=await fetch(`${this.gateway()}/report`,{method:'POST',headers:{Authorization:`Bearer ${await this.token()}`,'Content-Type':'application/json'},body:JSON.stringify(report)});

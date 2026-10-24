@@ -5,6 +5,11 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-24 · "Stumped or broken? Let me know" under the chat box
+If a prompt fails or something doesn't work, click "Stumped or broken? Let me know" under the box you type requests
+in. Write a few words about what went wrong and, if you like, your email so I can tell you when it's fixed. You don't
+need an account. Gumbo sends what it was doing along with your note, so you don't have to explain the details.
+
 ## 2026-10-24 · Free plan videos end with "Edited with Gumbo"
 Videos exported on the free plan now show a small "Edited with Gumbo" in the bottom-right corner for their last couple
 of seconds. It fades in and stays out of the way of your edit. Paid plans export without it. The export window says

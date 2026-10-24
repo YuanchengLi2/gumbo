@@ -25,7 +25,7 @@ const service=()=>projects??=new ProjectClient(account,settingsEnv(loadSettings(
 let openProject=false;
 
 /** The account requests the editor sends as commands ({type:'account',action}), as main/index.ts answers them. */
-async function accountCommand(c:{action?:string;query?:string;profile?:unknown;plan?:string;packs?:number;flow?:string;turnId?:string;note?:string;kind?:'report'|'feedback'|'training';rating?:'up'|'down'}){
+async function accountCommand(c:{action?:string;query?:string;email?:string;context?:Record<string,unknown>;profile?:unknown;plan?:string;packs?:number;flow?:string;turnId?:string;note?:string;kind?:'report'|'feedback'|'training';rating?:'up'|'down'}){
  switch(c.action){
   case 'browser':{const url=await account.beginSignIn();setTimeout(()=>location.assign(url),50);return{started:true,url};}
   case 'signout':return account.signout();
@@ -35,6 +35,7 @@ async function accountCommand(c:{action?:string;query?:string;profile?:unknown;p
   case 'creators':return account.creators(c.query??'');
   case 'profile':return account.profile(c.profile);
   case 'checkout':case 'portal':{const url=await account.payPage(c.action,{plan:c.plan,packs:c.packs,flow:c.flow});window.open(url,'_blank','noopener');return{opened:true};}
+  case 'feedback':return account.feedback({note:String(c.note??''),email:c.email,context:c.context,appVersion:version,platform:platform()});
   case 'report':{const log=c.turnId?await service().command({type:'turn_log',turnId:c.turnId}).catch(()=>null):null;return account.report({turnId:c.turnId??'',note:c.note??'',kind:c.kind??'report',...(c.rating?{rating:c.rating}:{}),appVersion:version,platform:platform(),log});}
   default:return account.info();
  }

@@ -48,6 +48,7 @@ describe('credits',()=>{
  it('gives no free credits to a paid account or a guest',async()=>{
   const paid=await account();await db.query("update dream_accounts set plan='max' where id=$1",[paid]);
   await expect(reserve(paid)).rejects.toThrow(/used all your credits/);
-  const guest=await account(true);await expect(reserve(guest)).rejects.toThrow(/used all your credits/);
+  // A guest has only the try's gift (try-share-feedback.test.ts): without it, it is asked to sign in.
+  const guest=await account(true);await expect(reserve(guest)).rejects.toThrow(/free try\. Sign in/);
  });
 });

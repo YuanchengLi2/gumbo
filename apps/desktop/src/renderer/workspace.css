@@ -963,3 +963,14 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .creator-text>span{font-size:11.5px;color:var(--n56);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .creator-limited{margin:4px 8px 6px;font-size:11.5px;line-height:1.45;color:var(--n56)}
 .creator-badge{flex:none;margin-left:auto;padding:2px 7px;border:1px solid var(--n10);border-radius:999px;font-size:10px;color:var(--n56)}
+
+/* "Stumped or broken? Let me know" under the prompt box (chat/FeedbackLink.tsx): quiet until it's needed. */
+.feedback-anchor{position:relative;display:flex;justify-content:flex-end;padding:6px 6px 0}
+.feedback-link{font-size:11px;color:var(--n38);padding:2px 0}.feedback-link:hover,.feedback-link[aria-expanded=true]{color:var(--n65);text-decoration:underline;text-underline-offset:2px}
+.feedback-box{position:absolute;right:0;bottom:calc(100% + 6px);width:min(340px,92vw);display:flex;flex-direction:column;gap:8px;padding:12px;background:var(--n0);border:1px solid var(--n9);border-radius:12px;box-shadow:0 10px 34px #1a263a1f;z-index:40}
+.feedback-box textarea,.feedback-box input{width:100%;border:1px solid var(--n9);border-radius:8px;padding:8px 9px;font-size:12px;background:var(--n1);outline:none;resize:none}
+.feedback-box textarea:focus,.feedback-box input:focus{border-color:var(--n25)}
+.feedback-actions{display:flex;justify-content:flex-end;gap:12px;align-items:center;font-size:12px}.feedback-actions>button:first-child{color:var(--n45)}
+.feedback-send{background:var(--n100);color:var(--n0);border-radius:8px;padding:6px 14px}.feedback-send:disabled{background:var(--n10);opacity:1}
+.feedback-error{font-size:11px;color:#a24a36}.feedback-thanks{font-size:12px;color:var(--n58);padding:4px 2px}
+.home-composer .feedback-anchor{justify-content:center;padding-top:10px}.home-composer .feedback-box{right:50%;transform:translateX(50%);bottom:calc(100% + 8px)}
