@@ -87,7 +87,8 @@ async function run(ctx:CommandContext,tool:'ffmpeg'|'ffprobe'):Promise<number>{
    const main=withFewerCores(()=>callMain(core,tool,args));
    // The core sets ret only when the program calls exit(); otherwise main's own return value is the status.
    const status=core.ret!==-1?core.ret:main??1;
-   if(stdoutFile){const data=ctx.fs.readFile(stdoutFile);await ctx.stdout.write(data);}
+   // An output that writes nothing (-f null - for loudness, silence or a test decode) leaves no file to pass on.
+   if(stdoutFile&&tryStat(ctx.fs,stdoutFile)){const data=ctx.fs.readFile(stdoutFile);await ctx.stdout.write(data);}
    return status<0||status>255?1:status;
   }finally{
    core.reset();log=undefined;

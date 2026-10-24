@@ -9,6 +9,8 @@ export interface ClientOptions{
  graceMs?:number;
  /** How long run_command waits before the command goes on in the background (4 minutes, like the desktop). */
  waitMs?:number;
+ /** A command's time limit when it names none (10 minutes, like the desktop). */
+ defaultTimeoutMs?:number;
 }
 type Tracked={id:string;command:string;started:number;timeoutMs:number;output:string;listeners:Set<(text:string)=>void>;done:Promise<ProcessResult>;resolve:(r:ProcessResult)=>void;stopping?:{kind:'stop'|'timeout';reason:string};timers:ReturnType<typeof setTimeout>[];result?:ProcessResult};
 const MAX_OUTPUT=12000;
@@ -16,7 +18,7 @@ const MAX_OUTPUT=12000;
  * answer and stop even while a program blocks the worker: a stuck command is interrupted (Python), then the worker is
  * terminated and started again. */
 export class SandboxClient{
- private worker:Worker|undefined;private ready:Promise<InitResult>|undefined;private seq=0;
+ private worker:Worker|undefined;private ready:Promise<InitResult>|undefined;private seq=0;private started=false;
  private calls=new Map<number,{resolve:(v:any)=>void;reject:(e:Error)=>void}>();private processes=new Map<string,Tracked>();private finished=new Map<string,ProcessResult>();
  /** Shared with the worker so a stop reaches Python while it runs; there only when the page is cross-origin isolated. */
  readonly interrupt=typeof SharedArrayBuffer!=='undefined'&&(globalThis as {crossOriginIsolated?:boolean}).crossOriginIsolated?new Int32Array(new SharedArrayBuffer(4)):undefined;
@@ -25,11 +27,13 @@ export class SandboxClient{
  /** Starts the worker (once; again after a restart). Returns what it can run and whether ffmpeg has threads. */
  start():Promise<InitResult>{
   if(this.ready)return this.ready;
-  const worker=this.config.createWorker();this.worker=worker;
+  const worker=this.config.createWorker();this.worker=worker;this.started=false;
   worker.onmessage=(event:MessageEvent<Event>)=>this.receive(event.data);
-  worker.onerror=event=>{event.preventDefault?.();this.restart(`The sandbox worker failed: ${event.message||'unknown error'}.`);};
+  // A worker that fails before it is ready did not start at all: its script could not load (most often a page left open
+  // across an update of the site) or the browser is short of memory. Retrying will not help, so the message says what will.
+  worker.onerror=event=>{event.preventDefault?.();this.restart(this.started?`The sandbox worker failed: ${event.message||'unknown error'}.`:`The sandbox could not start (${event.message||'its worker did not load'}). Commands are unavailable until the page is reloaded: carry on without them, and tell the user to reload Gumbo if they are needed.`);};
   this.ready=this.call<InitResult>({type:'init',options:this.config.options??{},interrupt:this.interrupt});
-  this.ready.catch(()=>{this.ready=undefined;});
+  this.ready.then(()=>{this.started=true;},()=>{this.ready=undefined;});
   return this.ready;
  }
  private receive(event:Event){
@@ -58,9 +62,9 @@ export class SandboxClient{
  /** Starts a command; `done` settles with its result. onOutput hears its output as it comes. */
  async run(request:RunRequest,onOutput?:(text:string)=>void):Promise<{id:string;done:Promise<ProcessResult>}>{
   await this.start();
+  const timeoutMs=request.timeoutMs??this.config.defaultTimeoutMs??600000;request={...request,timeoutMs};
   const {id}=await this.call<{id:string}>({type:'start',request});
   let resolve!:(r:ProcessResult)=>void;const done=new Promise<ProcessResult>(r=>{resolve=r;});
-  const timeoutMs=request.timeoutMs??600000;
   const p:Tracked={id,command:request.command,started:Date.now(),timeoutMs,output:'',listeners:new Set(onOutput?[onOutput]:[]),done,resolve,timers:[]};
   this.processes.set(id,p);
   // The worker enforces the time limit itself; this one fires only if a program keeps the worker from doing so.

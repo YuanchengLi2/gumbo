@@ -1,13 +1,16 @@
-import {createReadStream,createWriteStream,existsSync} from 'node:fs';
+import {createReadStream,createWriteStream,existsSync,readdirSync,unlinkSync} from 'node:fs';
 import {rename,unlink} from 'node:fs/promises';
 import {createHash,randomUUID} from 'node:crypto';
 import {Transform} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import {extname} from 'node:path';
+import {extname,dirname,basename,join} from 'node:path';
 import type {Asset} from '@dream/footage';
 
 /** Copy and checksum in one pass; a canceled import never publishes partial media. */
 export async function copyMedia(source:string,destination:string,signal?:AbortSignal){
+ // A copy cut off before it finished (the app closed, a browser tab reloaded) left its partial file behind: it goes
+ // first, or each interrupted import would keep a whole copy's worth of storage forever.
+ const stem=basename(destination)+'.';try{for(const name of readdirSync(dirname(destination)))if(name.startsWith(stem)&&name.endsWith('.copying'))unlinkSync(join(dirname(destination),name));}catch{}
  const temporary=destination+'.'+randomUUID()+'.copying',hash=createHash('sha256');
  try{
   await pipeline(createReadStream(source),new Transform({transform(chunk,_encoding,callback){hash.update(chunk);callback(null,chunk);}}),createWriteStream(temporary,{flags:'wx'}),{signal});

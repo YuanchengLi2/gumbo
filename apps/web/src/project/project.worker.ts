@@ -51,10 +51,13 @@ async function boot(env:Record<string,string>){
  // States it reports also refresh the project list and the service worker's media routes (routes.ts), before they leave:
  // the editor asks for the media as soon as it sees them. Messages keep their order (state deltas are numbered).
  let outgoing=Promise.resolve();
- // The project list (its name, length and picture on the home screen) follows the latest state a moment later, off the
- // way of the state to the editor: writing it before each one held every edit up by its file writes.
- let listed:any,listTimer:ReturnType<typeof setTimeout>|undefined;
- const listLater=(state:any)=>{listed=state;clearTimeout(listTimer);listTimer=setTimeout(()=>hostUpdate(listed),400);};
+ // The project list (its name, length and picture on the home screen): written at once for a project's first state, so
+ // a new project is listed even if the page closes right away, then at most every two seconds with the latest state
+ // following a moment later. Writing it before every state held each edit up by its file writes.
+ let listed:any,listTimer:ReturnType<typeof setTimeout>|undefined,listedId:string|undefined,listedAt=0;
+ const listNow=(state:any)=>{clearTimeout(listTimer);listTimer=undefined;listedId=state.meta.id;listedAt=Date.now();hostUpdate(state);};
+ const listLater=(state:any)=>{listed=state;if(state.meta.id!==listedId||Date.now()-listedAt>2000){listNow(state);return;}
+  if(!listTimer)listTimer=setTimeout(()=>listNow(listed),400);};
  (process as any).parentPort.postMessage=(message:any)=>{
   const state=message?.result?.timeline?message.result:message?.event?.type==='state'?message.event.payload:undefined;if(state?.meta){openFolder=state.meta.folder;openId=state.meta.id;listLater(state);}
   if(message?.file){void answerFile(message.file);return;}

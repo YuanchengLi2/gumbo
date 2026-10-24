@@ -53,4 +53,14 @@ describe('SandboxClient',()=>{
   const {done}=await c.run({command:'hold',timeoutMs:200});workers[0].deaf=workers[0].mute=true;
   const r=await done;expect(r.status).toBe('cancelled');expect(r.output).toMatch(/ran past its 0s time limit/);expect(c.restarts).toBe(1);
  });
+ it('gives a command without a limit the default it was set up with',async()=>{
+  const c=new SandboxClient({createWorker:()=>{const w=new FakeWorker({});workers.push(w);return w as unknown as Worker;},graceMs:100,defaultTimeoutMs:150});
+  const r=await c.runCommand({command:'sleep 5'});expect(r.process.status).toBe('cancelled');expect(r.process.output).toMatch(/time limit/);
+ });
+ it('says a worker that never started cannot be helped by retrying, and starts one again when asked',async()=>{
+  let attempt=0;
+  const c=new SandboxClient({createWorker:()=>{attempt++;const w=new FakeWorker({});workers.push(w);if(attempt===1){w.mute=true;setTimeout(()=>w.onerror?.({message:''}),10);}return w as unknown as Worker;},graceMs:100});
+  await expect(c.start()).rejects.toThrow(/could not start.*reload/);
+  expect((await c.runCommand({command:'echo back'})).process.output).toBe('back\n');expect(attempt).toBe(2);
+ });
 });

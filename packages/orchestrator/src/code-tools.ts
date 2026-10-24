@@ -4,6 +4,9 @@ import {TaskUpdateSchema,TaskPlanSchema,FileOperationSchema} from '@dream/contra
 import {DecisionInput} from './project-memory';
 import {engineBudgets} from '@dream/config';
 const path=z.string().min(1).max(2000);
+/** A command's time limit when it names none: ten minutes on the desktop, three in the browser, where ffmpeg and Python
+ * run slower and a stuck command holds every command after it (the browser sandbox runs one at a time). */
+const COMMAND_TIMEOUT_MS=typeof process!=='undefined'&&process.env?.DREAM_RUNTIME==='browser'?180_000:600_000;
 export const codeSchemas={
  remember_decision:DecisionInput,
  set_project_title:z.object({title:z.string().trim().min(1).max(80)}),
@@ -20,7 +23,7 @@ export const codeSchemas={
  read_file:z.object({path,scope:z.enum(['workspace','computer','log','receipt','project']).default('workspace'),version:z.string().optional(),startLine:z.number().int().positive().default(1),limit:z.number().int().min(1).max(400).default(200)}),
  write_file:z.object({path,content:z.string().max(500000),expectedHash:z.string().optional()}),
  edit_file:z.object({path,oldText:z.string().min(1).max(100000),newText:z.string().max(100000),expectedHash:z.string().optional()}),
- run_command:z.object({command:z.string().min(1).max(32000).optional(),processId:z.string().optional(),stop:z.boolean().optional(),cwd:z.string().default('.'),timeoutMs:z.number().int().min(1000).max(3600000).default(600000)}).refine(i=>!!i.command||!!i.processId,{message:'Give a command, or the processId of one still running.'}),
+ run_command:z.object({command:z.string().min(1).max(32000).optional(),processId:z.string().optional(),stop:z.boolean().optional(),cwd:z.string().default('.'),timeoutMs:z.number().int().min(1000).max(3600000).default(COMMAND_TIMEOUT_MS)}).refine(i=>!!i.command||!!i.processId,{message:'Give a command, or the processId of one still running.'}),
  bundle_scene:z.object({entry:path,output:path}),
  import_resources:z.object({source:z.string().min(1).max(2000),include:z.array(z.string().min(1).max(300)).max(20).optional(),into:z.string().min(1).max(200)}),
  check_outputs:z.object({paths:z.array(path).min(1).max(8).optional(),scene:z.string().max(100).optional()}),

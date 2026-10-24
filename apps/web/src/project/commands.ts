@@ -10,7 +10,10 @@ const runs=new Map<string,AbortController>();
 function sandboxFor(folder:string){
  if(sandbox?.folder!==folder){
   sandbox?.client.terminate();
-  sandbox={folder,client:new SandboxClient({createWorker:()=>new Worker(new URL('./sandbox.worker.ts',import.meta.url),{type:'module',name:folder}),options:{workspace:'/Workspace',mounts:['/Media','/Sources'],logDir:'/.dream/processes'}})};
+  sandbox={folder,client:new SandboxClient({createWorker:()=>new Worker(new URL('./sandbox.worker.ts',import.meta.url),{type:'module',name:folder}),options:{workspace:'/Workspace',mounts:['/Media','/Sources'],logDir:'/.dream/processes'},
+   // Three minutes unless a command asks for more: ffmpeg and Python run slower here than on a desktop, and a command
+   // stuck for the desktop's ten minutes held every command after it.
+   defaultTimeoutMs:180_000})};
  }
  return sandbox.client;
 }

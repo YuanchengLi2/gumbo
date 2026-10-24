@@ -50,7 +50,7 @@ export async function session(page:Page,steps:(assetId:string)=>any[][]){
   /** Asks in the editor, which draws the frames Roux looks at, and waits for the run to finish. */
   async ask(request:string){
    await page.reload();await page.getByRole('button',{name:'Untitled project'}).first().click();
-   await expect(page.getByRole('button',{name:'Media 1'})).toBeVisible({timeout:30_000});
+   await expect(page.getByRole('button',{name:/^Media \d+$/})).toBeVisible({timeout:30_000});
    await page.getByRole('textbox',{name:'Ask Gumbo to edit'}).fill(request);
    const send=page.getByRole('button',{name:'Send prompt'});await expect(send).toBeEnabled();await send.click();
    await expect.poll(async()=>['complete','interrupted','failed','error'].includes((await state(page)).aiStatus),{timeout:180_000}).toBe(true);
