@@ -57,3 +57,42 @@ test('a scene drawn by the cloud renderer is in the export',async({page})=>{
   expect(log.at(-1).render.scenes.asked).toBe(0);
  }finally{await run.gateway.close();rmSync(folder,{recursive:true,force:true});}
 });
+
+/** Drawn ahead: once Gumbo's edit settles, the scene on the timeline goes to quick render by itself (the gateway's pass
+ * and Modal stood in for here, the drawing done by render.mjs), and the export takes that drawing without asking again. */
+test('a scene is drawn ahead after an edit, and the export uses that drawing',async({page})=>{
+ test.setTimeout(400_000);
+ const folder=mkdtempSync(join(tmpdir(),'gumbo-cloud-ahead-'));let renders=0,passes=0;
+ await page.route('**/dream-gateway/scene-render-pass',route=>{passes++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({available:true,url:'https://test--gumbo-scene-render-web.modal.run/',token:'pass'})});});
+ await page.route('https://test--gumbo-scene-render-web.modal.run/**',async route=>{
+  const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'content-type','Access-Control-Allow-Methods':'POST'};
+  if(route.request().method()==='OPTIONS')return route.fulfill({status:204,headers:cors});
+  renders++;const {token,job}=route.request().postDataJSON();expect(token).toBe('pass');
+  const origin=new URL(page.url()).origin,jobPath=join(folder,'job.json'),webm=join(folder,'all.webm');
+  writeFileSync(jobPath,JSON.stringify({...job,page:job.page.replace('https://usegumbo.app',origin),start:0,end:job.frames}));
+  execFileSync(process.execPath,[renderer,jobPath,webm],{stdio:'inherit',env:{...process.env,SCENE_BROWSER_CHANNEL:'msedge'}});
+  return route.fulfill({status:200,headers:cors,contentType:'application/json',body:JSON.stringify({fps:job.fps,chunks:[{start:0,end:job.frames,webm:readFileSync(webm).toString('base64')}]})});
+ });
+ const run=await session(page,asset=>[
+  [use('w','write_file',{path:'src/card.tsx',content:scene})],
+  [use('e','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
+  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Card"}],'})],
+  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho"}}]'})],
+  [use('p','publish_project',{})],
+  [use('f','finish',{status:'complete',summary:'Added the card.',evidence:[]})]]);
+ try{
+  await run.ask('Add a card.');
+  // The edit settles; the scene is sent once, by itself.
+  await expect.poll(()=>renders,{timeout:120_000}).toBe(1);
+  const log:any[]=[];page.on('console',async m=>{if(m.text().startsWith('[export]'))log.push(await m.args()[1]?.jsonValue().catch(()=>null));});
+  await page.getByRole('button',{name:'Export'}).first().click();
+  const dialog=page.getByRole('dialog',{name:'Export'});
+  const [download]=await Promise.all([page.waitForEvent('download',{timeout:300_000}),dialog.getByRole('button',{name:'Export',exact:true}).click()]);
+  const saved=join(folder,download.suggestedFilename());await download.saveAs(saved);
+  const pixel=execFileSync(ffmpeg!,['-v','error','-ss','3','-i',saved,'-frames:v','1','-vf','crop=8:8:90:90,scale=1:1','-f','rawvideo','-pix_fmt','rgb24','-']);
+  expect(pixel[0]).toBeGreaterThan(200);expect(pixel[1]).toBeLessThan(80);expect(pixel[2]).toBeGreaterThan(200);
+  await expect.poll(()=>log.at(-1)?.render?.cloud).toMatchObject({scenes:1,failed:0});
+  // Taken from the drawing made ahead: no second render, and no waiting for one.
+  expect(renders).toBe(1);expect(log.at(-1).render.scenes.asked).toBe(0);expect(log.at(-1).render.cloud.ms).toBeLessThan(2000);
+ }finally{await run.gateway.close();rmSync(folder,{recursive:true,force:true});}
+});

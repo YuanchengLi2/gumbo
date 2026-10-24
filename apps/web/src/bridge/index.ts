@@ -9,7 +9,7 @@ import {reallow} from '../project/media/paths';
 import * as exporting from './export';
 import {serveScenes} from './engine';
 import * as scenes from './scenes';
-import {cloudScene,sceneJob} from './cloud-scenes';
+import {cloudScene,sceneJob,prerenderScenes} from './cloud-scenes';
 import {keepStorage} from './awake';
 
 /** window.dream in the browser: what the desktop app's preload and main process answer (preload/index.ts, main/index.ts),
@@ -55,7 +55,7 @@ async function command(c:any){
 
 export function createBridge(){
  const base=import.meta.env.BASE_URL;
- service();serveScenes(service);void keepStorage();
+ service();serveScenes(service);void keepStorage();prerenderScenes(account,service);
  return {
   web:true,
   // The service worker's routes for what the desktop serves from dream-media:// and dream-engine:// (sw.js).

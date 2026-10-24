@@ -62,7 +62,7 @@ export async function cloudScenes(p:ReturnType<typeof prepare>,signal:AbortSigna
  const used=new Set([...p.resolved.clips.map(c=>c.assetId),...p.resolved.items.flatMap(i=>i.source?[i.source.assetId]:[])]);
  const scenes=[...used].map(id=>p.assets.get(id)).filter((a):a is Asset=>!!a?.scene&&a.scene.format==='engine');
  await Promise.all(scenes.map(async asset=>{const fps=asset.fps||30;
-  try{const answer=await ask({assetId:asset.id,width:asset.width,height:asset.height,fps,frames:Math.max(1,Math.round(asset.durationSec*fps)),signal});if('chunks' in answer)drawn.set(asset.id,answer);}
+  try{const answer=await ask({assetId:asset.id,revision:asset.scene!.revisionId,width:asset.width,height:asset.height,fps,frames:Math.max(1,Math.round(asset.durationSec*fps)),signal});if('chunks' in answer)drawn.set(asset.id,answer);}
   catch(error){failed++;if(!signal.aborted)console.warn('[export] quick render failed; the scene is drawn here:',(error as Error).message);}}));
  return{drawn,failed,ms:Math.round(performance.now()-began)};
 }
