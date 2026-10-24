@@ -50,6 +50,8 @@ export function useBilling(){
  return value;
 }
 export const billingReady=(b:Billing):b is BillingSummary=>!!b&&!('unavailable' in b);
+/** Whether plans and credits can be bought: Stripe is set up and paying has been opened. Until then they show as coming soon. */
+export const payingOpen=(b:BillingSummary)=>b.payments&&b.paymentsOpen===true;
 /** Opens Stripe in the browser: Checkout for a plan or packs of credits, or the portal to manage the plan. */
 export const choosePlan=(plan:'pro'|'max'|'max20')=>window.dream.command({type:'account',action:'checkout',plan});
 export const buyCredits=(packs=1)=>window.dream.command({type:'account',action:'checkout',packs});

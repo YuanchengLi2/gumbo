@@ -752,6 +752,11 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .usage-days{display:flex;align-items:flex-end;gap:3px;height:72px;border-bottom:1px solid var(--n8)}.usage-days i{flex:1;border-radius:2px 2px 0 0;background:var(--n25)}.usage-days i:hover{background:var(--n100)}
 .usage-axis{display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--n46)}
 .topup-card{display:flex;align-items:center;justify-content:space-between;gap:18px}
+/* Plans and credits before paying opens: dimmed, with "Coming soon" where the button would be (BillingPages.tsx). */
+.plan-option.soon>*:not(.plan-option-head),.plan-option.soon .plan-option-head strong,.topup-card.soon p,.upgrade-plan.soon>*:not(.upgrade-tag),.upgrade-topup.soon>div{opacity:.45}
+.upgrade-plan.soon .plan-soon-button{width:100%}
+.plan-badge.soon{background:var(--n6);color:var(--n70);margin-left:8px;vertical-align:2px}
+.plan-soon-button{margin-top:auto;height:32px;display:grid;place-items:center;padding:0 14px;border:1px dashed var(--n20);border-radius:8px;font-size:12.5px;font-weight:600;color:var(--n50);flex:none}
 .topup-card p{margin:4px 0 0;font-size:12.5px;line-height:1.5;color:var(--n56)}
 .topup-card>button{display:inline-flex;align-items:center;gap:6px;flex:none}
 .plan-current{display:flex;align-items:center;justify-content:space-between;gap:20px}

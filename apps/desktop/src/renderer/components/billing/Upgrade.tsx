@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {createPortal} from 'react-dom';
 import {X,Check,Sparkles,Plus} from 'lucide-react';
 import type {BillingSummary,PlanId} from '@dream/contracts';
-import {useBilling,billingReady,choosePlan,buyCredits,credits,planOrder} from '../../billing';
+import {useBilling,billingReady,payingOpen,choosePlan,buyCredits,credits,planOrder} from '../../billing';
 import {useAccount} from '../../account';
 
 /** Whether the upgrade window is open, for the whole app (the home sidebar, the profile menu and the editor all open it).
@@ -34,8 +34,9 @@ export function PlanChooser(p:{b:BillingSummary;opened:string|null;pay:(key:stri
   <div className="upgrade-plans" style={{'--plan-count':cards.length} as React.CSSProperties}>{cards.map(plan=>{
    const kind=plan.id==='max20'?'max':plan.id as 'free'|'pro'|'max',current=plan.id===b.plan,up=planOrder.indexOf(plan.id)>planOrder.indexOf(b.plan);
    const times=kind==='pro'&&free?.credits?`${Math.round(plan.credits/free.credits)}x the credits of Free`:kind==='max'&&pro?.credits?`${Math.round(plan.credits/pro.credits)}x the credits of Pro`:'Unlimited editing by hand';
-   return <div key={kind} className={'upgrade-plan'+(current?' current':'')+(kind==='max'?' featured':'')}>
-    {kind==='max'&&!current&&<span className="upgrade-tag">Most popular</span>}
+   const soon=!payingOpen(b)&&!current&&kind!=='free';
+   return <div key={kind} className={'upgrade-plan'+(current?' current':'')+(kind==='max'?' featured':'')+(soon?' soon':'')}>
+    {soon?<span className="upgrade-tag">Coming soon</span>:kind==='max'&&!current&&<span className="upgrade-tag">Most popular</span>}
     <div className="upgrade-plan-head"><strong>{kind==='max'?'Max':plan.name}</strong>
      {kind==='max'&&<div className="upgrade-size" role="radiogroup" aria-label="Max size">{(['max','max20'] as const).map(id=><button key={id} type="button" role="radio" aria-checked={size===id} onClick={()=>setSize(id)}>{id==='max'?'5x':'20x'}</button>)}</div>}</div>
     <small>{blurbs[kind]}</small>
@@ -44,7 +45,8 @@ export function PlanChooser(p:{b:BillingSummary;opened:string|null;pay:(key:stri
      {kind!=='free'&&<><li><Check size={14}/>Extra credits any time</li><li><Check size={14}/>Change or cancel any time</li></>}</ul>
     {kind==='free'?(p.free?<button type="button" className="upgrade-secondary" onClick={p.free.onClick}>{p.free.label}</button>:<span className="upgrade-current">Your plan</span>)
      :current?<span className="upgrade-current">Your plan</span>
-     :<button type="button" className={up?'upgrade-primary':'upgrade-secondary'} disabled={!b.payments} onClick={()=>void p.pay(plan.id,()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{p.opened===plan.id?'Finish on Stripe’s page':b.plan==='free'?`Get ${plan.name}`:up?`Upgrade to ${plan.name}`:`Switch to ${plan.name}`}</button>}
+     :soon?<span className="plan-soon-button">Coming soon</span>
+     :<button type="button" className={up?'upgrade-primary':'upgrade-secondary'} onClick={()=>void p.pay(plan.id,()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{p.opened===plan.id?'Finish on Stripe’s page':b.plan==='free'?`Get ${plan.name}`:up?`Upgrade to ${plan.name}`:`Switch to ${plan.name}`}</button>}
    </div>;})}</div>
   {b.plan!=='free'&&<p className="upgrade-note">A new plan starts right away: Stripe charges only the difference for the rest of this month, and your credits move to the new plan.</p>}
  </>;
@@ -67,13 +69,14 @@ export function UpgradeLayer(){
    <header><h2>{out?'You’re out of credits':b?.plan==='free'?'Choose your plan':'Upgrade your plan'}</h2><p>{out?'Top up or move to a bigger plan to keep editing. Your edit is saved and waiting.':'More credits every month for more videos. Change or cancel any time.'}</p></header>
    {!b?<p className="upgrade-loading">Loading plans…</p>:<>
     <PlanChooser b={b} opened={opened} pay={pay}/>
-    <div className={'upgrade-topup'+(out?' first':'')}>
+    <div className={'upgrade-topup'+(out?' first':'')+(payingOpen(b)?'':' soon')}>
      <div><strong>Just need a few more?</strong><span>{credits(b.topup.credits)} credits for ${b.topup.priceUsd}. They never expire.</span></div>
-     <button type="button" className={out?'upgrade-primary':'upgrade-secondary'} disabled={!b.payments} onClick={()=>void pay('credits',()=>buyCredits(1))}><Plus size={15}/>{opened==='credits'?'Finish on Stripe’s page':`Buy ${credits(b.topup.credits)} credits`}</button>
+     {payingOpen(b)?<button type="button" className={out?'upgrade-primary':'upgrade-secondary'} onClick={()=>void pay('credits',()=>buyCredits(1))}><Plus size={15}/>{opened==='credits'?'Finish on Stripe’s page':`Buy ${credits(b.topup.credits)} credits`}</button>
+      :<span className="plan-soon-button">Coming soon</span>}
     </div>
     {error&&<p className="upgrade-error" role="alert">{error}</p>}
     {opened&&<p className="upgrade-note">Finish on Stripe's page, then come back: your plan and credits show here in a few seconds.</p>}
-    {!b.payments&&<p className="upgrade-note">Paying isn't set up on your Gumbo service yet.</p>}
+    {!payingOpen(b)&&<p className="upgrade-note">Paid plans and credit top-ups are coming soon. Your free credits come back each month.</p>}
    </>}
   </section>
  </div>,document.body);
@@ -84,7 +87,7 @@ export function SidebarUpgrade(){
  const account=useAccount(),billing=useBilling(),b=billingReady(billing)?billing:null,{opened,pay}=usePay();
  if(!account?.signedIn||!b)return null;
  if(b.credits.left<=0)return <div className="side-upgrade out"><span>You're out of credits</span>
-  <button type="button" className="side-buy" disabled={!b.payments} onClick={()=>void pay('credits',()=>buyCredits(1))}><Plus size={15}/>{opened?'Opened in your browser':'Buy credits'}</button>
+  {payingOpen(b)&&<button type="button" className="side-buy" onClick={()=>void pay('credits',()=>buyCredits(1))}><Plus size={15}/>{opened?'Opened in your browser':'Buy credits'}</button>}
   {!topPlan(b.plan)&&<button type="button" className="side-link" onClick={()=>openUpgrade('out')}>or upgrade your plan</button>}</div>;
  if(topPlan(b.plan))return null;
  return <button type="button" className="side-upgrade-button" onClick={()=>openUpgrade()}><Sparkles size={15}/>Upgrade plan</button>;
@@ -94,7 +97,9 @@ export function SidebarUpgrade(){
 export function OutOfCredits(){
  const billing=useBilling(),b=billingReady(billing)?billing:null,{opened,pay}=usePay();
  if(!b||b.credits.left>0)return null;
+ // Before paying opens there is nothing to buy: it says when free credits come back.
+ if(!payingOpen(b))return <div className="out-of-credits" role="status"><span><strong>You're out of credits.</strong> New free credits arrive next month; paid plans are coming soon.</span></div>;
  return <div className="out-of-credits" role="status"><span><strong>You're out of credits.</strong> Top up or upgrade to keep editing.</span>
-  <button type="button" className="out-buy" disabled={!b.payments} onClick={()=>void pay('credits',()=>buyCredits(1))}>{opened?'Opened in browser':`Buy ${credits(b.topup.credits)} · $${b.topup.priceUsd}`}</button>
+  <button type="button" className="out-buy" onClick={()=>void pay('credits',()=>buyCredits(1))}>{opened?'Opened in browser':`Buy ${credits(b.topup.credits)} · $${b.topup.priceUsd}`}</button>
   {!topPlan(b.plan)&&<button type="button" className="out-upgrade" onClick={()=>openUpgrade('out')}>Upgrade</button>}</div>;
 }

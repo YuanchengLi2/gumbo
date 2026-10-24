@@ -57,7 +57,9 @@ export type TokenActivity={lifetimeTokens:number;peakTokens:number;longestTaskMs
 /** The plan, the credits left (the plan's for this period, top-ups, less an overdraft) and what can be bought. */
 export type BillingSummary={plan:PlanId;planName:string;status:string|null;cancelAtPeriodEnd:boolean;renewsAt:string|null;
  credits:{left:number;plan:number;planTotal:number;topups:number;overdraft:number};plans:{id:PlanId;name:string;priceUsd:number;credits:number}[];
- topup:{credits:number;priceUsd:number;maxPacks:number};payments:boolean;portal:boolean};
+ topup:{credits:number;priceUsd:number;maxPacks:number};payments:boolean;portal:boolean;
+ /** Paying has been opened (DREAM_PAYMENTS_OPEN): until then plans and credits show as coming soon. */
+ paymentsOpen?:boolean};
 export type DesktopEvent={type:string;payload:unknown;seq?:number;projectId?:string;turnId?:string};
 /** A new version of the app downloading in the background, or ready to start (Windows; apps/desktop/src/main/updates.ts). */
 export type UpdateStatus={status:'idle'|'downloading'|'ready';version?:string};

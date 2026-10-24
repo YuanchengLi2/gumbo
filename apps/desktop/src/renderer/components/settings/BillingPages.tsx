@@ -2,7 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {Plus,Check,ArrowRight} from 'lucide-react';
 import type {UsageSummary,PlanId} from '@dream/contracts';
 import {requireSignIn} from '../../account';
-import {useBilling,billingReady,buyCredits,manageBilling,choosePlan,cancelPlan,credits} from '../../billing';
+import {useBilling,billingReady,payingOpen,buyCredits,manageBilling,choosePlan,cancelPlan,credits} from '../../billing';
 
 const dollars=(n:number)=>`$${n%1?n.toFixed(2):n}`,day=(iso:string)=>new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 const unwrap=(e:unknown)=>(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/,'');
@@ -26,7 +26,7 @@ export function UsagePage(p:{onPlans:()=>void}){
  if(billing===null)return <SignedOut what="credits and usage"/>;
  if(billing&&'unavailable' in billing)return <p className="settings-note">Your Gumbo service needs its latest update to show credits here.</p>;
  if(!b)return <p className="settings-note">Loading…</p>;
- const used=Math.max(0,b.credits.planTotal-b.credits.plan),share=b.credits.planTotal>0?Math.min(1,used/b.credits.planTotal):1,peak=Math.max(1,...(u?.days??[]).map(d=>d.credits));
+ const open=payingOpen(b),used=Math.max(0,b.credits.planTotal-b.credits.plan),share=b.credits.planTotal>0?Math.min(1,used/b.credits.planTotal):1,peak=Math.max(1,...(u?.days??[]).map(d=>d.credits));
  return <div className="billing-stack">
   <section className="billing-card">
    <header><h3>Credits</h3><button type="button" className="billing-link" onClick={p.onPlans}>{b.planName} plan<ArrowRight size={13}/></button></header>
@@ -47,12 +47,13 @@ export function UsagePage(p:{onPlans:()=>void}){
     <div className="usage-axis"><span>{day(u.days[0].date+'T12:00:00Z')}</span><span>Today</span></div>
    </>}
   </section>
-  <section className="billing-card topup-card">
-   <div><h3>Need more credits?</h3><p>{credits(b.topup.credits)} credits for {dollars(b.topup.priceUsd)}. They never expire and are used after your plan's.</p></div>
-   <button type="button" className="settings-button-primary" disabled={!b.payments} onClick={()=>void pay(()=>buyCredits(1))}><Plus size={15}/>Buy credits</button>
+  {/* Before paying opens, buying is shown as coming soon, dimmed, not as a broken button. */}
+  <section className={'billing-card topup-card'+(open?'':' soon')}>
+   <div><h3>Need more credits?{!open&&<span className="plan-badge soon">Coming soon</span>}</h3><p>{credits(b.topup.credits)} credits for {dollars(b.topup.priceUsd)}. They never expire and are used after your plan's.</p></div>
+   {open?<button type="button" className="settings-button-primary" onClick={()=>void pay(()=>buyCredits(1))}><Plus size={15}/>Buy credits</button>
+    :<span className="plan-soon-button">Coming soon</span>}
   </section>
   {error&&<p className="settings-error" role="alert">{error}</p>}
-  {!b.payments&&<p className="settings-note">Paying isn't set up on your Gumbo service yet.</p>}
   <p className="settings-note">One credit is one cent of AI. A small change uses a few; a whole video usually 100 to 300.</p>
  </div>;
 }
@@ -64,7 +65,7 @@ export function PlanPage(){
  if(billing===null)return <SignedOut what="plan"/>;
  if(billing&&'unavailable' in billing)return <p className="settings-note">Your Gumbo service needs its latest update to show plans here.</p>;
  if(!b)return <p className="settings-note">Loading…</p>;
- const current=b.plans.find(x=>x.id===b.plan)!,paid=b.plan!=='free',ending=b.cancelAtPeriodEnd;
+ const current=b.plans.find(x=>x.id===b.plan)!,paid=b.plan!=='free',ending=b.cancelAtPeriodEnd,open=payingOpen(b);
  return <div className="billing-stack">
   <section className="billing-card plan-current">
    <div className="plan-current-main">
@@ -79,15 +80,16 @@ export function PlanPage(){
    </div>
   </section>
   <h3 className="billing-heading">Change plan</h3>
-  <div className="plan-grid">{b.plans.map(plan=>{const here=plan.id===b.plan,up=order.indexOf(plan.id)>order.indexOf(b.plan);
-   return <div key={plan.id} className={'plan-option'+(here?' current':'')}>
-    <div className="plan-option-head"><strong>{plan.name}</strong>{here&&<span className="plan-badge">Current</span>}</div>
+  <div className="plan-grid">{b.plans.map(plan=>{const here=plan.id===b.plan,up=order.indexOf(plan.id)>order.indexOf(b.plan),soon=!open&&!here&&plan.id!=='free';
+   return <div key={plan.id} className={'plan-option'+(here?' current':'')+(soon?' soon':'')}>
+    <div className="plan-option-head"><strong>{plan.name}</strong>{here&&<span className="plan-badge">Current</span>}{soon&&<span className="plan-badge soon">Coming soon</span>}</div>
     <small>{blurbs[plan.id]}</small>
     <div className="plan-option-price">{plan.priceUsd?<>{dollars(plan.priceUsd)}<span>/month</span></>:'Free'}</div>
     <ul><li><Check size={13}/>{credits(plan.credits)} credits a month</li>{plan.id!=='free'&&<li><Check size={13}/>Buy extra credits any time</li>}</ul>
     {here?<span className="plan-option-current">Your plan</span>
      :plan.id==='free'?<button type="button" className="settings-button-secondary" disabled={!paid||ending} onClick={()=>void pay(cancelPlan)}>{ending?'At period end':'Downgrade'}</button>
-     :<button type="button" className={up?'settings-button-primary':'settings-button-secondary'} disabled={!b.payments} onClick={()=>void pay(()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{b.plan==='free'?`Get ${plan.name}`:up?'Upgrade':'Downgrade'}</button>}
+     :soon?<span className="plan-soon-button">Coming soon</span>
+     :<button type="button" className={up?'settings-button-primary':'settings-button-secondary'} onClick={()=>void pay(()=>choosePlan(plan.id as 'pro'|'max'|'max20'))}>{b.plan==='free'?`Get ${plan.name}`:up?'Upgrade':'Downgrade'}</button>}
    </div>;})}</div>
   {error&&<p className="settings-error" role="alert">{error}</p>}
   <p className="settings-note">Changes between paid plans are prorated: you pay or are credited the difference for the rest of the month, and get that share of the new plan's credits. Cancelling keeps your plan until the end of the period you paid for.</p>
