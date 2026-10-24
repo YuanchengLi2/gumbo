@@ -27,9 +27,13 @@ it('translates the agent\'s requests for Chat Completions and the Responses API,
  // A model without vision gets a note instead of the picture.
  expect(JSON.stringify(chatRequest({...conversation,model:'deepseek-flash'},{...providerModels['deepseek-flash'],vision:false},4096))).not.toContain('image_url');
  expect(providerModels['deepseek-v4-pro']).toBeUndefined();
- // DeepSeek's thinking follows the request's effort: medium thinks lightly (it would think at high on every call).
- const effort=(e?:string)=>chatRequest({...conversation,model:'deepseek-flash',...(e?{profile:{effort:e}}:{})},providerModels['deepseek-flash'],4096).reasoning_effort;
- expect([effort('low'),effort('medium'),effort('high'),effort('xhigh')]).toEqual(['low','low','high','max']);
+ // DeepSeek thinks at low effort whatever the request's (high only when it asks for xhigh): at high, a step thought for
+ // 30-50 s (providers.ts deepseekThinking). The gateway's setting 'on' keeps the request's own effort, 'off' stops
+ // thinking; one request can also turn it off.
+ const deepseekChat=(e?:string,mode?:string,extra:any={})=>chatRequest({...conversation,model:'deepseek-flash',...(e?{profile:{effort:e}}:{}),...extra},providerModels['deepseek-flash'],4096,mode) as any;
+ expect(['low','medium','high','xhigh'].map(e=>[deepseekChat(e).thinking?.type,deepseekChat(e).reasoning_effort])).toEqual([[undefined,'low'],[undefined,'low'],[undefined,'low'],[undefined,'high']]);
+ expect(['low','medium','high','xhigh'].map(e=>deepseekChat(e,'on').reasoning_effort)).toEqual(['low','low','high','max']);
+ expect([deepseekChat('high','off').thinking?.type,deepseekChat('high','off').reasoning_effort,deepseekChat('high',undefined,{dream_thinking:'off'}).thinking?.type]).toEqual(['disabled',undefined,'disabled']);
  const responses=responsesRequest({...conversation,model:'gpt-6.1-sol'},providerModels['gpt-6.1-sol'],4096);
  expect(responses).toMatchObject({instructions:'You edit videos.',store:false,max_output_tokens:4096,reasoning:{effort:'high'}});
  expect(responses.input.map((i:any)=>i.type??i.role)).toEqual(['user','assistant','function_call','function_call_output','user']);
@@ -142,7 +146,8 @@ it('sends two editing requests the same prompt start and cache key, so the secon
 
 it('sends DeepSeek\'s Messages endpoint the agent\'s request with its thinking, its pictures in tool results and the request\'s effort',()=>{
  const request=messagesRequest({...conversation,model:'deepseek-flash'},providerModels['deepseek-flash'],4096) as any;
- expect(request).toMatchObject({model:'deepseek-flash',max_tokens:4096,stream:true,system:'You edit videos.',thinking:{type:'enabled'},output_config:{effort:'high'}});
+ // A high-effort request thinks at low effort (providers.ts deepseekThinking).
+ expect(request).toMatchObject({model:'deepseek-flash',max_tokens:4096,stream:true,system:'You edit videos.',thinking:{type:'enabled'},output_config:{effort:'low'}});
  expect(request.messages).toEqual([
   {role:'user',content:[{type:'text',text:'Trim the intro'}]},
   // The model's earlier thinking goes back with its signature, before its text and call.
@@ -152,9 +157,14 @@ it('sends DeepSeek\'s Messages endpoint the agent\'s request with its thinking, 
  // Only custom tools (no web search), and nothing DeepSeek ignores.
  expect(request.tools).toEqual([{name:'look',description:'Look at a frame',input_schema:conversation.tools[0].input_schema}]);expect(request.tool_choice).toBeUndefined();
  expect(JSON.stringify(request)).not.toContain('cache_control');
- // The same effort levels as the chat route; without an effort DeepSeek thinks at its default.
- const effort=(e?:string)=>(messagesRequest({...conversation,model:'deepseek-flash',profile:e?{effort:e}:undefined},providerModels['deepseek-flash'],4096) as any).output_config?.effort;
- expect([effort('low'),effort('medium'),effort('high'),effort('xhigh'),effort()]).toEqual(['low','low','high','max',undefined]);
+ // The same efforts as the chat route; without an effort DeepSeek thinks at its default.
+ const effort=(e?:string,mode?:string)=>(messagesRequest({...conversation,model:'deepseek-flash',profile:e?{effort:e}:undefined},providerModels['deepseek-flash'],4096,mode) as any).output_config?.effort;
+ expect([effort('low'),effort('medium'),effort('high'),effort('xhigh'),effort()]).toEqual(['low','low','low','high',undefined]);
+ expect([effort('low','on'),effort('medium','on'),effort('high','on'),effort('xhigh','on')]).toEqual(['low','low','high','max']);
+ // With thinking off, the model's earlier thinking is not sent back.
+ const asked=(mode?:string)=>messagesRequest({...conversation,model:'deepseek-flash',profile:{effort:'high'}},providerModels['deepseek-flash'],4096,mode) as any;
+ expect([asked().thinking.type,asked('off').thinking.type]).toEqual(['enabled','disabled']);
+ expect(JSON.stringify(asked('off').messages)).not.toContain('"thinking"');expect(JSON.stringify(asked().messages)).toContain('"thinking"');
  // What it cannot take: documents and sound become notes; redacted thinking, Claude's web search blocks and Gemini's call
  // signatures are left out; turns of one role in a row are one turn, tool results first; a failed call says so.
  const odd=messagesRequest({model:'deepseek-flash',system:[{type:'text',text:'A'},{type:'text',text:'B'}],tools:[],tool_choice:{type:'any'},messages:[
@@ -206,7 +216,7 @@ it('answers DeepSeek on its Messages endpoint when the gateway says so, keeps it
   const messages=await ask('messages','ds-m'),chat=await ask(undefined,'ds-c');
   expect(sent.map(s=>s.url)).toEqual([deepseekMessagesEndpoint,providerEndpoints.deepseek]);
   expect(sent[0].headers.get('x-api-key')).toBe('ds-test');expect(sent[0].headers.get('authorization')).toBeNull();expect(sent[0].headers.get('anthropic-version')).toBe('2023-06-01');
-  expect(sent[0].body).toMatchObject({model:'deepseek-flash',thinking:{type:'enabled'},output_config:{effort:'high'}});expect(sent[1].body.reasoning_effort).toBe('high');
+  expect(sent[0].body).toMatchObject({model:'deepseek-flash',thinking:{type:'enabled'},output_config:{effort:'low'}});expect(sent[1].body.reasoning_effort).toBe('low');
   expect(messages.message.content).toEqual([{type:'thinking',thinking:'The intro runs 4s; trim to 4.',signature:'ds-sig'},{type:'tool_use',id:'call_9',name:'trim',input:{to:4}}]);
   expect(chat.message.content).toEqual([{type:'tool_use',id:'call_9',name:'trim',input:{to:4}}]);
   expect(messages.message.stop_reason).toBe('tool_use');

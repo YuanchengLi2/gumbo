@@ -57,9 +57,24 @@ const effortOf=(body:any)=>{const e=body.profile?.effort;return e==='low'||e==='
 // routine edits several times slower than on GPT-6.1 Sol. Gumbo's effort for the request sets it: low and medium think
 // lightly, high fully, xhigh at most.
 const deepseekEffort=(effort:string)=>effort==='xhigh'?'max':effort==='high'?'high':'low';
+/** Thinking on DeepSeek. Roux 1's requests spent most of their time in it: requests the router scored hard ran at high
+ * effort, where one step thought for 5,000-9,000 tokens (30-50 s) before a small tool call. Replaying the slow steps of a
+ * real request (October 24): at high effort the step that writes the edit thought for 47 s and still went on looking; at
+ * low effort it wrote the same edit in 6 s; with thinking off it answered in 2 s but read more files instead; a cap
+ * (budget_tokens) made it think more, not less. So by default ('auto') it thinks at low effort, and at high only for an
+ * xhigh request (one the user asks to think hardest). dream_thinking 'off', or a number of tokens, sets it for one
+ * request; the gateway's DREAM_DEEPSEEK_THINKING sets the default without a deploy: auto, on (thinking at the request's
+ * own effort, as before) or off. */
+export function deepseekThinking(body:any,mode:string='auto'){
+ if(body?.dream_thinking==='off'||mode==='off'&&body?.dream_thinking===undefined)return{type:'disabled'};
+ if(typeof body?.dream_thinking==='number'&&body.dream_thinking>=1024)return{type:'enabled',budget_tokens:Math.min(32_000,Math.round(body.dream_thinking))};
+ return{type:'enabled'};
+}
+/** The effort DeepSeek thinks at: the request's own with the gateway's setting 'on', low otherwise unless asked for xhigh. */
+const deepseekEffortFor=(effort:string|undefined,mode:string)=>!effort?undefined:mode==='on'?deepseekEffort(effort):effort==='xhigh'?'high':'low';
 
 /** An Anthropic Messages request as a Chat Completions request (Gemini, DeepSeek). */
-export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
+export function chatRequest(body:any,model:ProviderModel,maxTokens:number,thinkingMode='auto'){
  const messages:any[]=[],system=systemText(body.system);if(system)messages.push({role:'system',content:system});
  for(const m of body.messages as any[]){
   if(typeof m.content==='string'){messages.push({role:m.role,content:m.content});continue;}
@@ -86,7 +101,9 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number){
  const tools=functionTools(body.tools),effort=effortOf(body);
  return{model:body.model,messages,...(tools.length?{tools:tools.map(f=>({type:'function',function:f})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_tokens:maxTokens,stream:true,stream_options:{include_usage:true},
   ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{}),
-  ...(model.provider==='deepseek'&&effort?{reasoning_effort:deepseekEffort(effort)}:{})};
+  // DeepSeek's thinking as on its Messages route (deepseekThinking): its effort only matters while it thinks.
+  // Thinking on is the request as it always was (its effort only); off adds the switch.
+  ...(model.provider==='deepseek'?(()=>{const thinking=deepseekThinking(body,thinkingMode);return thinking.type==='disabled'?{thinking}:effort?{reasoning_effort:deepseekEffortFor(effort,thinkingMode)}:{};})():{})};
 }
 
 const unreadable:Record<string,string>={document:'[A document was attached here; this model cannot read it.]',audio:'[Audio was attached here; this model cannot hear it.]'};
@@ -96,14 +113,16 @@ const unreadable:Record<string,string>={document:'[A document was attached here;
  * endpoint cannot take becomes a note (documents, sound) or is left out (redacted thinking, Anthropic's own server tools
  * and their results, Gemini's call signatures, cache_control, which it ignores). DeepSeek ignores is_error, so a failed
  * call says so in its text, as on the chat route. */
-export function messagesRequest(body:any,model:ProviderModel,maxTokens:number){
+export function messagesRequest(body:any,model:ProviderModel,maxTokens:number,thinkingMode='auto'){
+ // Without thinking this turn, earlier thinking stays out of what is sent (a request whose effort stepped down has some).
+ const thinking=deepseekThinking(body,thinkingMode),thinks=thinking.type==='enabled';
  const input=(b:any):any[]=>b?.type==='text'?(b.text?[{type:'text',text:b.text}]:[]):
   b?.type==='image'?(model.vision&&(b.source?.type==='base64'||b.source?.type==='url')?[{type:'image',source:b.source}]:[{type:'text',text:noVision}]):
   unreadable[b?.type]?[{type:'text',text:unreadable[b.type]}]:[];
  const result=(b:any)=>{const content=(typeof b.content==='string'?[{type:'text',text:b.content}]:Array.isArray(b.content)?b.content:[]).flatMap(input);
   return{type:'tool_result',tool_use_id:b.tool_use_id,content:b.is_error?[{type:'text',text:'Error:'},...content]:content.length?content:[{type:'text',text:'(no output)'}]};};
  const said=(b:any):any[]=>b?.type==='text'?(b.text?[{type:'text',text:b.text}]:[]):
-  b?.type==='thinking'&&(b.thinking||b.signature)?[{type:'thinking',thinking:b.thinking??'',...(b.signature?{signature:b.signature}:{})}]:
+  b?.type==='thinking'&&thinks&&(b.thinking||b.signature)?[{type:'thinking',thinking:b.thinking??'',...(b.signature?{signature:b.signature}:{})}]:
   b?.type==='tool_use'?[{type:'tool_use',id:b.id,name:b.name,input:b.input??{}}]:[];
  const messages:{role:string;content:any[]}[]=[];
  for(const m of body.messages as any[]){
@@ -117,7 +136,7 @@ export function messagesRequest(body:any,model:ProviderModel,maxTokens:number){
  const tools=functionTools(body.tools),effort=effortOf(body),system=systemText(body.system),choice=body.tool_choice?.type;
  return{model:body.model,max_tokens:maxTokens,stream:true,...(system?{system}:{}),messages,
   ...(tools.length?{tools:tools.map(t=>({name:t.name,description:t.description,input_schema:t.parameters})),...(choice==='none'||choice==='any'?{tool_choice:{type:choice}}:choice==='tool'&&body.tool_choice.name?{tool_choice:{type:'tool',name:body.tool_choice.name}}:{})}:{}),
-  thinking:{type:'enabled'},...(effort?{output_config:{effort:deepseekEffort(effort)}}:{})};
+  thinking,...(effort&&thinks?{output_config:{effort:deepseekEffortFor(effort,thinkingMode)}}:{})};
 }
 /** DeepSeek's usage on its Messages endpoint as the gateway bills it, from the largest of each count the stream reported
  * (message_start and message_delta). Input is every prompt token not read from the cache: DeepSeek bills a miss at the
