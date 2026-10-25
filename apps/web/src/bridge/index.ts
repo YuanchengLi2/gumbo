@@ -30,6 +30,7 @@ async function accountCommand(c:{action?:string;query?:string;email?:string;cont
  switch(c.action){
   case 'browser':{const url=await account.beginSignIn();setTimeout(()=>location.assign(url),50);return{started:true,url};}
   case 'signout':return account.signout();
+  case 'guest':return account.startGuest();
   case 'usage':return account.usage();
   case 'billing':return account.billing();
   case 'activity':return account.activity();

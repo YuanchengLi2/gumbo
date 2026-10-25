@@ -27,7 +27,8 @@ test('a video added on the website goes into the project made from the request',
   await expect(page.getByText('source.mp4')).toBeVisible();
   await page.getByRole('textbox',{name:'Ask for any edit'}).fill('Make it set in India');
   await page.getByRole('button',{name:'Send'}).click();
-  await page.waitForURL(/\/app\/\?ask=.*&files=/);
+  // It opens Gumbo ready to try without an account (renderer/trial.ts).
+  await page.waitForURL(/\/app\/\?try=1&ask=.*&files=/);
   // The app has taken them from the address.
   await expect.poll(()=>page.evaluate(()=>location.search),{timeout:60_000}).toBe('');
 

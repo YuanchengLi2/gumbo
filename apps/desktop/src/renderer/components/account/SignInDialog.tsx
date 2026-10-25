@@ -1,11 +1,11 @@
 import React,{useEffect,useState} from 'react';
 import {X,ExternalLink} from 'lucide-react';
-import {signInFinished} from '../../account';
+import {signInFinished,type SignInReason} from '../../account';
 
 /** Sign in to Gumbo happens in the browser: this asks for it, opens Gumbo's sign-in page (Google or an emailed link),
  * and waits; the app is signed in when the browser returns, and whatever needed sign-in carries on. Shown whenever
  * something needs Gumbo AI and no one is signed in, and from Settings > Account. */
-export function SignInDialog(p:{onClose:()=>void}){
+export function SignInDialog(p:{onClose:()=>void;reason?:SignInReason}){
  const [url,setUrl]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null),[copied,setCopied]=useState(false);
  const done=(signedIn:boolean)=>{signInFinished(signedIn);p.onClose();};
  useEffect(()=>{const off=window.dream.onEvent(event=>{if(event.type==='account.signed_in')done(true);if(event.type==='account.error'){setUrl(null);setError(String((event.payload as {message?:string})?.message??'Sign-in failed.'));}});
@@ -16,8 +16,8 @@ export function SignInDialog(p:{onClose:()=>void}){
  return <div className="dialog-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)done(false);}}>
   <section className="dialog sign-in" role="dialog" aria-modal="true" aria-label="Sign in to Gumbo">
    <button type="button" className="sign-in-close" aria-label="Close sign-in" onClick={()=>done(false)}><X size={18}/></button>
-   <h2>{url?'Continue in your browser':'Sign in to Gumbo'}</h2>
-   <p className="sign-in-lead">{url?'Sign in on the page that opened in your browser, with Google or your email. Gumbo signs in as soon as you finish.':'Sign in to use Gumbo AI. Your browser opens to sign in with Google or your email; new here, it creates your account.'}</p>
+   <h2>{url?'Continue in your browser':p.reason==='try-used'?'Keep going with a free account':p.reason==='export'?'Sign in to export':'Sign in to Gumbo'}</h2>
+   <p className="sign-in-lead">{url?'Sign in on the page that opened in your browser, with Google or your email. Gumbo signs in as soon as you finish.':p.reason==='try-used'?'That was your free try. Sign in with Google or your email to keep editing and to export. Your project stays right here, and the free plan comes with credits every month.':p.reason==='export'?'Sign in with Google or your email to export your video. Your edit stays right here.':'Sign in to use Gumbo AI. Your browser opens to sign in with Google or your email; new here, it creates your account.'}</p>
    {error&&<p className="sign-in-error" role="alert">{error}</p>}
    {!url?<button type="button" className="sign-in-primary" disabled={busy} onClick={()=>void open()}><ExternalLink size={15}/>{busy?'Opening…':'Sign in with your browser'}</button>
     :<><div className="sign-in-waiting" role="status"><span className="sign-in-spinner" aria-hidden="true"/>Waiting for you to sign in…</div>

@@ -975,3 +975,14 @@ html,body,#root,.app{background:var(--chrome);color:var(--n87)}
 .feedback-error{font-size:11px;color:#a24a36}.feedback-thanks{font-size:12px;color:var(--n58);padding:4px 2px}
 .home-composer .feedback-anchor{justify-content:center;padding-top:10px}.home-composer .feedback-box{right:50%;transform:translateX(50%);bottom:calc(100% + 8px)}
 .share-dialog .share-url{margin-top:16px;font-size:12px;background:var(--n1);color:var(--n80)}.share-error{margin-top:12px;font-size:12px;color:#a24a36}
+
+/* Trying Gumbo without an account (trial.ts): a line under the title, and sample clips under the ideas. */
+.home-try{margin:-4px auto 18px;max-width:560px;text-align:center;font-size:13px;line-height:1.55;color:var(--n58)}
+.try-samples{margin:26px auto 0;max-width:720px;width:100%}
+.try-samples h2{font-size:12px;font-weight:500;color:var(--n45);margin-bottom:10px;text-align:center}
+.try-samples>div{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.try-samples button{display:flex;align-items:center;gap:10px;padding:8px;border:1px solid var(--n9);border-radius:12px;background:var(--n1);text-align:left}
+.try-samples button:hover{background:var(--n4)}
+.try-samples img{width:64px;height:40px;object-fit:cover;border-radius:7px;background:var(--n8);flex:none}
+.try-samples strong{display:block;font-size:12.5px;font-weight:600;color:var(--n80)}.try-samples small{display:block;font-size:11px;color:var(--n45);margin-top:2px}
+.try-credits{margin-top:8px;font-size:10.5px;color:var(--n35);text-align:center}

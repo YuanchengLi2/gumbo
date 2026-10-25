@@ -11,6 +11,7 @@ import {SidebarUpgrade} from '../billing/Upgrade';
 import {useBilling,billingReady} from '../../billing';
 import {useCreatorName} from '../../profile';
 import {useAccount} from '../../account';
+import {SAMPLES,samplePoster,type Sample} from '../../trial';
 
 /** The Gumbo mark, as on usegumbo.app: a paprika bowl with a play button in it and steam rising. The steam takes the text
  * colour, so the mark reads on light and dark; the bowl is the app's one brand colour. */
@@ -32,7 +33,7 @@ const ideas:[typeof Film,string,string][]=[
 /** Home, laid out like Claude's: a sidebar with the mark, a new video, opening a project and the recent ones, and you at its
  * foot (the profile menu, which holds Settings); beside it one big box to start an edit, quick ideas, and the projects as
  * pictures. The top strip of both is the window's drag area, and the window's own controls sit on the main side. */
-export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;onProjectAction:(project:ProjectSummary,action:ProjectAction)=>Promise<void>;busy:boolean}){
+export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v:string)=>void;attachments:Attachment[];onRemove:(id:string)=>void;onSubmit:()=>void;onUpload:()=>void;onOpen:(folder?:string)=>void;onProjectAction:(project:ProjectSummary,action:ProjectAction)=>Promise<void>;busy:boolean;trying?:boolean;onSample?:(sample:Sample)=>void}){
  const name=useCreatorName().split(/\s+/)[0],permission=useEditor(s=>s.permission),model=useEditor(s=>s.model),working=useWorking(),billing=useBilling(),plan=billingReady(billing)&&billing.plan!=='free'?billing.planName:'';
  const waitlisted=!!useAccount()?.waitlisted;
  // The sidebar's width is the user's: dragged at its edge, kept on this computer.
@@ -70,9 +71,13 @@ export function HomeScreen(p:{projects:ProjectSummary[];value:string;onChange:(v
    <div className="home-drag" aria-hidden="true"/>
    <section className="fig-hero">
     <h1>What are we cooking today{name?`, ${name}`:''}?</h1>
+    {p.trying&&<p className="home-try" role="status">Try Gumbo free: your first edit needs no account. Add your clips or pick a sample below, say what you want, and send.</p>}
     {waitlisted&&<p className="home-waitlist" role="status">You're on the waitlist. We'll email you when your spot opens, and then you can start editing.</p>}
     <ChatComposer home value={p.value} onChange={p.onChange} onSubmit={p.onSubmit} attachments={p.attachments} onRemove={p.onRemove} onUpload={p.onUpload} busy={p.busy} permission={permission} onPermission={useEditor.getState().setPermission} model={model} onModel={useEditor.getState().setModel}/>
     <div className="fig-ideas">{ideas.map(([Icon,label,prompt])=><button key={label} onClick={()=>p.onChange(prompt)}><Icon size={14}/>{label}</button>)}</div>
+    {p.trying&&p.onSample&&<section className="try-samples" aria-label="Sample clips"><h2>No clip handy? Start with one of these</h2>
+     <div>{SAMPLES.map(sample=><button key={sample.id} type="button" onClick={()=>p.onSample!(sample)}><img src={samplePoster(sample)} alt="" loading="lazy"/><span><strong>{sample.label}</strong><small>{sample.detail}</small></span></button>)}</div>
+     <p className="try-credits">{SAMPLES.filter(x=>x.credit).map(x=>x.credit).join(' · ')}{SAMPLES.some(x=>x.credit)?' · ':''}Other clips from Pexels.</p></section>}
    </section>
    <section className="fig-recent" aria-label="Your projects">
     <header><h2>Your projects</h2>{live.length>0&&<span>{live.length}</span>}</header>

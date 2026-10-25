@@ -5,6 +5,11 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-24 · Try Gumbo without an account, with sample clips
+You can now try Gumbo before signing up: click "Try it free" on usegumbo.app. Add your own clips, or pick one of the
+sample clips (a skate session, travel shots or a Roblox run) if you don't have any handy, say what you want, and Gumbo
+makes your first edit. To keep editing or to export, sign in with Google or your email. Your project stays where it is.
+
 ## 2026-10-24 · Share how you made a video
 After exporting, click Share link to get a page you can send anyone. It shows your video next to the requests you
 typed and a few stills of the footage it started from ("3 clips · 1:36 of footage"), so people can see how you made

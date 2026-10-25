@@ -1,0 +1,4 @@
+Sample clips for trying Gumbo without your own footage (usegumbo.app/app/?try=1).
+skate-1..3: Pexels (videos 5039704, 5156500, 7644256), free to use under the Pexels license.
+travel-1..4: Pexels, the homepage demo's footage, free to use under the Pexels license.
+obby: Roblox gameplay by Dope Gameplays (youtube.com/@DopeGameplays, video ycEBZN1pkYs), Creative Commons Attribution (CC BY): credited where it is offered.

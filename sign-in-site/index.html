@@ -634,7 +634,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
 </head>
 <body>
 
-<div class="announce">Gumbo now runs in your browser. Nothing to install.<a href="/app/">Open Gumbo ›</a></div>
+<div class="announce">Gumbo now runs in your browser. Nothing to install.<a href="/app/?try=1">Try it free, no sign-up ›</a></div>
 
 <nav class="nav" aria-label="Main">
  <a class="logo" href="#top" aria-label="Gumbo home">
@@ -642,7 +642,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
   Gumbo
  </a>
  <div class="links"><a class="link" href="/features/">Features</a><a class="link" href="/use-cases/">Use cases</a><a class="link" href="/pricing/">Pricing</a><a class="link" href="/community/">Community</a></div>
- <a class="btn" href="/app/">Open Gumbo</a>
+ <a class="btn" href="/app/?try=1">Try it free</a>
 </nav>
 
 <main id="top">
@@ -657,7 +657,7 @@ footer a{text-decoration:none}footer a:hover{color:var(--cream)}
     </form>
     <div class="chips"><button type="button">Cut every um</button><button type="button">Make it feel like the 90s</button><button type="button">Draw our route on a map</button><button type="button">Make it better</button></div>
    </div>
-   <p class="avail">Runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Nothing to install.</p>
+   <p class="avail">Runs in Chrome or Edge on Windows, Mac, Linux and Chromebooks. Nothing to install, and <a href="/app/?try=1">your first edit needs no account</a>.</p>
   </div>
   <div class="kitchen" aria-hidden="true">
    <svg id="kitchen" viewBox="0 -40 1440 270" preserveAspectRatio="xMidYMid slice">
@@ -1241,10 +1241,10 @@ const orders=[
  whenSeen(line,type,.2);
 })();
 
-// The prompt bars: type an edit and Gumbo opens with it (/app/?ask=…). The app keeps it through its onboarding and
+// The prompt bars: type an edit and Gumbo opens with it, ready to try without an account (/app/?try=1&ask=…). The app keeps it through its onboarding and
 // sign-in, then puts it in its box, ready to send.
 const ideas=['Cut every um…','Draw our route on a map…','Make it feel like the 90s…','Three Shorts from my talk…','Make the logo smaller…','Make it better…'];
-const openWith=idea=>{location.href='/app/?ask='+encodeURIComponent(idea.slice(0,2000));};
+const openWith=idea=>{location.href='/app/?try=1&ask='+encodeURIComponent(idea.slice(0,2000));};
 document.querySelectorAll('[data-ask]').forEach((ask,n)=>{
  const form=ask.querySelector('form'),box=ask.querySelector('textarea'),open=window.gumboAsk?.(ask)??openWith;
  const grow=()=>{box.style.height='40px';box.style.height=Math.min(box.scrollHeight,140)+'px';};

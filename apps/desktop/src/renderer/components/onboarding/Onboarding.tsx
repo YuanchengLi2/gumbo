@@ -1,4 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
+import {trying} from '../../trial';
 import {createPortal} from 'react-dom';
 import {ArrowLeft,ArrowRight,ExternalLink,Check,Sparkles} from 'lucide-react';
 import type {OnboardingAnswers} from '@dream/contracts';
@@ -24,7 +25,8 @@ export function OnboardingLayer(){
  const [signInUrl,setSignInUrl]=useState<string|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null);
  // A request typed on usegumbo.app before Gumbo opened waits in the home screen's box once this ends (first-ask.ts).
  const finish=()=>{markOnboarded();setStep(null);deliverFirstAsk();};
- useEffect(()=>{watchBilling();void sendAnswers();void window.dream.runtime().then(r=>{if(r.onboarding||!r.automated&&!onboarded())setStep('welcome');else deliverFirstAsk();},()=>{if(!onboarded())setStep('welcome');else deliverFirstAsk();});},[]);
+ useEffect(()=>{watchBilling();void sendAnswers();// A try (trial.ts) goes straight to its first edit; the questions can wait until there is an account.
+  void window.dream.runtime().then(r=>{if(r.onboarding||!r.automated&&!onboarded()&&!trying())setStep('welcome');else deliverFirstAsk();},()=>{if(!onboarded()&&!trying())setStep('welcome');else deliverFirstAsk();});},[]);
  // Answers given before signing in go to the account at sign-in.
  useEffect(()=>window.dream.onEvent(event=>{if(event.type==='account.signed_in')void sendAnswers();}),[]);
  // A plan bought on the plans step ends the onboarding: the welcome to the plan takes over.

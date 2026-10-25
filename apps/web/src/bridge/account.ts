@@ -6,21 +6,25 @@ type Session={access_token:string;refresh_token:string;expires_at:number;user:{i
 export class SignInRequired extends Error{constructor(){super('SIGN_IN_REQUIRED: Sign in to use Gumbo AI.');this.name='SignInRequired';}}
 /** This version of Gumbo on the web, and the platform its reports and edit logs name (the desktop's is "win32 x64"). */
 export const appVersion='0.3.0',platform=()=>`web ${navigator.platform}`;
-const sessionKey='gumbo-session',verifierKey='gumbo-sign-in-verifier';
+const sessionKey='gumbo-session',verifierKey='gumbo-sign-in-verifier',guestKey='gumbo-guest-session';
 const base64url=(bytes:Uint8Array)=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 const gzipped=async(text:string)=>new Uint8Array(await new Response(new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
 
 export class Account {
  private session:Session|null=null;private refreshing:Promise<void>|null=null;private generation=0;
+ /** Trying Gumbo without an account (usegumbo.app/app/?try=1): an anonymous session the gateway makes a guest with a
+  * few credits (migrations/202610240002). It is used only while no one is signed in, and signing in drops it. */
+ private guest:Session|null=null;
  // Set at build time (scripts/stage-web.ts); an empty line in .env.local counts as unset.
  url=import.meta.env.DREAM_SUPABASE_URL||'https://qewguvfkkwvdoqptiljd.supabase.co';anonKey=import.meta.env.DREAM_SUPABASE_ANON_KEY||'';
  constructor(){
-  this.session=this.saved();
+  this.session=this.saved();try{this.guest=JSON.parse(localStorage.getItem(guestKey)??'null');}catch{}
   // In development (and a build for the tests, never deployed) only, a local stand-in for Supabase and the gateway (the
   // tests' fixture), as the desktop's cloud.json.
   if(import.meta.env.MODE!=='production')try{const cloud=JSON.parse(localStorage.getItem('gumbo-cloud')??'null');if(typeof cloud?.url==='string'){this.url=cloud.url;this.anonKey=cloud.anonKey??'';}}catch{}
  }
- get accountId(){return this.session?.user.id;}
+ get accountId(){return this.session?.user.id??this.guest?.user.id;}
+ get guestSession(){return !this.signedIn()&&!!this.guest;}
  private saved():Session|null{try{return JSON.parse(localStorage.getItem(sessionKey)??'null');}catch{return null;}}
  private save(session:Session){this.session=session;localStorage.setItem(sessionKey,JSON.stringify(session));}
  private clear(){this.session=null;localStorage.removeItem(sessionKey);}
@@ -46,10 +50,24 @@ export class Account {
   if(!verifier)throw new Error('This sign-in was started in another tab. Sign in again here.');
   await this.exchange(code!,verifier);return true;
  }
- async exchange(code:string,verifier:string){const response=await fetch(`${this.url}/auth/v1/token?grant_type=pkce`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({auth_code:code,code_verifier:verifier})});const body=await response.json() as any;if(!response.ok)throw new Error(body.error_description??body.msg??'Sign-in failed.');this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});}
+ async exchange(code:string,verifier:string){const response=await fetch(`${this.url}/auth/v1/token?grant_type=pkce`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({auth_code:code,code_verifier:verifier})});const body=await response.json() as any;if(!response.ok)throw new Error(body.error_description??body.msg??'Sign-in failed.');this.save({...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in});this.dropGuest();}
+ private dropGuest(){this.guest=null;try{localStorage.removeItem(guestKey);}catch{}}
+ private keepGuest(body:any){this.guest={...body,expires_at:Math.floor(Date.now()/1000)+body.expires_in};localStorage.setItem(guestKey,JSON.stringify(this.guest));}
+ /** A guest session for the try, made once and kept until it can no longer be refreshed. */
+ async startGuest(){
+  if(this.signedIn())return{guest:false};if(this.guest){await this.guestToken();return{guest:true};}
+  const response=await fetch(`${this.url}/auth/v1/signup`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{}}),signal:AbortSignal.timeout(15000)});
+  const body=await response.json().catch(()=>({})) as any;if(!response.ok||!body.access_token)throw new Error('Trying without an account is unavailable right now. Sign in to start.');
+  this.keepGuest(body);return{guest:true};
+ }
+ private async guestToken(){
+  const guest=this.guest;if(!guest)throw new SignInRequired();if(guest.expires_at>Date.now()/1000+60)return guest.access_token;
+  const response=await fetch(`${this.url}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:this.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:guest.refresh_token}),signal:AbortSignal.timeout(15000)});
+  if(!response.ok){this.dropGuest();throw new SignInRequired();}this.keepGuest(await response.json());return this.guest!.access_token;
+ }
 
  async token(){
-  let current=this.signedIn();if(!current)throw new SignInRequired();
+  let current=this.signedIn();if(!current)return this.guestToken();
   // Another tab refreshed first: its newer session is used rather than spending this tab's old refresh token.
   const stored=this.saved();if(stored&&stored.refresh_token!==current.refresh_token&&stored.expires_at>current.expires_at){this.session=stored;current=stored;}
   if(current.expires_at<Date.now()/1000+60){
@@ -67,7 +85,7 @@ export class Account {
  private async get(route:string,missing:string){if(!this.signedIn())return null;const response=await fetch(`${this.gateway()}/${route}`,{headers:{Authorization:`Bearer ${await this.token()}`}});if(response.status===404)return{unavailable:true};const body=await response.json() as any;if(!response.ok)throw new Error(body.error??missing);return body;}
  /** A pass for quick render's cloud scene drawing, or why there is none (gateway scene-render.ts). */
  scenePass(){return this.get('scene-render-pass','Quick render is unavailable.');}
- async info(){if(!this.signedIn())return {signedIn:false,email:'',configured:!!this.anonKey};const response=await fetch(`${this.gateway()}/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Gumbo AI is currently unavailable.');return {signedIn:true,email:this.session?.user.email??'',...body};}
+ async info(){if(!this.signedIn())return {signedIn:false,email:'',configured:!!this.anonKey,guest:!!this.guest};const response=await fetch(`${this.gateway()}/account`,{headers:{Authorization:`Bearer ${await this.token()}`}});const body=await response.json() as any;if(!response.ok)throw new Error(body.error??'Gumbo AI is currently unavailable.');return {signedIn:true,email:this.session?.user.email??'',...body};}
  usage(){return this.get('usage','Usage is unavailable.');}
  billing(){return this.get('billing','Billing is unavailable.');}
  activity(){return this.get('activity','Activity is unavailable.');}

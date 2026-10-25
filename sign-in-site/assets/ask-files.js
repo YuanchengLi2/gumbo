@@ -36,7 +36,7 @@
    let paths=[];
    // A browser that can't keep files (no private storage) still opens Gumbo with the request; the files are added there.
    if(picked.length){form.setAttribute('aria-busy','true');try{paths=await store(picked);}catch{}}
-   location.href='/app/?ask='+encodeURIComponent(idea.slice(0,2000))+(paths.length?'&files='+encodeURIComponent(JSON.stringify(paths)):'');
+   location.href='/app/?try=1&ask='+encodeURIComponent(idea.slice(0,2000))+(paths.length?'&files='+encodeURIComponent(JSON.stringify(paths)):'');
   };
  };
 })();
