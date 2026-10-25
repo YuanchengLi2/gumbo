@@ -48,7 +48,7 @@ The Python environment is pinned by `apps/ingest-worker/uv.lock`; its PyInstalle
 
 ## Current boundaries still to complete
 
-Broad generated-code quality, vector retrieval, all analysis models, sample-accurate final audio assembly, streamed provider inference, representative multi-round review quality, update installation, signed distribution and Mac journeys are not established by the current Windows smoke test. See `ACCEPTANCE.md` for evidence.
+Broad generated-code quality, vector retrieval, all analysis models, sample-accurate final audio assembly, streamed provider inference, representative multi-round review quality, update installation, signed distribution and Mac journeys are not established by the current Windows smoke test.
 
 ## Visual review boundary
 

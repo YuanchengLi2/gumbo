@@ -18,6 +18,9 @@ music is, with the music's tempo and every beat, so a montage can cut on the bea
 easy to find. Every few seconds of footage gets a note of what happens in it and any text on screen, like a score or a
 slide title, so the play you want in a game or a match is found, not only what someone said.
 
+It can follow someone or something through a shot. Ask for a vertical version, or for the camera to stay on one
+player, and the framing moves with them instead of staying put while they walk out of frame.
+
 It watches its own cut before it says it's done: what is said, in order, and a frame of every shot. It fixes what is
 off, like a cut in the middle of a word or a story told out of order, before it tells you.
 

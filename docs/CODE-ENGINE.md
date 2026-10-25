@@ -45,6 +45,7 @@ Nothing renders the edit during chat. The edit plays live in the player; only Ex
 | `run` | A shell command (Unix tools, Node, Python, ffmpeg, installs). Past four minutes it goes on in the background with its output so far; `run` with its processId waits again or stops it. A command that changes `project.json` applies it |
 | `look` | Frames of a source at the times asked, or over a range with the words spoken there (and loudness on request), or of the edit as the player draws it |
 | `listen` | Up to 90 seconds of a source or of the edit, heard by a model that can hear, with loudness |
+| `track` | Follow a subject (described in words) through a range: a vision model marks it twice a second, the marks become a smooth path in `output/tracks/<name>.json`, and with a frame shape, keyframes that keep it centred |
 | `review` | The whole cut: what is said in playback order, every shot with its source range and what the shot index measured, what plays over it, the checks, the errors scenes reported, and a frame of every shot on one sheet |
 | `find` | Shots by what is visible, said and measured, with their frames on one sheet |
 | `task` | A helper with its own fresh conversation that looks and reads (never changes anything) and reports back, so a wide investigation never fills the main conversation |
@@ -89,15 +90,17 @@ HISTORY.md                     the edit's versions, newest first, with what was 
 project.json                   the edit, applied live when written
 footage/INDEX.md               every source: id, name, length, a one-line summary, how far its analysis has got
 footage/<name>-<id>/overview.md     what it is, who is in it, its scenes with times, its moments
-footage/<name>-<id>/transcript.txt  what is said, a sentence a line: [start-end] text
-footage/<name>-<id>/words.json      every word with its times, a word a line, for code
-footage/<name>-<id>/shots.txt       every shot: what is visible, tags, measured facts
+footage/<name>-<id>/transcript.txt  what is said, a sentence a line: [start-end] text, "A:", "B:" for the voice
+footage/<name>-<id>/words.json      every word with its times, a word a line, and the voices' turns, for code
+footage/<name>-<id>/shots.txt       every shot (long takes in parts of up to 6 s): what happens, text on screen, tags, measured facts
+footage/<name>-<id>/sound.txt       sections (speech, music, silence…), sounds (laughter, applause, bangs…), loudest moments, voices, tempo
+footage/<name>-<id>/beats.json      every beat of the music, for code
 footage/assets.json            ids, paths and facts for code
 guides/editing.md guides/project.md guides/engine.md   the references, read when the work needs them
 src/  output/  resources/
 ```
 
-`footage/`, `guides/`, `HISTORY.md` and `GUMBO.md` are not part of a version: an undo never takes the memory back. The footage files follow the project (`FootageLibrary.refresh`, every few seconds and before Roux reads them): a transcript grows while it is heard, and a stretch not heard yet is marked so it never reads as silence. An overview is written once a source's transcript and shots are in: in one Haiku call for a source of up to about 48K characters, otherwise in parts of five minutes read four at a time and then combined.
+`footage/`, `guides/`, `HISTORY.md` and `GUMBO.md` are not part of a version: an undo never takes the memory back. The footage files follow the project (`FootageLibrary.refresh`, every few seconds and before Roux reads them): a transcript grows while it is heard, and a stretch not heard yet is marked so it never reads as silence. Shots are described by Haiku from three frames each (early, middle, late; four shots a sheet), so the description says what happens and any text on screen. The sound is measured on the user's computer (`packages/sound`, `sound-index.ts`) in one streaming pass after import: YAMNet (Google's AudioSet classifier, 521 kinds of sound every 0.48 s) gives the sections and events, the loudness gives the loudest moments, CAM++ voice embeddings of every 3 s of speech are grouped into speakers (a transcript line takes the voice covering most of it), and YAMNet's spectrogram gives music's tempo and beats. On the desktop it runs on native ONNX Runtime (about two minutes an hour of footage); on the web in a worker of its own on WebAssembly (about three); the models download once from Hugging Face, pinned and checked by hash. An overview is written once a source's transcript, shots and sound are in: in one Haiku call for a source of up to about 48K characters, otherwise in parts of five minutes read four at a time and then combined.
 
 ### Applying the edit
 
@@ -131,4 +134,4 @@ Without computer access, the Windows host runs commands in an AppContainer with 
 
 ## Verification
 
-`pnpm typecheck` and `pnpm test` cover the agent end to end against scripted gateways: `tests/integration/roux-agent.test.ts` (the loop, the conversation across requests, plan mode, asking, helpers, footage search and review, pauses, stop and resume, compaction, hand changes, the edit log), the tools' suites (publication, scenes, commands, media, transcripts, the shot index, history) and the transport's (recovery, streaming, stalls). The browser tests (`npx playwright test -c tests/web/playwright.config.ts`) run Roux in the web app against the scripted gateway in `tests/fixtures/code-gateway.ts`. `tsx scripts/prefix-tokens.ts` counts the cached prefix exactly. Results of live runs are recorded in `docs/ACCEPTANCE.md`.
+`pnpm typecheck` and `pnpm test` cover the agent end to end against scripted gateways: `tests/integration/roux-agent.test.ts` (the loop, the conversation across requests, plan mode, asking, helpers, footage search and review, pauses, stop and resume, compaction, hand changes, the edit log), the tools' suites (publication, scenes, commands, media, transcripts, the shot index, history) and the transport's (recovery, streaming, stalls). The browser tests (`npx playwright test -c tests/web/playwright.config.ts`) run Roux in the web app against the scripted gateway in `tests/fixtures/code-gateway.ts`. `tsx scripts/prefix-tokens.ts` counts the cached prefix exactly. Live runs: `scripts/eval-roux.ts` runs requests against real footage through the deployed gateway (Roux 1 as users get it) within a budget, and writes a report under `artifacts/`; `tests/desktop/roux-stress-live.spec.ts` runs a twelve-case matrix in the packaged app with no window. Both spend money: run them only when approved.

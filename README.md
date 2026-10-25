@@ -45,7 +45,7 @@ Simple exact edits and questions are handled by Haiku alone. Creative, multi-par
 
 ## Creative coding engine — October 8, 2026
 
-The new agent edits a durable project workspace through general file, command and media-inspection capabilities. Code, dependency lockfiles, generated assets and timeline revisions share publication and undo history. The conversation streams public progress and actual execution, with tasks above the composer and technical details expandable. See [the engine documentation](docs/CODE-ENGINE.md) and [acceptance ledger](docs/ACCEPTANCE.md) for current release gates.
+The new agent edits a durable project workspace through general file, command and media-inspection capabilities. Code, dependency lockfiles, generated assets and timeline revisions share publication and undo history. The conversation streams public progress and actual execution, with tasks above the composer and technical details expandable. See [the engine documentation](docs/CODE-ENGINE.md).
 
 Windows runtime preparation: run `pnpm stage:code-runtime` and `pnpm qualify:code-runtime`. Staging verifies the official archive checksum and applies the documented AppContainer pipe-namespace compatibility patch; the manifest records the modified executable hash. Packaging rejects a missing or stale qualification. This never falls back to unrestricted host execution.
 
@@ -63,7 +63,7 @@ AI creates an encrypted anonymous session automatically. Offline local editing a
 
 An in-progress local-first Windows/macOS AI video editor. Electron loads the packaged React interface locally; a utility process owns SQLite project state. Supabase handles anonymous AI sessions, usage, and completed-export sharing.
 
-**Status:** development implementation. The full product and release gates are not complete. See [verification ledger](docs/ACCEPTANCE.md).
+**Status:** development implementation. The full product and release gates are not complete.
 
 One chat and one project execution engine handle timeline edits, original coded scenes/animation, procedural music and SFX. A local searchable project index supplies relevant chunks; operation schemas and creative capabilities load on demand. Haiku executes simple requests alone and Opus leads Haiku workers for everything else (see the October 9 entry above). Successful creations appear directly on the timeline. Plan first presents editable steps for approval; durable workflows can consult the director during execution, resume interrupted work and undo the turn as one action. Step completion records explicit outcomes and successful tool receipts; paused plans retain their current step and accept follow-up direction in the same composer. Streamed inference responses persist locally for crash recovery, and long provider conversations compact older results into retrievable execution history. Truncated creative definitions retry with more output capacity before any tool executes, within the documented request limits. The current Windows development package has passed the planning and creative export journeys. Mac distribution, complete analysis coverage, broader real-project soak and release quality gates remain open. The engine now has measured large-project storage/retrieval checks and a live Opus-to-Sonnet/module-revision acceptance run; see the latest ledger entry.
 
@@ -105,7 +105,7 @@ The dedicated Supabase project is `qewguvfkkwvdoqptiljd`. Migrations and the dep
 
 The companion runs with `pnpm --filter @dream/companion dev`. Public configuration is `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. No provider or service-role key belongs in the companion bundle.
 
-See [architectural decisions](DECISIONS.md), [license status](docs/LICENSES.md), and [verification ledger](docs/ACCEPTANCE.md).
+See [architectural decisions](DECISIONS.md) and [license status](docs/LICENSES.md).
 
 ## Long-project engine
 

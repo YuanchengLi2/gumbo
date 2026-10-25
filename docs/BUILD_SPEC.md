@@ -26,5 +26,5 @@ Creation includes 50 curated instrumental score presets, 40 SFX presets, editabl
 
 Acceptance requires packaged offline import/export on both targets, persistence/collection/relink recovery, real long-source analysis and AI editing, complete invited-user journeys, signed installers/updates and measured performance. Sources up to two hours and projects up to four hours must be supported. The broader-launch quality target is at least 60% project-weighted preference over the nonprofessional baseline in 20 projects with at least five ratings per pair, including category results and uncertainty.
 
-The implementation is not complete until these behaviors and delivery artifacts are verified. `ACCEPTANCE.md` records current evidence; `IMPLEMENTATION.md` maps the source and remaining changes.
+The implementation is not complete until these behaviors and delivery artifacts are verified. `ARCHITECTURE.md` maps the source; `CODE-ENGINE.md` describes Roux, the agent.
 

@@ -30,6 +30,7 @@ import {CloudSpeech} from '../apps/project-service/src/speech';
 import {ShotIndexer} from '../apps/project-service/src/shot-index';
 import {SoundIndexer} from '../apps/project-service/src/sound-index';
 import {soundAnalyser} from '../apps/project-service/src/sound-runtime';
+import {locator,locateSystem} from '../apps/project-service/src/track';
 import {sourceInspector} from '../apps/project-service/src/source-frames';
 import {contactSheet} from '../apps/project-service/src/contact-sheet';
 import {listenSystem} from '../apps/project-service/src/edit-audio';
@@ -131,6 +132,7 @@ const shots=new ShotIndexer(db,paths.ffmpeg,(system,content,signal)=>agent!.infe
 const sounds=new SoundIndexer(db,paths.ffmpeg,soundAnalyser(resolve('artifacts/models')));
 const workspace=new Workspace(db,{run:runtime.run.bind(runtime),ffmpeg:paths.ffmpeg,ffprobe:paths.ffprobe,shots,sounds,
  summarize:async(system,content,signal)=>text(await agent!.inference(agentModels.haiku,system,[{role:'user',content}],[],undefined,'footage_overview','overview',signal)),
+ locate:locator(async(content,turnId,signal)=>text(await agent!.inference(service.providers.google?agentModels['gemini-flash']:agentModels.haiku,locateSystem,[{role:'user',content}],[],turnId,'tracking','main',signal))),
  ...(service.providers.google?{listen:async(clip,turnId,signal)=>text(await agent!.inference(agentModels['gemini-flash'],listenSystem,[{role:'user',content:[{type:'text',text:`Audio: ${clip.what}.${clip.question?` Question: ${clip.question}`:''}`},{type:'audio',source:{type:'base64',media_type:'audio/mpeg',data:clip.audio},durationSec:clip.durationSec}]}],[],turnId,'listening','main',signal))}:{})},publish);
 agent=new Agent(db,connection,publish,workspace);
 const speech=new CloudSpeech(db,paths.ffmpeg,connection,publish);

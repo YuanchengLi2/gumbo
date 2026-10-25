@@ -16,6 +16,7 @@ export function toolActivity(name:string|undefined,input:any):string|undefined{
   case 'look':return input.target==='edit'?'Looking at the edit':'Looking at the footage';
   case 'listen':return input.target==='edit'?'Listening to the edit':'Listening to the sound';
   case 'review':return 'Watching the edit';
+  case 'track':return typeof input.subject==='string'&&input.subject.trim()?`Following ${input.subject.trim().slice(0,60)}`:'Following the subject';
   case 'find':return input.query?`Searching your footage for “${String(input.query).slice(0,60)}”`:'Going through your footage';
   case 'task':return typeof input.title==='string'&&input.title.trim()?input.title.trim():'Looking into it';
   case 'todo':return 'Updating tasks';
