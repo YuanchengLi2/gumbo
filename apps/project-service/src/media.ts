@@ -1,11 +1,11 @@
 import {measureLoudness} from './loudness';
-import {copyMedia,canPreviewOriginal,canPreviewAudio,playbackCapabilities,keyframeGap,PREVIEW_KEYFRAME_SEC,LONG_GOP_SEC} from './media-io';
+import {copyMedia,canPreviewOriginal,canRemuxForPreview,canPreviewAudio,playbackCapabilities,keyframeGap,PREVIEW_KEYFRAME_SEC,LONG_GOP_SEC} from './media-io';
 import {setTimeout as wait} from 'node:timers/promises';
 import {transcriptWords} from './transcript';
 import {analyzeStage} from './analysis-client';
 import {atomicArtifact} from './artifacts';
 import {mediaFacts} from '../../../packages/footage/src/capture-time';
-import {spawn} from 'node:child_process';import {createReadStream,existsSync,mkdirSync,writeFileSync,readFileSync,statSync,readdirSync,unlinkSync} from 'node:fs';import {join,basename} from 'node:path';import {createHash,randomUUID} from 'node:crypto';import {ProjectDB} from '@dream/project-db';import {AssetSchema,type Asset} from '@dream/footage';
+import {spawn} from 'node:child_process';import {createReadStream,existsSync,mkdirSync,writeFileSync,readFileSync,statSync,readdirSync,unlinkSync} from 'node:fs';import {join,basename,extname} from 'node:path';import {createHash,randomUUID} from 'node:crypto';import {ProjectDB} from '@dream/project-db';import {AssetSchema,type Asset} from '@dream/footage';
 export function run(exe:string,args:string[],signal?:AbortSignal):Promise<string>{return new Promise((resolve,reject)=>{const child=spawn(exe,args,{windowsHide:true,signal});let out='',err='';child.stdout.on('data',d=>{out+=d.toString();});child.stderr.on('data',d=>{err=(err+d.toString()).slice(-16000);});child.on('error',reject);child.on('close',code=>code===0?resolve(out):reject(new Error(`${basename(exe)} exited ${code}: ${err.slice(-1500)}`)));});}
 export async function fingerprint(path:string){const hash=createHash('sha256');for await(const chunk of createReadStream(path))hash.update(chunk);return hash.digest('hex');}
 /** When the media was captured: the phone's own creation date (with its time zone), the container's creation time, EXIF for photos, else the file time. */
@@ -45,7 +45,8 @@ export class Ingest {
   // The same unchanged file is imported once, whichever request brings it in again.
   const same=this.db.footage().assets.find(a=>a.source&&fold(a.source.path)===fold(path)&&a.source.size===info.size&&a.source.modifiedAt===info.mtime.toISOString()&&!a.missing);if(same){if(same.status==='failed')this.retry(same);return same;}
   const checksum='pending:'+createHash('sha256').update(JSON.stringify([assetId,info.size,info.mtimeMs])).digest('hex');
-  const meta=await probe(originalPath,this.ffprobe);signal?.throwIfAborted();const asset=AssetSchema.parse({id:assetId,filename:basename(path),originalPath,...meta,contentType:meta.kind==='video'?'mixed':'broll',status:'registered',missing:false,waveform:[],fingerprint:checksum,copyRequested:copy,source:{path,size:info.size,modifiedAt:info.mtime.toISOString()},playback:{ready:canPreviewOriginal({...meta,originalPath}),video:canPreviewOriginal({...meta,originalPath})?'original':'proxy'}});asset.playback=playbackCapabilities(asset);this.db.saveAsset(asset);this.startSpeech(asset);if(asset.playback?.ready)this.onReady?.(asset);this.queue.push({asset});if(!quiet)this.publish('state',this.db.state({bounded:true}));void this.drain();return asset;
+  // A container the browser cannot read (AVI, WMV, FLV) says so plainly, naming the file, instead of ffprobe's words.
+  const meta=await probe(originalPath,this.ffprobe).catch(error=>{if(/unsupported or unrecognizable format/i.test((error as Error).message))throw new Error(`${basename(path)} is in a format Gumbo can't open in the browser yet (${(extname(path).slice(1)||'unknown').toUpperCase()}). Save it as an MP4 or MOV and add it again.`);throw error;});signal?.throwIfAborted();const asset=AssetSchema.parse({id:assetId,filename:basename(path),originalPath,...meta,contentType:meta.kind==='video'?'mixed':'broll',status:'registered',missing:false,waveform:[],fingerprint:checksum,copyRequested:copy,source:{path,size:info.size,modifiedAt:info.mtime.toISOString()},playback:{ready:canPreviewOriginal({...meta,originalPath}),video:canPreviewOriginal({...meta,originalPath})?'original':'proxy'}});asset.playback=playbackCapabilities(asset);this.db.saveAsset(asset);this.startSpeech(asset);if(asset.playback?.ready)this.onReady?.(asset);this.queue.push({asset});if(!quiet)this.publish('state',this.db.state({bounded:true}));void this.drain();return asset;
  }
  /** Registers many files, four at a time, with one state update at the end. Preparation (proxies, thumbnails, speech) continues in the background. */
  async registerMany(paths:string[],copy:(path:string)=>boolean,requestKey:string,signal?:AbortSignal){
@@ -146,7 +147,11 @@ export class Ingest {
   };
   if(!background&&a.kind==='video'&&(!canPreviewOriginal(a)||requested==='proxy')){
    const proxy=join(this.db.folder,'Media/Proxies',`${a.id}-proxy-v2.mp4`);
-   const proxyReady=await stage('proxy',async()=>{await atomicArtifact(proxy,async temporary=>{await run(this.ffmpeg,['-y','-i',a.originalPath,'-vf',"scale=w='min(960,iw)':h=-2",'-c:v','libx264','-preset','veryfast','-crf','24','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',temporary],signal);},async temporary=>{await probe(temporary,this.ffprobe);});a.proxyPath=proxy;},proxy);if(!proxyReady)throw new Error('The video could not be prepared for playback.');
+   // A playable codec in another container is copied into an MP4 as it is (the sound made AAC); anything else, or a
+   // copy that fails, is encoded again at 960 wide.
+   const encode=(temporary:string)=>run(this.ffmpeg,['-y','-i',a.originalPath,'-vf',"scale=w='min(960,iw)':h=-2",'-c:v','libx264','-preset','veryfast','-crf','24','-pix_fmt','yuv420p','-c:a','aac','-b:a','192k','-movflags','+faststart',temporary],signal);
+   const remux=(temporary:string)=>run(this.ffmpeg,['-y','-i',a.originalPath,'-map','0:v:0','-map','0:a:0?','-c:v','copy',...(a.videoCodec==='hevc'?['-tag:v','hvc1']:[]),'-c:a','aac','-b:a','192k','-movflags','+faststart',temporary],signal);
+   const proxyReady=await stage('proxy',async()=>{await atomicArtifact(proxy,async temporary=>{if(canRemuxForPreview(a)){try{await remux(temporary);await probe(temporary,this.ffprobe);return;}catch(error){signal.throwIfAborted();}}await encode(temporary);},async temporary=>{await probe(temporary,this.ffprobe);});a.proxyPath=proxy;},proxy);if(!proxyReady)throw new Error('The video could not be prepared for playback.');
   }
   if(background&&a.kind!=='audio'){
    const thumbnail=join(dir,'thumbnail.jpg');

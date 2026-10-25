@@ -9,6 +9,7 @@ const state=(page:Page)=>page.evaluate(()=>(window as any).dream.command({type:'
 
 test('upload timing',async({page})=>{
  test.skip(!existsSync(file),'no video to measure with');test.setTimeout(600_000);
+ page.on('pageerror',e=>console.log('UPLOAD PAGEERROR '+e.message));page.on('console',m=>{if(m.type()==='error')console.log('UPLOAD CONSOLE '+m.text().slice(0,300));});
  await page.addInitScript(()=>{localStorage.setItem('gumbo-onboarded','1');});
  await page.goto('/app/');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
  await page.evaluate(()=>(window as any).dream.createProject({requestId:'timing-'+Date.now(),text:'',paths:[]}));
@@ -30,6 +31,8 @@ test('upload timing',async({page})=>{
   if(marks.ready&&(s?.jobs??[]).every((j:any)=>j.status!=='running'&&j.status!=='queued'))break;
   await page.waitForTimeout(150);
  }
+ if(!marks.playable)console.log('UPLOAD TOAST '+(await page.locator('.error-toast').allTextContents()).join(' | '));
+ const last=await state(page).catch(()=>null);if(!marks.playable)console.log('UPLOAD STATE '+JSON.stringify({asset:last?.footage?.assets?.[0]&&{status:last.footage.assets[0].status,playback:last.footage.assets[0].playback,videoCodec:last.footage.assets[0].videoCodec},jobs:last?.jobs?.map((j:any)=>[j.step,j.status,j.error]),error:last?.error}).slice(0,1500));
  const sizeMb=(await page.evaluate(()=>(window as any).__file.size))/1e6;
  console.log(`UPLOAD ${file.split(/[\\/]/).pop()} ${sizeMb.toFixed(0)} MB`);
  for(const [k,v] of Object.entries(marks).sort((x,y)=>x[1]-y[1]))console.log(`  ${k.padEnd(28)} ${(v/1000).toFixed(2)} s`);

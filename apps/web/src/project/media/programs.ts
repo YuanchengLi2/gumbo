@@ -189,7 +189,8 @@ async function analyse(input:Args['inputs'][number],options:Map<string,string>,i
  io.stderr(lines.join('\n')+'\n');
 }
 /** -i IN … -c:v libx264 OUT.mp4: the playback proxy (width at most 960, with its sound as AAC) or the preview copy (short
- * side at most 1080, a keyframe every -force_key_frames seconds, no sound), encoded with WebCodecs. */
+ * side at most 1080, a keyframe every -force_key_frames seconds, no sound), encoded with WebCodecs; with -c:v copy, the
+ * playback copy of a playable codec in another container, its picture copied as it is. */
 async function video(input:string,output:string,options:Map<string,string>,flags:Set<string>,io:Io){
  const media=await open(input);
  try{
@@ -198,9 +199,10 @@ async function video(input:string,output:string,options:Map<string,string>,flags
   const maxWidth=/min\((\d+),iw\)/.exec(scale);if(maxWidth){width=Math.min(Number(maxWidth[1]),w0);height=h0*width/w0;}
   const shortSide=/(\d+)\/min\(iw,ih\)/.exec(scale);if(shortSide){const k=Math.min(1,Number(shortSide[1])/Math.min(w0,h0));width=w0*k;height=h0*k;}
   const every=Number(/n_forced\*([\d.]+)/.exec(options.get('-force_key_frames')??'')?.[1]??2),noAudio=flags.has('-an')||(options.get('-map')??'').split(' ').every(m=>m.includes(':v'));
-  const target=await writable(output);
+  // -c:v copy (media.ts, for a playable codec in another container): the picture's packets go into the MP4 as they are.
+  const copy=options.get('-c:v')==='copy',target=await writable(output);
   const conversion=await Conversion.init({input:media,output:new Output({format:new Mp4OutputFormat({fastStart:false}),target:new StreamTarget(target as unknown as WritableStream<any>,{chunked:true})}),
-   video:{codec:'avc',width:even(width),height:even(height),fit:'fill',bitrate:QUALITY_MEDIUM,keyFrameInterval:every,forceTranscode:true},
+   video:copy?{}:{codec:'avc',width:even(width),height:even(height),fit:'fill',bitrate:QUALITY_MEDIUM,keyFrameInterval:every,forceTranscode:true},
    audio:noAudio?{discard:true}:{codec:'aac',bitrate:192_000}});
   if(!conversion.isValid){await target.abort?.();throw new Error('This video cannot be converted in the browser: '+conversion.discardedTracks.map(d=>`${d.track.type} (${d.reason})`).join(', '));}
   const abort=()=>void conversion.cancel();io.signal.addEventListener('abort',abort,{once:true});
@@ -223,7 +225,7 @@ export async function runProgram(program:string,args:string[],io:Io):Promise<num
   if(/%\d*d/.test(input.path)&&(a.options.get('-vf')??'').includes('tile=')){await sheet(input,out,a.options,io);return 0;}
   if(a.options.get('-frames:v')==='1'){await still(input,out,a.options,io);return 0;}
   if(a.flags.has('-vn')||a.options.has('-ar')&&!a.options.has('-c:v')){await audioFile(input,out,a.options,io);return 0;}
-  if(a.options.get('-c:v')==='libx264'){await video(input.path,out,a.options,a.flags,io);return 0;}
+  if(['libx264','copy'].includes(a.options.get('-c:v')??'')){await video(input.path,out,a.options,a.flags,io);return 0;}
  }
  throw new Error(`${name} ${args.filter(x=>!x.startsWith('/')).slice(0,8).join(' ')} … is not available in the browser yet.`);
 }
