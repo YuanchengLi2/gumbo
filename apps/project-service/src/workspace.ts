@@ -26,6 +26,7 @@ import {viewEdit,type SourceFacts} from './edit-view';
 import {reviewEdit} from './edit-review';
 import {downloadMedia,type OnlineMedia} from './media-download';
 import {ShotIndexer,searchShots,shotLine,usedRanges,rangeFacts,type ShotIndex} from './shot-index';
+import type {SoundIndexer} from './sound-index';
 import {extractAudio,mixEditRange,measureClip,MAX_LISTEN_SEC} from './edit-audio';
 import {mentionLines,styleFromOtherProjects} from './mentions';
 import {globMatcher,importResources} from './resource-import';
@@ -41,7 +42,7 @@ import {FootageLibrary,footageFolder,described} from './footage-library';
 type Asset=ReturnType<ProjectDB['assets']>[number];
 export type WorkspaceOptions={run:ProcessRunner;ffmpeg:string;ffprobe:string;audioWorker?:string;files?:FileService;
  transcribeRange?:(assetId:string,startSec:number,endSec:number,options:{language?:string;translate?:boolean},signal:AbortSignal)=>Promise<unknown>;
- mediaSearch?:(request:{query:string;kind:string;limit:number},signal:AbortSignal)=>Promise<any>;shots?:ShotIndexer;
+ mediaSearch?:(request:{query:string;kind:string;limit:number},signal:AbortSignal)=>Promise<any>;shots?:ShotIndexer;sounds?:SoundIndexer;
  listen?:(clip:{audio:string;durationSec:number;what:string;question?:string},turnId:string,signal:AbortSignal)=>Promise<string>;
  summarize?:(system:string,text:string,signal:AbortSignal)=>Promise<string>;renderReview?:ReviewRenderer;
  importMany?:(paths:string[],requestId:string,copy:boolean|undefined,signal:AbortSignal)=>Promise<{permissionRequired?:true;results?:({asset:any}|{path:string;error:string})[]}>};
@@ -69,7 +70,7 @@ ${notes.map(n=>`- ${n}`).join('\n')}
 export class Workspace implements AgentHost {
  readonly root:string;readonly footage:FootageLibrary;private computer?:ComputerStatus;
  constructor(private db:ProjectDB,private options:WorkspaceOptions,private publishEvent:(type:string,payload:any)=>void){
-  this.root=join(db.folder,'Workspace');this.footage=new FootageLibrary(db,this.root,{shots:options.shots,summarize:options.summarize});
+  this.root=join(db.folder,'Workspace');this.footage=new FootageLibrary(db,this.root,{shots:options.shots,sounds:options.sounds,summarize:options.summarize});
  }
  private write(path:string,text:string){const target=workspacePath(this.root,path);mkdirSync(dirname(target),{recursive:true});replaceFileSync(target,text);return digest(text);}
  private queue:Promise<unknown>=Promise.resolve();
@@ -412,14 +413,14 @@ export class Workspace implements AgentHost {
    if(asset.sequence)for(let n=0;n<asset.sequence.frameCount;n++){const name=String(n).padStart(6,'0')+'.png',output=join(destination,name);if(!existsSync(output))copyFileSync(join(asset.sequence.directory,name),output);}
   }
  }
- private async command(input:{command:string;cwd:string;timeoutMs:number},callId:string,turnId:string,signal:AbortSignal):Promise<string>{
+ private async command(input:{command:string;cwd:string;timeoutMs:number;progress?:string},callId:string,turnId:string,signal:AbortSignal):Promise<string>{
   const identity=digest(JSON.stringify({command:input.command,cwd:input.cwd})),old=this.db.db.prepare('SELECT * FROM workspace_processes WHERE id=?').get(callId) as any;
   if(old&&old.identity!==identity)throw new Error('This call id belongs to a different command.');
   if(rendersTheEdit(String(input.command),this.root,input.cwd))throw new Error(RENDER_REFUSAL.replace('publish instead','write project.json instead'));
   await this.sources(signal);this.footage.refresh();workspacePath(this.root,input.cwd);
   if(!old)this.db.db.prepare('INSERT INTO workspace_processes VALUES(?,?,?,?)').run(callId,identity,'prepared',JSON.stringify({sourceSnapshot:this.db.workspace.capture().hash}));
   let output='',lastOutput=0;
-  const emit=(status:string)=>{if(status==='running'&&output&&Date.now()-lastOutput<120)return;lastOutput=Date.now();const event=this.db.activityEvent(turnId,{id:'tool:'+callId,kind:'action',tool:'run',text:'Working on the edit',detail:input.command,status,output:output.slice(-12000)});if(event)this.publishEvent('ai.activity',{turnId,event});};
+  const emit=(status:string)=>{if(status==='running'&&output&&Date.now()-lastOutput<120)return;lastOutput=Date.now();const event=this.db.activityEvent(turnId,{id:'tool:'+callId,kind:'action',tool:'run',text:input.progress?.trim()||'Working on the edit',detail:input.command,status,output:output.slice(-12000)});if(event)this.publishEvent('ai.activity',{turnId,event});};
   await this.restoreDependencies(callId,signal,text=>{output=(output+text).slice(-12000);emit('running');});
   if(old&&['complete','failed','cancelled'].includes(old.status))return this.described(JSON.parse(old.json));
   this.db.db.prepare('UPDATE workspace_processes SET status=? WHERE id=?').run('running',callId);
@@ -528,7 +529,7 @@ export class Workspace implements AgentHost {
   const page=hits.slice(input.offset,input.offset+input.limit);
   let sheet:{data:string}|undefined;const makeSheet=this.sheet();
   if(page.length&&makeSheet)try{const images=await Promise.all(page.slice(0,12).map(async h=>({data:(await indexer.frame(byId.get(h.shot.assetId)!,h.shot,signal)).toString('base64')})));sheet=await makeSheet(images,signal);}catch{signal.throwIfAborted();}
-  const text=[`${hits.length} shot${hits.length===1?'':'s'} matched${input.query?` "${input.query}"`:''}${hits.length>page.length?`, showing ${input.offset+1}-${input.offset+page.length}`:''}. Each: source and range in source seconds (length) | what is visible | measured facts | what is said | where the edit already uses it.`,
+  const text=[`${hits.length} shot${hits.length===1?'':'s'} matched${input.query?` "${input.query}"`:''}${hits.length>page.length?`, showing ${input.offset+1}-${input.offset+page.length}`:''}. Each: source and range in source seconds (length) | what happens | on screen, when there is text | measured facts | what is said | where the edit already uses it.`,
    ...page.map((h,n)=>shotLine(h,input.offset+n+1,byId.get(h.shot.assetId)?.filename)),
    ...(input.offset+page.length<hits.length?[`(more: find again with offset ${input.offset+page.length})`]:[]),
    ...(pending.length?[`Still being analysed: ${pending.slice(0,5).join(', ')}; search again shortly for them.`]:[])].join('\n');

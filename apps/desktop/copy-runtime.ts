@@ -1,6 +1,6 @@
 import {createRequire} from 'node:module';
 import {dirname,join} from 'node:path';
-import {existsSync,readFileSync,cpSync,mkdirSync} from 'node:fs';
+import {existsSync,readFileSync,cpSync,mkdirSync,readdirSync,rmSync} from 'node:fs';
 export function copyRuntimeDependencies(destination:string){
  const appRequire=createRequire(join(__dirname,'package.json'));
  const copied=new Set<string>(),rootVersions=new Map<string,string>();
@@ -28,5 +28,12 @@ export function copyRuntimeDependencies(destination:string){
   for(const dependency of Object.keys(pkg.peerDependencies??{}))copy(dependency,nested,target,!!pkg.peerDependenciesMeta?.[dependency]?.optional,chain);
  }
  // ffmpeg-static and ffprobe-static are not shipped: the app uses staged/media-runtime once installed.
- for(const dependency of ['better-sqlite3','sqlite-vec','@remotion/renderer'])copy(dependency,appRequire,destination);
+ for(const dependency of ['better-sqlite3','sqlite-vec','@remotion/renderer','onnxruntime-node'])copy(dependency,appRequire,destination);
+ // ONNX Runtime (the sound analysis) ships every platform's build and its GPU libraries (288 MB); the app runs it on the
+ // CPU, so only this platform's runtime stays (28 MB on Windows).
+ const ort=join(destination,'node_modules','onnxruntime-node','bin');
+ if(existsSync(ort))for(const napi of readdirSync(ort))for(const platform of readdirSync(join(ort,napi))){
+  const folder=join(ort,napi,platform);if(platform!==process.platform){rmSync(folder,{recursive:true,force:true});continue;}
+  for(const arch of readdirSync(folder)){if(arch!==process.arch){rmSync(join(folder,arch),{recursive:true,force:true});continue;}for(const name of ['DirectML.dll','dxcompiler.dll','dxil.dll'])rmSync(join(folder,arch,name),{force:true});}
+ }
 }

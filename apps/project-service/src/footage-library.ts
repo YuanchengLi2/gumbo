@@ -5,14 +5,18 @@ import type {FootageIndex} from '@dream/footage';
 import {captureOrder} from '@dream/agent';
 import {replaceFileSync,digest} from '../../../packages/project-db/src/workspace-store';
 import {ShotIndexer,type ShotIndex} from './shot-index';
+import {SoundIndexer,soundText,beatsJson,lineSpeaker,type SoundIndex} from './sound-index';
 
 /** The footage as files, so the agent reads and searches it the way a programmer reads and searches code. Every source gets
  * a folder under footage/:
  *  - overview.md: what it is, who is in it, its scenes with times and its notable moments (written by a small model from
  *    the transcript and the shot list, once both are in);
- *  - transcript.txt: what is said, one sentence a line with its source times;
+ *  - transcript.txt: what is said, one sentence a line with its source times (and who says it, when there are voices
+ *    to tell apart);
  *  - words.json: every word with its times, for code that computes cuts;
- *  - shots.txt: every shot with what is visible and what was measured (camera, light, sharpness).
+ *  - shots.txt: every shot with what is visible and what was measured (camera, light, sharpness);
+ *  - sound.txt: what kind of sound is where, notable sounds (laughter, applause, a bang…), the loudest moments, the voices
+ *    and the music's tempo (sound-index.ts), with beats.json holding every beat for code.
  * footage/INDEX.md lists every source with its length, a one-line summary and how far its analysis has got, and
  * footage/assets.json gives code the facts and file paths. The same pipeline runs for a ten-second clip and a six-hour
  * recording; only the number of lines differs. The files follow the project: a transcript grows while it is heard. */
@@ -43,13 +47,13 @@ export function sentences(words:(Pick<Word,'text'|'start'|'end'>&{speaker?:strin
  return lines;
 }
 /** transcript.txt: a header that says what the file is and how complete, then "[start-end] sentence" in source seconds. */
-export function transcriptText(asset:Pick<Asset,'id'|'filename'|'durationSec'|'hasAudio'>,words:(Pick<Word,'text'|'start'|'end'>&{speaker?:string})[],status:{state:'complete'|'running'|'waiting'|'failed'|'none';until?:number;error?:string;covered?:{start:number;end:number}[]}){
+export function transcriptText(asset:Pick<Asset,'id'|'filename'|'durationSec'|'hasAudio'>,words:(Pick<Word,'text'|'start'|'end'>&{speaker?:string})[],status:{state:'complete'|'running'|'waiting'|'failed'|'none';until?:number;error?:string;covered?:{start:number;end:number}[]},sound?:SoundIndex){
  const head=`# What is said in ${asset.filename} (${asset.id}, ${clock(asset.durationSec)} long). One sentence a line: [start-end] in source seconds.`;
  if(!asset.hasAudio)return`${head}\n(This source has no sound.)\n`;
  const note=status.state==='running'?`(Still being transcribed: heard without a gap up to ${r1(status.until??0)} s of ${r1(asset.durationSec)} s. More lines arrive as it continues.)`
   :status.state==='waiting'?'(Not transcribed yet; lines arrive here as it is heard.)'
   :status.state==='failed'?`(Transcription failed${status.error?`: ${status.error.slice(0,200)}`:''}.)`:'';
- const lines=sentences(words).map(l=>({at:l.start,text:`[${r1(l.start)}-${r1(l.end)}] ${l.speaker?`${l.speaker}: `:''}${l.text}`}));
+ const lines=spoken(words,sound).map(l=>({at:l.start,text:`[${r1(l.start)}-${r1(l.end)}] ${l.speaker?`${l.speaker}: `:''}${l.text}`}));
  // While parts are heard out of order, a stretch not heard yet is marked, so it never reads as silence.
  if(status.state==='running'){
   const spans:[number,number][]=[];for(const r of [...status.covered??[]].sort((a,b)=>a.start-b.start)){const last=spans.at(-1);if(last&&r.start<=last[1]+.01)last[1]=Math.max(last[1],r.end);else spans.push([r.start,r.end]);}
@@ -58,21 +62,26 @@ export function transcriptText(asset:Pick<Asset,'id'|'filename'|'durationSec'|'h
  }
  return[head,...(note?[note]:[]),...(lines.length?lines.map(l=>l.text):status.state==='complete'?['(No speech was heard.)']:[])].join('\n')+'\n';
 }
+/** The transcript's sentences, each with the voice that covers most of it when the sound analysis heard more than one. */
+function spoken(words:(Pick<Word,'text'|'start'|'end'>&{speaker?:string})[],sound?:SoundIndex){
+ const lines=sentences(words);if(!sound||sound.speakers.count<2)return lines;
+ return lines.map(l=>{const speaker=lineSpeaker(sound.speakers.turns,l.start,l.end);return speaker?{...l,speaker}:l;});
+}
 /** shots.txt: every shot of the footage index with what is visible, its tags and its measured facts. */
 export function shotsText(asset:Pick<Asset,'id'|'filename'|'durationSec'|'kind'>,index:ShotIndex|undefined,status:string){
- const head=`# Shots in ${asset.filename} (${asset.id}). One shot a line: [start-end] in source seconds | what is visible | tags | measured facts (camera: steady, handheld, shaky, pans; light; soft = out of focus; loudness). Descriptions come from a small vision model and can be wrong; look at frames to be sure.`;
+ const head=`# Shots in ${asset.filename} (${asset.id}). One shot a line (long takes in parts of up to six seconds): [start-end] in source seconds | what happens | on screen: text shown, when there is any | tags | measured facts (camera: steady, handheld, shaky, pans; light; soft = out of focus; loudness). Descriptions come from a small vision model and can be wrong; look at frames to be sure.`;
  if(!index)return`${head}\n(${status==='not indexed'?'Not analysed yet':status}: shots arrive here when the analysis finishes.)\n`;
- const lines=index.shots.map(s=>`${asset.kind==='image'?'[image]':`[${r1(s.start)}-${r1(s.end)}]`} ${s.what??'(not described yet)'} | ${(s.tags??[]).join(', ')||'-'} | ${s.labels.join(', ')||'-'}`);
+ const lines=index.shots.map(s=>`${asset.kind==='image'?'[image]':`[${r1(s.start)}-${r1(s.end)}]`} ${s.what??'(not described yet)'}${s.text?` | on screen: "${s.text}"`:''} | ${(s.tags??[]).join(', ')||'-'} | ${s.labels.join(', ')||'-'}`);
  return[head,...(index.describeError&&index.shots.some(s=>!s.what)?[`(Describing some shots failed: ${index.describeError.slice(0,160)}.)`]:[]),...lines].join('\n')+'\n';
 }
 
 /** The system prompt for writing a source's overview, and for the notes on each part of a long one. */
-export const overviewSystem=`You write the overview of one source video for a video editor who will cut it. You get its transcript (one sentence a line, [start-end] in source seconds) and its shot list (what is visible in each shot). Reply in Markdown, exactly in this shape, and nothing else:
+export const overviewSystem=`You write the overview of one source video for a video editor who will cut it. You get its transcript (one sentence a line, [start-end] in source seconds; "A:", "B:"… mark different voices), its shot list (what is visible in each shot) and what its sound analysis heard (music, laughter, applause, bangs, loud moments). Reply in Markdown, exactly in this shape, and nothing else:
 
 <one paragraph of 2-4 sentences: what this is (a vlog, an interview, a TV episode, gameplay, a lecture...), what happens, and how it ends>
 
 ## People
-- <name or description>: <who they are, how to recognise them, what they do here>
+- <name or description>: <who they are, how to recognise them, what they do here; which voice letter is theirs, when the transcript has letters>
 
 ## Scenes
 - <start>-<end> s: <what happens, in one or two sentences>
@@ -80,13 +89,13 @@ export const overviewSystem=`You write the overview of one source video for a vi
 ## Moments
 - <time> s: <a moment an editor would want: a strong line (quote it briefly), a reaction, a reveal, a joke, an action, a problem in the footage>
 
-Times are source seconds as in the transcript. Scenes cover the whole source in order with no gaps; a scene is a stretch with one place, one situation or one topic (usually 20 seconds to a few minutes). List the 5-15 best moments. Write only what the transcript and shots show; never invent names or events. If there is no speech, work from the shots.`;
-const partSystem=`You take notes on one part of a longer source video for a video editor. You get that part's transcript (one sentence a line, [start-end] in source seconds) and shot list. Reply in Markdown with two lists and nothing else:
+Times are source seconds as in the transcript. Scenes cover the whole source in order with no gaps; a scene is a stretch with one place, one situation or one topic (usually 20 seconds to a few minutes). List the 5-15 best moments; laughter, applause, a crowd going up or a sudden loud moment often marks one. Write only what the transcript, shots and sounds show; never invent names or events. If there is no speech, work from the shots and sounds.`;
+const partSystem=`You take notes on one part of a longer source video for a video editor. You get that part's transcript (one sentence a line, [start-end] in source seconds; "A:", "B:"… mark different voices), shot list and what its sound analysis heard. Reply in Markdown with two lists and nothing else:
 ## Scenes
 - <start>-<end> s: <what happens>
 ## Moments
 - <time> s: <a strong line (quote briefly), a reaction, a reveal, a joke, an action or a problem>
-Also name the people who appear and how to recognise them in one line starting "People:". Times are source seconds. Never invent anything.`;
+Also name the people who appear, how to recognise them and their voice letter in one line starting "People:". Times are source seconds. Never invent anything.`;
 const combineSystem=overviewSystem+`\n\nYou get notes on each part of the source in order instead of the full transcript. Merge them into one overview of the whole source: keep every scene in order (merge only when two notes describe the same stretch), and choose the best moments across the whole source.`;
 /** How much text one call reads: a source longer than this is read in parts of about five minutes, then combined. */
 const ONE_CALL=48_000,PART_SEC=300;
@@ -99,7 +108,7 @@ type Summarize=(system:string,text:string,signal:AbortSignal)=>Promise<string>;
 
 export class FootageLibrary {
  private written=new Map<string,string>();private list='';private timer?:ReturnType<typeof setInterval>;private writing?:string;private controller=new AbortController();
- constructor(private db:ProjectDB,private root:string,private options:{shots?:ShotIndexer;summarize?:Summarize}={}){}
+ constructor(private db:ProjectDB,private root:string,private options:{shots?:ShotIndexer;sounds?:SoundIndexer;summarize?:Summarize}={}){}
  private write(path:string,text:string){const target=join(this.root,path);mkdirSync(dirname(target),{recursive:true});if(existsSync(target)&&readFileSync(target,'utf8')===text)return;replaceFileSync(target,text);}
  private job(assetId:string){return(this.db.db.prepare("SELECT status,error FROM jobs WHERE asset_id=? AND step='transcription'").get(assetId) as {status:string;error:string|null}|undefined);}
  /** How far from the start a source's speech is heard without a gap, in seconds. */
@@ -114,23 +123,31 @@ export class FootageLibrary {
  }
  private shotIndex(asset:Asset){return this.options.shots&&ShotIndexer.indexable(asset)?this.options.shots.saved(asset.id):undefined;}
  private shotStatus(asset:Asset){return this.options.shots&&ShotIndexer.indexable(asset)?this.options.shots.status(asset.id):'not analysed';}
+ private soundIndex(asset:Asset){return this.options.sounds&&SoundIndexer.indexable(asset)?this.options.sounds.saved(asset.id):undefined;}
+ private soundStatus(asset:Asset){return this.options.sounds&&SoundIndexer.indexable(asset)?this.options.sounds.status(asset.id):'not analysed';}
  overview(assetId:string){return this.db.loadState<Overview>('footage-overview:'+assetId);}
  /** Whether a source's transcript and shots are complete enough to write its overview from. */
  private ready(asset:Asset){
   if(asset.status==='failed'||asset.missing)return false;
   const speech=this.transcriptState(asset).state;if(speech==='running'||speech==='waiting')return false;
   if(this.options.shots&&ShotIndexer.indexable(asset)){const index=this.options.shots.saved(asset.id);if(!index||index.shots.some(s=>!s.what)&&!index.describeError)return false;}
+  // The sound analysis too, unless it failed (it is quicker than describing the shots, so this rarely waits).
+  if(this.options.sounds&&SoundIndexer.indexable(asset)&&!this.soundIndex(asset)&&!/failed/.test(this.soundStatus(asset)))return false;
   return wantsOverview(asset);
  }
  private material(asset:Asset){
-  const words=asset.hasAudio?this.db.wordsOf(asset.id):[],lines=sentences(words).map(l=>({at:l.start,text:`[${r1(l.start)}-${r1(l.end)}] ${l.speaker?l.speaker+': ':''}${l.text}`}));
+  const sound=this.soundIndex(asset),words=asset.hasAudio?this.db.wordsOf(asset.id):[],lines=spoken(words,sound).map(l=>({at:l.start,text:`[${r1(l.start)}-${r1(l.end)}] ${l.speaker?l.speaker+': ':''}${l.text}`}));
   const shots=(this.shotIndex(asset)?.shots??[]).map(s=>({at:s.start,text:`[${r1(s.start)}-${r1(s.end)}] ${s.what??''}${s.tags?.length?` (${s.tags.join(', ')})`:''}`}));
-  return{lines,shots,hash:digest(JSON.stringify([lines,shots]))};
+  // What the sound adds to the words and pictures: music and other sound (not speech or silence), the events, the loud moments.
+  const sounds=sound?[...sound.sections.filter(s=>s.kind!=='speech'&&s.kind!=='silence').map(s=>({at:s.start,text:`[${r1(s.start)}-${r1(s.end)}] ${s.kind}${s.label?` (${s.label})`:''}`})),
+   ...sound.events.map(e=>({at:e.start,text:`[${r1(e.start)}-${r1(e.end)}] ${e.label}`})),...sound.loud.map(l=>({at:l.at,text:`[${r1(l.at)}] loud: ${l.rise} dB above around it`}))].sort((a,b)=>a.at-b.at):[];
+  return{lines,shots,sounds,hash:digest(JSON.stringify([lines,shots,sounds]))};
  }
  private status(asset:Asset){
   const speech=this.transcriptState(asset),overview=this.overview(asset.id);
   const parts=[asset.hasAudio?`transcript ${speech.state==='running'?`being heard (to ${Math.round(speech.until??0)} s)`:speech.state==='waiting'?'not started':speech.state}`:'no sound',
    ...(this.options.shots&&ShotIndexer.indexable(asset)?[`shots: ${this.shotStatus(asset)}`]:[]),
+   ...(this.options.sounds&&SoundIndexer.indexable(asset)?[`sound: ${this.soundStatus(asset)}`]:[]),
    ...(!wantsOverview(asset)?[]:[`overview ${overview?.text?'ready':this.writing===asset.id?'being written':overview?.error?`failed (${overview.error.slice(0,80)})`:'waits for the analysis'}`])];
   return parts.join('; ');
  }
@@ -144,12 +161,14 @@ export class FootageLibrary {
   let changed=false;
   for(const asset of assets){
    const folder=footageFolder(asset);seen.add(folder.split('/')[1]);
-   const signature=JSON.stringify([asset.fingerprint,asset.durationSec,asset.status,asset.hasAudio,jobs.get(asset.id),key('speech-coverage:'+asset.id),key('shot-index:'+asset.id),key('footage-overview:'+asset.id),this.writing===asset.id]);
+   const signature=JSON.stringify([asset.fingerprint,asset.durationSec,asset.status,asset.hasAudio,jobs.get(asset.id),key('speech-coverage:'+asset.id),key('shot-index:'+asset.id),key('sound-index:'+asset.id),this.options.sounds?.status(asset.id),key('footage-overview:'+asset.id),this.writing===asset.id]);
    if(this.written.get(asset.id)===signature&&existsSync(join(this.root,folder)))continue;
-   changed=true;const speech=this.transcriptState(asset),index=this.shotIndex(asset),overview=this.overview(asset.id);
-   // words.json holds a word a line, so it can be read in pages and grepped as well as parsed.
-   if(asset.hasAudio){const words=this.db.wordsOf(asset.id);this.write(`${folder}/transcript.txt`,transcriptText(asset,words,speech));this.write(`${folder}/words.json`,`{"assetId":${JSON.stringify(asset.id)},"format":"[start, end, word] in source seconds","words":[\n${words.map(w=>JSON.stringify([Math.round(w.start*100)/100,Math.round(w.end*100)/100,w.text.trim()])).join(',\n')}\n]}\n`);}
+   changed=true;const speech=this.transcriptState(asset),index=this.shotIndex(asset),overview=this.overview(asset.id),sound=this.soundIndex(asset);
+   // words.json holds a word a line, so it can be read in pages and grepped as well as parsed; with more than one voice,
+   // their turns follow ([start, end, speaker]).
+   if(asset.hasAudio){const words=this.db.wordsOf(asset.id),turns=sound&&sound.speakers.count>1?sound.speakers.turns:undefined;this.write(`${folder}/transcript.txt`,transcriptText(asset,words,speech,sound));this.write(`${folder}/words.json`,`{"assetId":${JSON.stringify(asset.id)},"format":"[start, end, word] in source seconds${turns?'; speakers: [start, end, voice] turns':''}","words":[\n${words.map(w=>JSON.stringify([Math.round(w.start*100)/100,Math.round(w.end*100)/100,w.text.trim()])).join(',\n')}\n]${turns?`,"speakers":[\n${turns.map(t=>JSON.stringify([t.start,t.end,t.speaker])).join(',\n')}\n]`:''}}\n`);}
    else this.write(`${folder}/transcript.txt`,transcriptText(asset,[],speech));
+   if(asset.hasAudio&&asset.kind!=='image'){this.write(`${folder}/sound.txt`,soundText(asset,sound,this.soundStatus(asset)));if(sound?.music.length)this.write(`${folder}/beats.json`,beatsJson(asset,sound));}
    if(asset.kind!=='audio')this.write(`${folder}/shots.txt`,shotsText(asset,index,this.shotStatus(asset)));
    if(asset.kind!=='image'&&!wantsOverview(asset))this.write(`${folder}/overview.md`,`# ${asset.filename} (${asset.id}, ${clock(asset.durationSec)})\n\n(A short clip: transcript.txt and shots.txt say everything in it.)\n`);
    else if(asset.kind!=='image')this.write(`${folder}/overview.md`,overview?.text?`# ${asset.filename} (${asset.id}, ${clock(asset.durationSec)})\n\n${overview.text.trim()}\n`:`# ${asset.filename} (${asset.id}, ${clock(asset.durationSec)})\n\n(No overview yet: ${this.status(asset)}. Until it is written, read transcript.txt and shots.txt.)\n`);
@@ -174,7 +193,7 @@ export class FootageLibrary {
  }
  indexText(assets=captureOrder(this.db.assets().filter(described))){
   const made=this.db.assets().filter(a=>!described(a)).length;
-  return['# Footage',`${assets.length} source${assets.length===1?'':'s'}, in the order they were shot. Each has a folder: overview.md (the story, people, scenes and moments with times), transcript.txt (what is said, a sentence a line), words.json (every word with times, for code) and shots.txt (every shot). Times are source seconds. footage/assets.json has paths and facts for code.${made?` ${made} more media item${made===1?' was':'s were'} made in this project (scenes, music, outputs).`:''}`,'',...(assets.length?assets.map(a=>this.line(a)):['(No footage yet. The user can drop files in, or you can find and import media.)']),''].join('\n');
+  return['# Footage',`${assets.length} source${assets.length===1?'':'s'}, in the order they were shot. Each has a folder: overview.md (the story, people, scenes and moments with times), transcript.txt (what is said, a sentence a line, and by which voice), words.json (every word with times, for code), shots.txt (every shot) and sound.txt (music, laughter, applause, bangs, loud moments, voices, tempo; beats.json has every beat). Times are source seconds. footage/assets.json has paths and facts for code.${made?` ${made} more media item${made===1?' was':'s were'} made in this project (scenes, music, outputs).`:''}`,'',...(assets.length?assets.map(a=>this.line(a)):['(No footage yet. The user can drop files in, or you can find and import media.)']),''].join('\n');
  }
 
  /** Keeps the files current and writes overviews in the background, one source at a time, while the project is open. */
@@ -188,16 +207,16 @@ export class FootageLibrary {
    for(const asset of captureOrder(this.db.assets().filter(described))){
     if(this.controller.signal.aborted)return;
     // Each source is looked at again only when its transcript or shots changed (or a failed overview is due a retry).
-    const inputs=JSON.stringify([asset.fingerprint,this.job(asset.id)?.status,key('speech-coverage:'+asset.id),key('shot-index:'+asset.id)]),saved=this.overview(asset.id);
+    const inputs=JSON.stringify([asset.fingerprint,this.job(asset.id)?.status,key('speech-coverage:'+asset.id),key('shot-index:'+asset.id),key('sound-index:'+asset.id),this.options.sounds?.status(asset.id)]),saved=this.overview(asset.id);
     if(this.checked.get(asset.id)===inputs&&(saved?.text||!saved||Date.now()-Date.parse(saved.at)<15*60_000))continue;
     this.checked.set(asset.id,inputs);
     if(!this.ready(asset))continue;
-    const {lines,shots,hash}=this.material(asset);
+    const {lines,shots,sounds,hash}=this.material(asset);
     if(saved?.hash===hash&&(saved.text||Date.now()-Date.parse(saved.at)<15*60_000))continue;
-    if(!lines.length&&!shots.length)continue;
+    if(!lines.length&&!shots.length&&!sounds.length)continue;
     this.writing=asset.id;try{this.refresh();}catch{}
     let result:Overview;
-    try{result={hash,text:await this.summarizeSource(asset,lines,shots),at:new Date().toISOString()};}
+    try{result={hash,text:await this.summarizeSource(asset,lines,shots,sounds),at:new Date().toISOString()};}
     catch(error){if(this.controller.signal.aborted)return;result={hash,error:(error as Error).message||String(error),at:new Date().toISOString()};}
     finally{this.writing=undefined;}
     this.db.saveState('footage-overview:'+asset.id,result);try{this.refresh();}catch{}
@@ -205,9 +224,9 @@ export class FootageLibrary {
   }finally{this.busy=false;}
  }
  /** One call for a source that fits; a long one is read in parts of about five minutes, then the notes are combined. */
- private async summarizeSource(asset:Asset,lines:{at:number;text:string}[],shots:{at:number;text:string}[]){
+ private async summarizeSource(asset:Asset,lines:{at:number;text:string}[],shots:{at:number;text:string}[],sounds:{at:number;text:string}[]){
   const signal=this.controller.signal,heading=`Source: ${asset.filename}, ${r1(asset.durationSec)} s long.`;
-  const body=(from:number,to:number)=>{const said=lines.filter(l=>l.at>=from&&l.at<to).map(l=>l.text),seen=shots.filter(s=>s.at>=from&&s.at<to).map(s=>s.text);return`Transcript:\n${said.join('\n')||'(no speech)'}\n\nShots:\n${seen.join('\n')||'(no shot list)'}`;};
+  const body=(from:number,to:number)=>{const within=(l:{at:number})=>l.at>=from&&l.at<to,said=lines.filter(within).map(l=>l.text),seen=shots.filter(within).map(s=>s.text),heard=sounds.filter(within).map(s=>s.text);return`Transcript:\n${said.join('\n')||'(no speech)'}\n\nShots:\n${seen.join('\n')||'(no shot list)'}${heard.length?`\n\nSounds:\n${heard.join('\n')}`:''}`;};
   const whole=body(0,Infinity);
   if(whole.length<=ONE_CALL)return this.options.summarize!(overviewSystem,`${heading}\n\n${whole}`,signal);
   // Parts are read four at a time, so a six-hour recording takes minutes, not an hour.

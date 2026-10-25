@@ -73,25 +73,29 @@ it('ranks shots by what is visible and said, and filters on measured facts and o
  expect(ids({})).toEqual(['a','b','c','d','e']);
 });
 
-it('describes shots from one frame sheet per twelve, keeps what was described when a batch fails, and serves find and shots.txt',async()=>{
+it('describes what happens in each shot from three of its frames, four shots a sheet, with the text on screen, and serves find and shots.txt',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-shot-tool-')),db=new ProjectDB(folder,'Shots'),path=fixture(folder);
  db.saveAsset({id:'v1',filename:'shots.mp4',kind:'video',durationSec:10,fps:30,width:320,height:180,hasAudio:false,originalPath:path,fingerprint:'f1',status:'ready'} as any);
  let calls=0;const sheets:number[]=[];
- const describe=vi.fn(async(_system:string,content:any[])=>{calls++;const count=Number(String(content[1].text).match(/\d+/)![0]);return{content:[{type:'text',text:JSON.stringify(Array.from({length:count},(_,n)=>({n:n+1,what:`shot number ${n+1} of the test pattern`,tags:['pattern','test']})))}]};});
+ const describe=vi.fn(async(_system:string,content:any[])=>{calls++;const count=Number(String(content[1].text).match(/\d+/)![0]);return{content:[{type:'text',text:JSON.stringify(Array.from({length:count},(_,n)=>({n:n+1,what:`shot number ${calls*10+n+1} of the test pattern`,text:calls===1&&n===0?'SCORE 3-2':'',tags:['pattern','test']})))}]};});
  const indexer=new ShotIndexer(db,ffmpeg!,describe,async images=>{sheets.push(images.length);return{data:Buffer.from('sheet').toString('base64')};});
  try{
   const index=(await indexer.ensure('v1',new AbortController().signal))!;
-  expect(index.shots.length).toBeGreaterThanOrEqual(4);expect(index.shots.every(s=>s.what)).toBe(true);expect(calls).toBe(1);expect(sheets).toEqual([index.shots.length]);
+  const n=index.shots.length;expect(n).toBeGreaterThanOrEqual(4);expect(index.shots.every(s=>s.what)).toBe(true);
+  // A row of three frames per shot, four shots a sheet.
+  expect(calls).toBe(Math.ceil(n/4));expect(sheets).toEqual(Array.from({length:Math.ceil(n/4)},(_,k)=>3*Math.min(4,n-k*4)));
+  expect(index.shots[0].text).toBe('SCORE 3-2');
   expect(indexer.status('v1')).toBe(`${index.shots.length} shots`);
   // A second call reuses the saved index: no measuring, no describing.
-  await indexer.ensure('v1',new AbortController().signal);expect(calls).toBe(1);
+  await indexer.ensure('v1',new AbortController().signal);expect(calls).toBe(Math.ceil(n/4));
   db.contactSheet=vi.fn(async(images:any[])=>({data:'SHEET',mimeType:'image/jpeg' as const,columns:4,rows:3,count:images.length,width:1536,height:400}));
   const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
   await workspace.initialize();
   // The shots as a file the agent reads and greps, and the index's status in footage/INDEX.md.
-  const shots=textOf(await call(workspace,'read',{path:'footage/shots-v1/shots.txt'}));expect(shots).toMatch(/\[[\d.]+-[\d.]+\] shot number \d+ of the test pattern \| pattern, test \| /);
+  const shots=textOf(await call(workspace,'read',{path:'footage/shots-v1/shots.txt'}));expect(shots).toMatch(/\[[\d.]+-[\d.]+\] shot number \d+ of the test pattern \| pattern, test \| /);expect(shots).toContain('shot number 11 of the test pattern | on screen: "SCORE 3-2" | pattern, test');
+  expect(textOf(await call(workspace,'find',{query:'score'},'find-text'))).toContain('| shot number 11 of the test pattern | on screen "SCORE 3-2" |');
   expect(textOf(await call(workspace,'read',{path:'footage/INDEX.md'}))).toContain(`shots: ${index.shots.length} shots`);
-  expect(textOf(await call(workspace,'grep',{pattern:'shot number 2 ',path:'footage'}))).toMatch(/footage\/shots-v1\/shots\.txt:\d+: /);
+  expect(textOf(await call(workspace,'grep',{pattern:'shot number 12 ',path:'footage'}))).toMatch(/footage\/shots-v1\/shots\.txt:\d+: /);
   const result:any=await call(workspace,'find',{query:'pattern',steady:true},'find');
   const lines=result.content[0].text.split('\n');
   expect(lines[0]).toMatch(/^\d+ shots? matched "pattern"/);expect(lines[1]).toMatch(/^1\. v1 shots\.mp4 [\d.]+-[\d.]+s \([\d.]+s\) \| shot number \d+ of the test pattern \| /);expect(lines.slice(1).some((l:string)=>/shaky|handheld/.test(l))).toBe(false);

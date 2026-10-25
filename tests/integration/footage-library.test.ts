@@ -5,6 +5,8 @@ import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {FootageLibrary,sentences,transcriptText,footageFolder} from '../../apps/project-service/src/footage-library';
 import {addSource} from '../fixtures/agent-project';
+import {SoundIndexer} from '../../apps/project-service/src/sound-index';
+import {SOUND_ANALYSIS_VERSION,type SoundAnalysis} from '@dream/sound';
 
 /** The footage as files (apps/project-service/src/footage-library.ts): transcripts by sentence, shot lists, overviews
  * and the index, the same pipeline for a clip and for hours. */
@@ -62,5 +64,33 @@ it('writes no overview for a short clip: its index line says what is in it',asyn
   expect(calls).toBe(0);
   expect(readFileSync(join(root,footageFolder(asset),'overview.md'),'utf8')).toContain('A short clip');
   expect(readFileSync(join(root,'footage','INDEX.md'),'utf8')).toContain('says "Welcome back."');
+ }finally{library.close();db.close();}
+});
+
+it('writes what the sound analysis heard: sound.txt, the voice of each transcript line, beats for code, and an overview that waits for it',async()=>{
+ const {db,root}=project(),asked:string[]=[];
+ // Two people: the first speaks for 5 s, the second answers; a laugh, then music under the end.
+ const analysis:SoundAnalysis={version:SOUND_ANALYSIS_VERSION,durationSec:60,levelDb:-24,sections:[{start:0,end:40,kind:'speech'},{start:40,end:60,kind:'music'}],
+  events:[{start:20,end:22,group:'laughter',label:'Laughter',score:.8}],omitted:{},loud:[{at:21,db:-10,rise:14}],
+  speakers:{count:2,share:{A:.5,B:.5},turns:[{start:0,end:5.6,speaker:'A'},{start:5.6,end:12,speaker:'B'}]},music:[{start:40,end:60,bpm:120,beats:[40.5,41,41.5]}]};
+ const sounds=new SoundIndexer(db,'ffmpeg',async()=>analysis),library=new FootageLibrary(db,root,{sounds,summarize:async(system,text)=>{asked.push(text);return'Two people talk, then music.';}});
+ try{
+  const asset=addSource(db,{durationSec:60,words:[...words(0,12),...words(6,12)].map(([s,e,t],n)=>[s,e,n===11||n===23?t+'.':t])}),folder=join(root,footageFolder(asset));
+  library.refresh();await library.writeOverviews();
+  expect(readFileSync(join(folder,'sound.txt'),'utf8')).toContain('(Not analysed yet: the analysis arrives here when it finishes.)');
+  expect(asked).toEqual([]);
+  expect(readFileSync(join(root,'footage','INDEX.md'),'utf8')).toContain('sound: waiting');
+  await sounds.ensure(asset.id,new AbortController().signal);library.refresh();
+  const sound=readFileSync(join(folder,'sound.txt'),'utf8');
+  expect(sound).toContain('2 voices: A 50%, B 50% of the speech');expect(sound).toContain('[40.0-60.0] music');
+  expect(sound).toContain('[20.0-22.0] laughter: Laughter (80%)');expect(sound).toContain('[21.0] 14 dB above its surroundings');expect(sound).toContain('[40.0-60.0] 120 BPM, 3 beats from 40.5 s');
+  const transcript=readFileSync(join(folder,'transcript.txt'),'utf8').split('\n');
+  expect(transcript.find(l=>l.startsWith('[0.0-'))).toMatch(/\] A: word0/);expect(transcript.find(l=>l.startsWith('[6.0-'))).toMatch(/\] B: word0/);
+  expect(readFileSync(join(folder,'words.json'),'utf8')).toContain('"speakers":[\n[0,5.6,"A"],\n[5.6,12,"B"]\n]');
+  expect(JSON.parse(readFileSync(join(folder,'beats.json'),'utf8')).music[0].beats).toEqual([40.5,41,41.5]);
+  // Now the overview is written, from the voices and the sounds too.
+  await library.writeOverviews();
+  expect(asked).toHaveLength(1);expect(asked[0]).toContain('] A: word0');expect(asked[0]).toContain('Sounds:\n[20.0-22.0] Laughter');
+  expect(readFileSync(join(root,'footage','INDEX.md'),'utf8')).toContain('sound: analysed (2 voices), music at 120 BPM');
  }finally{library.close();db.close();}
 });

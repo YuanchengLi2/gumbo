@@ -50,6 +50,9 @@
       "@dream/agent": [
         "packages/agent/src/index.ts"
       ],
+      "@dream/sound": [
+        "packages/sound/src/index.ts"
+      ],
       "@dream/scene-engine": [
         "packages/scene-engine/src/index.ts"
       ],

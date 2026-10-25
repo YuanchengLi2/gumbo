@@ -161,6 +161,9 @@ importers:
       mediabunny:
         specifier: 1.60.0
         version: 1.60.0
+      onnxruntime-node:
+        specifier: 1.30.0
+        version: 1.30.0
       react:
         specifier: 19.3.0
         version: 19.3.0
@@ -237,6 +240,9 @@ importers:
       '@dream/scene-engine':
         specifier: workspace:*
         version: link:../../packages/scene-engine
+      '@dream/sound':
+        specifier: workspace:*
+        version: link:../../packages/sound
       '@dream/timeline':
         specifier: workspace:*
         version: link:../../packages/timeline
@@ -255,6 +261,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@dream/sound':
+        specifier: workspace:*
+        version: link:../../packages/sound
       '@dream/web-ml':
         specifier: workspace:*
         version: link:../../packages/web-ml
@@ -282,6 +291,9 @@ importers:
       modern-screenshot:
         specifier: 4.7.0
         version: 4.7.0
+      onnxruntime-web:
+        specifier: 1.31.0-dev.20260914-8d85527a0
+        version: 1.31.0-dev.20260914-8d85527a0
       path-browserify:
         specifier: 1.0.1
         version: 1.0.1
@@ -498,6 +510,8 @@ importers:
       '@types/three':
         specifier: 0.180.0
         version: 0.180.0
+
+  packages/sound: {}
 
   packages/timeline:
     dependencies:

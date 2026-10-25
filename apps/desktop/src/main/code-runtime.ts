@@ -54,10 +54,13 @@ export class CodeRuntime {
   const shell=join(this.paths.creation,'shell','busybox.exe');if(!existsSync(shell))throw new Error('The bundled command shell is missing. Stage the pinned runtimes.');
   // Inside the container BusyBox cannot hand itself over to a program, so a command's last line is never exec'd: the
   // shell stays, waits for it and passes on its exit code.
-  const script=request.command+'\nexit $?';
+  // Commands written for Linux call python3 and pip3; the bundled Python answers to python and pip (the web's sandbox
+  // has both names).
+  const script='python3(){ python "$@"; }; pip3(){ pip "$@"; }\n'+request.command+'\nexit $?';
   const libraries=join(dirname(this.paths.creation),'libraries'),shared=existsSync(join(libraries,'libraries.json'));
   // scipy and OpenCV, fetched after install into the user's data folder (extra-libraries.ts), sit beside the bundled ones.
-  const extraPython=shared&&existsSync(extraPythonFolder())?extraPythonFolder():undefined;
+  // Only the app has that folder; a script running the runtime under plain Node goes without them.
+  const extras=process.versions.electron?extraPythonFolder():undefined,extraPython=shared&&extras&&existsSync(extras)?extras:undefined;
   const cache=join(root,'.cache'),sources=join(project,'Sources');mkdirSync(cache,{recursive:true});mkdirSync(sources,{recursive:true});mkdirSync(join(project,'Media'),{recursive:true});
   const longPath=(path:string)=>path.startsWith('\\\\?\\')?path:'\\\\?\\'+path;
   const systemRoot=process.env.SystemRoot??'C:\\Windows',python=join(this.paths.creation,'python'),node=join(this.paths.creation,'node');

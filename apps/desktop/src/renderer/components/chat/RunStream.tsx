@@ -47,6 +47,12 @@ function MediaStrip({media}:{media:NonNullable<PublicActivity['media']>}){
  </figure>)}</div>;
 }
 
+/** The scenes a finished request put in the edit, under its answer, so they stay in view once its steps fold away. */
+export function TurnScenes({events,assets}:{events:PublicActivity[];assets:Asset[]}){
+ const media=events.flatMap(e=>e.kind==='changes'?(e.media??[]).filter(m=>m.kind==='scene'):[]);
+ return media.length?<Assets.Provider value={assets}><MediaStrip media={media}/></Assets.Provider>:null;
+}
+
 /** Scenes a worker is still writing, drawn live from their draft code before anything is published. */
 function DraftStrip({drafts}:{drafts:NonNullable<PublicActivity['drafts']>}){
  return <div className={'stream-media'+(drafts.length===1?' single':'')}>{drafts.slice(0,3).map(draft=>{const asset={id:'draft_'+draft.hash,filename:draft.name,kind:'video',durationSec:draft.durationInFrames/draft.fps,fps:draft.fps,width:draft.width,height:draft.height,originalPath:'',fingerprint:draft.hash,scene:{format:'engine',revisionId:draft.hash.padEnd(64,'0'),durationInFrames:draft.durationInFrames}} as unknown as Asset;

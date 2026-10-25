@@ -12,6 +12,12 @@ It reads your footage. Every video you add gets a written overview of its story,
 sentence by sentence and a list of every shot, so Roux finds "where she says the price" in a long stream in seconds,
 and a short cut of a 20-minute episode keeps whole sentences in story order, ending included.
 
+It knows more than what's said. Gumbo listens to every video on your own computer and notes who is speaking, so in a
+podcast or interview each line says which voice it is. It also notes laughter, applause, cheering, bangs and where the
+music is, with the music's tempo and every beat, so a montage can cut on the beat and the moment the crowd goes up is
+easy to find. Every few seconds of footage gets a note of what happens in it and any text on screen, like a score or a
+slide title, so the play you want in a game or a match is found, not only what someone said.
+
 It watches its own cut before it says it's done: what is said, in order, and a frame of every shot. It fixes what is
 off, like a cut in the middle of a word or a story told out of order, before it tells you.
 

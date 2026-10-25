@@ -6,14 +6,15 @@ import {jpeg} from './source-frames';
 
 /** The footage index: the agent's way to know its material, as an editor knows the rushes. Every imported video is split
  * into shots (long takes into parts of at most six seconds), each with facts measured from its frames and sound (camera
- * movement and shake, light, colour, sharpness, how much moves, loudness) and a short description of what is visible,
- * written once by a small vision model. The agent searches it by meaning and facts, and every result comes back with its
+ * movement and shake, light, colour, sharpness, how much moves, loudness) and a short description of what happens in it
+ * and any text on screen, written once by a small vision model from three of its frames (early, middle, late), so an
+ * action, a goal or a reaction inside a long take is written down, not only what one frame shows. The agent searches it by meaning and facts, and every result comes back with its
  * frame, so it judges with its own eyes: a wrong description costs a glance, never a wrong edit. Nothing here is pushed into
  * the agent's context; it asks. */
 export const SHOT_INDEX_VERSION=1;
 const W=96,H=54,RATE=4,FRAME=W*H*3,MAX_PART=6,SPLIT_OVER=8;
 export type ShotFacts={brightness:number;saturation:number;sharpness:number;panX:number;panY:number;shake:number;activity:number;loudnessDb?:number};
-export type Shot={id:string;assetId:string;start:number;end:number;cutIn:boolean;part?:[number,number];facts:ShotFacts;labels:string[];what?:string;tags?:string[]};
+export type Shot={id:string;assetId:string;start:number;end:number;cutIn:boolean;part?:[number,number];facts:ShotFacts;labels:string[];what?:string;text?:string;tags?:string[]};
 export type ShotIndex={version:number;assetId:string;fingerprint:string;durationSec:number;shots:Shot[];sharpnessMedian:number;describedAt?:string;describeError?:string};
 /** Asks a small vision model about one image (the director's inference, so its cost is recorded like any call). */
 export type Describe=(system:string,content:unknown[],signal:AbortSignal)=>Promise<{content?:any[]}>;
@@ -111,12 +112,14 @@ export async function measureShots(ffmpeg:string,asset:Pick<Asset,'id'|'kind'|'d
  return{shots,sharpnessMedian};
 }
 
-export const describeSystem=`You index video footage for a video editor, so shots can be found by searching. The image is a grid of frames, one per shot, numbered left to right and top to bottom from 1 (four per row). Reply with a JSON array only, one object per frame: {"n": frame number, "what": "what is visible, at most 18 words: the subjects, the action, the place; name a food, landmark, vehicle or sign only when it is clearly visible", "tags": ["8 to 14 single lowercase words: the setting (street, market, mountain, road, beach, cafe, room…), indoor or outdoor, day, night or sunset, people (none, person, couple, group, crowd), shot size (wide, medium, closeup), the view (selfie, aerial, pov, overhead) when it applies, and the main subjects and notable things (food, text, vehicle, motorbike, animal, water, sky, sign)"]}. Describe only what is visible.`;
+export const describeSystem=`You index video footage for a video editor, so moments can be found by searching. The image is a grid of frames: each row is one shot (row 1 at the top), its three frames in time order from left to right (early, middle, late). The footage can be anything: a vlog, an interview, a film, sport, gameplay, a screen recording, slides, animation. Reply with a JSON array only, one object per row: {"n": row number, "what": "what happens in the shot, at most 25 words: who or what, the action and how it changes across the three frames, the place; name a person only when a caption or name tag says it", "text": "readable text on screen, briefly: a title, caption, slide heading, score, game HUD or sign; empty when there is none", "tags": ["8 to 14 single lowercase words: the kind of picture (camera, screen, game, slides, animation, graphic), the setting (street, room, stage, field, studio, desk…), indoor or outdoor, day or night, people (none, person, couple, group, crowd), shot size (wide, medium, closeup), the view (selfie, aerial, pov, overhead) when it applies, and the main subjects, actions and notable things"]}. Describe only what is visible.`;
 /** The representative frame of a shot: its middle. */
 export const shotFrameTime=(s:Shot)=>r3((s.start+s.end)/2);
+/** The three frames a shot is described from: a sixth in, the middle, a sixth before the end. */
+export const describeTimes=(s:Shot)=>{const d=s.end-s.start;return[r3(s.start+d/6),shotFrameTime(s),r3(s.end-d/6)];};
 function parseDescriptions(text:string,count:number){
  const a=text.indexOf('['),b=text.lastIndexOf(']');if(a<0||b<a)return[];
- try{const rows=JSON.parse(text.slice(a,b+1));return(Array.isArray(rows)?rows:[]).filter((r:any)=>Number.isInteger(r?.n)&&r.n>=1&&r.n<=count&&typeof r.what==='string').map((r:any)=>({n:r.n as number,what:String(r.what).replace(/\s+/g,' ').trim().slice(0,200),tags:(Array.isArray(r.tags)?r.tags:[]).map((t:unknown)=>String(t).toLowerCase().trim()).filter(Boolean).slice(0,16) as string[]}));}catch{return[];}
+ try{const rows=JSON.parse(text.slice(a,b+1));return(Array.isArray(rows)?rows:[]).filter((r:any)=>Number.isInteger(r?.n)&&r.n>=1&&r.n<=count&&typeof r.what==='string').map((r:any)=>({n:r.n as number,what:String(r.what).replace(/\s+/g,' ').trim().slice(0,240),text:typeof r.text==='string'?r.text.replace(/\s+/g,' ').trim().slice(0,160):'',tags:(Array.isArray(r.tags)?r.tags:[]).map((t:unknown)=>String(t).toLowerCase().trim()).filter(Boolean).slice(0,16) as string[]}));}catch{return[];}
 }
 
 /** Builds, saves and describes the index of one asset; reuses what is saved for the same file. */
@@ -146,31 +149,34 @@ export class ShotIndexer{
   this.running.set(assetId,work);return work;
  }
  private async describeMissing(asset:Asset,index:ShotIndex,signal:AbortSignal){
+  // Four shots a sheet, a row of three frames each; four sheets at a time.
   const missing=index.shots.filter(s=>!s.what);
-  const batches=Array.from({length:Math.ceil(missing.length/12)},(_,k)=>missing.slice(k*12,k*12+12));let failure:string|undefined,next=0;
-  await Promise.all(Array.from({length:Math.min(3,batches.length)},async()=>{for(;;){const batch=batches[next++];if(!batch)return;signal.throwIfAborted();
+  const batches=Array.from({length:Math.ceil(missing.length/4)},(_,k)=>missing.slice(k*4,k*4+4));let failure:string|undefined,next=0;
+  await Promise.all(Array.from({length:Math.min(4,batches.length)},async()=>{for(;;){const batch=batches[next++];if(!batch)return;signal.throwIfAborted();
    try{
-    const images=await Promise.all(batch.map(async s=>({data:(await this.frame(asset,s,signal)).toString('base64')})));
-    const sheet=await this.sheet!(images,signal),response=await this.describe!(describeSystem,[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:sheet.data}},{type:'text',text:`${batch.length} frames.`}],signal);
+    const images=(await Promise.all(batch.map(s=>Promise.all((asset.kind==='image'?[0,0,0]:describeTimes(s)).map(async t=>({data:(await this.frameAt(asset,t,signal)).toString('base64')})))))).flat();
+    const sheet=await this.sheet!(images,signal),response=await this.describe!(describeSystem,[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:sheet.data}},{type:'text',text:`${batch.length} rows.`}],signal);
     const rows=parseDescriptions((response.content??[]).filter((b:any)=>b?.type==='text').map((b:any)=>b.text).join(''),batch.length);
-    for(const row of rows){const shot=batch[row.n-1];shot.what=row.what;shot.tags=row.tags;}
+    for(const row of rows){const shot=batch[row.n-1];shot.what=row.what;shot.tags=row.tags;if(row.text)shot.text=row.text;}
     if(!rows.length)failure='the description reply was not readable';
    }catch(error){signal.throwIfAborted();failure=(error as Error).message;}
   }}));
   const current=this.saved(asset.id)??index,byId=new Map(index.shots.map(s=>[s.id,s]));
-  const merged:ShotIndex={...current,shots:current.shots.map(s=>byId.get(s.id)?.what?{...s,what:byId.get(s.id)!.what,tags:byId.get(s.id)!.tags}:s),describedAt:new Date().toISOString(),...(failure?{describeError:failure}:{describeError:undefined})};
+  const merged:ShotIndex={...current,shots:current.shots.map(s=>{const d=byId.get(s.id);return d?.what?{...s,what:d.what,tags:d.tags,...(d.text?{text:d.text}:{})}:s;}),describedAt:new Date().toISOString(),...(failure?{describeError:failure}:{describeError:undefined})};
   this.db.saveState('shot-index:'+asset.id,merged);return merged;
  }
  /** A shot's representative frame, cached by file and time. */
- async frame(asset:Asset,shot:Shot,signal:AbortSignal){
-  const path=asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath,time=asset.kind==='image'?0:shotFrameTime(shot),key=`shot-frame:v1:${asset.fingerprint}:${time}`,saved=this.db.getMeta(key);
+ frame(asset:Asset,shot:Shot,signal:AbortSignal){return this.frameAt(asset,asset.kind==='image'?0:shotFrameTime(shot),signal);}
+ /** A frame of the source, from its short-keyframe preview copy when there is one (seeks are cheap there), cached. */
+ async frameAt(asset:Asset,time:number,signal:AbortSignal){
+  const path=asset.proxyPath&&existsSync(asset.proxyPath)?asset.proxyPath:asset.originalPath,key=`shot-frame:v1:${asset.fingerprint}:${time}`,saved=this.db.getMeta(key);
   if(saved)return Buffer.from(this.db.blobs.get(saved),'base64');
   const bytes=await jpeg(this.ffmpeg,path,time,signal,512);this.db.setMeta(key,this.db.blobs.put(bytes.toString('base64')));return bytes;
  }
 }
 
-// Search: words matched loosely (case, accents, plural and -ing forms), ranked like a search engine (BM25), what is
-// visible and its tags counting double, spoken words and fact labels once.
+// Search: words matched loosely (case, accents, plural and -ing forms), ranked like a search engine (BM25), what happens,
+// the text on screen and the tags counting double, spoken words and fact labels once.
 const STOP=new Set(['a','an','the','of','and','or','in','on','at','to','with','for','from','by','is','are','be','some','any','shot','shots','clip','clips','footage','video','videos','scene','scenes','that','this','where','me','my','i','show','find','want']);
 const stem=(w:string)=>{if(w.length<=4)return w;let s=w.replace(/ies$/,'y').replace(/(?<!s)(es|s)$/,'');if(s.length>5)s=s.replace(/(ing|ed)$/,'');return s.length>4?s.replace(/e$/,''):s;};
 export const terms=(text:string)=>text.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').split(/[^\p{L}\p{N}]+/u).filter(w=>w&&!STOP.has(w)).map(stem);
@@ -185,7 +191,7 @@ export function usedRanges(resolved:{clips:{assetId:string;srcIn:number;srcOut:n
 }
 export function searchShots(shots:Shot[],q:ShotQuery,spoken:(s:Shot)=>string,used:{assetId:string;from:number;to:number;at:number}[]){
  const wanted=terms(q.query??''),excluded=new Set(terms((q.query??'').split(/\s+/).filter(w=>w.startsWith('-')).join(' '))),include=wanted.filter(t=>!excluded.has(t));
- const docs=shots.map(shot=>{const words=spoken(shot),text=[...terms(`${shot.what??''} ${(shot.tags??[]).join(' ')}`).flatMap(t=>[t,t]),...terms(words),...terms(shot.labels.join(' '))];const tf=new Map<string,number>();for(const t of text)tf.set(t,(tf.get(t)??0)+1);
+ const docs=shots.map(shot=>{const words=spoken(shot),text=[...terms(`${shot.what??''} ${shot.text??''} ${(shot.tags??[]).join(' ')}`).flatMap(t=>[t,t]),...terms(words),...terms(shot.labels.join(' '))];const tf=new Map<string,number>();for(const t of text)tf.set(t,(tf.get(t)??0)+1);
   const overlap=used.filter(u=>u.assetId===shot.assetId&&Math.min(u.to,shot.end)-Math.max(u.from,shot.start)>Math.max(.5,(shot.end-shot.start)*.4));
   return{shot,words,tf,length:text.length,usedAt:overlap.length?r2(Math.min(...overlap.map(u=>u.at+Math.max(0,shot.start-u.from)))):undefined};});
  const avg=mean(docs.map(d=>d.length))||1,df=new Map<string,number>();for(const d of docs)for(const t of new Set(d.tf.keys()))df.set(t,(df.get(t)??0)+1);
@@ -213,8 +219,8 @@ export function rangeFacts(index:ShotIndex,srcIn:number,srcOut:number,speed=1){
  const longest=[...shots].sort((a,b)=>(Math.min(b.end,srcOut)-Math.max(b.start,srcIn))-(Math.min(a.end,srcOut)-Math.max(a.start,srcIn)))[0];
  return[...(longest.what?[`"${longest.what}"`]:[]),labels.join(', ')||'no notable facts',`shake ${r2(shake)}`,...(cuts.length?[`camera cut inside, ${cuts.join('s and ')}s in`]:[])].join('; ');
 }
-/** One result as one line: where it is, what is visible, the measured facts, what is said, and where the edit uses it. */
+/** One result as one line: where it is, what happens, any text on screen, the measured facts, what is said, and where the edit uses it. */
 export function shotLine(hit:ShotHit,n:number,filename?:string){
  const s=hit.shot,length=s.end>s.start?` (${r2(s.end-s.start)}s)`:'';
- return[`${n}. ${s.assetId}${filename?` ${filename}`:''} ${s.end>s.start?`${s.start}-${s.end}s`:'image'}${length}`,s.what??'(not described yet)',s.labels.join(', ')||'-',...(hit.words?[`says "${hit.words.slice(0,90)}${hit.words.length>90?'…':''}"`]:[]),...(hit.usedAt!==undefined?[`in the edit at ${hit.usedAt}s`]:[])].join(' | ');
+ return[`${n}. ${s.assetId}${filename?` ${filename}`:''} ${s.end>s.start?`${s.start}-${s.end}s`:'image'}${length}`,s.what??'(not described yet)',...(s.text?[`on screen "${s.text}"`]:[]),s.labels.join(', ')||'-',...(hit.words?[`says "${hit.words.slice(0,90)}${hit.words.length>90?'…':''}"`]:[]),...(hit.usedAt!==undefined?[`in the edit at ${hit.usedAt}s`]:[])].join(' | ');
 }

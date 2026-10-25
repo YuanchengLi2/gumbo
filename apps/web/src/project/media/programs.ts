@@ -177,6 +177,16 @@ async function audioFile(input:Args['inputs'][number],output:string,options:Map<
   await out.write({type:'write',position:0,data:wavHeader(rate,channels,frames)});await out.close();}
  catch(error){await out.abort().catch(()=>{});throw error;}
 }
+/** -i IN -vn -ac 1 -ar 16000 -f f32le pipe:1: the samples themselves, interleaved, as they decode (the sound analysis
+ * reads an hour this way without holding it). */
+async function samplesPcm(input:Args['inputs'][number],options:Map<string,string>,io:Io){
+ const rate=Number(options.get('-ar')??16000),channels=Number(options.get('-ac')??1),{from,seconds}=span(input,options);
+ for await(const planes of pcm(input.path,rate,channels,seconds,io.signal,from)){
+  const frames=planes[0].length,out=new Float32Array(frames*channels);
+  for(let i=0;i<frames;i++)for(let c=0;c<channels;c++)out[i*channels+c]=planes[c][i];
+  io.stdout(new Uint8Array(out.buffer));
+ }
+}
 /** -i IN -vn -ar 1000 -ac 1 -f s16le pipe:1: the waveform's samples, keeping each millisecond's peak. */
 async function waveformPcm(input:string,options:Map<string,string>,io:Io){
  const rate=Number(options.get('-ar')??1000),fine=Math.max(rate,8000),step=fine/rate;let peak=0,count=0;const out:number[]=[];
@@ -240,6 +250,7 @@ export async function runProgram(program:string,args:string[],io:Io):Promise<num
   const input=a.inputs[0],out=a.output??'',af=a.options.get('-af')??'',format=a.options.get('-f');
   if(/silencedetect|astats|ebur128/.test(af)){await analyse(input,a.options,io);return 0;}
   if(format==='rawvideo'){await rawFrames(input,a.options,io);return 0;}
+  if(out==='pipe:1'&&format==='f32le'){await samplesPcm(input,a.options,io);return 0;}
   if(out==='pipe:1'&&format==='s16le'){await waveformPcm(input.path,a.options,io);return 0;}
   if(/%\d*d/.test(input.path)&&(a.options.get('-vf')??'').includes('tile=')){await sheet(input,out,a.options,io);return 0;}
   if(a.options.get('-frames:v')==='1'){await still(input,out,a.options,io);return 0;}

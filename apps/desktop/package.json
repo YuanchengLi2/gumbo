@@ -24,6 +24,7 @@
     "@dream/procedural-media": "workspace:*",
     "@dream/agent": "workspace:*",
     "better-sqlite3": "13.0.3",
+    "onnxruntime-node": "1.30.0",
     "sqlite-vec": "^0.1.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",

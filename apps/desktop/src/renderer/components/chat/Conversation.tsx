@@ -1,6 +1,6 @@
 import {editingChanges} from '../../editing-language';
 import {TurnActions,CopyButton} from './TurnActions';
-import {RunStream,clock} from './RunStream';
+import {RunStream,TurnScenes,clock} from './RunStream';
 import React from 'react';
 import {ChevronRight} from 'lucide-react';
 import type {ProjectState,Message,TurnActivity} from '@dream/project-db';
@@ -64,6 +64,7 @@ const Turn=React.memo(function Turn({group,activity,running,commentary,assets,re
  {(events.length>0||last||running)&&<div className="assistant-turn">
  {running?<RunStream events={events} running assets={assets} startedAt={startedAt}/>:shown&&<details className="turn-work" open={!answered}><summary><span>{stopped?'Stopped':'Worked'}{time?(stopped?' after ':' for ')+time:''}</span>{count>0&&<small>{count} {count===1?'step':'steps'}</small>}<ChevronRight className="run-disclosure" size={12}/></summary><RunStream events={events} running={false} assets={assets}/></details>}
  {answered&&<div className="turn-answer"><MessageText text={last!.text}/></div>}
+ {answered&&<TurnScenes events={events} assets={assets}/>}
  {(()=>{const pills=changes.length>0?<ul className="turn-changes" aria-label="Change summary">{changes.map((change,i)=><li key={i} title={change}>{pill(change)}</li>)}</ul>:null;
   // Edits show as change cards; a request that only touched files keeps its short summary.
   return !running&&group.turnId&&changes.length?<ChangeCards turnId={group.turnId} refresh={refresh} fallback={pills}/>:pills;})()}
