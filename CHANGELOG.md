@@ -5,6 +5,12 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-24 · Phone videos are ready the moment you add them
+Videos from iPhones and most Android phones (HEVC) used to show "Preparing…" while Gumbo made a copy it could play:
+about a minute and a half for every minute of video. Now, if your browser can play them itself (Chrome and Edge on
+most Windows and Mac computers), they play, go on the timeline and export the moment you add them. Regular MP4s were
+already ready in under a second.
+
 ## 2026-10-24 · Try Gumbo without an account, with sample clips
 You can now try Gumbo before signing up: click "Try it free" on usegumbo.app. Add your own clips, or pick one of the
 sample clips (a skate session, travel shots or a Roblox run) if you don't have any handy, say what you want, and Gumbo

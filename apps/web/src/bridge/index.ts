@@ -22,7 +22,9 @@ const notYet=(what:string)=>()=>Promise.reject(new Error(`${what} is not availab
 // The settings the project service reads with every request (main/app-settings.ts settingsEnv).
 const settingsEnv=(s:AppSettings)=>({DREAM_CREATOR_PROFILE:JSON.stringify(s.profile),DREAM_DISABLED_PROVIDERS:s.disabledProviders.join(',')});
 let projects:ProjectClient|undefined;
-const service=()=>projects??=new ProjectClient(account,settingsEnv(loadSettings()));
+/** HEVC (phone footage) where this browser plays it with its own decoder: the original plays at once (media-io.ts). */
+const previewCodecs=()=>{try{return ['hvc1.1.6.L93.B0','hev1.1.6.L93.B0'].some(c=>(globalThis as any).MediaSource?.isTypeSupported?.(`video/mp4; codecs="${c}"`))?'hevc':'';}catch{return '';}};
+const service=()=>projects??=new ProjectClient(account,{...settingsEnv(loadSettings()),DREAM_PREVIEW_CODECS:previewCodecs()});
 let openProject=false;
 
 /** The account requests the editor sends as commands ({type:'account',action}), as main/index.ts answers them. */

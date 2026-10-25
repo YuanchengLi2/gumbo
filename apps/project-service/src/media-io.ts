@@ -18,10 +18,13 @@ export async function copyMedia(source:string,destination:string,signal?:AbortSi
  }finally{if(existsSync(temporary))await unlink(temporary);}
 }
 
+/** Codecs the player plays as they are. The browser adds the ones its own hardware decodes (DREAM_PREVIEW_CODECS: HEVC,
+ * from phones, on most Windows and Mac computers), so that footage plays at once instead of after a copy is made. */
+const playable=()=>['h264','vp8','vp9','av1',...String(process.env.DREAM_PREVIEW_CODECS??'').split(',').map(c=>c.trim()).filter(Boolean)];
 export function canPreviewOriginal(asset:Pick<Asset,'kind'|'originalPath'|'videoCodec'>){
  if(asset.kind!=='video')return true;
  const extension=extname(asset.originalPath).toLowerCase();
- return ['.mp4','.m4v','.mov','.webm'].includes(extension)&&['h264','vp8','vp9','av1'].includes(asset.videoCodec??'');
+ return ['.mp4','.m4v','.mov','.webm'].includes(extension)&&playable().includes(asset.videoCodec??'');
 }
 
 /** The preview copy keeps a keyframe this often, so a cut into the middle of a clip decodes at most this much to show it. */
