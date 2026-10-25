@@ -5,11 +5,21 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
-## 2026-10-25 · Gumbo asks when a request could mean different things
-Some requests can mean very different edits: "add motion tracking on Steve" could be the camera following him, a box
-that follows him, or Steve himself outlined. Gumbo used to pick one and could spend minutes on the wrong one. Now it
-asks one short question first, with the choices listed; reply with a number or in your own words and it does that.
-Clear requests, and anything quick to change afterwards, are still just done.
+## 2026-10-25 · Roux, rebuilt: it reads your footage, watches its own cut, and remembers the conversation
+Roux, the editor inside Gumbo, is rebuilt from the ground up to work the way the best coding agents do.
+
+It reads your footage. Every video you add gets a written overview of its story, people and scenes, a transcript
+sentence by sentence and a list of every shot, so Roux finds "where she says the price" in a long stream in seconds,
+and a short cut of a 20-minute episode keeps whole sentences in story order, ending included.
+
+It watches its own cut before it says it's done: what is said, in order, and a frame of every shot. It fixes what is
+off, like a cut in the middle of a word or a story told out of order, before it tells you.
+
+One conversation runs through your project, so "make it shorter" after a first cut remembers what was just done, and
+replies come faster. Effort fits the request: yellow captions take a few steps, a first cut of long footage takes as
+long as it needs, and when a request could mean very different edits ("follow Steve") it asks one short question
+first. It notes down what you like for each project, Plan first still shows you the plan before anything changes, and
+Undo takes back a whole request in one step, as before.
 
 ## 2026-10-25 · Speech in long videos is heard while they're still being added
 When you drop or pick a long video, Gumbo plays it before it has finished copying in. Hearing its speech at that moment

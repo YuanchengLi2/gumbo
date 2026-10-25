@@ -15,11 +15,13 @@ export function replaceFileSync(target:string,data:string|Uint8Array,suffix='.dr
    writeFileSync(target,data);try{unlinkSync(temp);}catch{}return;}
  }
 }
-export const sourceExcluded=new Set(['node_modules','.venv','.python-packages','.npm','__pycache__','.git','.cache','.logs','output','context']);
+// footage/, guides/ and HISTORY.md are written from the project for the agent to read, and GUMBO.md is the project's memory, which an
+// undo or a restored version leaves as it is: none of them belong to a version's files.
+export const sourceExcluded=new Set(['node_modules','.venv','.python-packages','.npm','__pycache__','.git','.cache','.logs','output','context','footage','guides','GUMBO.md','HISTORY.md']);
 export function workspacePath(root:string,path:string){
  if(path.includes('\0')||(!isAbsolute(path)&&path.includes(':'))||(isAbsolute(path)&&path.slice(2).includes(':')))throw new Error('Use a path inside the workspace.');
  const target=resolve(root,path),rel=relative(root,target);
- if(rel==='..'||rel.startsWith('..\\')||rel.startsWith('../')||isAbsolute(rel))throw new Error('Path is outside the workspace. For a file elsewhere on the computer use scope computer (read_file, view_media), or bring media in with import_media first.');
+ if(rel==='..'||rel.startsWith('..\\')||rel.startsWith('../')||isAbsolute(rel))throw new Error('Path is outside the workspace. For a file elsewhere on the computer use scope computer (read, list, grep), or bring media in with the media tool first.');
  let current=root;if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error('Workspace links are not allowed.');
  for(const part of rel.split(/[\\/]/).filter(Boolean)){current=join(current,part);if(existsSync(current)&&lstatSync(current).isSymbolicLink())throw new Error('Workspace links are not allowed.');}
  return target;

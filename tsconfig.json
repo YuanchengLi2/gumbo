@@ -47,8 +47,8 @@
       "@dream/procedural-media": [
         "packages/procedural-media/src/index.ts"
       ],
-      "@dream/orchestrator": [
-        "packages/orchestrator/src/index.ts"
+      "@dream/agent": [
+        "packages/agent/src/index.ts"
       ],
       "@dream/scene-engine": [
         "packages/scene-engine/src/index.ts"

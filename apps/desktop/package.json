@@ -22,7 +22,7 @@
     "@dream/composition": "workspace:*",
     "@dream/effects": "workspace:*",
     "@dream/procedural-media": "workspace:*",
-    "@dream/orchestrator": "workspace:*",
+    "@dream/agent": "workspace:*",
     "better-sqlite3": "13.0.3",
     "sqlite-vec": "^0.1.6",
     "react": "19.3.0",

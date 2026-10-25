@@ -98,6 +98,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@dream/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@dream/composition':
         specifier: workspace:*
         version: link:../../packages/composition
@@ -119,9 +122,6 @@ importers:
       '@dream/guardrails':
         specifier: workspace:*
         version: link:../../packages/guardrails
-      '@dream/orchestrator':
-        specifier: workspace:*
-        version: link:../../packages/orchestrator
       '@dream/procedural-media':
         specifier: workspace:*
         version: link:../../packages/procedural-media
@@ -216,6 +216,9 @@ importers:
 
   apps/project-service:
     dependencies:
+      '@dream/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@dream/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
@@ -225,9 +228,6 @@ importers:
       '@dream/guardrails':
         specifier: workspace:*
         version: link:../../packages/guardrails
-      '@dream/orchestrator':
-        specifier: workspace:*
-        version: link:../../packages/orchestrator
       '@dream/procedural-media':
         specifier: workspace:*
         version: link:../../packages/procedural-media
@@ -285,6 +285,27 @@ importers:
       path-browserify:
         specifier: 1.0.1
         version: 1.0.1
+
+  packages/agent:
+    dependencies:
+      '@dream/config':
+        specifier: workspace:*
+        version: link:../config
+      '@dream/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@dream/footage':
+        specifier: workspace:*
+        version: link:../footage
+      '@dream/project-db':
+        specifier: workspace:*
+        version: link:../project-db
+      '@dream/timeline':
+        specifier: workspace:*
+        version: link:../timeline
+      zod:
+        specifier: ^4.1.0
+        version: 4.6.5
 
   packages/composition:
     dependencies:
@@ -362,33 +383,6 @@ importers:
       '@dream/timeline':
         specifier: workspace:*
         version: link:../timeline
-
-  packages/orchestrator:
-    dependencies:
-      '@dream/config':
-        specifier: workspace:*
-        version: link:../config
-      '@dream/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@dream/footage':
-        specifier: workspace:*
-        version: link:../footage
-      '@dream/guardrails':
-        specifier: workspace:*
-        version: link:../guardrails
-      '@dream/procedural-media':
-        specifier: workspace:*
-        version: link:../procedural-media
-      '@dream/project-db':
-        specifier: workspace:*
-        version: link:../project-db
-      '@dream/timeline':
-        specifier: workspace:*
-        version: link:../timeline
-      zod:
-        specifier: ^4.1.0
-        version: 4.6.5
 
   packages/procedural-media:
     dependencies:

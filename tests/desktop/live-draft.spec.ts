@@ -16,7 +16,7 @@ test('shows the agent\'s edit on the timeline as it writes it, as effect, filter
  test.setTimeout(240000);
  const profile=mkdtempSync(join(tmpdir(),'dream-live-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-live-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  // Each response waits, so the draft is on screen for a while before the publish.
- const gateway=await codeGateway({delayMs:5000,script:(_body,step)=>step===0?[use('cut-write','write_file',{path:'src/cut.cjs',content:cut}),use('cut-run','run_command',{command:'node src/cut.cjs'})]:step===1?[use('publish','publish_project',{})]:finish('done','Cut it into three clips with a zoom and a grade.')});
+ const gateway=await codeGateway({delayMs:5000,script:(_body,step)=>step===0?[use('cut-write','write',{path:'src/cut.cjs',content:cut}),use('cut-run','run',{command:'node src/cut.cjs'})]:finish('done','Cut it into three clips with a zoom and a grade.')});
  writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});
  const out=resolve('artifacts/ui');mkdirSync(out,{recursive:true});

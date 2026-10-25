@@ -13,12 +13,11 @@ test('the preview shows the same whole frame, graphics included, at every height
  test.setTimeout(240000);let assetId='';
  const scene="export default function Card(){\n return <div style={{position:'absolute',left:80,top:80,padding:'28px 40px',background:'#ff00ff',color:'white',fontSize:64,fontFamily:'sans-serif',borderRadius:16}}>Pho - noodle soup</div>;\n}\n";
  const script=(_body:any,step:number)=>[
-  [use('w','write_file',{path:'src/card.tsx',content:scene})],
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c0","assetId":"${assetId}","srcIn":1,"srcOut":5,"speed":1,"reason":"Clip"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":4,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":4},"layer":2,"reason":"Card"}],'})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":120,"transparent":true}]'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'Placed the clip and a card.',evidence:[]})]][step]??[];
+  [use('w','write',{path:'src/card.tsx',content:scene})],
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c0","assetId":"${assetId}","srcIn":1,"srcOut":5,"speed":1,"reason":"Clip"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":4,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":4},"layer":2,"reason":"Card"}],'})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":120,"transparent":true}]'})],
+  [{type:'text',text:'Placed the clip and a card.'}]][step]??[];
  const profile=mkdtempSync(join(tmpdir(),'dream-resize-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-resize-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});

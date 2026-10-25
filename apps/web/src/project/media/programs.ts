@@ -65,16 +65,35 @@ async function picture(canvas:OffscreenCanvas,output:string,io:Io){
  const blob=await canvas.convertToBlob({type:/\.png$/i.test(output)?'image/png':/\.webp$/i.test(output)?'image/webp':'image/jpeg',quality:.88});
  if(output==='pipe:1'||output==='-')io.stdout(new Uint8Array(await blob.arrayBuffer()));else await writeFile(output,blob);
 }
+/** Videos kept open between stills, so a run of frames from one video (Roux looking at chosen moments, the shot index's
+ * frames) reuses its demuxer and decoder instead of opening the file and starting a decoder for every frame. At most four
+ * stay open, closed when idle for a minute; one video's frames are taken one at a time. */
+type Opened={input:Input;track:InputVideoTrack;sinks:Map<string,CanvasSink>;used:number;queue:Promise<unknown>};
+const opened=new Map<string,Promise<Opened>>();
+const close=(key:string)=>{const entry=opened.get(key);opened.delete(key);void entry?.then(e=>e.input.dispose?.(),()=>{});};
+setInterval(()=>{for(const [key,entry] of opened)void entry.then(e=>{if(Date.now()-e.used>60_000)close(key);},()=>close(key));},15_000);
+async function openVideo(path:string):Promise<Opened>{
+ const file=await fileAt(path),key=`${path}:${file.size}:${file.lastModified}`;
+ let entry=opened.get(key);
+ if(!entry){
+  entry=(async()=>{const input=new Input({source:new BlobSource(file),formats:ALL_FORMATS}),track=await input.getPrimaryVideoTrack();if(!track){input.dispose?.();throw new Error('No video stream to take a frame from.');}return{input,track,sinks:new Map(),used:Date.now(),queue:Promise.resolve()};})();
+  opened.set(key,entry);entry.catch(()=>opened.delete(key));
+  if(opened.size>4){const times=await Promise.all([...opened].map(async([k,e])=>[k,await e.then(x=>x.used,()=>0)] as const));close(times.sort((a,b)=>a[1]-b[1])[0][0]);}
+ }
+ const video=await entry;video.used=Date.now();return video;
+}
 /** [-skip_frame nokey] -ss T -i IN -frames:v 1 [-vf scale…[,showinfo]] OUT|pipe:1: the frame at T (or the photo) as an
  * image. With -skip_frame nokey, the keyframe at or before T; showinfo reports the frame's time as ffmpeg does. */
 async function still(input:Args['inputs'][number],output:string,options:Map<string,string>,io:Io){
- const vf=options.get('-vf')??'',at=span(input,options).from;let canvas:OffscreenCanvas,time=at;
+ const vf=options.get('-vf')??'',at=span(input,options).from;let canvas!:OffscreenCanvas,time=at;
  if(IMAGE.test(input.path)){const bitmap=await createImageBitmap(await fileAt(input.path)),[w,h]=fit(vf,bitmap.width,bitmap.height);canvas=new OffscreenCanvas(w,h);canvas.getContext('2d')!.drawImage(bitmap,0,0,w,h);bitmap.close();time=0;}
- else{const media=await open(input.path);try{
-  const track=await media.getPrimaryVideoTrack();if(!track)throw new Error('No video stream to take a frame from.');const [w,h]=fit(vf,track.displayWidth,track.displayHeight),start=await track.getFirstTimestamp();
+ else{const video=await openVideo(input.path),take=async()=>{
+  const {track}=video,[w,h]=fit(vf,track.displayWidth,track.displayHeight),start=await track.getFirstTimestamp();
   let target=start+at;if(options.get('-skip_frame')==='nokey'){const packets=new EncodedPacketSink(track),key=await packets.getKeyPacket(target,{metadataOnly:true})??await packets.getFirstPacket({metadataOnly:true});if(key)target=key.timestamp;}
-  const sink=new CanvasSink(track,{width:w,height:h,fit:'fill'}),frame=await sink.getCanvas(target)??await sink.getCanvas(start);if(!frame)throw new Error('No frame could be decoded there.');
-  canvas=new OffscreenCanvas(w,h);canvas.getContext('2d')!.drawImage(frame.canvas as OffscreenCanvas,0,0);time=frame.timestamp;}finally{media.dispose?.();}}
+  const size=`${w}x${h}`,sink=video.sinks.get(size)??video.sinks.set(size,new CanvasSink(track,{width:w,height:h,fit:'fill'})).get(size)!;
+  const frame=await sink.getCanvas(target)??await sink.getCanvas(start);if(!frame)throw new Error('No frame could be decoded there.');
+  canvas=new OffscreenCanvas(w,h);canvas.getContext('2d')!.drawImage(frame.canvas as OffscreenCanvas,0,0);time=frame.timestamp;};
+  const turn=video.queue.then(take,take);video.queue=turn.catch(()=>{});await turn;video.used=Date.now();}
  if(vf.includes('showinfo'))io.stderr(`[Parsed_showinfo_1 @ 0] n:   0 pts:${Math.round(time*90000)} pts_time:${time} duration:0\n`);
  await picture(canvas,output,io);
 }

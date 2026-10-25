@@ -2,7 +2,7 @@ import {pageText} from '../../../project-service/src/web-fetch';
 import {gatewayConnection} from './connection';
 export {privateAddress,pageText} from '../../../project-service/src/web-fetch';
 
-/** fetch_url on the web: a browser cannot read other sites, so the gateway reads the page (its fetch-url, which refuses
+/** Reading a page (the web tool with a url) on the web: a browser cannot read other sites, so the gateway reads the page (its fetch-url, which refuses
  * private addresses at every redirect), and the page becomes text here exactly as the desktop makes it
  * (project-service web-fetch.ts fetchPage). */
 export async function fetchPage(url:string,maxCharacters:number,signal:AbortSignal){

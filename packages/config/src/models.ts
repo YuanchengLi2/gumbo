@@ -33,69 +33,23 @@ export const typicalCost=(m:ModelInfo,at=new Date())=>{const price=m.change&&at>
 /** Model ids by composer choice (Auto excluded: it resolves per request). */
 export const agentModels=Object.fromEntries(modelCatalog.map(m=>[m.choice,m.id])) as Record<Exclude<ModelChoice,'auto'>,string>;
 
-/** What a request is and how hard, as scored for Auto (see the orchestrator's triage): edit changes the project, answer
- * only replies, plan returns a plan first. Difficulty runs from 1 (one setting on one thing, small talk) to 5 (a first cut
- * of long footage, a whole-video restructure). */
-export type RequestScore={kind:'edit'|'answer'|'plan';difficulty:number;vision?:boolean;work?:Work;model?:string};
-/** The kind of work a request is, which decides which model is best at it: talk (small talk, thanks, questions about the
- * app), look (a question that needs a look at the video), write (a script, ideas, an outline), fix (precise changes to
- * what exists), footage (choosing, cutting and pacing shots, b-roll), graphics (motion graphics, titles, animation,
- * drawings), sound (music, effects, the mix) and restructure (a first cut, condensing long footage, the whole video). */
-export type Work='talk'|'look'|'write'|'fix'|'footage'|'graphics'|'sound'|'restructure';
-export const works:Work[]=['talk','look','write','fix','footage','graphics','sound','restructure'];
 type Choice=Exclude<ModelChoice,'auto'>;
-/** The fallback when the router's own pick cannot run: for each kind of work and difficulty, the tier of model it needs
- * (light for one setting on one thing and small talk, strong for everything else), run on Auto's model for that tier
- * (autoModels). Auto has no frontier tier: the hardest work runs on the strong model too. */
-export const bestFor:Record<Work,{upTo:number;tier:AutoTier}[]>={
- talk:[{upTo:5,tier:'light'}],
- look:[{upTo:1,tier:'light'},{upTo:5,tier:'strong'}],
- write:[{upTo:5,tier:'strong'}],
- fix:[{upTo:1,tier:'light'},{upTo:5,tier:'strong'}],
- footage:[{upTo:5,tier:'strong'}],
- graphics:[{upTo:5,tier:'strong'}],
- sound:[{upTo:5,tier:'strong'}],
- restructure:[{upTo:5,tier:'strong'}],
-};
-/** The work a score stands for when the triage did not name it (the word rules, an older gateway). */
-export function workOf(score:RequestScore):Work{
- if(score.work)return score.work;const d=Math.round(score.difficulty)||3;
- if(score.kind==='answer')return d<=2?'talk':'look';if(score.kind==='plan')return d>=4?'restructure':'write';return d>=5?'restructure':'fix';
-}
-/** Auto: the tier Haiku chose for the request, weighing how hard it is against what each tier costs (model), or else the
- * tier its kind of work needs at its difficulty (bestFor), run on Auto's model for that tier (autoModels). Auto runs
- * only Claude Haiku 5.5 and DeepSeek V4.1 Flash: a frontier tier or model the router still names runs on the strong model.
- * A model the user picks always wins over Auto (Opus and the other frontier models run only when picked). */
-export function autoModel(score:RequestScore,providers?:Partial<Record<Provider,boolean>>):string{
- const d=Math.min(5,Math.max(1,Math.round(score.difficulty)||3)),can=(m:ModelInfo)=>(m.provider==='anthropic'||!!providers?.[m.provider])&&(!score.vision||m.vision);
- // The router names a tier (it is shown tiers, not providers); a model id is still honoured.
- // A model id it returns counts as that model's tier: Auto only ever runs its own model for a tier (autoModels).
- const named=isTier(score.model)?score.model:modelInfo(score.model??'')?.tier,tier:AutoTier=autoTier(named??(score.kind==='plan'?'strong':(bestFor[workOf(score)].find(b=>d<=b.upTo)??bestFor[workOf(score)].at(-1)!).tier));
- const pick=(t:AutoTier)=>autoModels[t].map(choice=>modelInfo(choice)!).find(can);
- return(pick(tier)??autoTiers.map(pick).find(Boolean))?.id??agentModels.sonnet;
-}
 export const tiers:Tier[]=['light','strong','frontier'];
-/** The tiers Auto chooses between. The frontier tier is for models the user picks, never for Auto. */
-export type AutoTier=Exclude<Tier,'frontier'>;
-export const autoTiers:AutoTier[]=['light','strong'];
-export const autoTier=(tier:Tier):AutoTier=>tier==='frontier'?'strong':tier;
-/** The models Auto runs, one for each tier: Claude Haiku 5.5 for light work and DeepSeek V4.1 Flash for everything else,
- * the hardest work included. Chosen on October 18 for value: GPT-6.1 Sol edits cost 20 to 115 credits, and DeepSeek's
- * input is about a seventh of Sol's price, its cached input a sixteenth, and its cache lasts hours (a stop and continue
- * does not pay for the whole conversation again). A request may take longer. Every other model runs only when the user
- * picks it, and the user's pick always wins. When DeepSeek cannot run (no key on the gateway), GPT-6.1 Sol, then Claude
- * Sonnet 5.5, stands in. */
-export const autoModels:Record<AutoTier,Choice[]>={light:['haiku'],strong:['deepseek-flash','gpt-sol','sonnet']};
-/** Auto's stand-in when the model it chose stops responding: the first model of Auto's other tier that can run, so
- * Roux 1's two models (DeepSeek V4.1 Flash and Claude Haiku 5.5) stand in for each other. None for a model Auto does not run. */
-export function autoFallback(model:string,providers?:Partial<Record<Provider,boolean>>):string|undefined{
- const tier=autoTiers.find(t=>autoModels[t].some(choice=>modelInfo(choice)?.id===model));if(!tier)return;
- return autoModels[autoTiers.find(t=>t!==tier)!].map(choice=>modelInfo(choice)!).find(m=>m.id!==model&&(m.provider==='anthropic'||!!providers?.[m.provider]))?.id;
-}
 export const isTier=(value:unknown):value is Tier=>tiers.includes(value as Tier);
-/** What Auto's router is shown: the tiers that have a model that can run, each with what it is for and what a request
- * costs on it, without naming a provider or a model, so it judges how much model a request needs and nothing else. */
-export function routerChoices(providers?:Partial<Record<Provider,boolean>>,at=new Date()){
- return autoTiers.flatMap(tier=>{const model=autoModels[tier].map(choice=>modelInfo(choice)!).find(m=>m.provider==='anthropic'||!!providers?.[m.provider]);if(!model)return[];
-  return[{id:tier,name:tier[0].toUpperCase()+tier.slice(1)+' model',bestAt:model.guide,costPerRequest:`about $${typicalCost(model,at).toFixed(2)}`}];});
+/** Roux 1 (Auto)'s models. Its agent runs on DeepSeek V4.1 Flash, chosen on October 18 for value: GPT-6.1 Sol edits cost
+ * 20 to 115 credits, and DeepSeek's input is about a seventh of Sol's price, its cached input a sixteenth, and its cache
+ * lasts hours (a stop and continue does not pay for the whole conversation again). When DeepSeek cannot run (no key on the
+ * gateway), GPT-6.1 Sol, then Claude Sonnet 5.5, stands in. Claude Haiku 5.5 does the small work in the background
+ * (describing shots, writing footage overviews, condensing a long conversation). Every other model runs only when the
+ * user picks it, and the user's pick always wins. */
+export const autoModels:{agent:Choice[];light:Choice[]}={agent:['deepseek-flash','gpt-sol','sonnet'],light:['haiku']};
+const runs=(m:ModelInfo,providers?:Partial<Record<Provider,boolean>>)=>m.provider==='anthropic'||!!providers?.[m.provider];
+/** The model Auto's agent runs on: the first of its models whose provider has a key on the gateway. */
+export function autoModel(providers?:Partial<Record<Provider,boolean>>):string{return autoModels.agent.map(choice=>modelInfo(choice)!).find(m=>runs(m,providers))?.id??agentModels.sonnet;}
+/** Auto's stand-in when its model stops responding: Claude Haiku 5.5 for the agent's model, and the agent's model for
+ * Haiku, so Roux 1's two models stand in for each other. None for a model Auto does not run. */
+export function autoFallback(model:string,providers?:Partial<Record<Provider,boolean>>):string|undefined{
+ const own=(choices:Choice[])=>choices.some(choice=>modelInfo(choice)?.id===model);
+ const other=own(autoModels.agent)?autoModels.light:own(autoModels.light)?autoModels.agent:undefined;
+ return other?.map(choice=>modelInfo(choice)!).find(m=>m.id!==model&&runs(m,providers))?.id;
 }

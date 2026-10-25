@@ -39,5 +39,5 @@ export function chunksFor(imports:Iterable<string>,usesThreeHelpers=false):Chunk
 export function unknownModuleMessage(specifier:string){
  const families=['react','remotion','@remotion/shapes','@remotion/paths','@remotion/transitions','@remotion/layout-utils','@remotion/noise','@remotion/three','three (and three/addons/…)','@react-three/fiber','@react-three/drei','d3 (and d3-*)','lucide-react','simplex-noise','@dream/engine'];
  const pkg=specifier.startsWith('@')?specifier.split('/').slice(0,2).join('/'):specifier.split('/')[0];
- return `"${specifier}" is not installed. Install it with run_command (npm install ${pkg}); installed packages are bundled into the scene automatically. Already provided without installing: ${families.join(', ')}.`;
+ return `"${specifier}" is not installed. Install it with run (npm install ${pkg}); installed packages are bundled into the scene automatically. Already provided without installing: ${families.join(', ')}.`;
 }

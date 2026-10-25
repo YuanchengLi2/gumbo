@@ -7,7 +7,8 @@ import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import {ProjectDB} from '@dream/project-db';
 import {measureShots,searchShots,shotLine,terms,labelsFor,rangeFacts,ShotIndexer,type Shot} from '../../apps/project-service/src/shot-index';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
+import {call,textOf} from '../fixtures/agent-project';
 
 // Ten seconds with known content: a still red card (0-2 s), a pan to the right across colour bars (2-5 s), a test pattern
 // jolting from side to side like a handheld walk (5-8 s), and a still blue card (8-10 s).
@@ -72,7 +73,7 @@ it('ranks shots by what is visible and said, and filters on measured facts and o
  expect(ids({})).toEqual(['a','b','c','d','e']);
 });
 
-it('describes shots from one frame sheet per twelve, keeps what was described when a batch fails, and serves find_shots with frames',async()=>{
+it('describes shots from one frame sheet per twelve, keeps what was described when a batch fails, and serves find and shots.txt',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-shot-tool-')),db=new ProjectDB(folder,'Shots'),path=fixture(folder);
  db.saveAsset({id:'v1',filename:'shots.mp4',kind:'video',durationSec:10,fps:30,width:320,height:180,hasAudio:false,originalPath:path,fingerprint:'f1',status:'ready'} as any);
  let calls=0;const sheets:number[]=[];
@@ -85,14 +86,18 @@ it('describes shots from one frame sheet per twelve, keeps what was described wh
   // A second call reuses the saved index: no measuring, no describing.
   await indexer.ensure('v1',new AbortController().signal);expect(calls).toBe(1);
   db.contactSheet=vi.fn(async(images:any[])=>({data:'SHEET',mimeType:'image/jpeg' as const,columns:4,rows:3,count:images.length,width:1536,height:400}));
-  const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
+  const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
   await workspace.initialize();
-  expect((workspace.mediaContext() as any[]).find(m=>m.assetId==='v1').shots).toBe(`${index.shots.length} shots`);
-  const result:any=await workspace.execute('find_shots',{query:'pattern',steady:true,limit:12,offset:0},'find','turn',new AbortController().signal);
-  const summary=JSON.parse(result.content[0].text);
-  expect(summary.matched).toBeGreaterThan(0);expect(summary.results[0]).toMatch(/^1\. v1 shots\.mp4 [\d.]+-[\d.]+s \([\d.]+s\) \| shot number \d+ of the test pattern \| /);expect(summary.results.some((l:string)=>/shaky|handheld/.test(l))).toBe(false);
+  // The shots as a file the agent reads and greps, and the index's status in footage/INDEX.md.
+  const shots=textOf(await call(workspace,'read',{path:'footage/shots-v1/shots.txt'}));expect(shots).toMatch(/\[[\d.]+-[\d.]+\] shot number \d+ of the test pattern \| pattern, test \| /);
+  expect(textOf(await call(workspace,'read',{path:'footage/INDEX.md'}))).toContain(`shots: ${index.shots.length} shots`);
+  expect(textOf(await call(workspace,'grep',{pattern:'shot number 2 ',path:'footage'}))).toMatch(/footage\/shots-v1\/shots\.txt:\d+: /);
+  const result:any=await call(workspace,'find',{query:'pattern',steady:true},'find');
+  const lines=result.content[0].text.split('\n');
+  expect(lines[0]).toMatch(/^\d+ shots? matched "pattern"/);expect(lines[1]).toMatch(/^1\. v1 shots\.mp4 [\d.]+-[\d.]+s \([\d.]+s\) \| shot number \d+ of the test pattern \| /);expect(lines.slice(1).some((l:string)=>/shaky|handheld/.test(l))).toBe(false);
   expect(result.content.at(-1)).toEqual({type:'image',source:{type:'base64',media_type:'image/jpeg',data:'SHEET'}});
-  await expect(workspace.execute('find_shots',{assetIds:['nope'],limit:12,offset:0},'find2','turn',new AbortController().signal)).rejects.toThrow(/Not in the footage index/);
+  await expect(call(workspace,'find',{sources:['nope']},'find2')).rejects.toThrow(/No source "nope"/);
+  workspace.close();
  }finally{indexer.close();db.close();}
 },60_000);
 
@@ -116,38 +121,18 @@ it('shows the index facts of each clip the agent places, and of each cut in a st
   // A range across the cut from the pan into the jolting pattern: its facts name the cut inside it and the shake.
   const facts=rangeFacts(index,4,7)!;expect(facts).toMatch(/shaky|handheld/);expect(facts).toMatch(/camera cut inside, 1(\.\d+)?s in/);expect(facts).toMatch(/shake [\d.]+/);
   expect(rangeFacts(index,0.2,1.8)).toMatch(/still|steady/);expect(rangeFacts(index,0.2,1.8)).not.toMatch(/camera cut/);
-  const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
+  const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
   await workspace.initialize();
   const file=join(workspace.root,'project.json'),doc=JSON.parse(readFileSync(file,'utf8'));
-  doc.timeline.spine=[{id:'calm',assetId:'v1',srcIn:0.2,srcOut:1.8,speed:1,audio:{mute:true},reason:'Calm open'},{id:'jolt',assetId:'v1',srcIn:4,srcOut:7,speed:1,audio:{mute:true},reason:'Across the cut'}];writeFileSync(file,JSON.stringify(doc));
-  const first:any=await workspace.execute('publish_project',{},'p1','turn',new AbortController().signal);
-  const placed:string[]=first.footageInPlacedClips.clips;expect(placed).toHaveLength(2);expect(placed[1]).toMatch(/^jolt at 1\.6s \(source 4-7s\): .*camera cut inside/);
-  // Publishing again without new or re-trimmed clips adds nothing.
-  const second:any=await workspace.execute('publish_project',{},'p2','turn',new AbortController().signal);expect(second.footageInPlacedClips).toBeUndefined();
+  doc.timeline.spine=[{id:'calm',assetId:'v1',srcIn:0.2,srcOut:1.8,speed:1,audio:{mute:true},reason:'Calm open'},{id:'jolt',assetId:'v1',srcIn:4,srcOut:7,speed:1,audio:{mute:true},reason:'Across the cut'}];
+  const first=textOf(await call(workspace,'write',{path:'project.json',content:JSON.stringify(doc,null,2)},'p1'));
+  expect(first).toMatch(/clips placed:\n- calm \(0\.2-1\.8 s\): .*steady.*\n- jolt \(4-7 s\): .*camera cut inside/);
+  // Writing again without new or re-trimmed clips adds nothing about them.
+  const again=JSON.parse(readFileSync(file,'utf8'));again.timeline.settings.fps=24;
+  expect(textOf(await call(workspace,'write',{path:'project.json',content:JSON.stringify(again,null,2)},'p2'))).not.toMatch(/clips placed/);
   // Watching the stretch of the edit: each cut carries what the index measured in its source range.
-  const viewed:any=await workspace.execute('view_media',{target:'preview',startSec:0,endSec:4},'look','turn',new AbortController().signal);
+  const viewed:any=await call(workspace,'look',{target:'edit',start:0,end:4},'look');
   const events:string[]=JSON.parse(viewed.content[0].text).stretch.events;expect(events.find(e=>e.includes('cut to jolt'))).toMatch(/camera cut inside/);
  }finally{indexer.close();db.close();}
 },60_000);
 
-it('gives every request its edit as footage, and the shots triage says it needs, from the index',async()=>{
- const folder=mkdtempSync(join(tmpdir(),'dream-shot-context-')),db=new ProjectDB(folder,'Context'),path=fixture(folder);
- db.saveAsset({id:'v1',filename:'shots.mp4',kind:'video',durationSec:10,fps:30,width:320,height:180,hasAudio:false,originalPath:path,fingerprint:'f1',status:'ready'} as any);
- const describe=vi.fn(async(_system:string,content:any[])=>{const count=Number(String(content[1].text).match(/\d+/)![0]);return{content:[{type:'text',text:JSON.stringify(Array.from({length:count},(_,n)=>({n:n+1,what:n===count-1?'calm blue lake under a clear sky':'colour bars test pattern',tags:n===count-1?['lake','water','calm','outdoor']:['pattern']})))}]};});
- const indexer=new ShotIndexer(db,ffmpeg!,describe,async()=>({data:Buffer.from('sheet').toString('base64')}));
- try{
-  await indexer.ensure('v1',new AbortController().signal);
-  const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,shots:indexer},()=>{});
-  await workspace.initialize();
-  const file=join(workspace.root,'project.json'),doc=JSON.parse(readFileSync(file,'utf8'));
-  doc.timeline.spine=[{id:'jolt',assetId:'v1',srcIn:5.2,srcOut:7.8,speed:1,audio:{mute:true},reason:'Jolting pattern'}];writeFileSync(file,JSON.stringify(doc));
-  await workspace.execute('publish_project',{},'p1','turn',new AbortController().signal);
-  // Triage said what the request needs from the footage.
-  db.setMeta('pending_request',JSON.stringify({turnId:'t2',text:'open on something calm'}));db.setMeta('routing:t2',JSON.stringify({route:'local',lookFor:'calm lake water'}));
-  const project:any=(workspace.context('open on something calm') as any).project;
-  expect(project.timeline.lines[0]).toMatch(/^1\. jolt at .*\| "colour bars test pattern"; .*(shaky|handheld)/);
-  expect(project.footageForRequest.lookingFor).toBe('calm lake water');expect(project.footageForRequest.shots[0]).toMatch(/calm blue lake/);
-  // A request that needs no footage chosen gets no shot list.
-  db.setMeta('routing:t2',JSON.stringify({route:'local'}));expect((workspace.context('make the caption white') as any).project.footageForRequest).toBeUndefined();
- }finally{indexer.close();db.close();}
-},60_000);

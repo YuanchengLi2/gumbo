@@ -12,9 +12,10 @@ test('finds what was shot today on the computer, imports it in capture order and
  for(const [name,seconds] of [['C.mp4',90],['A.mp4',30],['B.mp4',60]] as const){const target=join(camera,name);copyFileSync(resolve('artifacts/fixtures/source.mp4'),target);utimesSync(target,ago(seconds),ago(seconds));}
  copyFileSync(resolve('artifacts/fixtures/source.mp4'),join(camera,'old.mp4'));utimesSync(join(camera,'old.mp4'),ago(3*86400),ago(3*86400));
  const script:Script=(body,step)=>{
-  if(step===0)return[{type:'tool_use',id:'find',name:'find_media',input:{when:'today',folders:[camera],kinds:['video']}}];
-  if(step===1)return[{type:'tool_use',id:'import',name:'import_media',input:{paths:resultOf(body,'find_media').files.map((f:any)=>f.path)}}];
-  if(step===2){const ids=resultOf(body,'import_media').imported.map((i:any)=>i.assetId);return scriptedEdit('today',`p.timeline.spine=${JSON.stringify(ids)}.map((assetId,n)=>({id:'today-'+n,assetId,srcIn:0,srcOut:1,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'Shot today'}))`);}
+  if(step===0)return[{type:'tool_use',id:'find',name:'media',input:{action:'find',when:'today',folders:[camera],kinds:['video']}}];
+  // Found files are listed under their folder, one "name | time | ..." line each; imported ones as "- a_… \"name\"" lines.
+  if(step===1)return[{type:'tool_use',id:'import',name:'media',input:{action:'import',paths:[...String(resultOf(body,'media')).matchAll(/^  ([^|]+?) \|/gm)].map(m=>join(camera,m[1].trim()))}}];
+  if(step===2){const ids=[...String(resultOf(body,'media')).matchAll(/^- (a_\S+) /gm)].map(m=>m[1]);return scriptedEdit('today',`p.timeline.spine=${JSON.stringify(ids)}.map((assetId,n)=>({id:'today-'+n,assetId,srcIn:0,srcOut:1,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'Shot today'}))`);}
   return finish('done','Cut your three clips from today together in the order you shot them.');
  };
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));

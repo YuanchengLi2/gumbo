@@ -7,7 +7,7 @@ import ffmpeg from 'ffmpeg-static';
 import {ProjectDB} from '@dream/project-db';
 import {AssetSchema} from '@dream/footage';
 import {contactSheet,jpegSize} from '../../apps/project-service/src/contact-sheet';
-import {captureOrder} from '../../packages/orchestrator/src/media-context';
+import {captureOrder} from '../../packages/agent/src/media-context';
 
 const frame=(color:string)=>execFileSync(ffmpeg!,['-v','error','-f','lavfi','-i',`color=c=${color}:s=320x180`,'-frames:v','1','-f','image2pipe','-vcodec','mjpeg','pipe:1']).toString('base64');
 

@@ -14,13 +14,12 @@ const scene="export default function Card({word,meaning}:{word:string;meaning:st
 test('a coded scene compiles, plays, is seen by Roux and is exported in the browser',async({page})=>{
  test.setTimeout(400_000);
  const run=await session(page,asset=>[
-  [use('w','write_file',{path:'src/card.tsx',content:scene})],
-  [use('e','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Definition"}],'})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho","meaning":"noodle soup"}}]'})],
-  [use('p','publish_project',{})],
-  [use('v','view_media',{target:'preview',times:[2,4]})],
-  [use('f','finish',{status:'complete',summary:'Added the card.',evidence:[]})]]);
+  [use('w','write',{path:'src/card.tsx',content:scene})],
+  [use('e','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Definition"}],'})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho","meaning":"noodle soup"}}]'})],
+  [use('v','look',{target:'edit',times:[2,4]})],
+  [{type:'text',text:'Added the card.'}]]);
  try{
   await run.ask('Add a definition card.');
   const s=await state(page),card=s.footage.assets.find((a:any)=>a.scene);

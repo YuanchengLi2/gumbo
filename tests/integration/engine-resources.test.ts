@@ -4,7 +4,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {zipSync} from 'fflate';
 import {ProjectDB} from '@dream/project-db';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
+import {call,textOf} from '../fixtures/agent-project';
 import {importResources,globMatcher,imageSize} from '../../apps/project-service/src/resource-import';
 import {engineReference} from '../../packages/scene-engine/src/reference.generated';
 import {engineReferenceModule} from '../../scripts/build-engine-reference';
@@ -32,10 +33,10 @@ it('copies matching files from a folder, enforces the per-file limit and matches
 
 it('asks for computer access before reading, through the existing file permission',async()=>{
  const root=mkdtempSync(join(tmpdir(),'dream-resources-perm-')),db=new ProjectDB(root,'Perm');let granted=false;
- const ws=new CodeWorkspace(db,{run:async()=>{throw Error('unexpected');},ffmpeg:'',ffprobe:'',files:async request=>request.action==='authorize_import'&&!granted?{permissionRequired:true} as any:{paths:(request as any).paths}},()=>{});
+ const ws=new Workspace(db,{run:async()=>{throw Error('unexpected');},ffmpeg:'',ffprobe:'',files:async request=>request.action==='authorize_import'&&!granted?{permissionRequired:true} as any:{paths:(request as any).paths}},()=>{});
  try{await ws.initialize();const source=join(root,'pic.png');writeFileSync(source,png(4,4,()=>[1,2,3]));
-  await expect(ws.execute('import_resources',{source,into:'pictures'},'r1','turn',new AbortController().signal)).rejects.toThrow();
-  granted=true;const result=await ws.execute('import_resources',{source,into:'pictures'},'r2','turn',new AbortController().signal);expect(result.imported).toBe(1);expect(existsSync(join(root,'Workspace/resources/pictures/pic.png'))).toBe(true);
+  await expect(call(ws,'media',{action:'import',into:'resources',paths:[source]},'r1')).rejects.toThrow();
+  granted=true;const result=textOf(await call(ws,'media',{action:'import',into:'resources',paths:[source]},'r2'));expect(result).toMatch(/resources\/pic: 1 file/);expect(existsSync(join(root,'Workspace/resources/pic/pic.png'))).toBe(true);
  }finally{db.close();}
 });
 
@@ -45,15 +46,3 @@ it('keeps the prompt copy of the engine reference identical to reference/api.md'
  expect(engineReference).toContain('## @dream/engine');expect(engineReference.length).toBeLessThan(28000);  // rides in every request: 24000 until the style library (Oct 22) named its transitions, captions, looks and effects
 });
 
-it('lets a reply unpack the user\'s archive to look at it, outside the project\'s files, so nothing in the project changes',async()=>{
- const {allowedTools}=await import('../../packages/orchestrator/src/code-tools');
- expect(allowedTools('readonly').has('import_resources')).toBe(true);expect(allowedTools('readonly').has('run_command')).toBe(false);
- const root=mkdtempSync(join(tmpdir(),'dream-resources-look-')),db=new ProjectDB(root,'Look');
- const ws=new CodeWorkspace(db,{run:async()=>{throw Error('unexpected');},ffmpeg:'',ffprobe:'',files:async request=>({paths:(request as any).paths}) as any},()=>{});
- try{await ws.initialize();const source=join(root,'Untitled design.zip');writeFileSync(source,zipSync({'1.png':png(8,8,()=>[200,150,40]),'2.png':png(8,8,()=>[90,60,30])}));
-  const result=await ws.execute('import_resources',{source,into:'drawings'},'look','turn',new AbortController().signal,{writes:[],canPublish:false,lookOnly:true});
-  expect(result).toMatchObject({imported:2,into:'.cache/look/resources/drawings',index:'.cache/look/resources/drawings/index.json'});
-  expect(existsSync(join(root,'Workspace/.cache/look/resources/drawings/1.png'))).toBe(true);expect(existsSync(join(root,'Workspace/resources/drawings'))).toBe(false);
-  expect(ws.unpublishedChanges()).toEqual([]);
- }finally{db.close();}
-});

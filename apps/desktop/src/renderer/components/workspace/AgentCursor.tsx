@@ -12,9 +12,10 @@ import type {PublicActivity} from '@dream/contracts';
  * the edit), clicking each with a word on the action, so the editor never sits still while Gumbo thinks or codes. */
 /** What Gumbo is doing right now, from its running step, for where the cursor works and what it says. */
 export type Work='footage'|'code'|'search'|'thinking';
-const FOOTAGE=new Set(['view_media','read_transcript','look','watch','listen','frames','grab_frames','inspect_media','contact_sheet']);
-const CODE=new Set(['write_file','edit_file','read_file','run_command','bundle_scene','list_files','propose_file_changes']);
-const SEARCH=new Set(['search','find_media','search_media','media_search']);
+// Roux's tools (packages/agent/src/tools.ts), and the names earlier requests' steps carry.
+const FOOTAGE=new Set(['look','listen','review','view_media','read_transcript','watch','frames','grab_frames','inspect_media','contact_sheet']);
+const CODE=new Set(['read','write','edit','run','list','propose_files','write_file','edit_file','read_file','run_command','bundle_scene','list_files','propose_file_changes']);
+const SEARCH=new Set(['grep','find','media','web','task','search','find_media','search_media','media_search']);
 export function workOf(step:PublicActivity|undefined):Work{
  if(!step)return 'thinking';
  if(step.kind==='reasoning')return 'thinking';

@@ -6,7 +6,8 @@ import ffmpeg from 'ffmpeg-static';
 import ffprobe from 'ffprobe-static';
 import {ProjectDB} from '@dream/project-db';
 import {Ingest} from '../../apps/project-service/src/media';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
+import {call,textOf} from '../fixtures/agent-project';
 
 it('imports many files at once, reuses an unchanged file across requests, records source and capture time, and reports bad paths',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-bulk-')),db=new ProjectDB(folder,'Bulk'),publish=vi.fn();
@@ -25,22 +26,23 @@ it('imports many files at once, reuses an unchanged file across requests, record
 // Background analysis finishes before the project closes, which takes longer under a full parallel run.
 },90_000);
 
-it('gives the agent find_media results marked with what is already imported, and imports in capture order without pushing frames',async()=>{
+it('gives the agent found media marked with what is already imported, and imports in capture order without pushing frames',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'dream-bulk-tools-')),db=new ProjectDB(folder,'Tools');
  const late={id:'late',filename:'late.mp4',kind:'video',durationSec:3,fps:30,width:640,height:360,hasAudio:false,originalPath:resolve('artifacts/fixtures/source.mp4'),capturedAt:'2026-10-10T12:00:00.000Z'},early={...late,id:'early',filename:'early.mp4',capturedAt:'2026-10-10T07:00:00.000Z'};
  db.saveAsset({...early,fingerprint:'e',status:'ready',source:{path:'C:\\Camera\\early.mp4',size:1,modifiedAt:'x'}} as any);
  const files=vi.fn(async(request:any)=>request.action==='computer_status'?{access:true,now:'2026-10-10T18:00:00.000Z',timeZone:'UTC',folders:[{name:'Camera Roll',path:'C:\\Camera',exists:true}]}:{media:[{path:'C:\\Camera\\early.mp4',name:'early.mp4',kind:'video',modifiedAt:'x',sizeMB:1},{path:'C:\\Camera\\late.mp4',name:'late.mp4',kind:'video',modifiedAt:'x',sizeMB:1}],scanned:2,matched:2,truncated:false,now:'2026-10-10T18:00:00.000Z',timeZone:'UTC',folders:[]});
  const importMany=vi.fn(async()=>({results:[{asset:late},{asset:early},{path:'C:\\Camera\\broken.mov',error:'Unsupported file.'}]}));
  db.contactSheet=vi.fn(async(images:any[])=>({data:'SHEET',mimeType:'image/jpeg' as const,columns:5,rows:1,count:images.length,width:1568,height:300}));
- const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,files:files as any,importMany:importMany as any},()=>{});
+ const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,files:files as any,importMany:importMany as any},()=>{});
  try{
   await workspace.initialize();
-  expect((workspace.context('today') as any).computer).toMatchObject({access:true,timeZone:expect.any(String),mediaFolders:[{name:'Camera Roll'}]});
-  const found:any=await workspace.execute('find_media',{when:'today'},'find',db.head(),new AbortController().signal);
+  expect(workspace.sessionContext().text).toContain('Computer access is allowed. Media folders: Camera Roll (C:\\Camera)');
+  const found=textOf(await call(workspace,'media',{action:'find',when:'today'},'find')).split('\n');
   // Grouped by folder, one short line a file; a file already in the project says which asset it is.
-  expect(found.found).toHaveLength(1);expect(found.found[0].folder).toBe('C:\\Camera');expect(found.found[0].files[0]).toMatch(/^early\.mp4 \| .* \| imported as early$/);expect(found.found[0].files[1]).not.toContain('imported');expect(JSON.stringify(found)).not.toContain('C:\\\\Camera\\\\early.mp4');expect(found.next).toContain('import_media');
-  const imported:any=await workspace.execute('import_media',{paths:['C:\\Camera\\late.mp4','C:\\Camera\\early.mp4','C:\\Camera\\broken.mov']},'import',db.head(),new AbortController().signal);
-  expect(imported.assets).toEqual(['early','late']);expect(imported.media.map((m:any)=>m.id)).toEqual(['early','late']);expect(imported.failed).toHaveLength(1);
-  expect(imported.content.filter((b:any)=>b.type==='image')).toHaveLength(0);expect(JSON.parse(imported.content[0].text).imported.map((i:any)=>i.assetId)).toEqual(['early','late']);
- }finally{db.close();}
+  expect(found[1]).toBe('C:\\Camera:');expect(found[2]).toMatch(/^  early\.mp4 \| .* \| imported as early$/);expect(found[3]).not.toContain('imported');expect(found.join('\n')).not.toContain('C:\\Camera\\early.mp4');expect(found.at(-1)).toMatch(/media action import/);
+  const imported=textOf(await call(workspace,'media',{action:'import',paths:['C:\\Camera\\late.mp4','C:\\Camera\\early.mp4','C:\\Camera\\broken.mov']},'import'));
+  // Imported in the order they were shot, with what each is; the failure says why; no frames are pushed.
+  expect(imported.indexOf('- early "early.mp4"')).toBeGreaterThan(0);expect(imported.indexOf('- late "late.mp4"')).toBeGreaterThan(imported.indexOf('- early "early.mp4"'));
+  expect(imported).toContain('Not imported: C:\\Camera\\broken.mov (Unsupported file.)');
+ }finally{workspace.close();db.close();}
 });

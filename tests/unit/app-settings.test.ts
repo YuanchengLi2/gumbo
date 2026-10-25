@@ -1,6 +1,6 @@
 import {it,expect,afterEach} from 'vitest';
 import {AppSettingsSchema} from '@dream/contracts';
-import {creatorProfile} from '../../packages/orchestrator/src/context';
+import {creatorProfile} from '../../apps/project-service/src/workspace';
 import {usageSummary} from '../../supabase/functions/dream-gateway/usage-summary';
 
 const saved=process.env.DREAM_CREATOR_PROFILE;afterEach(()=>{if(saved===undefined)delete process.env.DREAM_CREATOR_PROFILE;else process.env.DREAM_CREATOR_PROFILE=saved;});
@@ -13,9 +13,9 @@ it('fills settings with defaults and refuses providers it does not know, includi
 
 it('gives the agent the creator\'s profile with every request, only the parts filled in',()=>{
  process.env.DREAM_CREATOR_PROFILE=JSON.stringify({name:' Yuan ',makes:'travel vlogs and anime shorts',style:''});
- expect(creatorProfile()).toEqual({creatorProfile:{name:'Yuan',makes:'travel vlogs and anime shorts'}});
- process.env.DREAM_CREATOR_PROFILE=JSON.stringify({name:'',makes:'',style:''});expect(creatorProfile()).toEqual({});
- process.env.DREAM_CREATOR_PROFILE='not json';expect(creatorProfile()).toEqual({});
+ expect(creatorProfile()).toEqual({name:'Yuan',makes:'travel vlogs and anime shorts'});
+ process.env.DREAM_CREATOR_PROFILE=JSON.stringify({name:'',makes:'',style:''});expect(creatorProfile()).toBeUndefined();
+ process.env.DREAM_CREATOR_PROFILE='not json';expect(creatorProfile()).toBeUndefined();
 });
 
 it('sums credits today, over 30 days, by day and by model, counting nothing for a request still running',()=>{

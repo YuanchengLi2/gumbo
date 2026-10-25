@@ -1,6 +1,5 @@
 import {it,expect} from 'vitest';
 import {SoundDesignSchema,describeIssues} from '@dream/procedural-media';
-import {failureSignature} from '../../packages/orchestrator/src/code-agent';
 
 // The Northern Vietnam vlog's chime (October 13, 2026), with a repeated id and too-long fades added: every problem must
 // come back at once, saying which layer, which rule and the numbers to fix it with.
@@ -20,10 +19,3 @@ it('lists every problem in a sound at once, with the layer, the rule and the num
  expect(SoundDesignSchema.safeParse(fixed).success).toBe(true);
 });
 
-it('tells failures apart by what they say, not by which tool failed',()=>{
- // The vlog's publish attempts: each a different problem, which must not add up to "repeated attempts".
- const attempts=['Source range exceeds chime.wav.','src/sfx/whoosh.sfx.json (sfx whoosh) layers.0.id: Invalid input: expected string, received undefined','src/sfx/whoosh.sfx.json (sfx whoosh) layers.0.pan: Invalid input: expected number, received undefined'];
- expect(new Set(attempts.map(failureSignature)).size).toBe(3);
- // The same failure with different numbers or ids is still the same failure.
- expect(failureSignature('Source range 0–0.8 s exceeds a_1f2e3d4c5b.wav, which is 0.4 s long')).toBe(failureSignature('Source range 0–0.6 s exceeds a_9a8b7c6d5e.wav, which is 0.42 s long'));
-});

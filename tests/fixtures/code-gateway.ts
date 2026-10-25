@@ -12,7 +12,7 @@ export const requestJSON=(req:{headers:Record<string,unknown>},chunks:Buffer[])=
 export type Script=(body:any,step:number)=>any[];
 /** providers: what /providers answers (unset, it is missing, as before). pages: the web as fetch-url reads it, through
  * the gateway's own handler. Browsers (Gumbo on the web) may call it from another origin. */
-export async function codeGateway(options:{script:Script;route?:(body:any)=>Record<string,unknown>;delayMs?:number;shortSession?:boolean;transientOnce?:boolean;words?:{word:string;start:number;end:number}[];providers?:Record<string,boolean>;pages?:Record<string,{contentType:string;text:string}>}){
+export async function codeGateway(options:{script:Script;delayMs?:number;shortSession?:boolean;transientOnce?:boolean;words?:{word:string;start:number;end:number}[];providers?:Record<string,boolean>;pages?:Record<string,{contentType:string;text:string}>}){
  let refreshes=0,streams=0,failures=0,responses=0;const usedTokens=new Set<string>(),calls:{purpose?:string;model?:string;tools:string[];step:number}[]=[],editLogs:any[]=[],transcribeRefusals:string[]=[];
  const server=createServer(async(req,res)=>{try{
   res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
@@ -34,14 +34,13 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   if(options.shortSession){const token=String(req.headers.authorization);if(usedTokens.has(token))return json(401,{error:'Fixture token expired',dream_request:{status:'failed',retryable:false}});usedTokens.add(token);}
   if(options.transientOnce&&!failures){failures++;return json(529,{error:'Temporary overload',dream_request:{status:'failed',retryable:true,retryAfterMs:500}});}
   if(options.delayMs)await new Promise(r=>setTimeout(r,options.delayMs));
-  const tools:string[]=(body.tools??[]).map((t:any)=>t.name),step=(body.messages??[]).filter((m:any)=>m.role==='assistant').length;calls.push({purpose:body.purpose,model:body.model,tools,step});
+  // A project keeps one conversation across its requests; a script's step counts from the latest request's words, so
+  // each request starts at step 0.
+  const messages:any[]=body.messages??[],asked=messages.findLastIndex(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text')));
+  const tools:string[]=(body.tools??[]).map((t:any)=>t.name),step=messages.slice(asked+1).filter(m=>m.role==='assistant').length;calls.push({purpose:body.purpose,model:body.model,tools,step});
   let content:any[];
-  // Auto's model router and the request splitter answer simply: Sonnet, and the whole message as one part.
-  if(body.purpose==='model_routing')content=[{type:'text',text:JSON.stringify({model:'sonnet',reason:'Fixture'})}];
-  else if(body.purpose==='request_parts')content=[{type:'text',text:JSON.stringify({parts:[String(body.messages?.[0]?.content??'request').slice(0,300)]})}];
-  else if(body.purpose==='routing')content=[{type:'text',text:JSON.stringify({route:'local',intelligence:'haiku',complexity:'normal',reason:'Fixture route',approvalQuote:null,projectTitle:'Fixture edit',...options.route?.(body)})}];
   // Real responses never reuse tool IDs; make scripted IDs unique per response.
-  else{const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
+  {const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
   const message={content,stop_reason:content.some(b=>b.type==='tool_use')?'tool_use':'end_turn',usage:{input_tokens:0,output_tokens:0}};
   if(!body.stream)return json(200,message);
   streams++;res.writeHead(200,{'Content-Type':'text/event-stream'});
@@ -67,31 +66,35 @@ export function resultOf(body:any,tool:string):any{
 }
 /** Asset IDs mentioned in the conversation, in order. */
 export const assetIds=(body:any)=>[...JSON.stringify(body.messages??[]).matchAll(/a_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|a_[0-9a-f]{24}/g)].map(m=>m[0]);
-/** One response that edits project.json through a sandboxed Node script, then publishes. */
+/** One response that edits project.json through a Node script in the sandbox; the edit applies when the script changes it. */
 export function scriptedEdit(prefix:string,edit:string){
  const script=`const fs=require('fs');const p=JSON.parse(fs.readFileSync('project.json','utf8'));${edit};fs.writeFileSync('project.json',JSON.stringify(p,null,2));`;
- return[use(prefix+'-write','write_file',{path:`src/${prefix}.cjs`,content:script}),use(prefix+'-run','run_command',{command:`node src/${prefix}.cjs`}),use(prefix+'-publish','publish_project',{})];
+ return[use(prefix+'-write','write',{path:`src/${prefix}.cjs`,content:script}),use(prefix+'-run','run',{command:`node src/${prefix}.cjs`})];
 }
-export const finish=(id:string,summary:string,blocked?:string)=>[use(id,'finish',blocked?{status:'blocked',summary,nextAction:blocked}:{status:'complete',summary})];
-
-/** Plan, then one editing-agent conversation through the approved steps: each step edits project.json by script, publishes
- * and finishes. */
+/** Roux's reply that ends a run: plain words, with no tool call. */
+export const finish=(_id:string,summary:string,question?:string)=>[{type:'text',text:question?`${summary} ${question}`:summary}];
+/** The text of the latest user message (a request, or the words that approve a plan). */
+const lastUserText=(body:any)=>{const messages:any[]=body.messages??[],m=messages.findLast(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text')));return typeof m?.content==='string'?m.content:(m?.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n');};
+/** Plan mode proposes a two-step plan; once approved, the same conversation carries it out with one scripted edit, marks
+ * the steps on its task list and replies. With blockOnce, it leaves the square format for the user to confirm and asks; a
+ * follow-up that confirms it completes the list. */
 export function planningScript(blockOnce=false):Script{
  return body=>{
-  const all=JSON.stringify(body.messages??[]);
-  if(body.purpose==='planning')return[use('plan','finish',{status:'complete',summary:'Plan ready.',plan:{schemaVersion:1,title:'Format plan',goal:'Prepare a square 60 fps edit',steps:[{id:'timing',title:'Set timing',instruction:'Set 60 fps',acceptance:'60 fps',review:false},{id:'square',title:'Set format',instruction:'Set square dimensions',acceptance:'1080 square',review:false}],assumptions:[]}})];
-  // The latest step message decides the step. A message is plain text or, for the first one, the cached briefing followed
-  // by the request.
-  const text=(m:any)=>typeof m?.content==='string'?m.content:Array.isArray(m?.content)?m.content.map((b:any)=>b.text??'').join('\n'):'';
-  const messages:any[]=body.messages??[],at=messages.findLastIndex(m=>text(m).includes('Current step:')),current=text(messages[at]),id=current.includes('Set 60 fps')?'timing':'square',since=messages.slice(at).filter(m=>m.role==='assistant').length;
-  if(since===0)return scriptedEdit('step-'+id,id==='timing'?'p.timeline.settings.fps=60':'p.timeline.settings.width=1080;p.timeline.settings.height=1080');
-  if(blockOnce&&id==='square'&&!all.includes('Square format is confirmed'))return finish(id+'-paused','Square format saved; confirmation needed.','Confirm the square format before continuing.');
-  return finish(id+'-done','Approved step saved.');
+  const messages:any[]=body.messages??[],latest=lastUserText(body),confirmed=JSON.stringify(messages).includes('Square format is confirmed');
+  if(body.purpose==='planning')return[use('plan','propose_plan',{schemaVersion:1,title:'Format plan',goal:'Prepare a square 60 fps edit',steps:[{id:'timing',title:'Set timing',instruction:'Set 60 fps',acceptance:'60 fps',review:false},{id:'square',title:'Set format',instruction:'Set square dimensions',acceptance:'1080 square',review:false}],assumptions:[]})];
+  // Steps since the latest user words decide what comes next.
+  const at=messages.findLastIndex(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text'))),since=messages.slice(at).filter(m=>m.role==='assistant').length;
+  const tasks=(square:string)=>use('plan-tasks','todo',{tasks:[{id:'timing',title:'Set timing',status:'complete'},{id:'square',title:'Set format',status:square}]});
+  if(latest.includes('I approve the plan')){
+   if(since===0)return[...scriptedEdit('plan-steps','p.timeline.settings.fps=60;p.timeline.settings.width=1080;p.timeline.settings.height=1080'),tasks(blockOnce&&!confirmed?'pending':'complete')];
+   return blockOnce&&!confirmed?finish('paused','Square format saved.','Confirm the square format?'):finish('done','The approved plan is done.');
+  }
+  return since===0?[tasks('complete')]:finish('done','The approved plan is done.');
  };
 }
-/** Finishes, keeping with a reason every must-fix check the latest publication reported (an edit that means to repeat
- * footage or cut where the fixture's words fall). */
-export const finishKeeping=(body:any,id:string,summary:string,reason:string)=>[use(id,'finish',{status:'complete',summary,kept:(resultOf(body,'publish_project')?.checks?.mustFix??[]).map((c:any)=>({check:c.id,reason}))})];
+/** Replies after an edit whose checks found things to fix, saying why they stay (an edit that means to repeat footage or
+ * cut where the fixture's words fall). */
+export const finishKeeping=(_body:any,_id:string,summary:string,reason:string)=>[{type:'text',text:`${summary} (${reason})`}];
 
 /** Signs the app in as a person would in the browser: starts the browser sign-in (headless, no browser opens), then
  * answers the app's one-time callback with a code, which the app exchanges with the fixture's auth (an account is needed

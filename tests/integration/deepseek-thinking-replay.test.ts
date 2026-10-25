@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {usageCost} from '@dream/config';
-import {infer,requestBody} from '../../packages/orchestrator/src/inference';
+import {infer,requestBody} from '../../packages/agent/src/transport';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
 import {deepseekMessagesEndpoint} from '../../supabase/functions/dream-gateway/providers';
 
@@ -30,7 +30,7 @@ it('sends Roux its own earlier thinking on every later step through the Messages
    const result=await handleAI(requestBody(init?.body),'user',{db:gatewayDb,key:'anthropic',providerKeys:{deepseek:'ds-test'},fetcher:deepseek,deepseekRoute:'messages'});
    return result.stream?new Response(result.stream,{headers:{'content-type':'text/event-stream'}}):Response.json(result.body,{status:result.status});
   };
-  const step=(messages:any[])=>infer({db,config:{url:'https://fixture.invalid',token:'fixture',accountId:'account'},resume:0,input:{model:'deepseek-flash',system:'Edit',messages,tools,turnId:'turn',purpose:'execution',phase:'main',profile:{version:1,role:'executor',effort:'high',complexity:'normal',reason:'fixture'},max_tokens:4096}},{fetch:gateway});
+  const step=(messages:any[])=>infer({db,config:{url:'https://fixture.invalid',token:'fixture',accountId:'account'},input:{model:'deepseek-flash',system:'Edit',messages,tools,turnId:'turn',purpose:'execution',phase:'main',profile:{version:1,role:'executor',effort:'high',complexity:'normal',reason:'fixture'},max_tokens:4096}},{fetch:gateway});
   const opening={role:'user',content:[{type:'text',text:'Trim the intro'},png]};
   const first=await step([opening]);
   expect(first.content[0]).toEqual({type:'thinking',thinking:'Plan for step 1.',signature:'sig-1'});

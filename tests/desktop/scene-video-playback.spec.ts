@@ -14,12 +14,11 @@ test('a scene with video in it plays smoothly, and fullscreen shows the picture'
  test.setTimeout(300000);let assetId='';
  const scene=(id:string)=>`import React from 'react';\nimport {AbsoluteFill} from 'remotion';\nimport {SourceVideo,asset} from '@dream/engine';\nexport default function Layout(){\n const video=(style:React.CSSProperties)=><SourceVideo src={asset('${id}')} style={style}/>;\n return <AbsoluteFill style={{background:'#000'}}>\n  <AbsoluteFill style={{filter:'blur(32px)'}}>{video({position:'absolute',inset:0,width:'100%',height:'100%',objectFit:'cover'})}</AbsoluteFill>\n  <div style={{position:'absolute',left:0,top:'30%',width:'100%',height:'40%',overflow:'hidden'}}>{video({width:'100%',height:'100%',objectFit:'cover'})}</div>\n </AbsoluteFill>;\n}\n`;
  const script=(_body:any,step:number)=>[
-  [use('w','write_file',{path:'src/layout.tsx',content:scene(assetId)})],
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c0","assetId":"${assetId}","srcIn":0,"srcOut":6,"speed":1,"reason":"Clip"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"layout_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:layout","srcIn":0,"srcOut":6},"layer":2,"reason":"Layout"}],'})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"layout","path":"src/layout.tsx","kind":"scene","durationInFrames":180}]'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'Built the layout.',evidence:[]})]][step]??[];
+  [use('w','write',{path:'src/layout.tsx',content:scene(assetId)})],
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c0","assetId":"${assetId}","srcIn":0,"srcOut":6,"speed":1,"reason":"Clip"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"layout_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:layout","srcIn":0,"srcOut":6},"layer":2,"reason":"Layout"}],'})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"layout","path":"src/layout.tsx","kind":"scene","durationInFrames":180}]'})],
+  [{type:'text',text:'Built the layout.'}]][step]??[];
  const profile=mkdtempSync(join(tmpdir(),'dream-scenevideo-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-scenevideo-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});

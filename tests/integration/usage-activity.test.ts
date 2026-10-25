@@ -6,10 +6,9 @@ import Database from 'better-sqlite3';
 import {ProjectDB} from '@dream/project-db';
 import {usageCost,modelPrices} from '@dream/config';
 import {usageCost as gatewayCost} from '../../supabase/functions/dream-gateway/inference-policy';
-import {infer} from '../../packages/orchestrator/src/inference';
-import {intelligence,taskBudget} from '../../packages/orchestrator/src/intelligence';
-import {parseCodeTool} from '../../packages/orchestrator/src/code-tools';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {infer} from '../../packages/agent/src/transport';
+import {parseTool} from '../../packages/agent/src/tools';
+import {Workspace} from '../../apps/project-service/src/workspace';
 import {publishWorkspace} from '../../apps/project-service/src/code-publication';
 import type {ProcessResult} from '@dream/contracts';
 
@@ -23,14 +22,14 @@ it('prices usage exactly like the gateway for every model, both Haiku tiers, cac
  expect(usageCost('claude-haiku-5-5',{input_tokens:101000,output_tokens:0})).toBeCloseTo(101000*.5/1e6,12);
 });
 
-it('records one cost row per response with phase, worker and duration, and publishes it',async()=>{
+it('records one cost row per response with its phase, the helper it belongs to and its duration, and publishes it',async()=>{
  const db=fixture();try{const published:any[]=[];
-  await infer({db,config,resume:0,publish:(type,payload)=>published.push({type,payload}),input:{model:'claude-haiku-5-5',system:'Work',messages:[{role:'user',content:'Do it'}],tools:[],turnId:'turn',purpose:'worker',phase:'main:worker:call:intro',max_tokens:16384}},{fetch:async()=>Response.json({content:[{type:'text',text:'Done'}],stop_reason:'end_turn',usage:{input_tokens:1000,cache_read_input_tokens:4000,output_tokens:300}})});
+  await infer({db,config,publish:(type,payload)=>published.push({type,payload}),input:{model:'claude-haiku-5-5',system:'Work',messages:[{role:'user',content:'Do it'}],tools:[],turnId:'turn',purpose:'subagent',phase:'task:call-intro',max_tokens:16384}},{fetch:async()=>Response.json({content:[{type:'text',text:'Done'}],stop_reason:'end_turn',usage:{input_tokens:1000,cache_read_input_tokens:4000,output_tokens:300}})});
   const row=db.db.prepare('SELECT * FROM ai_usage').get() as any;
-  expect(row).toMatchObject({turn_id:'turn',model:'claude-haiku-5-5',purpose:'worker',phase:'main:worker:call:intro',parent:'worker:call:intro',input_tokens:1000,cache_read:4000,output_tokens:300});
+  expect(row).toMatchObject({turn_id:'turn',model:'claude-haiku-5-5',purpose:'subagent',phase:'task:call-intro',parent:'task:call-intro',input_tokens:1000,cache_read:4000,output_tokens:300});
   expect(row.cost_usd).toBeCloseTo(usageCost('claude-haiku-5-5',{input_tokens:1000,cache_read_input_tokens:4000,output_tokens:300}),6);
-  expect(published.find(p=>p.type==='ai.usage')?.payload).toMatchObject({purpose:'worker',outputTokens:300,visibleChars:expect.any(Number),durationMs:expect.any(Number)});
-  expect(db.turnUsage('turn')).toMatchObject({calls:1,rows:[expect.objectContaining({owner:'worker:call:intro'})]});
+  expect(published.find(p=>p.type==='ai.usage')?.payload).toMatchObject({purpose:'subagent',outputTokens:300,visibleChars:expect.any(Number),durationMs:expect.any(Number)});
+  expect(db.turnUsage('turn')).toMatchObject({calls:1,rows:[expect.objectContaining({owner:'task:call-intro'})]});
  }finally{db.close();}
 });
 
@@ -50,7 +49,7 @@ it('stores each activity event as one row and keeps the saved turn summary small
 });
 
 it('publishes file changes as hashes and line counts, and reads the text back on demand',async()=>{
- const root=mkdtempSync(join(tmpdir(),'dream-receipt-')),db=new ProjectDB(root,'Receipt');const ws=new CodeWorkspace(db,{run:async()=>{throw new Error('unexpected run');},ffmpeg:'',ffprobe:''},()=>{});
+ const root=mkdtempSync(join(tmpdir(),'dream-receipt-')),db=new ProjectDB(root,'Receipt');const ws=new Workspace(db,{run:async()=>{throw new Error('unexpected run');},ffmpeg:'',ffprobe:''},()=>{});
  try{await ws.initialize();const big=Array.from({length:4000},(_,n)=>`export const line${n}=${n};`).join('\n');writeFileSync(join(root,'Workspace/src/big.js'),big);
   const file=join(root,'Workspace','project.json'),doc=JSON.parse(readFileSync(file,'utf8'));doc.timeline.settings.fps=24;writeFileSync(file,JSON.stringify(doc));
   const receipt=await publishWorkspace(db,processResult('first'),'turn','');
@@ -74,19 +73,14 @@ it('moves events out of saved turns during migration, idempotently',()=>{
  const again=new ProjectDB(folder);try{expect(again.turnActivity('old')!.events).toHaveLength(2);}finally{again.close();}
 });
 
-it('sets effort by role and task budgets, and steps effort down after a thinking-only cut-off',()=>{
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build'}).effort).toBe('xhigh');expect(intelligence('claude-haiku-5-5','routing').effort).toBe('low');
- expect(intelligence('claude-sonnet-5-5','execution').effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'difficult'}).effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','execution',{complexity:'simple'}).effort).toBe('medium');expect(intelligence('claude-sonnet-5-5','routing').effort).toBe('low');
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,'high',{workerMode:'build'}).effort).toBe('high');
- expect(intelligence('claude-haiku-5-5','worker',undefined,0,undefined,{workerMode:'build',lower:1}).effort).toBe('high');
- expect(taskBudget('execution')).toEqual({total:120000});expect(taskBudget('worker','build')).toEqual({total:100000});expect(taskBudget('routing')).toBeUndefined();
-});
 
 it('shortens over-long prose fields instead of failing the tool call, but never code or paths',()=>{
- const finish=parseCodeTool('finish',{status:'complete',summary:'s'.repeat(20000),evidence:[]}) as any;expect(finish.summary.length).toBeLessThanOrEqual(12000);
- // Limits the model is not shown never fail a call: a long note, a long part id, too many evidence lines.
- const loose=parseCodeTool('finish',{status:'complete',summary:'Done.',notes:'n'.repeat(3000),parts:[{id:'p1-captions-white',status:'done',note:'x'.repeat(900)}],evidence:Array.from({length:60},(_,n)=>({toolCallId:'t'+n,finding:'f'}))}) as any;
- expect(loose.notes.length).toBeLessThanOrEqual(1200);expect(loose.parts[0].note.length).toBeLessThanOrEqual(400);expect(loose.evidence).toHaveLength(40);
- const search=parseCodeTool('search',{query:'q'.repeat(900)}) as any;expect(search.query.length).toBeLessThanOrEqual(500);
- expect(()=>parseCodeTool('write_file',{path:'p'.repeat(3000),content:'x'})).toThrow();
+ // Limits the model is not shown never fail a call: a long task title, a long search, numbers past their bounds.
+ const todo=parseTool('todo',{tasks:[{id:'cut',title:'t'.repeat(900),status:'running'}]});expect(todo.tasks[0].title.length).toBeLessThanOrEqual(200);
+ const find=parseTool('find',{query:'q'.repeat(900),limit:500});expect(find.query.length).toBeLessThanOrEqual(300);expect(find.limit).toBe(24);
+ // A quoted choice and a null for an optional field are slips, not errors.
+ expect(parseTool('look',{target:'"edit"',source:null})).toMatchObject({target:'edit'});
+ // Code and paths are never shortened: an over-long one fails.
+ expect(()=>parseTool('write',{path:'p'.repeat(3000),content:'x'})).toThrow(/write input is not valid/);
+ expect(parseTool('edit',{path:'project.json',oldText:'a'.repeat(5000),newText:'b'}).oldText).toHaveLength(5000);
 });

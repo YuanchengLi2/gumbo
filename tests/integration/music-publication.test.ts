@@ -5,7 +5,7 @@ import {join,dirname} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {publishWorkspace} from '../../apps/project-service/src/code-publication';
 import {inProcessRenderer,type AudioRenderer} from '../../apps/project-service/src/sound-outputs';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
 import {sceneFromAsset} from '../../apps/desktop/src/main/engine-routes';
 import type {ProcessResult} from '@dream/contracts';
 
@@ -13,7 +13,7 @@ const result=(id:string):ProcessResult=>({id,status:'complete',exitCode:0,starte
 const score={title:'Pulse',tempo:120,key:'D major',sections:[{name:'main',bars:2}],tracks:[{instrument:'kick',pattern:'x...x...x...x...'},{instrument:'pad',chords:['D','G']}]};
 
 it('publishes a score as an audio asset with beats, caches it, binds it on the timeline and gives scenes its beats',async()=>{
- const root=mkdtempSync(join(tmpdir(),'dream-music-')),db=new ProjectDB(root,'Music');const ws=new CodeWorkspace(db,{run:async()=>{throw Error('x');},ffmpeg:'',ffprobe:''},()=>{});
+ const root=mkdtempSync(join(tmpdir(),'dream-music-')),db=new ProjectDB(root,'Music');const ws=new Workspace(db,{run:async()=>{throw Error('x');},ffmpeg:'',ffprobe:''},()=>{});
  let renders=0;const counting:AudioRenderer=async(input,signal)=>{renders++;return inProcessRenderer(input,signal);};
  try{await ws.initialize();const write=(path:string,text:string)=>{mkdirSync(dirname(join(root,'Workspace',path)),{recursive:true});writeFileSync(join(root,'Workspace',path),text);};
   write('src/music/pulse.score.json',JSON.stringify(score));write('src/scene.tsx',"import {useBeats} from '@dream/engine';export default()=>{const b=useBeats('pulse');return <div style={{opacity:b.pulse()}}/>;};");
@@ -36,7 +36,7 @@ it('publishes a score as an audio asset with beats, caches it, binds it on the t
 });
 
 it('builds sound effects from a sound design file and names the field of an invalid score',async()=>{
- const root=mkdtempSync(join(tmpdir(),'dream-sfx-')),db=new ProjectDB(root,'Sfx');const ws=new CodeWorkspace(db,{run:async()=>{throw Error('x');},ffmpeg:'',ffprobe:''},()=>{});
+ const root=mkdtempSync(join(tmpdir(),'dream-sfx-')),db=new ProjectDB(root,'Sfx');const ws=new Workspace(db,{run:async()=>{throw Error('x');},ffmpeg:'',ffprobe:''},()=>{});
  try{await ws.initialize();mkdirSync(join(root,'Workspace/src/sfx'),{recursive:true});mkdirSync(join(root,'Workspace/src/music'),{recursive:true});
   writeFileSync(join(root,'Workspace/src/sfx/rise.sfx.json'),JSON.stringify({durationSec:.5,layers:[{id:'a',wave:'saw',startSec:0,durationSec:.5,frequencyHz:200,endFrequencyHz:1200,gainDb:-8,pan:0,attackSec:.05,releaseSec:.2,filterHz:4000}]}));
   writeFileSync(join(root,'Workspace/src/music/bad.score.json'),JSON.stringify({tempo:120,tracks:[{instrument:'bass',notes:'A2 Z9'}]}));

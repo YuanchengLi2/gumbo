@@ -1,9 +1,9 @@
 import {useEffect,useState} from 'react';
 import {modelCatalog,modelInfo,type ModelChoice,type Provider} from '@dream/config';
 
-/** Roux 1 is Gumbo's own model, what users see for Auto: Haiku for quick replies and DeepSeek V4.1 Flash for edits, run
- * by Gumbo's router. It is the default and the recommended pick; every other model is a premium choice. The models Roux 1
- * runs on (Haiku, DeepSeek) and GPT-6 Luna are not offered on their own. */
+/** Roux 1 is Gumbo's own model, what users see for Auto: DeepSeek V4.1 Flash does the editing and Haiku the work in the
+ * background (packages/config autoModels). It is the default and the recommended pick; every other model is a premium
+ * choice. The models Roux 1 runs on (Haiku, DeepSeek) and GPT-6 Luna are not offered on their own. */
 export const ROUX='Roux 1';
 export const hiddenChoices:readonly ModelChoice[]=['haiku','gpt-luna','deepseek-flash'];
 export const pickable=modelCatalog.filter(m=>!hiddenChoices.includes(m.choice));

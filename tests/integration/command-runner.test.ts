@@ -4,7 +4,8 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
 import {CodeRuntime,commandMemoryLimit} from '../../apps/desktop/src/main/code-runtime';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
+import {call,textOf} from '../fixtures/agent-project';
 
 const localRuntime=()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-runner-')),workspace=join(project,'Workspace');mkdirSync(workspace);
@@ -32,17 +33,17 @@ it('gives programs that start their own shell the Unix tools too',async()=>{
 it('returns a long command\'s output so far and lets it run on, then waits for it again; finishing waits for it',async()=>{
  const root=mkdtempSync(join(tmpdir(),'dream-long-')),db=new ProjectDB(root);process.env.DREAM_COMMAND_WAIT_MS='300';
  let finish!:()=>void;
- const ws=new CodeWorkspace(db,{ffmpeg:'unavailable',ffprobe:'unavailable',run:async(request,_signal,onOutput)=>{onOutput('frame 120 of 900\n');await new Promise<void>(r=>finish=r);return{id:request.id,status:'complete',exitCode:0,startedAt:'',finishedAt:'',output:'frame 900 of 900\n',logPath:'',isolation:'local',commandHash:'x'};}},()=>{});
+ const ws=new Workspace(db,{ffmpeg:'unavailable',ffprobe:'unavailable',run:async(request,_signal,onOutput)=>{onOutput('frame 120 of 900\n');await new Promise<void>(r=>finish=r);return{id:request.id,status:'complete',exitCode:0,startedAt:'',finishedAt:'',output:'frame 900 of 900\n',logPath:'',isolation:'local',commandHash:'x'};}},()=>{});
  try{
-  await ws.initialize();const signal=new AbortController().signal;
-  const first=await ws.execute('run_command',{command:'python render_scores.py',cwd:'.'},'long1','turn',signal);
-  expect(first.process).toMatchObject({id:'long1',status:'running'});expect(first.process.output).toContain('frame 120');expect(first.note).toContain('processId');
+  await ws.initialize();
+  const first=textOf(await call(ws,'run',{command:'python render_scores.py'},'long1'));
+  expect(first).toContain('Still running');expect(first).toContain('processId long1');expect(first).toContain('frame 120');
   expect(ws.runningCommands().map(c=>c.id)).toEqual(['long1']);
   // Other work is not held up by it.
-  expect((await ws.execute('list_files',{path:'.'},'list','turn',signal)).length).toBeGreaterThan(0);
-  const again=await ws.execute('run_command',{processId:'long1'},'wait1','turn',signal);expect(again.process.status).toBe('running');
-  finish();const done=await ws.execute('run_command',{processId:'long1'},'wait2','turn',signal);
-  expect(done.process).toMatchObject({status:'complete',output:'frame 900 of 900\n'});expect(ws.runningCommands()).toEqual([]);
+  expect(textOf(await call(ws,'list',{path:'.'}))).toContain('project.json');
+  expect(textOf(await call(ws,'run',{processId:'long1'},'wait1'))).toContain('Still running');
+  finish();const done=textOf(await call(ws,'run',{processId:'long1'},'wait2'));
+  expect(done).toContain('Exit code 0');expect(done).toContain('frame 900 of 900');expect(ws.runningCommands()).toEqual([]);
  }finally{delete process.env.DREAM_COMMAND_WAIT_MS;db.close();}
 });
 

@@ -17,12 +17,11 @@ test('a scene drawn by the cloud renderer is in the export',async({page})=>{
  test.setTimeout(400_000);
  const folder=mkdtempSync(join(tmpdir(),'gumbo-cloud-scene-'));
  const run=await session(page,asset=>[
-  [use('w','write_file',{path:'src/card.tsx',content:scene})],
-  [use('e','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Card"}],'})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho"}}]'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'Added the card.',evidence:[]})]]);
+  [use('w','write',{path:'src/card.tsx',content:scene})],
+  [use('e','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Card"}],'})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho"}}]'})],
+  [{type:'text',text:'Added the card.'}]]);
  try{
   await run.ask('Add a card.');
   const card=(await state(page)).footage.assets.find((a:any)=>a.scene);expect(card?.scene?.format).toBe('engine');
@@ -74,12 +73,11 @@ test('a scene is drawn ahead after an edit, and the export uses that drawing',as
   return route.fulfill({status:200,headers:cors,contentType:'application/json',body:JSON.stringify({fps:job.fps,chunks:[{start:0,end:job.frames,webm:readFileSync(webm).toString('base64')}]})});
  });
  const run=await session(page,asset=>[
-  [use('w','write_file',{path:'src/card.tsx',content:scene})],
-  [use('e','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Card"}],'})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho"}}]'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'Added the card.',evidence:[]})]]);
+  [use('w','write',{path:'src/card.tsx',content:scene})],
+  [use('e','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${asset}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Card"}],'})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho"}}]'})],
+  [{type:'text',text:'Added the card.'}]]);
  try{
   await run.ask('Add a card.');
   // The edit settles; the scene is sent once, by itself.

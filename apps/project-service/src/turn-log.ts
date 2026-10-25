@@ -66,13 +66,14 @@ export function turnLog(db:ProjectDB,turnId:string){
  const timing={startedAt,runStartedAt,endedAt,durationMs:startedAt&&endedAt?Date.parse(endedAt)-Date.parse(startedAt):null,modelMs:usage.reduce((n,u)=>n+(Number(u.duration_ms)||0),0)};
  const costUsd=usage.reduce((n,u)=>n+(Number(u.cost_usd)||0),0);
  const cost={usd:Math.round(costUsd*10000)/10000,credits:Math.round(costUsd*1000)/10,calls:usage.length,inputTokens:usage.reduce((n,u)=>n+(Number(u.input_tokens)||0)+(Number(u.cache_read)||0)+(Number(u.cache_write)||0),0),outputTokens:usage.reduce((n,u)=>n+(Number(u.output_tokens)||0),0)};
- // Each tool the agent used, with its input from the model's conversation and its result or error from the receipt.
- const prefix=`code-agent:${turnId}:`,keys=rows(db,'SELECT key FROM meta WHERE key>=? AND key<?',prefix,prefix+'\uffff').map(r=>String(r.key));
- const phases=keys.filter(k=>!k.includes(':call:')).map(k=>({phase:k.slice(prefix.length),checkpoint:(()=>{try{return db.loadState<any>(k);}catch{return undefined;}})()})).filter(p=>p.checkpoint);
- const receipts=rows(db,'SELECT key,value FROM meta WHERE key>=? AND key<?','workspace-receipt-summary:'+prefix,'workspace-receipt-summary:'+prefix+'\uffff').map(r=>({...parse(r.value),phase:String(r.key).slice(26+prefix.length).split(':call:')[0],callId:String(r.key).split(':call:')[1]}));
- const inputs=new Map<string,unknown>();for(const {checkpoint} of phases)for(const m of checkpoint.messages??[])for(const b of Array.isArray(m?.content)?m.content:[])if(b?.type==='tool_use')inputs.set(b.id,b.input);
- const tools=(limit:number)=>receipts.map(r=>clean({phase:r.phase,callId:r.callId,tool:r.tool,status:r.status,input:inputs.get(r.callId),...(r.error?{error:r.error}:{}),...(r.process?{process:r.process}:{}),...(r.publication?{publication:r.publication}:{})},limit));
- const conversation=(limit:number)=>phases.map(({phase,checkpoint})=>({phase,model:checkpoint.model,...(checkpoint.outcome?{outcome:clean(checkpoint.outcome,limit)}:{}),messages:clean(checkpoint.messages??[],limit)}));
+ // This request's part of the project's conversation (packages/agent/src/session.ts): from its first message to the next
+ // request's, with each tool call's input and the result its receipt saved.
+ const session=(()=>{try{return db.loadState<any>('agent-session');}catch{return undefined;}})();
+ const from:number|undefined=session?.turns?.[turnId],next=(Object.values(session?.turns??{}) as number[]).filter(i=>from!==undefined&&i>from).sort((a,b)=>a-b)[0];
+ const part:any[]=from===undefined?[]:(session.messages??[]).slice(Math.max(0,from),next);
+ const calls=part.flatMap(m=>m?.role==='assistant'&&Array.isArray(m.content)?m.content.filter((b:any)=>b?.type==='tool_use'):[]);
+ const tools=(limit:number)=>calls.map((c:any)=>{const receipt=(()=>{try{return db.loadState<any>('agent-call:'+c.id);}catch{return undefined;}})();return clean({callId:c.id,tool:c.name,input:c.input,...(receipt?{status:receipt.block?.is_error?'failed':'complete',result:receipt.block?.content}:{status:'not run'})},limit);});
+ const conversation=(limit:number)=>part.length?[{phase:'main',model:session.model,effort:session.effort,compactions:session.compactions,messages:clean(part,limit)}]:[];
  // The edit document and the workspace's files (names and sizes; scripts the agent wrote are small and say what it did).
  const workspace=join(db.meta.folder,'Workspace'),files:{path:string;bytes:number;text?:string}[]=[];
  const walk=(folder:string,prefix=''):void=>{if(!existsSync(folder))return;for(const name of readdirSync(folder)){if(name.startsWith('.')||name==='node_modules'||name==='output')continue;const full=join(folder,name),stat=statSync(full);
@@ -80,7 +81,7 @@ export function turnLog(db:ProjectDB,turnId:string){
   const text=/\.(json|tsx?|jsx?|py|md|txt|css)$/i.test(name)&&stat.size<120_000&&!/^\.?env/i.test(name)?String(cut(readFileSync(full,'utf8'),60_000)):undefined;
   files.push({path:prefix+name,bytes:stat.size,...(text!==undefined?{text}:{})});}};
  walk(workspace);
- const log:Record<string,any>={version:2,turnId,project:{name:db.meta.name},request:cut(String(said.find(m=>m.role==='user')?.text??pending?.text??''),20_000),
+ const log:Record<string,any>={version:3,turnId,project:{name:db.meta.name},request:cut(String(said.find(m=>m.role==='user')?.text??pending?.text??''),20_000),
   outcome,timing,cost,totals:Object.entries(totals).map(([model,t])=>({model,...t,costUsd:Math.round(t.costUsd*10000)/10000})),
   usage,tools:tools(LIMIT),conversation:conversation(LIMIT),messages,before,activity,sceneErrors,footage,files,rating:db.getMeta('turn-feedback:'+turnId)||null};
  // Kept under the size the gateway takes: the biggest workspace files go first, then the conversation and tool results

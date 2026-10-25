@@ -10,7 +10,7 @@ const speech='And so my fellow Americans ask not what your country can do for yo
 const words=speech.map((word,n)=>({word,start:.4+n*.45,end:.4+n*.45+.4}));
 
 /** What the agent sees when it looks at its own edit: a video clip, narration on the music track captioned by the
- * built-in captions, and a coded graphic drawn from its props. The frames view_media returns are saved to
+ * built-in captions, and a coded graphic drawn from its props. The frames look returns are saved to
  * test-results/agent-view so a person can look at exactly what the model was shown. */
 test('the agent sees the captions and graphics of its published edit',async()=>{
  test.setTimeout(300000);const ids:Record<string,string>={};let seen:any;
@@ -20,14 +20,13 @@ test('the agent sees the captions and graphics of its published edit',async()=>{
   const last=(body.messages??[]).at(-1);log.push(step+': '+JSON.stringify(last?.content??'').slice(0,400));
   if(step===7){const messages:any[]=body.messages??[];for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&/^v(-|$)/.test(b.tool_use_id))seen=b;}
   return[
-  [use('w','write_file',{path:'src/card.tsx',content:scene})],
-  [use('e','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${ids.video}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
-  [use('e2','edit_file',{path:'project.json',oldText:'"music": [],',newText:`"music": [{"id":"voice","assetId":"${ids.voice}","srcIn":0,"srcOut":6,"start":{"kind":"project","at":"start","offsetSec":0},"gainDb":0}],"captions":{"style":"clean","params":{},"overrides":[]},"attached":[{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Definition"}],`})],
-  [use('e3','edit_file',{path:'project.json',oldText:'"attached": [],',newText:''})],
-  [use('e4','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho","meaning":"noodle soup"}}]'})],
-  [use('p','publish_project',{})],
-  [use('v','view_media',{target:'preview',times:[2,4]})],
-  [use('f','finish',{status:'complete',summary:'Looked at the edit.',evidence:[]})]][step]??[];};
+  [use('w','write',{path:'src/card.tsx',content:scene})],
+  [use('e','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${ids.video}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],
+  [use('e2','edit',{path:'project.json',oldText:'"music": [],',newText:`"music": [{"id":"voice","assetId":"${ids.voice}","srcIn":0,"srcOut":6,"start":{"kind":"project","at":"start","offsetSec":0},"gainDb":0}],"captions":{"style":"clean","params":{},"overrides":[]},"attached":[{"id":"card_o","type":"overlay","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":6,"component":"source","params":{},"source":{"assetId":"output:card","srcIn":0,"srcOut":6},"layer":2,"reason":"Definition"}],`})],
+  [use('e3','edit',{path:'project.json',oldText:'"attached": [],',newText:''})],
+  [use('e4','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":180,"transparent":true,"props":{"word":"Pho","meaning":"noodle soup"}}]'})],
+  [use('v','look',{target:'edit',times:[2,4]})],
+  [{type:'text',text:'Looked at the edit.'}]][step]??[];};
  const profile=mkdtempSync(join(tmpdir(),'dream-sees-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-sees-project-'));
  const video=join(profile,'clip.mp4'),voice=join(profile,'voice.wav');copyFileSync(resolve('artifacts/fixtures/source.mp4'),video);copyFileSync(resolve('artifacts/fixtures/whisper-jfk.wav'),voice);
  const gateway=await codeGateway({script,words});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
@@ -48,11 +47,11 @@ test('the agent sees the captions and graphics of its published edit',async()=>{
   await page.getByLabel('Ask Gumbo to edit').fill('Add a definition card and captions');await page.getByRole('button',{name:'Send prompt'}).click();
   await expect.poll(async()=>(await page.evaluate(async()=>(await window.dream.command({type:'state'})))).aiStatus,{timeout:120000}).toBe('complete');
   if(!seen)console.log(log.join('\n'));
-  expect(seen,'view_media result reached the model').toBeTruthy();
+  expect(seen,'look result reached the model').toBeTruthy();
   const parts:any[]=Array.isArray(seen.content)?seen.content:[],text=parts.filter(p=>p.type==='text').map(p=>p.text).join('\n'),images=parts.filter(p=>p.type==='image');
   const out=resolve('test-results/agent-view');mkdirSync(out,{recursive:true});writeFileSync(join(out,'result.txt'),text);
   images.forEach((image,n)=>writeFileSync(join(out,`frame-${n+1}.jpg`),Buffer.from(image.source.data,'base64')));
-  console.log('view_media text:',text.slice(0,3000));console.log('images:',images.length);
+  console.log('look text:',text.slice(0,3000));console.log('images:',images.length);
   // What is on screen, as the agent reads it: the clip, the card scene and the caption with the words spoken there.
   expect(text).toContain('card_o');expect(text).toMatch(/"kind":"caption","text":"[^"]+"/);
   expect(images.length).toBe(2);

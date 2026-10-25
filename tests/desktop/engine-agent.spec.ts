@@ -19,12 +19,11 @@ test('the agent writes an engine scene, the user sees its draft, the player runs
  const script=(body:any,step:number)=>{
   // Each request starts a new conversation (step 0); the turn number picks the script.
   if(step===0)turn++;const all=JSON.stringify(body.messages??[]);
-  if(turn===1)return[[use('w','write_file',{path:'src/card.tsx',content:card(false)})],[use('c','check_outputs',{paths:['src/card.tsx']})],[use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":60,"props":{"title":"Hello"}}]'})],[use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:'"spine": [{"id":"c1","assetId":"output:card","srcIn":0,"srcOut":2,"speed":1,"audio":{"mute":true},"reason":"Card"}],'})],[use('p','publish_project',{})],[use('f','finish',{status:'complete',summary:'The intro card is in the preview.',evidence:[]})]][step]??[];
-  if(turn===2)return[[use('w2','write_file',{path:'src/card.tsx',content:card(true)})],[use('p2','publish_project',{})],[use('f2','finish',{status:'complete',summary:'Updated the card.',evidence:[]})]][step]??[];
-  // The agent sees the error in its project state, with the file and line; like every edit request, it publishes (an
-  // unchanged project gets a no-change receipt) before it finishes.
-  sawError||=all.includes('sceneErrors')&&all.includes('card-fails-late')&&/src\/card\.tsx:5/.test(all);
-  return[[use('p3','publish_project',{})],[use('f3','finish',{status:'complete',summary:sawError?'The card fails after frame 20.':'No scene errors.',evidence:[]})]][step]??[];
+  if(turn===1)return[[use('w','write',{path:'src/card.tsx',content:card(false)})],[use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":60,"props":{"title":"Hello"}}]'})],[use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:'"spine": [{"id":"c1","assetId":"output:card","srcIn":0,"srcOut":2,"speed":1,"audio":{"mute":true},"reason":"Card"}],'})],[{type:'text',text:'The intro card is in the preview.'}]][step]??[];
+  if(turn===2)return[[use('w2','write',{path:'src/card.tsx',content:card(true)})],[{type:'text',text:'Updated the card.'}]][step]??[];
+  // The agent is told of the error with its next message, with the file and line.
+  sawError||=all.includes('reported errors while playing')&&all.includes('card-fails-late')&&/src\/card\.tsx:5/.test(all);
+  return[[{type:'text',text:sawError?'The card fails after frame 20.':'No scene errors.'}]][step]??[];
  };
  const gateway=await codeGateway({script}),profile=mkdtempSync(join(tmpdir(),'dream-engine-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-engine-agent-'));
  writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'local-fixture'}));
@@ -37,7 +36,7 @@ test('the agent writes an engine scene, the user sees its draft, the player runs
   await run('Make an intro card');
   const state:any=await page.evaluate(()=>window.dream.command({type:'state'}));
   const scene:any=state.footage.assets.find((a:any)=>a.scene?.format==='engine');expect(scene?.scene.engine.chunks).toEqual(['core']);
-  expect(state.experience.activity.events.some((e:any)=>e.tool==='check_outputs'&&e.drafts?.length===1)).toBe(true);
+  expect(state.experience.activity.events.some((e:any)=>e.tool==='write'&&e.drafts?.length===1)).toBe(true);
   expect(readFileSync(join(folder,'Workspace/src/card.tsx'),'utf8')).toContain('FitText');
   // The player runs the published scene from dream-engine:// and seeking draws the frame for the new position.
   const player=page.locator(`.preview-viewport iframe[src^="dream-engine://app/scene/${scene.id}/"]`);await expect(player).toHaveCount(1,{timeout:30000});

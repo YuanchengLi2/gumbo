@@ -9,10 +9,9 @@ const use=(id:string,name:string,input:unknown)=>({type:'tool_use',id,name,input
 test('a reply lists its changes as cards that light up, select and undo each one, and Elements lists everything added',async()=>{
  test.setTimeout(240000);let assetId='';
  const script=(_body:any,step:number)=>[
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${assetId}","srcIn":0,"srcOut":3,"speed":1,"reason":"Opening"}],`})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"t1","type":"overlay","component":"title_card","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":2,"params":{"text":"Hello"},"reason":"Title"}],'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'Added the clip and a title.',evidence:[]})]][step]??[];
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${assetId}","srcIn":0,"srcOut":3,"speed":1,"reason":"Opening"}],`})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"t1","type":"overlay","component":"title_card","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":2,"params":{"text":"Hello"},"reason":"Title"}],'})],
+  [{type:'text',text:'Added the clip and a title.'}]][step]??[];
  const profile=mkdtempSync(join(tmpdir(),'dream-cards-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-cards-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});

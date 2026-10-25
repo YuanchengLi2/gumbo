@@ -20,12 +20,11 @@ export default function Card(){
 test('a coded scene plays live in the engine preview, under a lower third, and Export draws its frames, the same for the agent',async()=>{
  test.setTimeout(300000);
  const script=(_body:any,step:number)=>[
-  [use('w','write_file',{path:'src/card.tsx',content:card})],
-  [use('o','edit_file',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":60}]'})],
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:'"spine": [{"id":"c1","assetId":"output:card","srcIn":0,"srcOut":2,"speed":1,"audio":{"mute":true},"reason":"Card"}],'})],
-  [use('a','edit_file',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"name","type":"overlay","component":"lower_third","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":2,"params":{"text":"Over the scene"},"reason":"Name"}],'})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'The card is in the preview.',evidence:[]})]][step]??[];
+  [use('w','write',{path:'src/card.tsx',content:card})],
+  [use('o','edit',{path:'project.json',oldText:'"outputs": []',newText:'"outputs": [{"id":"card","path":"src/card.tsx","kind":"scene","durationInFrames":60}]'})],
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:'"spine": [{"id":"c1","assetId":"output:card","srcIn":0,"srcOut":2,"speed":1,"audio":{"mute":true},"reason":"Card"}],'})],
+  [use('a','edit',{path:'project.json',oldText:'"attached": [],',newText:'"attached": [{"id":"name","type":"overlay","component":"lower_third","start":{"kind":"project","at":"start","offsetSec":0},"durationSec":2,"params":{"text":"Over the scene"},"reason":"Name"}],'})],
+  [{type:'text',text:'The card is in the preview.'}]][step]??[];
  const gateway=await codeGateway({script}),profile=mkdtempSync(join(tmpdir(),'dream-scene-export-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-scene-export-')),out=mkdtempSync(join(tmpdir(),'dream-scene-export-out-'));
  writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'local-fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1'}});

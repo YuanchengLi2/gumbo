@@ -3,7 +3,7 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {infer,requestBody} from '../../packages/orchestrator/src/inference';
+import {infer,requestBody} from '../../packages/agent/src/transport';
 import {readMessageStream} from '../../supabase/functions/_shared/stream';
 import {handleAI} from '../../supabase/functions/dream-gateway/ai';
 // Historical journal compatibility; new execution is covered by code-agent.test.ts.
@@ -41,7 +41,7 @@ it('automatically increases creative output capacity without executing truncated
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-stream-')),'Streaming');const capacities:number[]=[];
  try{
   const input={model:'claude-sonnet-5-5',system:'Create an original animation',messages:[{role:'user',content:'Create'}],tools:[],turnId:'turn',purpose:'routine',max_tokens:8192};
-  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{fetch:async(_url,init)=>{capacities.push(requestBody(init?.body).max_tokens);return streamed(capacities.length===1?events('max_tokens',true):events());}});
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input},{fetch:async(_url,init)=>{capacities.push(requestBody(init?.body).max_tokens);return streamed(capacities.length===1?events('max_tokens',true):events());}});
   expect(capacities).toEqual([8192,16384]);expect(response.content[1].input).toEqual({definition:'Dream \u03c0 \ud83c\udfac'});expect(db.state().versions).toHaveLength(1);
   const usage=db.db.prepare("SELECT json FROM events WHERE type='ai.usage'").all() as {json:string}[];expect(usage).toHaveLength(2);expect(usage.map(row=>JSON.parse(row.json).stopReason)).toEqual(['max_tokens','tool_use']);
  }finally{db.close();}
@@ -63,7 +63,7 @@ it('records a response that cannot be decoded with what the stream showed, then 
   const input={model:'claude-sonnet-5-5',system:'Edit',messages:[{role:'user',content:'Edit'}],tools:[],turnId:'turn',purpose:'execution',phase:'main',max_tokens:8192};
   // The first stream stops a tool call's block without ever closing it, then ends the message.
   const broken=[event('dream_request',{providerRequestId:'provider-broken'}),...events().filter(e=>!(e.type==='content_block_stop'&&e.index===1))];
-  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input,resume:0},{wait:async()=>{},fetch:async url=>{
+  const response=await infer({db,config:{url:'https://fixture.invalid',token:'fixture'},input},{wait:async()=>{},fetch:async url=>{
    if(!String(url).endsWith('/ai'))return Response.json({},{status:404});
    return streamed(attempts++===0?broken:events());}});
   expect(response.stop_reason).toBe('tool_use');expect(attempts).toBe(2);

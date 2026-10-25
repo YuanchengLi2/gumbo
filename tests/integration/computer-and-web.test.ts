@@ -7,10 +7,9 @@ import {ProjectDB} from '@dream/project-db';
 import {models,usageCost} from '@dream/config';
 import {CodeRuntime} from '../../apps/desktop/src/main/code-runtime';
 import {pageText,privateAddress,fetchPage} from '../../apps/project-service/src/web-fetch';
-import {Director,webSearchTool} from '../../packages/orchestrator/src/code-director';
-import {codeAgent} from '../../packages/orchestrator/src/code-agent';
+import {agentProject,use,say} from '../fixtures/agent-project';
 import {usageCost as gatewayCost} from '../../supabase/functions/dream-gateway/inference-policy';
-import {withoutUnansweredServerCalls,repairSavedExchanges} from '../../packages/orchestrator/src/tool-exchanges';
+import {withoutUnansweredServerCalls,repairSavedExchanges} from '../../packages/agent/src/tool-exchanges';
 
 it('runs a command on the user\'s computer when computer access is allowed, without the app\'s secrets',async()=>{
  const project=mkdtempSync(join(tmpdir(),'dream-local-')),workspace=join(project,'Workspace');mkdirSync(workspace);
@@ -41,23 +40,23 @@ it('reads a page as text and refuses addresses on this computer or its network',
  finally{server.close();}
 });
 
-it('gives every agent with tools web search in its model\'s version, resumes a paused search, and counts searches in the cost',async()=>{
- // A plain function answered by a Haiku search: Anthropic's own search tool cost 2,440 tokens on every call.
- expect(webSearchTool(models.agent)).toMatchObject({name:'web_search'});expect((webSearchTool(models.agent) as any).type).toBeUndefined();
+it('answers every model\'s web tool with a quiet Haiku search, carries on a paused search, and counts searches in the cost',async()=>{
  const usage={input_tokens:1000,output_tokens:100,server_tool_use:{web_search_requests:3}};expect(usageCost(models.agent,usage)).toBeCloseTo(gatewayCost(models.agent,usage,[2,10]));expect(usageCost(models.agent,usage)).toBeGreaterThan(.03);
- const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-web-')));
+ const searches:any[]=[];
+ const run=await agentProject((_body,step)=>step===0?[use('w','web',{query:'Anthropic release this week'})]:[say('A new model.')],{providers:{anthropic:true,deepseek:true}});
+ // The search pauses once (a long server-side turn) and is sent back as it was to carry on.
+ const original=run.agent.dependencies.fetch!;
+ run.agent.dependencies.fetch=(async(url:any,init:any)=>{const body=JSON.parse(require('node:zlib').gunzipSync(init.body).toString());
+  if(body.purpose!=='web_search')return original(url,init);searches.push(body);
+  return Response.json(searches.length===1?{content:[{type:'server_tool_use',id:'s1',name:'web_search',input:{query:'Anthropic release'}},{type:'web_search_tool_result',tool_use_id:'s1',content:[]}],stop_reason:'pause_turn',usage:{}}:{content:[{type:'text',text:'Anthropic released a new model on Monday.'}],stop_reason:'end_turn',usage:{}});}) as typeof fetch;
  try{
-  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const sent:any[]=[];
-  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'What did Anthropic release this week?',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));
-   return sent.length===1?{content:[{type:'server_tool_use',id:'s1',name:'web_search',input:{query:'Anthropic release'}},{type:'web_search_tool_result',tool_use_id:'s1',content:[]}],stop_reason:'pause_turn'}:{content:[{type:'text',text:'A new model.'}],stop_reason:'end_turn'};}});
-  // The paused turn is sent back unchanged, with nothing added after it.
-  expect(sent).toHaveLength(2);expect(sent[1].at(-1).role).toBe('assistant');expect(sent[1].at(-1).content[0].type).toBe('server_tool_use');
-  expect(db.turnActivity('turn')?.events?.some((e:any)=>e.tool==='web_search'&&e.detail==='Anthropic release')??JSON.stringify(db.db.prepare("SELECT json FROM activity_events").all()).includes('Searching the web')).toBe(true);
-  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{});let tools:any[]=[];
-  (director as any).infer=async(_m:string,_s:string,_msgs:unknown[],given:any[])=>{tools=given;return{content:[{type:'text',text:'ok'}],stop_reason:'end_turn',usage:{}};};
-  await director.inference(models.agent,'Edit',[{role:'user',content:'hi'}],[{name:'read_file',input_schema:{type:'object'}}],'turn2',undefined,'execution','main');
-  expect(tools.map(t=>t.name)).toEqual(['web_search','read_file']);
- }finally{db.close();}
+  await run.agent.message('What did Anthropic release this week?',[],'ask',[],'turn','auto','deepseek-flash');
+  expect(searches).toHaveLength(2);expect(searches[0]).toMatchObject({model:'claude-haiku-5-5',tools:[{type:'web_search_20250305'}]});
+  expect(searches[1].messages.at(-1)).toMatchObject({role:'assistant',content:[{type:'server_tool_use'},{type:'web_search_tool_result'}]});
+  // The agent's own model (DeepSeek here) gets the findings like any tool's result.
+  expect(JSON.stringify(run.gateway.returned('w'))).toContain('Anthropic released a new model on Monday.');
+  expect(run.db.state().messages.at(-1)?.text).toBe('A new model.');
+ }finally{run.close();}
 });
 
 it('drops a server tool call the provider left without a result, so the conversation can be sent back',()=>{
@@ -68,23 +67,9 @@ it('drops a server tool call the provider left without a result, so the conversa
  const repaired=repairSavedExchanges(saved,()=>undefined);expect(repaired[1].content).toEqual([title]);expect(repaired.at(-1)!.content).toEqual([orphan]);
 });
 
-it('resumes a current-format conversation saved with an unanswered server call, without rejecting its changed history',async()=>{
- const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-orphan-')));
- try{
-  const orphan={type:'server_tool_use',id:'srvtoolu_1',name:'code_execution',input:{code:'edit project.json'}};
-  db.saveState('code-agent:turn:main',{turnId:'turn',protocolVersion:2,messages:[{role:'user',content:'Add music'},{role:'assistant',content:[orphan,{type:'text',text:'Working.'}]},{role:'user',content:'continue'}],results:[],completed:{},model:models.agent,failures:{}});
-  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const sent:any[]=[];
-  await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true})} as any,turnId:'turn',text:'Add music',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async(_m,_s,messages)=>{sent.push(structuredClone(messages));return{content:[{type:'text',text:'Done.'}],stop_reason:'end_turn'};}});
-  expect(sent).toHaveLength(1);expect(sent[0][1].content).toEqual([{type:'text',text:'Working.'}]);
- }finally{db.close();}
-});
-
-it('keeps a script the agent wrote alongside finish in the saved reply, not only the short summary',async()=>{
- const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-reply-')));
- try{
-  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const script='SCENE 1. Ooga. '.repeat(40).trim();
-  const result=await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({ok:true,finished:true})} as any,turnId:'turn',text:'Write me a script',model:models.agent,readOnly:true,signal:new AbortController().signal,publish:()=>{},infer:async()=>({content:[{type:'text',text:script},{type:'tool_use',id:'toolu_f',name:'finish',input:{status:'complete',summary:'Wrote a 16-scene script.'}}],stop_reason:'tool_use'})});
-  // Nothing changed, so the script is the whole reply: no recap line repeated under it.
-  expect(result.outcome.summary).toBe(script);
- }finally{db.close();}
+it('keeps a script written in the reply as the whole reply',async()=>{
+ const script='SCENE 1. Ooga. '.repeat(40).trim();
+ const run=await agentProject(()=>[say(script)]);
+ try{await run.agent.message('Write me a script',[],'ask',[],'turn');expect(run.db.state().messages.at(-1)).toMatchObject({role:'assistant',text:script,report:{kind:'answer'}});}
+ finally{run.close();}
 });

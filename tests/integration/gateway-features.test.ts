@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {requestBody} from '../../packages/orchestrator/src/inference';
+import {requestBody} from '../../packages/agent/src/transport';
 import {handleAI,resetFallbackSupport} from '../../supabase/functions/dream-gateway/ai';
 import {inferencePolicy,cachedPrompt,usageCost} from '../../supabase/functions/dream-gateway/inference-policy';
 
@@ -27,7 +27,7 @@ it('sends task budgets with their beta, drops them for good when the provider re
 });
 
 it('shows a worker\'s summarized thinking as transient progress on its row, never as chat prose',async()=>{
- const {mkdtempSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {ProjectDB}=await import('@dream/project-db');const {RunStream}=await import('../../packages/orchestrator/src/run-stream');
+ const {mkdtempSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {ProjectDB}=await import('@dream/project-db');const {RunStream}=await import('../../packages/agent/src/run-stream');
  const project=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-summary-')),'Summary');try{
   project.setMeta('pending_request',JSON.stringify({text:'Edit',turnId:'turn'}));
   const stream=new RunStream(project,'turn','req',undefined,true,'worker:call:intro');

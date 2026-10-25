@@ -5,9 +5,9 @@ test('Dream discovers and imports computer media after one inline approval',asyn
  const profile=mkdtempSync(join(tmpdir(),'dream-computer-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-computer-project-')),media=mkdtempSync(join(tmpdir(),'dream-computer-media-')),source=join(media,'holiday-source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);let searches=0;
  // Haiku alone: search the computer, import the found clip, place it on the timeline, publish, finish.
  const script:Script=(body,step)=>{
-  if(step===0){searches++;return[{type:'tool_use',id:'search',name:'search',input:{query:'holiday',scope:'computer',path:media}}];}
-  if(step===1)return[{type:'tool_use',id:'import',name:'view_media',input:{scope:'computer',path:source}}];
-  if(step===2){const asset=resultOf(body,'view_media').assetId;return scriptedEdit('use-'+Date.now(),`p.timeline.spine.push({id:'found-${Date.now()}',assetId:'${asset}',srcIn:0,srcOut:2,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'Use discovered footage'})`);}
+  if(step===0){searches++;return[{type:'tool_use',id:'search',name:'grep',input:{pattern:'holiday',scope:'computer',path:media}}];}
+  if(step===1)return[{type:'tool_use',id:'import',name:'media',input:{action:'import',paths:[source]}}];
+  if(step===2){const asset=/^- (a_\S+) /m.exec(String(resultOf(body,'media')))?.[1];return scriptedEdit('use-'+Date.now(),`p.timeline.spine.push({id:'found-${Date.now()}',assetId:'${asset}',srcIn:0,srcOut:2,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'Use discovered footage'})`);}
   return finishKeeping(body,'done','Found and used your holiday clip.','The second request asked for the same clip again.');
  };
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));

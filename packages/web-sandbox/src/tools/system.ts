@@ -141,7 +141,7 @@ const clear:Command=async()=>0;
 async function download(ctx:CommandContext,url:string,init?:RequestInit){
  const fetcher=ctx.host.fetch??globalThis.fetch;if(!fetcher)throw new CommandError('no network access in this sandbox',4);
  try{return await fetcher(url,{...init,signal:ctx.signal});}
- catch(error){if(ctx.signal.aborted)throw error;throw new CommandError(`unable to fetch ${url}: ${(error as Error).message}. In the browser a download only works from sites that allow cross-origin requests; for other pages use the fetch_url tool, and import_media for media.`,4);}
+ catch(error){if(ctx.signal.aborted)throw error;throw new CommandError(`unable to fetch ${url}: ${(error as Error).message}. In the browser a download only works from sites that allow cross-origin requests; for other pages use the web tool with the page's url, and the media tool to import media.`,4);}
 }
 const wget:Command=async ctx=>{
  const {opts,rest}=parseArgs('wget',ctx.args,{flags:'qcNnvSOP',values:'OPUTt',long:{quiet:'q','output-document=':'O','directory-prefix=':'P','user-agent=':'U','no-check-certificate':'nc','timeout=':'T','tries=':'t',continue:'c','show-progress':'sp','no-verbose':'nv',header:'h','header=':'h','progress=':'progress'},lists:'h'});

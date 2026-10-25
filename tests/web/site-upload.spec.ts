@@ -13,7 +13,7 @@ test('a video added on the website goes into the project made from the request',
  test.setTimeout(180_000);
  const gateway=await codeGateway({providers:{anthropic:true,google:true},script:(body)=>{
   if(!body.tools?.length)return [{type:'text',text:body.purpose==='shot_index'?'[]':'Fixture.'}];
-  return [{type:'tool_use',id:'f',name:'finish',input:{status:'complete',summary:'Looked at the clip.',evidence:[]}}];}});
+  return [{type:'text',text:'Looked at the clip.'}];}});
  try{
   await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
   // The website's bar, on the same address as the app (as usegumbo.app and usegumbo.app/app are).

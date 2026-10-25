@@ -11,7 +11,7 @@ import {resolve as resolvePath,join} from './path';
 export interface ProcessResult{id:string;status:'complete'|'failed'|'cancelled'|'interrupted';exitCode:number|null;startedAt:string;finishedAt:string;output:string;logPath:string;isolation:'browser';commandHash:string}
 export interface RunningProcess{id:string;status:'running';output:string;runningSec:number;command:string}
 export interface RunRequest{id?:string;command:string;cwd?:string;timeoutMs?:number;env?:Record<string,string>}
-/** run_command's input (packages/orchestrator/src/code-tools.ts). */
+/** The run tool's input (packages/agent/src/tools.ts). */
 export interface RunCommandInput{command?:string;processId?:string;stop?:boolean;cwd?:string;timeoutMs?:number}
 export type RunCommandResult={process:ProcessResult|RunningProcess;note?:string};
 export interface SandboxAssets{
@@ -36,7 +36,7 @@ export interface SandboxOptions{
  /** A folder in the file system for each process's full log (<id>.log), like the desktop's .dream/processes. */
  logDir?:string;
  maxLogBytes?:number;
- /** How long a run_command call waits before the command goes on in the background (4 minutes, like the desktop). */
+ /** How long a run call waits before the command goes on in the background (4 minutes, like the desktop). */
  waitMs?:number;
  fetch?:typeof fetch;
  assets?:SandboxAssets;
@@ -55,7 +55,7 @@ class Stopped extends Error{constructor(message:string,public kind:'stop'|'timeo
 
 type Entry={id:string;command:string;started:number;timeoutMs:number;controller:AbortController;done:Promise<ProcessResult>;output:()=>string};
 const timedOut=(timeoutMs:number)=>new Stopped(`it ran past its ${Math.round(timeoutMs/1000)}s time limit. Run it with a longer timeoutMs, in the background, or on less material.`,'timeout');
-/** Runs commands like the desktop's run_command: each in its own shell over the sandbox's file system, with a time limit,
+/** Runs commands like the desktop's run: each in its own shell over the sandbox's file system, with a time limit,
  * an output cap, a memory guard and a process id to wait on or stop. Runs in a worker in the app and under Node in tests. */
 export class Sandbox{
  readonly workspace:string;private running=new Map<string,Entry>();private finished=new Map<string,ProcessResult>();
@@ -131,7 +131,7 @@ export class Sandbox{
  }
  stopAll(reason='Stopped.'){for(const id of[...this.running.keys()])void this.stop(id,reason);}
  list(){return[...this.running.values()].map(e=>({id:e.id,command:e.command.slice(0,200),runningSec:Math.round((Date.now()-e.started)/1000)}));}
- /** run_command as Roux calls it: a command (waiting up to 4 minutes, then it goes on in the background), or a processId
+ /** run as Roux calls it: a command (waiting up to 4 minutes, then it goes on in the background), or a processId
   * to wait on again, or with stop true to end. */
  async runCommand(input:RunCommandInput,waitMs=this.options.waitMs??240000):Promise<RunCommandResult>{
   if(input.processId){
@@ -143,4 +143,4 @@ export class Sandbox{
   const r=await this.wait(id,waitMs);return r.status==='running'?{process:r,note:stillRunning(r)}:{process:r};
  }
 }
-export const stillRunning=(r:RunningProcess)=>`Still running after ${r.runningSec} s; it continues in the background until its timeout. Call run_command with processId "${r.id}" to wait for it again, or with processId and stop true to end it. Finishing the request waits for it.`;
+export const stillRunning=(r:RunningProcess)=>`Still running after ${r.runningSec} s; it continues in the background until its timeout. Call run with processId "${r.id}" to wait for it again, or with processId and stop true to end it. Finishing the request waits for it.`;

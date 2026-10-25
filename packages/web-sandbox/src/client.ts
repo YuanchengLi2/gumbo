@@ -7,7 +7,7 @@ export interface ClientOptions{
  options?:WorkerOptions;
  /** How long a stopped or timed-out command may take to unwind before the worker is terminated and started again. */
  graceMs?:number;
- /** How long run_command waits before the command goes on in the background (4 minutes, like the desktop). */
+ /** How long run waits before the command goes on in the background (4 minutes, like the desktop). */
  waitMs?:number;
  /** A command's time limit when it names none (10 minutes, like the desktop). */
  defaultTimeoutMs?:number;
@@ -91,7 +91,7 @@ export class SandboxClient{
   return result??{id,status:'running',output:p.output.slice(-6000),runningSec:Math.round((Date.now()-p.started)/1000),command:p.command.slice(0,200)};
  }
  async stop(id:string,reason='Stopped.'):Promise<ProcessResult|undefined>{const p=this.processes.get(id);if(!p)return this.finished.get(id);this.halt(p,'stop',reason);return p.done;}
- /** run_command as Roux calls it (packages/orchestrator/src/code-tools.ts). */
+ /** run as Roux calls it (packages/agent/src/tools.ts). */
  async runCommand(input:RunCommandInput,waitMs=this.config.waitMs??240000):Promise<RunCommandResult>{
   if(input.processId){
    if(input.stop){const result=await this.stop(input.processId);if(!result)throw new Error('No command with that processId is running.');return{process:result,note:'Stopped.'};}

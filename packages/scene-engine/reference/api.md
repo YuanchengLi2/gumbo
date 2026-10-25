@@ -4,7 +4,7 @@ A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose de
 
 ## The project document
 
-`project.json` is the edit. Change it with code: edit it directly for a small change (one clip, one item, one setting), or write a program in any language that reads it, the sources and `context/` and writes it back; then call `publish_project`. Keep `format`, `version`, `baseVersionId` and `timeline.id` as they are, keep items you were not asked to change (the user may have made them), and never write the document from scratch.
+`project.json` is the edit. Change it with `edit` for a small change (one clip, one item, one setting), or with a program in any language that reads it and the footage files and writes it back. Every write applies the edit live at once; if anything is wrong, nothing changes and the problems come back to fix. Keep `format`, `version`, `baseVersionId` and `timeline.id` as they are, keep items you were not asked to change (the user may have made them), and never write the document from scratch.
 
 ```json
 {"format":"dream-workspace","version":1,"baseVersionId":"<as read>",
@@ -13,9 +13,9 @@ A scene is a React component in `src/` (`.tsx`, `.ts`, `.jsx` or `.js`) whose de
  "outputs":[{"id":"intro","path":"src/intro.tsx","kind":"scene","durationInFrames":150}]}
 ```
 
-- Sources: `context/assets.json` lists every source (id, file, length, size, frame rate, sound, path your code can read). A clip's `assetId` is a source id, or `output:<id>` for something your files produce.
-- Speech: `context/transcripts/<assetId>.json` holds the timed words (`words`: id, text, start, end in source seconds) and `coverage` (how far transcription has got; `coverage.status` is `complete` when it is done). The file updates as transcription runs, also while your own commands run, so code may wait on it. Cut between words, never inside one.
-- `publish_project` validates the document (ids, sources, ranges within each source, anchors), publishes it, and returns checks of what changed: footage used twice, a cut inside a spoken word, silence over three seconds inside a clip. Fix those and publish again, or keep one with a reason in `finish.kept`.
+- Sources: `footage/assets.json` lists every source (id, file, length, size, frame rate, sound, path your code can read). A clip's `assetId` is a source id, or `output:<id>` for something your files produce.
+- Speech: `footage/<name>/transcript.txt` holds what is said, a sentence a line as `[start-end] text` in source seconds; `footage/<name>/words.json` holds every word as `[start, end, word]`, for code. Both grow while transcription runs. Cut between words, never inside one.
+- Writing `project.json` validates the document (ids, sources, ranges within each source, anchors), applies it, and returns checks of what changed: footage used twice, a cut inside a spoken word, silence over three seconds inside a clip. Fix those, or say why one stays. Once applied, each `output:<id>` in the timeline becomes the id of the media it made and `outputs` is emptied: read project.json again before editing it further.
 
 ## Declaring outputs
 
@@ -31,7 +31,7 @@ Scenes, music, sound effects and media your code produces are declared in `outpu
 - `props` are passed to the component, so one component can serve many shots with different props.
 - Scenes have no background: what a scene does not draw shows the footage under it. A full-screen card draws its own. Keep fades inside the clip.
 - Media your programs make (stabilized, cleaned, converted, generated) goes under `output/` with kind `video`, `audio` or `image`, and is placed like any source.
-- `publish_project` compiles and publishes; `check_outputs` previews drafts without publishing and also checks score files (each track's length in bars, partial bars, the total length). Writing a scene file returns a compile check.
+- Writing a scene file compiles it and shows the user a live preview; a scene already in the edit updates live. Score and sound files are checked when written (each track's length in bars, partial bars, the total length).
 
 ## Clips
 
@@ -124,7 +124,7 @@ Text is an `overlay` with `component` `"text"` and `params.text`; a sticker is a
 - `three` and `three/addons/...`; `@react-three/fiber`; `@react-three/drei` (`Text`, `Text3D`, `RoundedBox`, `Center`, `Float`, `Billboard`, `Line`, `Sparkles`, `Stars`, `Sky`, `Environment`+`Lightformer`, `ContactShadows`, `Edges`, `Outlines`, `Grid`, `Instances`/`Instance`, `MeshDistortMaterial`, `MeshTransmissionMaterial`, cameras, primitive shapes, `Svg`, `Html`). Drei helpers that download files (environment presets) are unavailable; nothing in a scene can reach the network.
 - `d3` (and any `d3-*` module); `lucide-react` icons; `simplex-noise`.
 - `@dream/engine` (below).
-- Anything else: install it with `run_command` (`npm install <package>`); installed packages are bundled into the scene automatically. Never install another copy of React, Remotion or three; the engine's copies are always used.
+- Anything else: install it with `run` (`npm install <package>`); installed packages are bundled into the scene automatically. Never install another copy of React, Remotion or three; the engine's copies are always used.
 
 ## @dream/engine
 

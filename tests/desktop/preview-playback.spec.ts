@@ -15,9 +15,8 @@ const use=(id:string,name:string,input:unknown)=>({type:'tool_use',id,name,input
 async function playEdit(cuts:number[][],options:{previewCopy?:boolean}={}){
  let assetId='';
  const script=(_body:any,step:number)=>[
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [${cuts.map(([a,b],i)=>`{"id":"c${i}","assetId":"${assetId}","srcIn":${a},"srcOut":${b},"speed":1,"reason":"Cut ${i}"}`).join(',')}],`})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:`Cut the clip into ${cuts.length} shots.`,evidence:[]})]][step]??[];
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [${cuts.map(([a,b],i)=>`{"id":"c${i}","assetId":"${assetId}","srcIn":${a},"srcOut":${b},"speed":1,"reason":"Cut ${i}"}`).join(',')}],`})],
+  [{type:'text',text:`Cut the clip into ${cuts.length} shots.`}]][step]??[];
  const profile=mkdtempSync(join(tmpdir(),'dream-playback-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-playback-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});

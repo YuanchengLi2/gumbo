@@ -10,10 +10,11 @@ import {emptyFootage,AssetSchema} from '@dream/footage';
 import {ProjectDB} from '@dream/project-db';
 import {mixEditRange,measureClip,extractAudio} from '../../apps/project-service/src/edit-audio';
 import {viewEdit,happenings} from '../../apps/project-service/src/edit-view';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
+import {Workspace} from '../../apps/project-service/src/workspace';
 import {chatRequest,responsesRequest,providerModels} from '../../supabase/functions/dream-gateway/providers';
 import {promptEstimate} from '../../supabase/functions/dream-gateway/inference-policy';
-import {estimateTokens} from '../../packages/orchestrator/src/context-budget';
+import {estimateTokens} from '../../packages/agent/src/compact';
+import {call,textOf} from '../fixtures/agent-project';
 
 const tone=(folder:string,seconds=3)=>{const path=join(folder,'tone.wav');execFileSync(ffmpeg!,['-v','error','-y','-f','lavfi','-i',`sine=frequency=440:duration=${seconds}`,'-ar','48000','-ac','2',path]);return path;};
 // A ten-second timeline: a silent picture clip, and a three-second tone placed from 2 s to 5 s at full gain.
@@ -39,20 +40,20 @@ it('lets the agent listen to a source or to the edit, through the hearing model,
  const folder=mkdtempSync(join(tmpdir(),'dream-listen-tool-')),db=new ProjectDB(folder,'Listen'),path=tone(folder);
  db.saveAsset(AssetSchema.parse({id:'tone',filename:'tone.wav',kind:'audio',originalPath:path,durationSec:3,fps:30,hasAudio:true,fingerprint:'t',status:'ready'}));
  const heard:any[]=[];const listen=vi.fn(async(clip:any,turnId:string)=>{heard.push({...clip,turnId});return'A steady 440 Hz tone from 0 s to 2 s, no speech.';});
- const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,listen},()=>{});
+ const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,listen},()=>{});
  try{
-  await workspace.initialize();const signal=new AbortController().signal;
-  const result:any=await workspace.execute('listen',{target:'source',assetId:'tone',startSec:0,endSec:2,question:'Is there speech?'},'l1','turn-1',signal);
-  expect(result).toMatchObject({range:{start:0,end:2},heard:'A steady 440 Hz tone from 0 s to 2 s, no speech.',measurements:{integratedLufs:expect.any(Number)}});
-  expect(heard[0]).toMatchObject({durationSec:2,what:'tone.wav from 0s to 2s',question:'Is there speech?',turnId:'turn-1'});expect(Buffer.from(heard[0].audio,'base64').length).toBeGreaterThan(1000);
-  // At most 90 seconds are heard at once.
-  await workspace.execute('listen',{target:'source',assetId:'tone',startSec:0,endSec:500},'l2','turn-1',signal);expect(heard[1].durationSec).toBe(90);
-  // The published edit is empty: nothing sounds there, and nothing is sent.
-  expect(await workspace.execute('listen',{target:'preview',startSec:0,endSec:5},'l3','turn-1',signal)).toEqual({range:{start:0,end:5},heard:'Nothing sounds in the edit here.'});expect(listen).toHaveBeenCalledTimes(2);
+  await workspace.initialize();
+  const result=textOf(await call(workspace,'listen',{source:'tone',start:0,end:2,question:'Is there speech?'},'l1','turn-1'));
+  expect(result).toContain('A steady 440 Hz tone from 0 s to 2 s, no speech.');expect(result).toMatch(/integratedLufs/);
+  expect(heard[0]).toMatchObject({durationSec:2,what:'tone.wav from 0 s to 2 s',question:'Is there speech?',turnId:'turn-1'});expect(Buffer.from(heard[0].audio,'base64').length).toBeGreaterThan(1000);
+  // At most 90 seconds are heard at once; the source can be named by its file name.
+  await call(workspace,'listen',{source:'tone.wav',start:0,end:500},'l2','turn-1');expect(heard[1].durationSec).toBe(90);
+  // The edit is empty: nothing sounds there, and nothing is sent.
+  expect(textOf(await call(workspace,'listen',{target:'edit',start:0,end:5},'l3','turn-1'))).toBe('Nothing sounds in the edit from 0 s to 5 s.');expect(listen).toHaveBeenCalledTimes(2);
   // When the hearing model fails, the loudness still comes back.
   listen.mockRejectedValueOnce(new Error('hearing needs the Gemini key on the gateway'));
-  expect(await workspace.execute('listen',{target:'source',assetId:'tone',startSec:0,endSec:1},'l4','turn-1',signal)).toMatchObject({measurements:{integratedLufs:expect.any(Number)},note:expect.stringMatching(/Listening failed \(hearing needs the Gemini key/)});
- }finally{db.close();}
+  const failed=textOf(await call(workspace,'listen',{source:'tone',start:0,end:1},'l4','turn-1'));expect(failed).toMatch(/Listening failed \(hearing needs the Gemini key/);expect(failed).toMatch(/integratedLufs/);
+ }finally{workspace.close();db.close();}
 },60_000);
 
 it('gives Gemini the sound to hear, tells other models it was there, and counts sound by its length',()=>{

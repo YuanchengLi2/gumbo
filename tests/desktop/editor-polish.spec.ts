@@ -10,9 +10,8 @@ test('the agent edits visibly, clips show their frames, and selection, clip acti
  test.setTimeout(240000);let assetId='';
  // The agent places the imported clip by editing project.json, slowly enough to watch it work.
  const script=(_body:any,step:number)=>[
-  [use('s','edit_file',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${assetId}","srcIn":0,"srcOut":3,"speed":1,"reason":"Opening"}],`})],
-  [use('p','publish_project',{})],
-  [use('f','finish',{status:'complete',summary:'The clip is on the timeline.',evidence:[]})]][step]??[];
+  [use('s','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${assetId}","srcIn":0,"srcOut":3,"speed":1,"reason":"Opening"}],`})],
+  [{type:'text',text:'The clip is on the timeline.'}]][step]??[];
  const profile=mkdtempSync(join(tmpdir(),'dream-polish-profile-')),folder=mkdtempSync(join(tmpdir(),'dream-polish-project-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  const gateway=await codeGateway({script,delayMs:1500});writeFileSync(join(profile,'cloud.json'),JSON.stringify({url:gateway.url,anonKey:'fixture'}));
  const app=await electron.launch({executablePath:resolve(process.env.DREAM_PACKAGE_EXECUTABLE??'apps/desktop/out/Dream-win32-x64/Dream.exe'),args:[`--user-data-dir=${profile}`],env:{...process.env,DREAM_HEADLESS:'1',DREAM_DOCUMENTS_DIRECTORY:profile}});

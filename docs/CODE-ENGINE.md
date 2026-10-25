@@ -1,154 +1,134 @@
-# Code creation engine
+# Roux and the code creation engine
 
-This document describes the production engine as of October 11, 2026: the orchestrator (`packages/orchestrator/src/code-director.ts`, `code-agent.ts`, `task-graph.ts`), the scene engine (`packages/scene-engine`) and the workspace that compiles, checks and publishes the agent's work (`apps/project-service/src/code-workspace.ts`).
+This document describes the production engine as of October 25, 2026 (Roux 2): the agent (`packages/agent`), its workstation (`apps/project-service/src/workspace.ts` with `footage-library.ts` and `edit-review.ts`) and the scene engine (`packages/scene-engine`).
+
+## The idea
+
+Roux edits video the way a programmer works in a codebase with Claude Code:
+
+- **One loop for every request.** A message joins the project's one continuing conversation; the model is called; the tools it asks for run; their results go back; and that repeats until it answers without asking for a tool. Its words are then the reply. Nothing classifies the request first, nothing gates how it finishes, and nothing nudges it along. A short request is a few calls; a long one is as many as it needs.
+- **The footage is files.** Every source has a readable overview, transcript and shot list under `footage/`, so Roux finds moments with `grep` and `read` the way it finds code.
+- **Few general tools, small results.** Every result is small by default and pages on request.
+- **Verify the work.** `review` watches the whole cut like a viewer would; it is the "run the tests" of an edit.
+- **Edits apply as they are written.** Writing `project.json` checks it and applies it live; a problem comes back like a linter's.
+
+The harness keeps the loop safe, small and cached. It does not steer the model.
 
 ## The division of labor
 
-The agent makes the edit with code: it writes and runs whatever programs a request needs (any language, any package it installs) and changes the project document. The engine provides the rest:
-
-| The agent writes | The engine provides |
+| Roux writes | The engine provides |
 |---|---|
-| The project document (`project.json`): what plays when (clips and their ranges, speed, framing, grade, transitions, overlays, effects, scenes, music, sound, captions), changed directly for a small change or by a program that reads it, the sources and `context/` and writes it | Validation against the sources, publish checks of what changed (footage used twice, cuts inside words, long silences), publication, versions and undo, the live player and Export |
-| Scene components (React, Remotion timing, three.js through React Three Fiber, d3, SVG, Canvas, CSS) | One prebuilt runtime with those libraries, bundled fonts, project media and resources by name, frame-exact video, textures, a ready 3D scene, fit-to-box text, safe areas and beat timing; compilation in milliseconds |
-| Produced media under `output/` (processed footage, generated images and audio) | Hash-addressed storage and placement as `output:<id>` |
-| Score files (`src/music/*.score.json`) and sound designs | Expansion, validation and synthesis into audio assets with beat times |
-| Which media to use, and what to look at in it | Finding media on the computer by capture date, importing, proxies, thumbnails, waveforms, loudness and cloud transcripts |
+| The edit (`project.json`): what plays when (clips and their ranges, speed, framing, grade, transitions, overlays, effects, scenes, music, sound, captions), changed with `edit`, `write` or a program it runs | Validation against the sources, checks of what changed (footage used twice, cuts inside words, long silences), versions and undo, the live player and Export |
+| Scene components (React, Remotion timing, three.js through React Three Fiber, d3, SVG, Canvas, CSS) | One prebuilt runtime with those libraries, bundled fonts, project media and resources by name, frame-exact video, textures, fit-to-box text, safe areas and beat timing; compilation in milliseconds |
+| Media it makes under `output/` | Hash-addressed storage and placement as `output:<id>` |
+| Score files (`src/music/*.score.json`) and sound designs | Expansion, validation and synthesis into audio with beat times |
+| What to look at and what to use | Import, proxies, transcription, the shot index and the footage files |
 
-Nothing renders the edit during chat. Published work runs live in the right panel; only Export renders. Source footage may be processed and looked at freely.
+Nothing renders the edit during chat. The edit plays live in the player; only Export renders.
 
-## Who does the work
+## The agent (`packages/agent`)
 
-One editing agent owns each request from start to finish: it looks at what it needs, decides, edits, publishes, checks and replies. Every role runs on Sonnet 5.5 (`models.agent`); there is no tier to choose and no hand-over to another model.
+- `session.ts`: the `Agent`. One conversation per project (saved as `agent-session`), carried across messages, so a follow-up reads the earlier exchange from the cache and remembers what was just done. It runs the loop, the tools Roux runs itself (`todo`, `title`, `task`, `propose_plan`, web search), compaction and the harness limits.
+- `prompt.ts`: one system prompt for every model and every request (about 2.5K tokens). How to work (understand, plan with a todo list, edit, check with `review`, reply), when to ask, the workspace map and the editing rules. A mode (plan, ask) rides on the message as a note, so the cached prompt never changes.
+- `tools.ts`: the tools' schemas, descriptions and tolerant parsing (a quoted choice is unwrapped, a null dropped, over-long prose shortened, a number moved to its bound; paths and code are never changed).
+- `transport.ts`: one model call through the gateway with a saved receipt per call, recovery through `/ai-status`, stall and idle watchdogs, retries with backoff, one larger allowance for a reply cut off with something visible, and a usage row per response.
+- `compact.ts`: compaction. `plans.ts`: plan mode's records. `activity.ts`: the rows the chat shows.
 
-| Request | Model | Role |
-|---|---|---|
-| **An edit** | Sonnet 5.5 | **solo**: the editing agent. When an attempt keeps failing it is told to diagnose (the second identical failure returns `diagnosisRequired`), and the third identical failure, or the fourth similar one, ends the request as blocked with its work saved. `delegate` has helpers build separate pieces. |
-| Pieces the agent delegates | Sonnet 5.5 | **worker** (a helper): one isolated conversation per task that writes only its declared paths. It never edits `project.json`, publishes, imports media or changes the user's computer; the agent places its outputs and publishes. |
-| A reply: a question, a script, ideas | Sonnet 5.5 | **readonly**: answers directly, looking at what it needs with the read-only tools. |
-| Planning, and approved plans | Sonnet 5.5 | **readonly** planner returning an editable plan; the approved steps run as one continuing editing-agent conversation. |
+### The tools
 
-Earlier projects may hold `ai.escalation` events from the Haiku, Sonnet and Opus ladder; `scripts/session-report.ts` still lists them.
+| Tool | What it does |
+|---|---|
+| `read` | A text file with line numbers, paged with offset and limit; an image comes back as a picture; scope computer reads the user's files; version reads a file as an earlier version had it |
+| `grep` | A regular expression across the workspace, footage included, with context lines and paging |
+| `list` | A folder or a glob |
+| `write`, `edit` | Write a file or replace an exact piece of one. `project.json` applies live; a scene compiles at once (a scene not in the edit shows the user a live preview; one in the edit, or code it imports, updates live); score and sound files are checked |
+| `run` | A shell command (Unix tools, Node, Python, ffmpeg, installs). Past four minutes it goes on in the background with its output so far; `run` with its processId waits again or stops it. A command that changes `project.json` applies it |
+| `look` | Frames of a source at the times asked, or over a range with the words spoken there (and loudness on request), or of the edit as the player draws it |
+| `listen` | Up to 90 seconds of a source or of the edit, heard by a model that can hear, with loudness |
+| `review` | The whole cut: what is said in playback order, every shot with its source range and what the shot index measured, what plays over it, the checks, the errors scenes reported, and a frame of every shot on one sheet |
+| `find` | Shots by what is visible, said and measured, with their frames on one sheet |
+| `task` | A helper with its own fresh conversation that looks and reads (never changes anything) and reports back, so a wide investigation never fills the main conversation |
+| `todo` | The task list the user watches |
+| `media` | Media on the computer by capture time or folder, or free-to-use media online; imports them (or files code uses into `resources/`) |
+| `web` | A web search (answered by a quiet Haiku call with server-side search, for every model) or a page read as text |
+| `title` | Names the project |
+| `propose_plan` | Plan mode's proposal |
+| `propose_files` | Changes to files on the user's computer, and exporting, which wait for the user's approval |
 
-### Routing, permission modes and effort
+Calls that only look run together; anything that changes something runs on its own, in order. A result is cut at 20,000 characters with a note on how to read the rest.
 
-Exact local instructions, "continue" phrasing and plain follow-up edits on a titled project with a timeline (`plainEdit`: "make it warmer", "add crossfades") skip the classifier. Everything else is classified by Sonnet with a provider JSON schema, falling back to the local heuristic (`routeCodeRequest`) if classification fails. Routes are `question`, `local`, `plan` and `continue` (only while a stopped request exists). The routing schema still has an `intelligence` field for older gateways; the app ignores it.
+### Plan mode, asking, and approval
 
-The composer chooses the permission mode and the effort:
+- **Plan first**: the same loop, tools and prompt, with a note on the message. Changes are refused; Roux looks at what it needs and calls `propose_plan`. The proposal waits in `task_plan` with `ai_status` `awaiting_approval`; the user can change its steps in the card. Approving (the button, or a go-ahead such as "do it") adds the approved plan to the same conversation, seeds the task list with its steps, and Roux carries it out. Anything else typed while a plan waits asks for a changed plan.
+- **Ask only**: the same loop; changes are refused and the reply is an answer.
+- **Asking the user**: Roux replies with its question and stops; the answer comes as the next message. There is no separate ask-first step.
 
-- **Edit automatically** (default): routed as above.
-- **Plan first**: every request is routed to `plan`. Approving a plan (the button or "do it") switches the composer back to Edit automatically.
-- **Ask only**: every request is routed to `question`; nothing in the project changes.
-- **Effort** Auto, Low, Medium or High. Auto is medium on Sonnet and xhigh on Haiku (to make up for the smaller model), except the router, which classifies within a 2K-token allowance and stays low; `DREAM_BUILD_WORKER_EFFORT` overrides helpers only, for measurement. A chosen effort applies to every model of that request except the router. A phase whose response spent its whole output allowance thinking steps its effort down.
+### The harness
 
-## Helpers as a task graph
+- **Receipts**: each tool call's result is saved by its call id before the conversation goes on, and each model call has a receipt by its content. A stop, a crash or a closed app never runs a finished call twice; a resume runs only the calls that never finished (a command the stop cut short is reported as stopped, and the model decides).
+- **Pauses**: a run pauses to check in after $0.50 of spending (`engineBudgets.requestSpendUsd`) or 30 minutes (`requestMinutes`), and after 150 steps. Each pause keeps everything; continue goes on with a fresh allowance.
+- **Stalls**: a model that sends nothing for its limit (DeepSeek 60 s before its first token and 45 s between tokens; others 5 minutes) is cancelled and asked once more; a second stall on Roux 1 (Auto) hands the conversation to its other model, while a model the user picked is never switched.
+- **Thinking-only replies**: a reply that spent its whole allowance thinking gets a short note and is asked again, twice at most.
+- **Server tool calls** a provider left without a result are dropped, and a paused web search is sent back to carry on.
 
-`delegate` takes one to eight tasks `{id,title,brief,writes,after,context}` and runs them as a dependency graph (`runTaskGraph`). It is meant only for independent pieces that take real work, such as several new scenes or scenes plus music; the agent does everything else itself.
+## The conversation and its cache
 
-- A task starts as soon as every task in its `after` list completed, with at most `engineBudgets.maxWorkers` (4) running at once. Dependents of a blocked task are skipped with that reason.
-- Every task declares `writes` (path prefixes such as `src/intro/`). No task may claim `project.json` or the whole workspace; tasks that can run at the same time need disjoint writes; dependencies must name tasks in the call and form no cycle (`validateDelegation`). Writes are also confined to the declared scopes at execution.
-- `context` attaches up to 12 workspace files (60K characters in total) to the brief, so helpers do not explore to find them.
-- The graph and its reports are saved per call (`taskgraph:<turn>:<call>`); a resumed request does not rerun finished tasks.
+The first message has two blocks. The first is the session start, marked for caching and never changed after: `GUMBO.md`, the footage index, the creator profile from Settings, what the user wanted in their other projects, and the computer and installed packages. The second is the request with its context: the time, the edit in one line, what is selected and attached, what its @ references are, scenes that crashed while playing, what the user changed by hand since Roux's last edit, and footage that arrived since the conversation last heard about footage.
 
-Every helper of one call starts from the same project snapshot (overview, timeline outline, project notes, media facts, capabilities, computer status, decisions), marked for caching, followed by its task, scope and context files. Later helpers start once the first helper's stream begins (at most 5 s), so they read that cached prefix instead of each writing it. A blocked helper is retried once with the reason, unless the block needs the user. Reports carry the summary, changed files, scene errors, attempts, duration and cost. The agent cannot finish complete while a task it delegated is still blocked or was skipped.
+Everything after is appended. The system prompt and tools are identical in every mode and on every call (helpers included), so every call reads the same cached prefix; Anthropic models get breakpoints on the system prompt, the last tool and the session start, DeepSeek caches the prefix by itself, and OpenAI gets a `prompt_cache_key`.
 
-Commands and publication run one at a time within the workspace (`CodeWorkspace.exclusive`).
+**Compaction**: when the conversation passes 90K tokens (60K on Haiku), a Haiku call summarizes the older part (requests, decisions, the edit so far, footage learned, what is open), carrying an earlier summary forward. The session start stays exactly as it was; the summary joins the first message, and the recent exchanges stay verbatim. Saved messages are an append-only journal; a rewrite starts a new journal epoch.
+
+**Models**: Roux 1 (Auto) runs the loop on DeepSeek V4.1 Flash (GPT-6.1 Sol, then Claude Sonnet 5.5, stand in without a DeepSeek key) and does the background work on Claude Haiku 5.5: shot descriptions, footage overviews and compaction summaries. A model the user picks runs the loop instead, and helpers run on the conversation's model. The effort is the composer's choice (Auto is medium).
+
+## The workspace
+
+```
+GUMBO.md                       the project's memory: lasting wishes, decisions, notes on the footage
+HISTORY.md                     the edit's versions, newest first, with what was asked for each
+project.json                   the edit, applied live when written
+footage/INDEX.md               every source: id, name, length, a one-line summary, how far its analysis has got
+footage/<name>-<id>/overview.md     what it is, who is in it, its scenes with times, its moments
+footage/<name>-<id>/transcript.txt  what is said, a sentence a line: [start-end] text
+footage/<name>-<id>/words.json      every word with its times, a word a line, for code
+footage/<name>-<id>/shots.txt       every shot: what is visible, tags, measured facts
+footage/assets.json            ids, paths and facts for code
+guides/editing.md guides/project.md guides/engine.md   the references, read when the work needs them
+src/  output/  resources/
+```
+
+`footage/`, `guides/`, `HISTORY.md` and `GUMBO.md` are not part of a version: an undo never takes the memory back. The footage files follow the project (`FootageLibrary.refresh`, every few seconds and before Roux reads them): a transcript grows while it is heard, and a stretch not heard yet is marked so it never reads as silence. An overview is written once a source's transcript and shots are in: in one Haiku call for a source of up to about 48K characters, otherwise in parts of five minutes read four at a time and then combined.
+
+### Applying the edit
+
+Writing `project.json` runs `publishWorkspace`: it validates the document against the sources, compiles scenes, synthesizes music and sound, copies media into hash-addressed storage, resolves `output:<id>` (also to what an earlier write made from that output), and saves the timeline, the source snapshot and the assets in one SQLite transaction. The result says what changed, what each output became, what the checks found and what the shot index measured in the clips placed. A document based on an older version (the user changed the edit since Roux read it) is refused with a note to read it again. Each request is one undo checkpoint.
+
+The checks (`edit-checks.ts`) use the timeline and the transcript only. Must fix: the same footage used twice (over a second of overlap), a cut more than 0.05 s inside a spoken word, more than three seconds of silence between words inside a clip. Notes: slow motion below half speed, one clip over 40% of a video of 15 seconds or more.
 
 ## Scenes
 
-A scene is a default-exported React component in `src/**/*.tsx` (or `.ts`, `.jsx`, `.js`), declared in `project.json` outputs as `{id, path, kind:'scene', ...}`. Width, height, fps and duration default to the project's; `props` lets one component serve many shots; `transparent` makes it an overlay. The engine reference the agent reads is `packages/scene-engine/reference/api.md`, mirrored into the cached system prompt.
+A scene is a default-exported React component in `src/**/*.tsx` (or `.ts`, `.jsx`, `.js`), declared in `project.json` outputs as `{id, path, kind:'scene', durationInFrames, ...}` and placed as `output:<id>`. Size and frame rate default to the project's; `props` lets one component serve many shots; `transparent` makes it an overlay. The reference Roux reads is `guides/engine.md` and `guides/project.md`, from `packages/scene-engine/reference/api.md`.
 
-- **Runtime**: five chunks (core, three, d3, icons, noise) built by `scripts/build-engine.ts` into `resources/staged/engine/<version>/`, sharing one React, Remotion and three.js through a module registry. Each scene document mounts the component through Remotion's `Thumbnail`, one frame at a time.
-- **Determinism**: a frame is acknowledged only after React commits, 3D roots advance to the frame time, and textures, files, fonts, images and video seeks finish. Randomness is seeded by the revision and clocks report frame time, so frames are identical in any order.
-- **Isolation**: each scene runs in its own sandboxed document, served from `dream-engine://` in the player and from the loopback render server during export. Its CSP allows only that origin plus data and blob URLs; there is no network.
-- **Compilation**: publication compiles scene outputs with esbuild in milliseconds. Engine modules resolve to the shared runtime; packages installed in `Workspace/node_modules` are bundled; anything else fails with an install hint. Files under `resources/` (24 MB per file, 96 MB in total) are copied to `Media/Engine/files` and served by name. Any input change recompiles and refreshes the scene on the timeline.
-- **Export**: 3D export finds a working WebGL backend on first use (ANGLE, then SwiftShader) and remembers it.
-- **Legacy HTML scenes** (`window.renderFrame`) are unchanged. `bundle_scene` and the HTML guide exist only in advanced mode (`DREAM_AGENT_ADVANCED_TOOLS=1`).
+- **Runtime**: five chunks (core, three, d3, icons, noise) built by `scripts/build-engine.ts`, sharing one React, Remotion and three.js through a module registry.
+- **Determinism**: a frame is acknowledged only after React commits, 3D roots advance and media finish loading; randomness is seeded and clocks report frame time.
+- **Isolation**: each scene runs in its own sandboxed document with no network.
+- **Compilation**: esbuild, in milliseconds; installed packages are bundled; files under `resources/` are served by name.
+- **Errors**: nothing runs scene code in the background. A scene's runtime errors come from the player or a chat preview, mapped through its source map to `src/file:line`, and reach Roux in `look`, `review` and the next message's context.
 
-### Errors without background runs
-
-Nothing runs scene code in the background. Writing scene code returns a compile check; `check_outputs` compiles drafts that the user sees live in the stream. Runtime errors come from scenes playing in the visible player or a chat preview: the stack is mapped through the scene's source map to `src/file:line`, stored per scene revision or draft, added to the agent's project state, and a request cannot finish complete while a scene changed in it reports errors.
-
-### Music and sound
-
-Music is a score file (`src/music/*.score.json`) in compact notation (drum step patterns, note strings, chord progressions, arpeggios, sections, repeats) or a full score document; Dream expands and validates it, naming the field and token at fault. Sound effects are a sound design file or a named preset. Synthesis runs in the procedural audio worker and is cached by content. Music assets carry beat times that a scene reads with `useBeats(name)`. Scenes are silent; sound goes on the timeline.
-
-## Footage: facts, and the agent's own looks
-
-Nothing interprets the footage for the agent. Import prepares what the player and Export need (proxy, playback audio, thumbnail, waveform, loudness for auto-level) and runs cloud transcription. The agent is given facts per source: length, size, frame rate, sound, path, capture time, its own earlier notes (`sourceNotes`), and the transcript's state (`status`, `transcribedUntilSec`, word count, and the file `context/transcripts/<id>.json`, whose `coverage` shows how far transcription has got). The files in `context/` are never stale copies: between tool calls they are rewritten, and while a command runs each transcript file is rewritten as its transcription advances and `assets.json` (with `Sources/`) when a source is added, so a program can wait on them. `read_transcript` reads the same words, including the part transcribed so far while a long recording is still running.
-
-The agent decides what to look at and what to measure:
-
-- `view_media` returns source frames at the times it picks (a range up to 8 seconds, or 60 for an overview), with the timed words in the range, and audio measurements on request. Five or more frames come back tiled on 4x3 contact sheets; a range of a second or two returns full-size frames.
-- `read_file` returns any image in the workspace as the image itself, so the agent can look at frames, crops, plots or sheets its own code made.
-- `run_command` measures with code: ffmpeg, ffprobe, Node and Python are on PATH, and any other tool may be installed.
+Music is a score file in compact notation or a full score document; sound effects are a sound design file or a preset. Synthesis runs in the procedural audio worker, cached by content; music carries beat times that a scene reads with `useBeats(name)`.
 
 ## Media from the computer
 
-- `find_media` finds photos, videos and audio by capture date: today, yesterday, this week, the last 7 days, or explicit dates, in the computer's local time.
-  - By default it searches camera rolls, phone sync folders (OneDrive, iCloud), Videos, Downloads, Desktop and memory-card DCIM folders.
-  - Capture time comes from each file's own metadata without decoding: QuickTime creation date with time zone, MP4 creation time, or EXIF `DateTimeOriginal` in JPEG/HEIC/TIFF, falling back to the file time.
-  - It returns a capture-sorted catalog marked with what is already imported.
-- `import_media` imports up to 100 files in one call.
-  - An unchanged file (same path, size and modification time) is imported once.
-  - Asset IDs, capture times and durations return immediately; the agent looks at what it needs itself. Proxies, thumbnails and transcripts continue in the background; transcription runs two sources at a time and skips clips under two seconds.
-- `import_resources` brings folders and archives (only matching entries are extracted) into `resources/` for scenes.
-
-With computer access granted the agent imports automatically; changes to computer files still go through `propose_file_changes` and the user's approval. A dropped folder grants a read-only subtree. Phones connected over MTP are reached through their synced folders.
+`media` with action find looks for photos, videos and audio by capture time (today, yesterday, this week, the last 7 days, or dates) in camera rolls, synced phone folders, Videos, Downloads, Desktop and memory cards, reading capture time from each file's metadata. Results are grouped by folder, a line a file, marked with what is already imported. Action import brings up to 100 files at once (an unchanged file once); the files' transcripts and shots fill in as their analysis runs. Into resources copies folders and archives that code uses into `resources/`. Changes to the user's files go through `propose_files` and the user's approval.
 
 ## What the user sees
 
-Every role says in one sentence what it is about to do, adds brief updates when something matters, writes out scripts or copy before building, and ends with a short recap. Between-tool notes are shown as progress; reasoning itself is never shown. Each helper task is a row holding its own notes and actions. Imported and inspected media, and published or draft scenes, appear as thumbnails and live previews in the stream. The run monitor shows the current step, elapsed time, tasks, and the request's cost, tokens and time for Dream (the editing agent) and each helper.
-
-## The agent loop
-
-Each phase is a checkpointed conversation. Tool calls and results are persisted as complete pairs; a replayed call ID returns its saved receipt and never repeats an effect.
-
-- **Spending limit**: each request may spend $3 (`DREAM_REQUEST_BUDGET_USD`), checked before every model call; at the limit it stops as interrupted with its work saved, and each resume allows the same amount again.
-- **Step limits**: 80 model calls per role. At the limit the request reports a blocker with its work saved, never completion.
-- **Text-only responses**: nudged at most twice. Engine nudges are tagged and dropped at compaction.
-- **Repeated failures**: failures of the same tool on the same file or command count as one problem (`coarseKey`). The second failure's result carries `diagnosisRequired`, and the prompt tells the agent to find out why (the error, the log, the files) and change approach; the third identical failure, or the fourth similar one, ends the request as blocked.
-- **Parallel reads**: the reads at the start of a response (`read_file`, `view_media`, `read_transcript`, `search`) run together; results are recorded in order.
-- **Truncation**: a response cut off with visible content retries with double the output allowance, up to 64K, scoped to its phase. A response that only thought is not retried with more room: the agent is told to act in one concrete step, and the phase's effort steps down. Three truncations end the step.
-- **Over-long fields**: prose fields (summary, brief, query, title) are shortened instead of failing the call. Paths and code are never trimmed.
-- **Completion**: only when the current head was published (or validated unchanged) in this phase with no unpublished changes and no scene errors, every must-fix check of the request's publications is fixed or listed in `finish.kept` with a reason, and no delegated task is blocked or skipped. Kept reasons go into the recap. Plan notes (`update_tasks.notes`) survive compaction.
-
-## Context
-
-- **Editing agent**: the first message is two blocks. The first, cached so the next request within five minutes reads it, holds what changes rarely: capabilities, environment, the workspace folder, the project document and its schema (`context/project-schema.json`), the computer without its clock, and the media facts above. The second carries the request, the project overview, an outline of the timeline in order (one plain line per clip: place, source and range, speed, framing, grade, transition; then overlays, sound effects, music and captions), the project notes, source notes, media the agent made, recent conversation, relevant indexed chunks found from words, the authored files by name (no code excerpts), decisions and the computer status (access, media folders, local date and time zone).
-- **Project notes and source notes**: `finish` takes optional `notes` (what the user wants for the video overall; the editing agent only) and `sourceNotes` (what each inspected source shows and where). Both are saved with the project and shown to every later request, at no extra model call.
-- **Readonly and planning** get the same briefing; nothing is pushed into any role's context beyond it.
-- **State changes**: when the project or media state changes, a message with only the changed fields (and the media or decision records added, changed or removed) is appended, never edited. The full state is kept locally under each message; compaction restores it when it drops the messages a change report builds on.
-- **Transcript words** carry only id, text, start and end (plus speaker or an uncertainty flag).
-
-The compaction target is 180K tokens.
-
-- **Measurement**: the last response's real prompt size calibrates the byte estimate. The token-count endpoint is called only without a calibration or near the target.
-- **Compaction**: an overrun compacts to half the target from the current sticky view. It carries the earlier summary forward and keeps only real instructions and the newest state snapshot. Following steps then append to a stable cached prefix.
-
-## Inference, caching and cost
-
-- **Transport**: requests stream through the Supabase gateway. Tools, system and history are cached for five minutes. The editing agent's conversation switches to one-hour caching of all of them (`cacheTtl`) once a wait for its helpers in the request has outlasted the five-minute cache; short requests keep the cheaper one. Helpers share their snapshot's cached prefix.
-- **Task budgets**: each role gets a budget the model can see (editing agent 120K, helpers 100K, planner 60K, replies 40K). The remainder is sent explicitly after compaction.
-- **Failures**: a 90-second idle watchdog replaces a total timeout. Transient and unconfirmed failures are cancelled server-side and retried up to three times.
-- **Usage tracking**: every response is recorded in the append-only `ai_usage` table: phase, helper, tokens, cost (a parity-tested client mirror of the gateway's price formula), duration and visible size.
-- **Activity**: activity events are rows, one upsert per stream update. Publications record changed files as hashes and line counts; text loads on demand.
-
-The gateway features above (one-hour conversation cache, task budgets, cost in receipts, the `continue` route, the routing schema on Sonnet) are optional and take effect after `supabase functions deploy dream-gateway`; the app works unchanged against an older deployment.
-
-## Workspace and publication
-
-`Workspace/project.json` is a version-1 `dream-workspace` document with `baseVersionId`, the timeline and `outputs` (scenes, images, audio, video, music, sound effects). It is the edit: the agent changes it directly for a small change (`write_file`, `edit_file`) or with a program it writes and runs, which may also produce media under `output/`. `publish_project` validates the document against the sources, compiles scenes, synthesizes music and sound, copies files into hash-addressed storage, resolves asset references, and saves the timeline, source snapshot, assets and receipt in one SQLite transaction. Replaying a completed call cannot create another version. Undo, redo, restore and branch changes restore the workspace sources with the version.
-
-Each publication then checks what the request changed, against the version the request started from, using the timeline and the transcript only (`apps/project-service/src/edit-checks.ts`). Must fix: the same footage used twice (over a second of overlap), a cut more than 0.05 s inside a spoken word, more than three seconds of silence between words inside a clip. Notes: slow motion below half speed, one clip over 40% of a video of 15 seconds or more. The checks return with the publication and are saved for the request (`edit-checks:<turn>`).
-
-## Sound and colour
-
-Clip sound is levelled toward -18 LUFS from each source's measured loudness (at most 12 dB either way; `settings.autoLevel` false turns it off), in the shared audio manifest so preview and Export match; music keeps its own gain. Export then normalizes the mix to -14 LUFS with true peaks below -1.5 dBTP in two passes, copying the picture. Colour temperature is an SVG colour matrix that scales red against blue, defined once per temperature in the composition. Effect items on footage (`slow_push`, `punch_zoom`, `shake`, `grade`) need no code and are documented in the engine reference.
+Roux says in a sentence what it will do, adds brief updates when something changes the plan, writes out scripts and copy before building them, and ends with a short recap. Each tool call is a row with Roux's own few words for it; a helper is one row. Applied edits show their changes, scene drafts show as live previews, and the task list shows Roux's todo list. The edit log of each request (`turn-log.ts`, version 3) holds its part of the conversation and every tool call with its input and result.
 
 ## Runtime
 
-Without computer access, the Windows host runs commands in an AppContainer with project-specific identity, read-only runtime and source access, the app's own ffmpeg and ffprobe on PATH (read-only), internet access, an explicit environment without account credentials, and a kill-on-close Job Object. With computer access granted, commands run on the user's computer as the user (cmd.exe in the project workspace) with the bundled Node, Python and ffmpeg ahead on PATH and the app's own secrets removed. Node 24.19.0 and Python 3.13.16 are pinned (`pnpm stage:code-runtime`, `pnpm qualify:code-runtime`). Commands never publish; `publish_project` does.
+Without computer access, the Windows host runs commands in an AppContainer with project-specific identity, read-only runtime and source access, the app's own ffmpeg and ffprobe, internet access and no account credentials. With computer access granted, commands run on the user's computer with the bundled Node, Python and ffmpeg ahead on PATH and the app's own secrets removed. On the web, commands run in the browser sandbox (`packages/web-sandbox`): a POSIX shell with the usual tools, Python (Pyodide), ffmpeg in WebAssembly and esbuild.
 
 ## Verification
 
-`pnpm test` and `pnpm typecheck` cover the engine end to end with fixture gateways. Every live session first checks that the packaged app is newer than the app's code and the deployed gateway newer than the gateway's code (`assertCurrent` in `tests/desktop/live-session.ts`), and refuses to start otherwise. `tests/desktop/agent-smoke-live.spec.ts` (`DREAM_LIVE_SMOKE=1`) is the cheap live check to run before a long session: three minutes of the long-form talk cut into a short clip, then captions. The live session specs (`tests/desktop/agent-*-live.spec.ts`, each behind its own `DREAM_LIVE_*` variable, sharing `tests/desktop/live-session.ts`) record each step's cost, model calls, largest context, escalations and looks at footage and write `session-report.txt`, compared with `DREAM_LIVE_COMPARE` when set; `tsx scripts/session-report.ts <folder> [--compare <older>]` reports any saved project. The packaged desktop specs (`pnpm exec playwright test tests/desktop`) cover the player, export, drag-and-drop, planning and the agent. `pnpm exec tsx scripts/smoke-engine-local.ts --budget=<usd>` runs real requests against the Anthropic API through this repository's gateway code on localhost and reports cost and time per phase. `scripts/compare-export.ts` compares the native export with the browser export. Results are recorded in `docs/ACCEPTANCE.md`.
+`pnpm typecheck` and `pnpm test` cover the agent end to end against scripted gateways: `tests/integration/roux-agent.test.ts` (the loop, the conversation across requests, plan mode, asking, helpers, footage search and review, pauses, stop and resume, compaction, hand changes, the edit log), the tools' suites (publication, scenes, commands, media, transcripts, the shot index, history) and the transport's (recovery, streaming, stalls). The browser tests (`npx playwright test -c tests/web/playwright.config.ts`) run Roux in the web app against the scripted gateway in `tests/fixtures/code-gateway.ts`. `tsx scripts/prefix-tokens.ts` counts the cached prefix exactly. Results of live runs are recorded in `docs/ACCEPTANCE.md`.

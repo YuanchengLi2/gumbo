@@ -140,6 +140,10 @@ export class ProjectDB {
  head():string{return(this.db.prepare('SELECT head_id FROM branches WHERE id=?').get(this.getMeta('branch')??'main') as {head_id:string}).head_id;}
  timeline(id=this.head()):TimelineDocument {return this.versionsStore.read(id);}
  footage():FootageIndex {const index=emptyFootage();index.assets=(this.db.prepare('SELECT json FROM assets').all() as {json:string}[]).map(r=>hydrateAsset(AssetSchema.parse(JSON.parse(r.json)),this.folder));for(const kind of ['words','shots','faces'] as const)index[kind]=(this.db.prepare('SELECT json FROM index_records WHERE kind=? ORDER BY rowid').all(kind) as {json:string}[]).map(r=>JSON.parse(r.json));index.shots=index.shots.map(shot=>({...shot,framePaths:shot.framePaths.map(path=>hydratePath(path,this.folder))}));index.revision=Number(this.getMeta('index_revision')??0);return index;}
+ /** The sources alone, without every word and shot: for callers that need the list. */
+ assets():FootageIndex['assets']{return(this.db.prepare('SELECT json FROM assets').all() as {json:string}[]).map(r=>hydrateAsset(AssetSchema.parse(JSON.parse(r.json)),this.folder));}
+ /** One source's timed words, in order. */
+ wordsOf(assetId:string):FootageIndex['words']{return(this.db.prepare("SELECT json FROM index_records WHERE kind='words' AND json_extract(json,'$.assetId')=? ORDER BY json_extract(json,'$.start')").all(assetId) as {json:string}[]).map(r=>JSON.parse(r.json));}
  playbackFootage(t=this.timeline()):FootageIndex {
   const key=this.head()+':'+this.getMeta('index_revision');if(this.playbackCache?.key===key)return this.playbackCache.value;const index=emptyFootage();index.revision=Number(this.getMeta('index_revision')??0);index.assets=(this.db.prepare('SELECT json FROM assets').all() as {json:string}[]).map(row=>hydrateAsset(AssetSchema.parse(JSON.parse(row.json)),this.folder));
   // The words of everything that can be captioned: main-track clips and the music track, where separately recorded

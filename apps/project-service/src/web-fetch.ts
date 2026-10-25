@@ -17,7 +17,7 @@ export function pageText(html:string){
  return{title,text};
 }
 
-/** fetch_url: a web page or text file as plain text, at most maxCharacters. Binary files are downloaded with commands instead. */
+/** A web page for the web tool's url: a web page or text file as plain text, at most maxCharacters. Binary files are downloaded with commands instead. */
 export async function fetchPage(url:string,maxCharacters:number,signal:AbortSignal){
  const target=new URL(url);if(!['http:','https:'].includes(target.protocol))throw new Error('Only http and https addresses can be read.');
  const host=target.hostname.replace(/^\[|\]$/g,'');if(host==='localhost'||host.endsWith('.local')||(isIP(host)?privateAddress(host):(await lookup(host,{all:true})).some(a=>privateAddress(a.address))))throw new Error('Addresses on this computer or its local network are not read.');

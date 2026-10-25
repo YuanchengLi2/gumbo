@@ -8,12 +8,11 @@ import {ProjectDB} from '@dream/project-db';
 import {TimelineSchema} from '@dream/timeline';
 import {handleMediaSearch,licenseOf} from '../../supabase/functions/dream-gateway/media-search';
 import {downloadMedia} from '../../apps/project-service/src/media-download';
-import {CodeWorkspace} from '../../apps/project-service/src/code-workspace';
-import {webSearchTool} from '../../packages/orchestrator/src/code-director';
-import {searchReport} from '../../packages/orchestrator/src/web-search';
-import {newCredits} from '../../packages/orchestrator/src/credits';
-import {codeAgent} from '../../packages/orchestrator/src/code-agent';
-import {intelligence,quietPurposes} from '../../packages/orchestrator/src/intelligence';
+import {Workspace} from '../../apps/project-service/src/workspace';
+import {searchReport} from '../../packages/agent/src/web-search';
+import {newCredits} from '../../packages/agent/src/credits';
+import {quietPurposes} from '../../packages/agent/src/transport';
+import {call,textOf} from '../fixtures/agent-project';
 
 afterEach(()=>{vi.unstubAllGlobals();});
 const json=(body:unknown)=>new Response(JSON.stringify(body),{status:200,headers:{'Content-Type':'application/json'}});
@@ -94,43 +93,31 @@ it('lets the agent search online, import a result with its license, and see that
  const mediaSearch=vi.fn(async()=>({query:'calm piano',kind:'music',results:[result],sources:{'Wikimedia Commons':'searched'},notSetUp:['pexels']}));
  vi.stubGlobal('fetch',vi.fn(async()=>new Response(new Uint8Array([1,2,3]),{headers:{'Content-Type':'audio/mpeg'}})));
  const importMany=vi.fn(async(paths:string[])=>({results:paths.map((path,n)=>{const asset={id:'song'+n,filename:path.split(/[\\/]/).pop()!,kind:'audio',durationSec:90,fps:30,hasAudio:true,originalPath:path,fingerprint:'f'+n,status:'ready'} as any;db.saveAsset(asset);return{asset};})}));
- const workspace=new CodeWorkspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,mediaSearch,importMany:importMany as any},()=>{});
+ const workspace=new Workspace(db,{run:async()=>{throw new Error('no commands');},ffmpeg:ffmpeg!,ffprobe:ffprobe.path,mediaSearch,importMany:importMany as any},()=>{});
  try{
   await workspace.initialize();
   // The tool's default limit (100, for files on the computer) is not passed on: online searches ask for 8 per library.
-  const found:any=await workspace.execute('find_media',{online:'music',query:'calm piano',limit:100},'find',db.head(),new AbortController().signal);
+  const found=textOf(await call(workspace,'media',{action:'find',online:'music',query:'calm piano',limit:100},'find')).split('\n');
   expect(mediaSearch).toHaveBeenCalledWith({query:'calm piano',kind:'music',limit:8},expect.anything());
-  expect(found.found).toEqual(['online:commons:5 | audio | First | Jo | CC BY 4.0 | 90s | Wikimedia Commons']);
+  expect(found[0]).toBe('1 free-to-use music result for "calm piano" (searched Wikimedia Commons):');
+  expect(found[1]).toBe('online:commons:5 | audio | First | Jo | CC BY 4.0 | 90 s | Wikimedia Commons');
   // Only what a search found can be downloaded; the link is never typed by the model.
-  const imported:any=await workspace.execute('import_media',{paths:['online:commons:5','online:commons:404']},'import',db.head(),new AbortController().signal);
-  const report=JSON.parse(imported.content?.[0]?.text??JSON.stringify(imported));
-  expect(report.imported).toEqual([expect.objectContaining({assetId:'song0',license:'CC BY 4.0',credit:result.attribution})]);
-  expect(report.failed).toEqual([{path:'online:commons:404',error:expect.stringMatching(/online find_media search/)}]);
+  const imported=textOf(await call(workspace,'media',{action:'import',paths:['online:commons:5','online:commons:404']},'import'));
+  expect(imported).toMatch(/- song0 "First - [0-9a-f]{8}\.mp3": audio .*licence CC BY 4\.0 \(credit: "First" by Jo/);
+  expect(imported).toContain('Not imported: online:commons:404 (not a result of an online search in this project)');
   expect(importMany.mock.calls[0][0][0]).toMatch(/Media[\\/]Downloaded[\\/]First - [0-9a-f]{8}\.mp3$/);expect(existsSync(importMany.mock.calls[0][0][0])).toBe(true);
   expect(db.footage().assets.find(a=>a.id==='song0')?.license).toEqual({name:'CC BY 4.0',source:'Wikimedia Commons',page:result.page,creator:'Jo',attribution:result.attribution});
-  expect(workspace.mediaContext().find((m:any)=>m.assetId==='song0')).toMatchObject({license:'CC BY 4.0',credit:result.attribution});
- }finally{db.close();}
+  expect(textOf(await call(workspace,'read',{path:'footage/INDEX.md'}))).toContain(`licence CC BY 4.0 (credit: ${result.attribution})`);
+ }finally{workspace.close();db.close();}
 },60_000);
 
-it('gives every model web search as a function, answered by a quiet low-effort Haiku search',async()=>{
- expect(webSearchTool('claude-sonnet-5-5')).toMatchObject({name:'web_search',input_schema:{type:'object',properties:{query:{type:'string'}},required:['query']}});
- expect(webSearchTool('gpt-6.1-sol')).toMatchObject({name:'web_search',input_schema:{type:'object',properties:{query:{type:'string'}},required:['query']}});
- expect((webSearchTool('deepseek-flash') as any).type).toBeUndefined();
- expect(intelligence('claude-haiku-5-5','web_search',{difficulty:4},0,'high').effort).toBe('low');expect(quietPurposes.has('web_search')).toBe(true);
+it('reports a web search as findings with the pages they came from, quietly',async()=>{
+ expect(quietPurposes.has('web_search')).toBe(true);
  const report=searchReport('pho hanoi price',[{type:'server_tool_use',id:'s',name:'web_search',input:{query:'pho hanoi price'}},
   {type:'web_search_tool_result',tool_use_id:'s',content:[{type:'web_search_result',url:'https://a.example/pho',title:'Pho prices',page_age:'2026-09-01',encrypted_content:'x'},{type:'web_search_result',url:'https://a.example/pho',title:'dup',encrypted_content:'x'}]},
   {type:'text',text:'A bowl costs 40,000-60,000 VND.',citations:[{type:'web_search_result_location',url:'https://a.example/pho',title:'Pho prices',cited_text:'40,000'}]}]);
  expect(report).toMatchObject({query:'pho hanoi price',findings:'A bowl costs 40,000-60,000 VND. [https://a.example/pho]',pages:[{title:'Pho prices',url:'https://a.example/pho',age:'2026-09-01'}]});
  expect(()=>searchReport('x',[{type:'web_search_tool_result',content:{type:'web_search_tool_result_error',error_code:'too_many_requests'}}])).toThrow(/too_many_requests/);
- // A GPT agent's web_search call runs the search hook and its result goes back like any tool's.
- const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-websearch-')));
- try{
-  db.setMeta('pending_request',JSON.stringify({turnId:'turn'}));const searched:string[]=[];let n=0,seen:any;
-  const {outcome}=await codeAgent({db,workspace:{initialize:async()=>{},context:()=>({}),execute:async()=>({})} as any,turnId:'turn',text:'How much is pho in Hanoi?',model:'gpt-6.1-sol',readOnly:true,signal:new AbortController().signal,publish:()=>{},
-   webSearch:async query=>{searched.push(query);return report;},
-   infer:async(_m,_s,messages)=>{if(n++===0)return{content:[{type:'tool_use',id:'w1',name:'web_search',input:{query:'pho price hanoi'}}],stop_reason:'tool_use'};seen=messages.at(-1);return{content:[{type:'text',text:'About 40,000-60,000 VND a bowl.'}],stop_reason:'end_turn'};}});
-  expect(searched).toEqual(['pho price hanoi']);expect(JSON.stringify(seen)).toContain('40,000-60,000 VND');expect(outcome.status).toBe('complete');
- }finally{db.close();}
 });
 
 it('lists credits for downloaded media a request put into the edit, once',()=>{

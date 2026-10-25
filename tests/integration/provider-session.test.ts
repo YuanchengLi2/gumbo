@@ -3,7 +3,7 @@ import {mkdtempSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ProjectDB} from '@dream/project-db';
-import {providerSession} from '../../packages/orchestrator/src/provider-session';
+import {providerSession} from '../../packages/agent/src/provider-session';
 it('replays signed thinking only for its exact account, model, tools, system and message prefix',()=>{
  const db=new ProjectDB(mkdtempSync(join(tmpdir(),'dream-binding-')),'Binding');
  try{
