@@ -38,3 +38,28 @@ test('a try: a sample clip, one request as a guest, then sign in to keep going',
   expect(signups).toBe(1);
  }finally{await gateway.close();}
 });
+
+test('signed in, a try link opens Gumbo as usual',async({page})=>{
+ test.setTimeout(150_000);
+ const gateway=await codeGateway({providers:{anthropic:true},script:()=>[]});
+ try{
+  await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));localStorage.setItem('gumbo-onboarded','1');sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
+  await page.goto('/app/?code=fixture-code');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:90_000});
+  await page.goto('/app/?try=1');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:90_000});
+  await expect(page.getByText('Try Gumbo free: your first edit needs no account.')).toHaveCount(0);await expect(page.getByRole('region',{name:'Sample clips'})).toHaveCount(0);
+ }finally{await gateway.close();}
+});
+
+test('a try where Supabase refuses guests asks to sign in for the first edit, saying so',async({page,context})=>{
+ test.setTimeout(150_000);
+ const gateway=await codeGateway({providers:{anthropic:true},script:()=>[]});
+ try{
+  await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));localStorage.setItem('gumbo-onboarded','1');},gateway.url);
+  await context.route('**/auth/v1/signup',route=>route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({code:422,error_code:'anonymous_provider_disabled',msg:'Anonymous sign-ins are disabled'})}));
+  await page.goto('/app/?try=1&prompt='+encodeURIComponent('Make it punchy'));await expect(page.getByText('Try Gumbo free: your first edit needs no account.')).toBeVisible({timeout:90_000});
+  await page.getByRole('button',{name:'Send prompt'}).click();
+  const signIn=page.getByRole('dialog',{name:'Sign in to Gumbo'});await expect(signIn.getByRole('heading',{name:'Sign in to make your edit'})).toBeVisible();
+  await expect(signIn.getByText('That was your free try.')).toHaveCount(0);
+  expect(await page.evaluate(()=>localStorage.getItem('gumbo-try-used'))).toBeNull();
+ }finally{await gateway.close();}
+});

@@ -1301,5 +1301,6 @@ const qs=document.getElementById('qs'),asked=document.getElementById('asked'),an
 const pick=i=>{[...qs.children].forEach((b,j)=>b.classList.toggle('on',j===i));asked.textContent=faqs[i][0];answer.textContent=faqs[i][1];};
 faqs.forEach(([q],i)=>{const b=document.createElement('button');b.className='q';b.type='button';b.textContent=q;b.addEventListener('click',()=>pick(i));qs.appendChild(b);});pick(0);
 </script>
+<script src="/assets/nav-account.js"></script>
 </body>
 </html>

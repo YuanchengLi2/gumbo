@@ -31,13 +31,14 @@ const waiting=new Set<Waiting>();
  * false when the user closes it. */
 /** guest: a request to Gumbo AI, which a try (trial.ts) may send once without an account. reason says why sign-in is
  * asked for, for the dialog: the try was used, or an export from a try. */
-export type SignInReason='try-used'|'export';
+export type SignInReason='try-used'|'try-unavailable'|'export';
 export async function requireSignIn(options:{guest?:boolean;reason?:SignInReason}={}):Promise<boolean>{
  const status=current??await refreshAccount();if(status.signedIn)return true;
  let reason=options.reason;
  if(options.guest&&trying()){
-  if(freeRequestsLeft()>0)try{await window.dream.command({type:'account',action:'guest'});useFreeRequest();return true;}catch{}
-  reason='try-used';
+  // Without a guest session (anonymous sign-ins off, or Supabase refusing), the first edit needs an account too.
+  if(freeRequestsLeft()>0)try{await window.dream.command({type:'account',action:'guest'});useFreeRequest();return true;}catch{reason='try-unavailable';}
+  else reason='try-used';
  }
  return new Promise<boolean>(resolve=>{waiting.add(resolve);window.dispatchEvent(new CustomEvent('dream:sign-in',{detail:reason}));});
 }
