@@ -13,13 +13,27 @@ export function inferencePolicy(model:string,purpose:unknown='routine',profile?:
  if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...budget}};
  return{};
 }
+/** The extension's quick calls (Gumbo for Chrome): a Tab suggestion, a Ctrl+K rewrite, ranking a next action, warming
+ * the cache before one. Speed comes first: no thinking and low effort, and the gateway keeps no text of them (no request
+ * store), so closing the connection stops the model at once. */
+export const fastPurposes=new Set(['tab','inline','action','prewarm']);
+export const isFast=(purpose:unknown)=>typeof purpose==='string'&&fastPurposes.has(purpose);
+export function fastPolicy(model:string){
+ // Haiku and Sonnet can turn thinking off at low effort; Opus always thinks, so it runs at its lowest effort.
+ if(model==='claude-haiku-5-5')return{thinking:{type:'disabled'},output_config:{effort:'low'}};
+ if(model==='claude-sonnet-5-5')return{thinking:{type:'between_tools'},output_config:{effort:'low'}};
+ if(model==='claude-opus-5-5')return{output_config:{effort:'low'}};
+ return{};
+}
 /** Tools, system and the conversation are cached for five minutes, which covers the calls of a request (seconds apart);
  * a one-hour write costs twice the input price, against 1.25 times for five minutes, so the first call of every request
  * paid 60% more to keep a prefix that few next requests arrived in time to read. conversationTtl '1h' is for an editing
  * agent that waits many minutes on its helpers: every breakpoint is then one hour. */
-export function cachedPrompt(system:unknown,tools:unknown,conversationTtl?:unknown){
+export function cachedPrompt(system:unknown,tools:unknown,conversationTtl?:unknown,explicitOnly=false){
  const cache=conversationTtl==='1h'?{type:'ephemeral',ttl:'1h'}:{type:'ephemeral'};
- return{system:typeof system==='string'?[{type:'text',text:system,cache_control:cache}]:system,tools:Array.isArray(tools)?tools.map((tool,n)=>n===tools.length-1?{...tool,cache_control:cache}:tool):tools,cache_control:cache};
+ // A quick call marks its own stable start (the system prompt and the block the client marked); caching the whole prompt
+ // too would write an entry keyed to text that changes with every keystroke.
+ return{system:typeof system==='string'?[{type:'text',text:system,cache_control:cache}]:system,tools:Array.isArray(tools)?tools.map((tool,n)=>n===tools.length-1?{...tool,cache_control:cache}:tool):tools,...(explicitOnly?{}:{cache_control:cache})};
 }
 // Prices for models that can serve a server-side refusal fallback; billed per attempt from usage.iterations.
 const attemptPrices:Record<string,[number,number]>={'claude-opus-5-5':[4,20],'claude-sonnet-5-5':[2,10],'claude-opus-5':[5,25],'claude-opus-4-8':[5,25],'claude-sonnet-5':[2,10],'claude-sonnet-4-6':[3,15]};

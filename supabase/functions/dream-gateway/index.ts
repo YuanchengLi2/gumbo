@@ -1,6 +1,7 @@
 import {InferenceRequests,requestStatus} from './inference-requests.ts';
 const compressedJSON='application/x-dream-json-gzip';
 import {activateAccess} from './access.ts';
+import {AuthCache,serverTiming} from './auth-cache.ts';
 import {countTokens} from './token-count.ts';
 import {handleAI} from './ai.ts';
 import {providerSecrets} from './providers.ts';
@@ -20,10 +21,10 @@ import {handleSpendDashboard,supabaseSpendPorts} from './spend-dashboard.ts';
 import {readProfile,saveProfile,supabaseProfilePorts} from './profiles.ts';
 import {billingSummary,startCheckout,openPortal,handleStripeEvent,verifyStripeSignature,stripeConfig,supabaseBillingPorts,PLANS,PAYMENTS_CLOSED} from './billing.ts';
 import {createClient} from 'npm:@supabase/supabase-js@2';
-const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS'};
+const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization,apikey,content-type,x-client-info','Access-Control-Allow-Methods':'GET,POST,OPTIONS','Access-Control-Expose-Headers':'server-timing','Timing-Allow-Origin':'*'};
 const json=(data:unknown,status=200)=>Response.json(data,{status,headers:cors});
 const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-const requests=new InferenceRequests(db);
+const requests=new InferenceRequests(db),sessions=new AuthCache();
 const sha=async(value:string)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value)))).map(b=>b.toString(16).padStart(2,'0')).join('');
 Deno.serve(async(req)=>{
  if(req.method==='OPTIONS')return new Response(null,{headers:cors});
@@ -52,11 +53,19 @@ Deno.serve(async(req)=>{
   const {data:signed,error}=await db.storage.from('dream-exports').createSignedUrl(data.object_key,3600);if(error)return json({error:'Video unavailable'},404);await db.from('dream_shares').update({views:(data.views??0)+1}).eq('id',data.id);
   return json({title:data.title,url:signed.signedUrl,prompts:data.prompts??[],source:data.source??null,durationSec:data.duration_sec===null?null:Number(data.duration_sec)});}
  const bearer=req.headers.get('authorization')?.replace(/^Bearer /i,'');if(!bearer)return json({error:'Dream AI connection required'},401);
- const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
- const user=auth.user;const active=await activateAccess(db,user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
+ const authStarted=performance.now();
+ // A session let in during the last minute is let in again without asking the database (auth-cache.ts).
+ let session=await sessions.get(bearer);
+ if(!session){
+  const {data:auth,error:authError}=await db.auth.getUser(bearer);if(authError||!auth.user)return json({error:'Session expired'},401);
+  const active=await activateAccess(db,auth.user);if(!active)return json({error:'Dream AI is unavailable for this session'},403);
+  session={user:auth.user};
+ }
+ const user=session.user;
  // The paid beta: what costs money (the AI, transcription, media search, sharing, checkout) or reads the web for the
  // agent is for accounts invited from the waitlist. Anyone can sign in and see where they stand.
- if(['ai','count-tokens','transcribe','media-search','fetch-url','creators','billing-checkout','share-create'].includes(action)){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);}
+ if(['ai','count-tokens','transcribe','media-search','fetch-url','creators','billing-checkout','share-create'].includes(action)&&!session.beta){const {data:access}=await db.from('dream_accounts').select('beta_access').eq('id',user.id).single();if(!access?.beta_access)return json({error:WAITLISTED,code:'waitlist'},403);session.beta=true;}
+ await sessions.set(bearer,session);const authMs=performance.now()-authStarted;
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
  // Quick render: a pass for the cloud scene renderer, for the plans that have it (scene-render.ts).
@@ -101,7 +110,11 @@ Deno.serve(async(req)=>{
   if(action==='edit-log'){const result=await handleEditLog(body,user.id,supabaseEditLogPorts(db));return json(result.body,result.status);}
   if(action==='profile'){const result=await saveProfile(body,user.id,supabaseProfilePorts(db));return json(result.body,result.status);}
   if(action==='count-tokens'){const result=await countTokens(body,user.id,db,Deno.env.get('ANTHROPIC_API_KEY'));return json(result.body,result.status);}
-  if(action==='ai'){const result=await handleAI(body,user.id,{db,deepseekThinking:Deno.env.get('DREAM_DEEPSEEK_THINKING')??'auto',key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)),deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE')});if(result.finished)EdgeRuntime.waitUntil(result.finished);return result.stream?new Response(result.stream,{status:200,headers:{...cors,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):json(result.body,result.status);}
+  if(action==='ai'){const timing:Record<string,number>={auth:authMs};const result=await handleAI(body,user.id,{db,deepseekThinking:Deno.env.get('DREAM_DEEPSEEK_THINKING')??'auto',key:Deno.env.get('ANTHROPIC_API_KEY'),providerKeys:Object.fromEntries(Object.entries(providerSecrets).map(([id,secret])=>[id,Deno.env.get(secret)])),requests,timeoutMs:Math.min(350000,Math.max(1000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)),deepseekRoute:Deno.env.get('DEEPSEEK_ROUTE'),timing});if(result.finished)EdgeRuntime.waitUntil(result.finished);
+   // Where the time before the first word went (auth, the usage reservation, the provider's first byte), for the
+   // extension's latency meter.
+   const timed={...cors,'Server-Timing':serverTiming(timing)};
+   return result.stream?new Response(result.stream,{status:200,headers:{...timed,'Content-Type':'text/event-stream','Cache-Control':'no-cache, no-transform'}}):Response.json(result.body,{status:result.status,headers:timed});}
   if(action==='share-create'){
    const id=crypto.randomUUID(),token=crypto.randomUUID()+crypto.randomUUID(),key=`${user.id}/${id}.mp4`;
    const story=shareStory(body);const {error}=await db.from('dream_shares').insert({id,user_id:user.id,token_hash:await sha(token),object_key:key,title:String(body.title??'Gumbo video').slice(0,200),prompts:story.prompts,source:story.source,duration_sec:story.durationSec});if(error)throw error;

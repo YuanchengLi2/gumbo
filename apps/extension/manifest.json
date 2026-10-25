@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "Gumbo",
+  "description": "Tab finishes what you type, Ctrl+K rewrites and answers in place, and Gumbo remembers what you read, write and hear, on your computer.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1dEN4yrwONxvZrhPDIUIQ63kHV+jxEV1Wl3nlVgbProdrCyhe5YEDCWsHDCa6aYmMK4JGwWu8JGVaiFMStKmZW30NNfgNr8zG2vZHc8VpRxt2r88+E0DA2LhMtnn1peWUbYQiJlZ/7keAy/AeX9C3jRSc95GOsKt7IQTyHOV70QobpaPa7aag2kMFhgpM5kfE1hEgACyoXZfndfDyWxJ76wB95UgbfCRVV/wdTvKkAiAu9xDQ4bcZrYGKW2Uyt4cIgjdw1kwm/kUXjn/gKwt/aF9yE//Z8SP5j5SliFbXX+37caY6IjpQstCdqQPJJFJ8AUtusdycnR7aLKHAQon4wIDAQAB",
+  "icons": {"16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png"},
+  "action": {"default_popup": "popup.html", "default_title": "Gumbo", "default_icon": {"16": "icons/16.png", "32": "icons/32.png"}},
+  "background": {"service_worker": "background.js", "type": "module"},
+  "permissions": ["storage", "unlimitedStorage", "tabs", "scripting", "history", "offscreen", "alarms", "sidePanel", "tabCapture"],
+  "optional_permissions": ["debugger"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {"matches": ["https://usegumbo.app/app/*"], "js": ["signin.js"], "run_at": "document_start"},
+    {"matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_end", "all_frames": true, "match_about_blank": true, "match_origin_as_fallback": true}
+  ],
+  "side_panel": {"default_path": "sidepanel.html"},
+  "commands": {
+    "listen": {"suggested_key": {"default": "Alt+Shift+L"}, "description": "Listen to this tab (live captions and notes)"}
+  },
+  "content_security_policy": {"extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"}
+}

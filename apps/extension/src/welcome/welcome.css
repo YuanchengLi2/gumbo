@@ -1,0 +1,13 @@
+body{min-height:100vh;display:flex;justify-content:center}
+main{width:min(640px,100% - 32px);padding:72px 0 48px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.02em;margin:18px 0 8px}
+.lede{font-size:16px;color:var(--n60);margin:0 0 28px;max-width:520px}
+.primary{background:var(--paprika);color:#fff;border-radius:999px;padding:10px 22px;font-weight:600;font-size:15px}
+.primary:hover{background:var(--paprika-hover)}
+.error{color:var(--bad);margin:0 0 16px}
+.try{margin-top:40px}
+.try h2{font-size:13px;font-weight:600;color:var(--n46);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
+.try textarea,.try .rich{width:100%;min-height:96px;font:15px/1.5 var(--font);color:var(--n87);background:var(--n2);border:1px solid var(--n12);border-radius:10px;padding:12px 14px;outline:none;resize:vertical}
+.try textarea:focus,.try .rich:focus{border-color:var(--n32)}
+.keys{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;color:var(--n60)}
+kbd{font:12px var(--mono);border:1px solid var(--n12);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--n81);background:var(--n0)}

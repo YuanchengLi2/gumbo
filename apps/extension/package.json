@@ -1,0 +1,24 @@
+{
+  "name": "@dream/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Gumbo for Chrome: Tab, inline Ctrl+K, memory and meetings, on every site",
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "dev": "tsx scripts/build.ts --watch",
+    "test:e2e": "playwright test -c test/playwright.config.ts"
+  },
+  "dependencies": {
+    "diff": "^9.0.0",
+    "idb": "^8.0.4",
+    "minisearch": "^7.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.6",
+    "esbuild": "0.25.12",
+    "tsx": "^4.23.15"
+  }
+}

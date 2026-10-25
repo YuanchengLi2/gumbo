@@ -1,5 +1,10 @@
 # Dream decisions
 
+## October 25, 2026 — Gumbo for Chrome's foundation: its own sign-in, and a fast lane in the gateway
+
+- The extension signs in through the existing sign-in page with its own PKCE verifier and returns to usegumbo.app/app/?ext=1, the address Supabase already allows; a content script that runs before the web app takes the code out of the address and hands it over. No change to the site or to Supabase, and the extension keeps its own session, so its refresh token never collides with the site's.
+- The gateway has a fast lane for the extension's quick calls (`purpose` tab, inline, action, prewarm): thinking off at low effort, no request store (no text kept, and closing the connection stops the model), the usage reservation running alongside the model call, output limits down to 16 tokens (0 to warm the cache), and only the cache points the client marks. A session let in during the last minute is let in again without the three database round trips. Every /ai answer carries Server-Timing (auth, reserve, provider) for the extension's latency meter.
+
 ## October 25, 2026 — Gumbo for Chrome: Tab and Ctrl+K first, everything local except the AI
 
 - A Chrome extension (`apps/extension`, spec in its SPEC.md) puts Gumbo in every site: Tab finishes what you type and offers your next step, Ctrl+K edits, answers, writes and acts in place, memory keeps what you read, write and hear, and an agent comes last.

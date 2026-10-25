@@ -1,0 +1,7 @@
+/* Gumbo's black-and-white scale (--n0 paper … --n100 ink) and its one brand colour, paprika, for the bowl, the main
+ * button and the avatar only; flipped for dark mode with the system. The same steps as the app's globals.css. */
+:root{color-scheme:light;--n0:hsl(0 0% 100%);--n2:hsl(0 0% 98%);--n4:hsl(0 0% 96%);--n6:hsl(0 0% 94%);--n8:hsl(0 0% 92%);--n12:hsl(0 0% 88%);--n20:hsl(0 0% 80%);--n32:hsl(0 0% 68%);--n46:hsl(0 0% 54%);--n60:hsl(0 0% 40%);--n72:hsl(0 0% 28%);--n81:hsl(0 0% 19%);--n87:hsl(0 0% 13%);--n100:hsl(0 0% 0%);--accent:#111;--paprika:#E2552A;--paprika-hover:#C9471F;--good:#1f7a3d;--bad:#b3261e;--font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;--mono:Consolas,ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--n0:hsl(0 0% 6.5%);--n2:hsl(0 0% 8.3%);--n4:hsl(0 0% 10%);--n6:hsl(0 0% 11.8%);--n8:hsl(0 0% 13.6%);--n12:hsl(0 0% 17.1%);--n20:hsl(0 0% 24.2%);--n32:hsl(0 0% 34.8%);--n46:hsl(0 0% 47.2%);--n60:hsl(0 0% 59.6%);--n72:hsl(0 0% 70.2%);--n81:hsl(0 0% 78.2%);--n87:hsl(0 0% 83.5%);--n100:hsl(0 0% 95%);--accent:#f2f2f2;--good:#5cc882;--bad:#f28b82}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--n0);color:var(--n87);font:13px/1.45 var(--font)}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}

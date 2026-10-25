@@ -1,0 +1,38 @@
+/// <reference types="chrome" />
+/** The user's settings, in chrome.storage.local so every frame's content script sees a change at once. */
+export type Surface='tab'|'inline'|'action'|'notes'|'agent';
+export type Settings={
+ enabled:boolean;
+ /** Gumbo is paused until this time (ms); 0 when not paused. */
+ pausedUntil:number;
+ /** Sites (hostnames) where the user turned Gumbo off. */
+ siteOff:string[];
+ /** Sites where Ctrl+K stays the site's own and Gumbo opens on Alt+K. */
+ altK:string[];
+ models:Record<Surface,string>;
+ /** Facts the user gave about themselves, which Tab may use: name, sign-off, email, anything else. */
+ facts:{name?:string;signOff?:string;email?:string;other?:string};
+};
+export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
+ models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{}};
+
+export async function loadSettings():Promise<Settings>{
+ const {settings}=await chrome.storage.local.get('settings') as {settings?:Partial<Settings>};
+ return{...defaultSettings,...settings,models:{...defaultSettings.models,...settings?.models},facts:{...settings?.facts}};
+}
+export async function saveSettings(change:Partial<Settings>){const now=await loadSettings();await chrome.storage.local.set({settings:{...now,...change}});}
+export function onSettings(listener:(settings:Settings)=>void){
+ chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.settings)void loadSettings().then(listener);});
+}
+
+/** Sites where Gumbo never reads, captures or suggests: banking and health portals, by name and by common words in
+ * their hostnames. The user's own list adds to it. */
+const blockedHosts=['chase.com','bankofamerica.com','wellsfargo.com','citi.com','capitalone.com','americanexpress.com','usbank.com','pnc.com','schwab.com','fidelity.com','vanguard.com','paypal.com','venmo.com','robinhood.com','coinbase.com','discover.com','ally.com','sofi.com','chime.com','tdbank.com','hsbc.com','barclays.co.uk','kp.org','mychart.com','healthcare.gov','zocdoc.com','labcorp.com','questdiagnostics.com','1password.com','bitwarden.com','lastpass.com','accounts.google.com','login.microsoftonline.com'];
+const blockedWords=/(^|[.-])(bank|banking|creditunion|mychart|patientportal)([.-]|$)/;
+export function blockedSite(host:string){host=host.toLowerCase().replace(/^www\./,'');return blockedHosts.some(b=>host===b||host.endsWith('.'+b))||blockedWords.test(host);}
+/** Whether Gumbo may work on this site right now. */
+export function activeOn(settings:Settings,host:string,now=Date.now()){
+ host=host.toLowerCase().replace(/^www\./,'');
+ return settings.enabled&&settings.pausedUntil<=now&&!settings.siteOff.includes(host)&&!blockedSite(host);
+}
+export const siteOf=(url:string)=>{try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch{return '';}};
