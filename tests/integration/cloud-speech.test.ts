@@ -5,7 +5,8 @@ import {join,resolve} from 'node:path';
 import ffmpeg from 'ffmpeg-static';
 import {ProjectDB} from '@dream/project-db';
 import {AssetSchema} from '@dream/footage';
-import {CloudSpeech,cloudWords,speechChunks} from '../../apps/project-service/src/speech';
+import {CloudSpeech,cloudWords,speechChunks,SPEECH_LOCAL} from '../../apps/project-service/src/speech';
+import {turnLog} from '../../apps/project-service/src/turn-log';
 import {run,Ingest} from '../../apps/project-service/src/media';
 import ffprobe from 'ffprobe-static';
 import {handleTranscription,wavDuration} from '../../supabase/functions/dream-gateway/transcribe';
@@ -65,4 +66,18 @@ it('hears a stretch again in a named language or as English, through the right s
  const translated=await handleTranscription(new Request('https://test/transcribe?task=translate',{method:'POST',body:wav}),'user',{db:gateway,key:'server-key',fetcher});
  expect(sent[0]).toEqual({url:'https://api.groq.com/openai/v1/audio/translations',model:'whisper-large-v3'});
  expect(translated.body).toMatchObject({translated:true,language:'english',segments:[{text:'Hello there'}]});
+});
+
+it('records why the cloud did not hear a source, for the edit log',async()=>{
+ const folder=mkdtempSync(join(tmpdir(),'dream-speech-elsewhere-')),source=join(folder,'talk.wav');await run(ffmpeg!,['-v','error','-f','lavfi','-i','sine=frequency=440:duration=40','-ar','16000','-ac','1',source]);
+ const db=new ProjectDB(folder,'Elsewhere');const asset=AssetSchema.parse({id:'a',filename:'talk.wav',originalPath:source,kind:'audio',hasAudio:true,durationSec:40,fingerprint:'test'});db.saveAsset(asset);
+ // As the web does (web-speech.ts): a piece the cloud refuses is heard on this computer instead, and why is kept.
+ class Elsewhere extends CloudSpeech{protected override async request(bytes:Uint8Array,signal:AbortSignal,options:any={}){try{return await super.request(bytes,signal,options);}catch(error){this.heardElsewhere(options.assetId,error as Error);return {words:[{word:'local',start:1,end:1.5}]};}}}
+ const refused=vi.fn(async()=>Response.json({error:'Dream AI is unavailable for this session'},{status:403}));
+ const speech=new Elsewhere(db,ffmpeg!,async()=>({url:'https://gateway.invalid',token:'test'}),()=>{},refused as typeof fetch);
+ try{
+  await speech.transcribe(asset,new AbortController().signal);
+  expect(JSON.parse(db.getMeta(SPEECH_LOCAL+'a')!)).toMatchObject({pieces:2,reason:'HTTP 403: Dream AI is unavailable for this session'});
+  expect(turnLog(db,'turn').footage.find((f:any)=>f.id==='a')).toMatchObject({speech:{heardOnThisComputer:2,reason:'HTTP 403: Dream AI is unavailable for this session'}});
+ }finally{db.close();}
 });

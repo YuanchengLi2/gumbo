@@ -5,6 +5,11 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-25 · Speech in long videos is heard while they're still being added
+When you drop or pick a long video, Gumbo plays it before it has finished copying in. Hearing its speech at that moment
+could fail partway ("network error"), leaving the video with no transcript, so Roux couldn't find what was said. Now
+transcription carries on from Gumbo's own copy, and a 10-minute video is transcribed in under a minute while it copies.
+
 ## 2026-10-24 · Videos are ready the moment you add them
 Videos you add now play, go on the timeline and export straight away, instead of showing "Preparing…" while Gumbo
 made a copy it could play. MP4s were already quick; now iPhone and Android videos (where Chrome or Edge can play them,

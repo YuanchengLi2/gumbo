@@ -40,5 +40,31 @@ test('speech is heard in the cloud when signed in, without loading Whisper',asyn
   await expect.poll(async()=>(await transcription(page))?.status,{timeout:60_000}).toBe('complete');
   expect(Date.now()-started).toBeLessThan(30_000);expect(models).toEqual([]);
   expect(await found(page,'fellow')).toContain('fellow');expect(await found(page,'country')).not.toContain('country');
+  expect(gateway.transcribeRefusals()).toEqual([]);
+ }finally{await gateway.close();}
+});
+
+/** A long recording (10 minutes of video, as from OBS or a camera), dropped and signed in: heard in the cloud while it
+ * is still being copied into the project, every chunk accepted by the gateway's own audio check, and Whisper never
+ * runs in the browser. Before, the copy moving the file mid-read failed the transcription ("network error"), and a
+ * chunk the gateway refused was heard by Whisper here, which took minutes for a 20-minute episode. */
+test('a long video is heard in the cloud while it copies in, every chunk accepted',async({page})=>{
+ test.setTimeout(300_000);
+ const big=resolve('artifacts/fixtures/long-upload.mp4');
+ const gateway=await codeGateway({words:[{word:'hello',start:.5,end:.9}],script:()=>[]});
+ try{
+  await page.addInitScript(url=>{if(window!==window.top)return;localStorage.setItem('gumbo-cloud',JSON.stringify({url,anonKey:'fixture'}));sessionStorage.setItem('gumbo-sign-in-verifier','fixture-verifier');},gateway.url);
+  const logs:string[]=[];page.on('console',m=>logs.push(m.text()));
+  await page.goto('/app/?code=fixture-code');await expect(page.getByText('What are we cooking today?')).toBeVisible({timeout:60_000});
+  const started=Date.now();
+  await page.evaluate(async url=>{
+   const dream=(window as any).dream,file=new File([await (await fetch(url)).blob()],'long-upload.mp4',{type:'video/mp4'});
+   const paths=await dream.registerDropped([file]);await dream.createProject({requestId:'web-long-speech',text:'',paths:[]});await dream.command({type:'import',paths,copy:true});
+  },'/app/@fs/'+big.replace(/\\/g,'/'));
+  await expect.poll(async()=>(await transcription(page))?.status,{timeout:240_000,intervals:[2000]}).not.toBe('running');
+  expect(await transcription(page)).toMatchObject({status:'complete',error:null});
+  expect(Date.now()-started).toBeLessThan(120_000);
+  expect(gateway.transcribeRefusals()).toEqual([]);
+  expect(logs.filter(l=>l.includes('[speech] heard on this computer'))).toEqual([]);
  }finally{await gateway.close();}
 });

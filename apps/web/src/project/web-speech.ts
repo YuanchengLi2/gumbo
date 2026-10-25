@@ -18,6 +18,8 @@ export class CloudSpeech extends Speech{
   catch(error){
    if(signal.aborted)throw error;
    if(!told){told=true;console.info(`[speech] heard on this computer: ${(error as Error).message}`);}
+   // Kept with the source and sent in the edit log, so a slow transcription says why the cloud didn't hear it.
+   this.heardElsewhere(options.assetId,error as Error);
    const pcm=wavToPcm(bytes);
    // base: about half the time of small, which matters more here than its slightly better words.
    return local().transcribe(pcm,{signal,override:{size:'base'},durationSec:pcm.length/SAMPLE_RATE,language:languageCode(options.language),task:options.translate?'translate':'transcribe'});

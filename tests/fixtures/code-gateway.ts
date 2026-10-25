@@ -1,5 +1,6 @@
 import {createServer} from 'node:http';
 import {handleFetchUrl} from '../../supabase/functions/dream-gateway/fetch-url';
+import {wavDuration} from '../../supabase/functions/dream-gateway/transcribe';
 
 /** Protocol fixture for the current engine (routing, the editing agent and its helpers, planning).
  * A script receives each inference request and its step: the number of assistant turns already in that conversation,
@@ -12,12 +13,16 @@ export type Script=(body:any,step:number)=>any[];
 /** providers: what /providers answers (unset, it is missing, as before). pages: the web as fetch-url reads it, through
  * the gateway's own handler. Browsers (Gumbo on the web) may call it from another origin. */
 export async function codeGateway(options:{script:Script;route?:(body:any)=>Record<string,unknown>;delayMs?:number;shortSession?:boolean;transientOnce?:boolean;words?:{word:string;start:number;end:number}[];providers?:Record<string,boolean>;pages?:Record<string,{contentType:string;text:string}>}){
- let refreshes=0,streams=0,failures=0,responses=0;const usedTokens=new Set<string>(),calls:{purpose?:string;model?:string;tools:string[];step:number}[]=[],editLogs:any[]=[];
+ let refreshes=0,streams=0,failures=0,responses=0;const usedTokens=new Set<string>(),calls:{purpose?:string;model?:string;tools:string[];step:number}[]=[],editLogs:any[]=[],transcribeRefusals:string[]=[];
  const server=createServer(async(req,res)=>{try{
   res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','authorization,apikey,content-type,x-client-info');res.setHeader('Access-Control-Allow-Methods','GET,POST,OPTIONS');
   if(req.method==='OPTIONS'){res.writeHead(204).end();return;}
   const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
-  if(req.url?.split('?')[0].endsWith('/transcribe')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({words:options.words??[],segments:[]}));return;}
+  // The audio is checked as the gateway checks it (16 kHz mono PCM16 WAV of up to 94 seconds), so a chunk it would refuse
+  // fails here too instead of passing a test and failing for real.
+  if(req.url?.split('?')[0].endsWith('/transcribe')){
+   try{wavDuration(new Uint8Array(Buffer.concat(chunks)));}catch(error){transcribeRefusals.push((error as Error).message);res.writeHead(400,{'Content-Type':'application/json'}).end(JSON.stringify({error:(error as Error).message}));return;}
+   res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({words:options.words??[],segments:[]}));return;}
   const body=chunks.length?requestJSON(req,chunks):{},json=(status:number,data:unknown)=>res.writeHead(status,{'Content-Type':'application/json'}).end(JSON.stringify(data));
   if(req.url?.startsWith('/auth/v1/'))return json(200,{access_token:`code-fixture-${++refreshes}`,refresh_token:'code-fixture-refresh',expires_in:options.shortSession?1:3600,user:{id:'fixture-account',email:'local-fixture@example.invalid',is_anonymous:false}});
   if(req.url?.endsWith('/edit-log')){editLogs.push(body);return json(200,{kept:true});}
@@ -50,7 +55,7 @@ export async function codeGateway(options:{script:Script;route?:(body:any)=>Reco
   emit('message_delta',{type:'message_delta',delta:{stop_reason:message.stop_reason},usage:message.usage});emit('message_stop',{type:'message_stop'});emit('dream_request',{status:'completed',retryable:false});res.end();
  }catch(error){res.writeHead(500).end(JSON.stringify({error:(error as Error).message}));}});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const {port}=server.address() as {port:number};
- return{url:`http://127.0.0.1:${port}`,streams:()=>streams,failures:()=>failures,refreshes:()=>refreshes,calls,editLogs,close:()=>new Promise<void>(resolve=>{server.close(()=>resolve());server.closeAllConnections();})};
+ return{url:`http://127.0.0.1:${port}`,streams:()=>streams,failures:()=>failures,refreshes:()=>refreshes,calls,editLogs,transcribeRefusals:()=>transcribeRefusals,close:()=>new Promise<void>(resolve=>{server.close(()=>resolve());server.closeAllConnections();})};
 }
 
 const use=(id:string,name:string,input:unknown)=>({type:'tool_use',id,name,input});

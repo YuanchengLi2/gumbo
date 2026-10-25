@@ -13,7 +13,11 @@ export const SPEECH_FIT='speech-fit:v1:';
 
 export type SpeechChunk={index:number;start:number;end:number;decodeStart:number;decodeEnd:number};
 export type SpeechResult={words:{word:string;start:number;end:number}[];segments?:{start:number;end:number;avg_logprob?:number;no_speech_prob?:number;text?:string}[];language?:string;translated?:boolean};
-export type RangeOptions={language?:string;translate?:boolean};
+/** assetId: whose transcription the request is part of (not sent), so a piece heard elsewhere is recorded against it. */
+export type RangeOptions={language?:string;translate?:boolean;assetId?:string};
+/** Where a source's speech was heard when the cloud didn't hear it (the web hears it in the browser instead): how many
+ * pieces and why, kept per source (`speech-local:<asset id>`) and written into the turn's edit log (turn-log.ts). */
+export const SPEECH_LOCAL='speech-local:';
 export function speechChunks(duration:number):SpeechChunk[]{
  const chunks:SpeechChunk[]=[];
  for(let start=0;start<duration;){const end=Math.min(duration,start+(start===0?30:90));chunks.push({index:chunks.length,start,end,decodeStart:Math.max(0,start-1),decodeEnd:Math.min(duration,end+1)});start=end;}
@@ -45,6 +49,17 @@ export class CloudSpeech {
   else this.active++;
   try{signal.throwIfAborted();return await work();}finally{const next=this.waiting.shift();if(next)next();else this.active--;}
  }
+ /** Where the source is now: footage that is being copied into the project moves while it is heard (on the web, from
+  * /imports to the project's Media/Originals, and the waiting copy is removed), so each piece asks again. */
+ private source(asset:Asset){return this.db.footage().assets.find(a=>a.id===asset.id)?.originalPath??asset.originalPath;}
+ /** A stretch of the source's sound as 16 kHz mono WAV. A read that fails because the file moved under it is tried once
+  * more from where the source is now. */
+ private async cut(asset:Asset,wav:string,start:number,seconds:number,signal:AbortSignal){
+  const once=(path:string)=>atomicArtifact(wav,temporary=>run(this.ffmpeg,['-v','error','-y','-ss',String(start),'-i',path,'-t',String(seconds),'-map','0:a:0','-vn','-ar','16000','-ac','1','-c:a','pcm_s16le','-map_metadata','-1',temporary],signal).then(()=>undefined));
+  const path=this.source(asset);
+  try{await once(path);}
+  catch(error){signal.throwIfAborted();const moved=this.source(asset);if(moved===path)await wait(1000,undefined,{signal});await once(this.source(asset));}
+ }
  async transcribe(asset:Asset,signal:AbortSignal){
   const chunks=speechChunks(asset.durationSec),dir=join(this.db.folder,'Media/Analysis',asset.id,'speech');mkdirSync(dir,{recursive:true});
   const coverageKey='speech-coverage:'+asset.id,coverage:{start:number;end:number}[]=[];
@@ -58,10 +73,10 @@ export class CloudSpeech {
     if(saved)result=JSON.parse(this.db.blobs.get(saved));
     else{
      const wav=join(dir,`${chunk.index}.wav`);
-     await atomicArtifact(wav,temporary=>run(this.ffmpeg,['-v','error','-y','-ss',String(chunk.decodeStart),'-i',asset.originalPath,'-t',String(chunk.decodeEnd-chunk.decodeStart),'-map','0:a:0','-vn','-ar','16000','-ac','1','-c:a','pcm_s16le','-map_metadata','-1',temporary],signal).then(()=>undefined));
+     await this.cut(asset,wav,chunk.decodeStart,chunk.decodeEnd-chunk.decodeStart,signal);
      const bytes=readFileSync(wav),hash=createHash('sha256').update(bytes).digest('hex'),cache='speech-audio:v1:'+hash,cached=this.db.getMeta(cache);
      if(cached)result=JSON.parse(this.db.blobs.get(cached));
-     else{result=await this.request(bytes,signal);signal.throwIfAborted();this.db.setMeta(cache,this.db.blobs.put(JSON.stringify(result)));}
+     else{result=await this.request(bytes,signal,{assetId:asset.id});signal.throwIfAborted();this.db.setMeta(cache,this.db.blobs.put(JSON.stringify(result)));}
      this.db.setMeta(key,this.db.blobs.put(JSON.stringify(result)));
     }
     const audio=join(dir,`${chunk.index}.wav`),mask=existsSync(audio)?speechMask(readFileSync(audio)):undefined;
@@ -85,8 +100,8 @@ export class CloudSpeech {
   const lines:{start:number;end:number;text:string}[]=[];let language:string|undefined;
   for(let at=start;at<end;at+=90){
    const length=Math.min(90,end-at),wav=join(dir,`${Math.round(at*1000)}-${Math.round(length*1000)}.wav`);
-   await atomicArtifact(wav,temporary=>run(this.ffmpeg,['-v','error','-y','-ss',String(at),'-i',asset.originalPath,'-t',String(length),'-map','0:a:0','-vn','-ar','16000','-ac','1','-c:a','pcm_s16le','-map_metadata','-1',temporary],signal).then(()=>undefined));
-   const result=await this.request(readFileSync(wav),signal,options);language??=result.language;
+   await this.cut(asset,wav,at,length,signal);
+   const result=await this.request(readFileSync(wav),signal,{...options,assetId:asset.id});language??=result.language;
    if(result.segments?.some(s=>s.text))for(const s of result.segments)if(s.text&&(s.no_speech_prob??0)<.8)lines.push({start:Math.round((at+s.start)*100)/100,end:Math.round((at+s.end)*100)/100,text:s.text});
    if(!result.segments?.some(s=>s.text)&&result.words.length)lines.push({start:Math.round((at+result.words[0].start)*100)/100,end:Math.round((at+result.words.at(-1)!.end)*100)/100,text:result.words.map(w=>w.word.trim()).join(' ')});
   }
@@ -100,10 +115,16 @@ export class CloudSpeech {
    try{response=await this.fetcher(config.url+'/transcribe'+(query?'?'+query:''),{method:'POST',headers:{Authorization:`Bearer ${config.token}`,'Content-Type':'audio/wav'},body:new Blob([new Uint8Array(bytes)]),signal:AbortSignal.any([signal,AbortSignal.timeout(105_000)])});result=await response.json().catch(()=>({}));}
    catch(error){signal.throwIfAborted();if(attempt<3){await wait(2000*2**attempt,undefined,{signal});continue;}throw new Error('Cloud transcription could not be reached: '+(error as Error).message);}
    if(response.status>=500&&attempt<3){await wait(2000*2**attempt,undefined,{signal});continue;}
-   if(response.ok){if(!Array.isArray(result.words))throw new Error('Cloud transcription returned invalid words.');return result;}
+   if(response.ok){if(!Array.isArray(result.words))throw Object.assign(new Error('Cloud transcription returned invalid words.'),{status:response.status});return result;}
    if((response.status===409||response.status===429)&&result.retryAfterMs&&attempt<3){await wait(Math.min(30000,Math.max(1000,result.retryAfterMs)),undefined,{signal});continue;}
-   throw new Error(typeof result.error==='string'?result.error:'Cloud transcription failed. Retry to resume saved chunks.');
+   throw Object.assign(new Error(typeof result.error==='string'?result.error:'Cloud transcription failed. Retry to resume saved chunks.'),{status:response.status});
   }
   throw new Error('Cloud transcription is busy. Retry to resume saved chunks.');
+ }
+ /** A piece of this source the cloud didn't hear, and why (the gateway's status when it answered): counted per source,
+  * the last reason kept. */
+ protected heardElsewhere(assetId:string|undefined,error:Error&{status?:number}){
+  if(!assetId)return;const key=SPEECH_LOCAL+assetId;let before:{pieces?:number}={};try{before=JSON.parse(this.db.getMeta(key)??'{}');}catch{}
+  this.db.setMeta(key,JSON.stringify({pieces:(before.pieces??0)+1,reason:(error.status?`HTTP ${error.status}: `:'')+error.message.slice(0,300),at:new Date().toISOString()}));
  }
 }

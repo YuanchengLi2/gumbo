@@ -1,6 +1,7 @@
 import {existsSync,readFileSync,readdirSync,statSync} from 'node:fs';
 import {join,basename} from 'node:path';
 import {STOPPED_WHEN_CLOSED,type ProjectDB} from '@dream/project-db';
+import {SPEECH_LOCAL} from './speech';
 
 /** One edit's log, sent on its own when a run of the request ends (the desktop's edit-logs.ts) and with Send log: what a
  * request did and what it cost, so a slow, failed or expensive edit can be traced by its calls, tools and commentary
@@ -50,7 +51,10 @@ export function turnLog(db:ProjectDB,turnId:string){
  const before=rows(db,'SELECT role,text,created_at,turn_id FROM messages WHERE created_at<? ORDER BY created_at DESC LIMIT 6',first).reverse().map(trim);
  const sceneErrors=rows(db,'SELECT * FROM scene_errors WHERE turn_id=? ORDER BY rowid',turnId).map(trim);
  const totals=usage.reduce<Record<string,{calls:number;costUsd:number}>>((acc,u)=>{const m=String(u.model);acc[m]??={calls:0,costUsd:0};acc[m].calls++;acc[m].costUsd+=Number(u.cost_usd)||0;return acc;},{});
- const footage=db.footage().assets.map(a=>({id:a.id,file:basename(a.filename),kind:a.kind,durationSec:a.durationSec,width:a.width,height:a.height,scene:!!a.scene}));
+ // Where each source's speech was heard: pieces the cloud didn't hear, and why (speech.ts SPEECH_LOCAL), since hearing it
+ // in the browser instead takes minutes for a long video and weighs the page down.
+ const heard=(id:string)=>{try{const local=JSON.parse(db.getMeta(SPEECH_LOCAL+id)??'null');return local?{speech:{heardOnThisComputer:local.pieces,reason:local.reason,at:local.at}}:{};}catch{return {};}};
+ const footage=db.footage().assets.map(a=>({id:a.id,file:basename(a.filename),kind:a.kind,durationSec:a.durationSec,width:a.width,height:a.height,scene:!!a.scene,...heard(a.id)}));
  // How it ended: the turn's own status, its last reply and the outcome the agent reported.
  const activityStatus=parse(db.getMeta('turn_activity:'+turnId))?.status as string|undefined,pending=parse(db.getMeta('pending_request'));
  const current=pending?.turnId===turnId,aiStatus=current?db.getMeta('ai_status')??activityStatus:activityStatus;
