@@ -1,5 +1,13 @@
 # Dream decisions
 
+## October 25, 2026 — Gumbo for Chrome: Tab and Ctrl+K first, everything local except the AI
+
+- A Chrome extension (`apps/extension`, spec in its SPEC.md) puts Gumbo in every site: Tab finishes what you type and offers your next step, Ctrl+K edits, answers, writes and acts in place, memory keeps what you read, write and hear, and an agent comes last.
+- Tab and Ctrl+K come first and must feel like magic on every site. There is no code for one site: general readers find a field's intent, the conversation above it and the document around it, and one insertion engine is tested against every major editor library. "Perfect" is measured: the mechanics never fail, and what shows is right, scored on the user's own typing.
+- Everything runs and stays on the computer except model calls. For the extension's requests the gateway keeps no text, only the id, status and cost.
+- Meetings and videos are heard on the computer (Whisper, YAMNet, CAM++), and their notes feed Tab and Ctrl+K.
+- Not in this build: connectors, capture of other desktop apps, the website. The video editor at /app stays.
+
 ## October 18, 2026 — Onboarding, plans and the welcome to a plan, after Claude's
 
 - The first time Gumbo opens on a computer it shows Claude-style onboarding, one question per screen: welcome, account (or "Skip for now": editing by hand needs none), what to call you, what you make, how much you have edited, how you found Gumbo, the plans (Free to carry on with), and starter requests fitted to the answers. Computers that saw the old welcome skip it, and so do test runs (DREAM_HEADLESS) unless DREAM_ONBOARDING asks for it.
