@@ -77,6 +77,10 @@ export class Director {
    if(triage.carriesStopped)request+=`\n\nDo what this message asks first: it was sent after stopping the request below and may correct it; where they differ, this message wins. Still wanted from that stopped request, after this message: ${String(stopped.text).slice(0,4000)}`;
    this.recordTriage(turnId,triage);
   }
+  // An answer to the question Gumbo asked before starting (askFirst) carries the request it answers, so "the first one"
+  // is done as that request, read the way the answer says.
+  const asked=intent==='auto'?this.lastQuestion():undefined;
+  if(asked)request+=`\n\nThis answers the question Gumbo asked before starting: "${asked.question}" (choices: ${asked.options.map((o:string,n:number)=>`${n+1}. ${o}`).join('; ')}). The request it answers: ${String(asked.request).slice(0,4000)}`;
   this.db.db.transaction(()=>{this.db.userMessage(text,turnId,assetIds,selectionRefs(this.db.timeline(),this.db.footage(),selection));this.chooseEffort(turnId,effort);this.chooseModel(turnId,model);this.db.setMeta('pending_request',JSON.stringify({text:request,selection,intent,assetIds,turnId}));this.db.setMeta('submitted:'+turnId,'1');})();await this.lifecycle(()=>this.runTurn(request,turnId,selection,intent),turnId);
  }
  /** One inference. The editing agent's first message carries the project briefing; helpers work from briefs. */
@@ -221,12 +225,30 @@ export class Director {
   if(this.db.getMeta('route:'+turnId)==='workflow'){await this.workflow(turnId);return;}
   let route=this.db.loadState<any>('routing:'+turnId);
   if(!route){const pending=this.db.loadState<any>('pending_request');this.recordTriage(turnId,await this.triage(turnId,text,intent,undefined,!!this.db.getMeta('model-choice:'+turnId),pending?.turnId===turnId?pending.assetIds?.length??0:0));route=this.db.loadState<any>('routing:'+turnId);}
+  // A request whose words could mean quite different edits, or a quick change or many minutes of work, is asked about
+  // first (the triage's ask). On October 25 "highlight steve in red and then add motion tracking", meant as the camera
+  // following him, was read as recolouring every frame: eleven minutes of a tracker in Python before it was stopped.
+  if(this.shouldAsk(route,intent)){this.askFirst(turnId,route.ask,text);return;}
   // Auto picks before anything pins the model for this request.
   await this.routeModel(turnId);
   this.agentModel(turnId,text,route);
   const parts=route.route==='local'?await this.requestParts(turnId,text):[];
   const result=await this.execute(text+(parts.length>1?partsBriefing(parts):'')+'\nSelected items: '+JSON.stringify(selection),turnId,route.route==='plan'||route.route==='question',route.route==='plan');
   if(result.plan){proposePlan(this.db,turnId,result.plan,selection);return;}this.report(turnId,result.outcome,route.route==='question');
+ }
+ /** Gumbo's last message, when it was a question asked before starting a request (askFirst), with that request. */
+ private lastQuestion():{question:string;options:string[];request:string}|undefined{
+  const last=this.db.db.prepare("SELECT report FROM messages WHERE role='assistant' ORDER BY rowid DESC LIMIT 1").get() as {report?:string}|undefined;
+  try{const report=JSON.parse(last?.report??'null');return report?.kind==='question'&&Array.isArray(report.options)?report:undefined;}catch{return undefined;}
+ }
+ /** Asked only for an edit in the normal mode, when the model's triage gave a question, the work is more than one setting
+  * on one thing, the message does not carry on a stopped request, and the last thing Gumbo said was not itself a question. */
+ private shouldAsk(route:any,intent:RequestIntent){return intent==='auto'&&route?.route==='local'&&route.source==='model'&&!!route.ask?.question&&route.ask.options?.length>=2&&Number(route.difficulty??3)>=2&&!route.carriesStopped&&!this.lastQuestion();}
+ /** The question, with the readings to choose from, as Gumbo's reply; the request waits for the answer (see message). */
+ private askFirst(turnId:string,ask:{question:string;options:string[]},request:string){
+  const text=`${ask.question}\n\n${ask.options.map((o,n)=>`${n+1}. ${o}`).join('\n')}`;
+  this.db.message('assistant',text,turnId,{status:'complete',summary:text,kind:'question',question:ask.question,options:ask.options,request:request.replace(/\nSelected items: .*$/s,'').slice(0,4000)});
+  this.db.setMeta('code-reported:'+turnId,'1');this.db.event('ai.asked',{turnId,...ask});this.db.setMeta('ai_status','complete');this.publish('ai.status',{status:'complete'});
  }
  // Every finished request ends with the agent's own short recap; questions end with the answer.
  private report(turnId:string,outcome:any,answer=false){if(!this.db.getMeta('code-reported:'+turnId)){this.db.message('assistant',outcome.summary,turnId,{...outcome,kind:outcome.status==='complete'?answer?'answer':'completion':'blocker'});this.db.setMeta('code-reported:'+turnId,'1');}const status=outcome.status==='blocked'?'interrupted':'complete';this.db.setMeta('ai_status',status);this.publish('ai.status',{status});}

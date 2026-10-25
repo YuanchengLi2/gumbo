@@ -10,13 +10,17 @@ export type TriageKind='edit'|'answer'|'plan'|'continue';
 /** How a message reacts to the result before it: negative when it says that result is wrong, still broken or not what was
  * meant ("its still there", "no revert that"), positive when it approves or builds on it. */
 export type Feedback='positive'|'negative'|'none';
-export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;model?:string;lookFor?:string;title?:string};
+/** A question to ask before an edit whose words could mean quite different results, or a quick change or many minutes of
+ * work ("add motion tracking on Steve": the camera following him, a box following him, or Steve outlined), with the
+ * readings to choose from. */
+export type Ask={question:string;options:string[]};
+export type Triage={kind:TriageKind;difficulty:number;vision:boolean;carriesStopped:boolean;parts:string[];reason:string;source:'model'|'rules';work?:Work;feedback?:Feedback;model?:string;lookFor?:string;title?:string;ask?:Ask};
 export type TriageInput={message:string;mode:RequestIntent;recent:{role:string;text:string}[];stopped?:string;planWaiting?:boolean;models?:{id:string;name:string;bestAt:string;costPerRequest:string}[];previousModel?:string;project:{clips:number;overlays:number;audio:number;minutes:number;footageFiles:number};attachments:number;untitled?:boolean};
 
 export const triagePrompt=`You read one message a user sent to Gumbo, a video editor where an AI agent makes every edit by writing code, and decide how it is handled. Reply with JSON only.
 
 kind:
-- "edit": they want the video or project made or changed. This includes short follow-ups that act on the conversation ("yeah go ahead", "do it", "go", "no revert that", "its still there" about something they asked to fix).
+- "edit": they want the video or project made or changed. This includes short follow-ups that act on the conversation ("yeah go ahead", "do it", "go", "no revert that", "its still there" about something they asked to fix), and an answer to a question Gumbo just asked about an edit ("the first one", "follow him with the camera").
 - "answer": they want something to read and nothing changed: a question, an opinion, a script, ideas or an outline to read, small talk, thanks, complaints, insults, anything off-topic. A question that needs a look at the video to answer ("why is the screen bright now") is still an answer.
 - "plan": they ask for a plan before anything is built.
 - "continue": a request was stopped (stopped is given) and this message only says to carry on with it ("continue", "keep going", "please continue", "continue work"); or a plan awaits approval (planAwaitingApproval) and this message accepts it or says to go ahead with it, in any words. Asking to change the plan is "plan".
@@ -37,21 +41,25 @@ carriesStopped: true when a request was stopped and this new message still wants
 parts: every separate thing the message asks for, each one short instruction in the user's words (fix spelling only), including small asks mentioned in passing; one item for a single ask. When carriesStopped, also list the stopped request's asks.
 lookFor: when doing this needs footage from the user's own imported videos (choosing shots, b-roll, a montage, a summary of the trip, replacing a clip, finding a moment), what to look for in it, as words a person describing those shots would use: places, subjects, actions, light, camera ("rice fields, mountain road, street food, market, wide scenic, steady"). Empty when it needs no footage chosen from their videos.
 title: when projectUntitled is true and the message asks for a video or an edit, a 2-6 word title for the project from what it is about, in Title Case ("Vietnam Travel Recap", "Podcast Shorts"); otherwise an empty string.
+ask: for an "edit" whose words could fairly mean quite different results, or either a quick change or many minutes of work, when neither the conversation nor the project says which: one short question to ask before starting (question), and 2 or 3 readings to choose from in the user's own terms, the most likely first (options). "add motion tracking on Steve" could mean the camera following Steve (keyframed zoom and pan), a box or label that follows him, or Steve himself outlined or coloured; "make it pop" or "make it better" do not need asking, since any sensible improvement is fine and easy to change. Otherwise question is "" and options is []: when it is clear enough to just do, when a sensible reading is quick to try and easy to change, for anything that is not an "edit", and when Gumbo's last message in recentConversation already asked a question. Ask rarely: most requests should simply be done.
 reason: a short phrase.`;
 
 /** The JSON schema the gateway enforces for purpose 'triage'. */
-export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},lookFor:{type:'string'},title:{type:'string'},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','title','reason'],additionalProperties:false} as const;
+export const triageSchema={type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer',minimum:1,maximum:5},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},lookFor:{type:'string'},title:{type:'string'},ask:{type:'object',properties:{question:{type:'string'},options:{type:'array',items:{type:'string'}}},required:['question','options'],additionalProperties:false},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','title','ask','reason'],additionalProperties:false} as const;
 
 export const triageMessage=(input:TriageInput)=>JSON.stringify({message:input.message.slice(0,6000),composerMode:input.mode==='plan'?'plan first':input.mode==='ask'?'answer only':'normal',
  ...(input.stopped?{stopped:input.stopped.slice(0,3000)}:{}),...(input.planWaiting?{planAwaitingApproval:true}:{}),
  recentConversation:input.recent.map(m=>({role:m.role,text:m.text.slice(0,m.role==='user'?800:600)})),project:input.project,attachedFiles:input.attachments,...(input.untitled?{projectUntitled:true}:{}),
  ...(input.models?.length?{models:input.models}:{}),...(input.previousModel?{previousResultBy:input.previousModel}:{})});
 
-const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),model:z.string().optional().transform(m=>m?.trim()||undefined),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),lookFor:z.coerce.string().default(''),title:z.coerce.string().default(''),reason:z.coerce.string().default('')});
+const Reply=z.object({kind:z.enum(['edit','answer','plan','continue']),difficulty:z.coerce.number(),work:z.string().optional().transform(w=>works.includes(w as Work)?w as Work:undefined),feedback:z.enum(['positive','negative','none']).catch('none').default('none'),model:z.string().optional().transform(m=>m?.trim()||undefined),vision:z.boolean().default(false),carriesStopped:z.boolean().default(false),parts:z.array(z.coerce.string()).default([]),lookFor:z.coerce.string().default(''),title:z.coerce.string().default(''),ask:z.object({question:z.coerce.string().default(''),options:z.array(z.coerce.string()).default([])}).optional().catch(undefined),reason:z.coerce.string().default('')});
+/** A question worth asking: one with at least two readings to choose between. */
+const askOf=(ask?:{question:string;options:string[]}):Ask|undefined=>{const question=ask?.question.trim().slice(0,300)??'',options=(ask?.options??[]).map(o=>o.trim().slice(0,160)).filter(Boolean).slice(0,3);return question&&options.length>=2?{question,options}:undefined;};
 /** Haiku's triage, or undefined when its reply is not one. */
 export function parseTriage(text:string):Omit<Triage,'source'>|undefined{
  try{const json=JSON.parse(text.trim().replace(/^```(?:json)?\s*|\s*```$/g,''));const r=Reply.parse(json);
-  return{...r,difficulty:Math.min(5,Math.max(1,Math.round(r.difficulty)||3)),parts:r.parts.map(p=>p.trim()).filter(Boolean).slice(0,20).map(p=>p.slice(0,300)),lookFor:r.lookFor.trim().slice(0,300),title:r.title.replace(/^[\s"']+|[\s"'.]+$/g,'').slice(0,80),reason:r.reason.slice(0,200)};}
+  const {ask,...rest}=r,question=r.kind==='edit'?askOf(ask):undefined;
+  return{...rest,...(question?{ask:question}:{}),difficulty:Math.min(5,Math.max(1,Math.round(r.difficulty)||3)),parts:r.parts.map(p=>p.trim()).filter(Boolean).slice(0,20).map(p=>p.slice(0,300)),lookFor:r.lookFor.trim().slice(0,300),title:r.title.replace(/^[\s"']+|[\s"'.]+$/g,'').slice(0,80),reason:r.reason.slice(0,200)};}
  catch{return undefined;}
 }
 
@@ -75,4 +83,4 @@ export function withMode(triage:Triage,intent:RequestIntent,interrupted:boolean)
  return{...triage,kind,carriesStopped:interrupted&&kind!=='continue'&&triage.carriesStopped};
 }
 /** The route record the rest of the engine reads (routing:<turn>): route, complexity and reason, plus the score. */
-export const routeRecord=(t:Triage)=>({route:t.kind==='edit'?'local':t.kind==='answer'?'question':t.kind,intelligence:'haiku' as const,complexity:t.difficulty<=1?'simple':t.difficulty>=4?'difficult':'normal',difficulty:t.difficulty,vision:t.vision,carriesStopped:t.carriesStopped,reason:t.reason||'Scored by triage.',source:t.source,...(t.lookFor?{lookFor:t.lookFor}:{}),...(t.title?{projectTitle:t.title}:{}),requestedChanges:[] as string[]});
+export const routeRecord=(t:Triage)=>({route:t.kind==='edit'?'local':t.kind==='answer'?'question':t.kind,intelligence:'haiku' as const,complexity:t.difficulty<=1?'simple':t.difficulty>=4?'difficult':'normal',difficulty:t.difficulty,vision:t.vision,carriesStopped:t.carriesStopped,reason:t.reason||'Scored by triage.',source:t.source,...(t.lookFor?{lookFor:t.lookFor}:{}),...(t.title?{projectTitle:t.title}:{}),...(t.ask?{ask:t.ask}:{}),requestedChanges:[] as string[]});

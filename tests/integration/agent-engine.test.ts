@@ -238,3 +238,26 @@ it('pauses a request once a stretch of it has cost the spending limit, and conti
   expect(second.outcome.summary).toContain('Paused after about 50 credits');expect(calls).toBe(50);
  }finally{db.close();}
 });
+
+it('asks before an edit that could mean quite different work, then does the request the way the answer says',async()=>{
+ const db=fixture();try{
+  const purposes:string[]=[],sent:string[]=[];let agent=0;
+  const workspace={initialize:async()=>{},context:()=>({}),execute:async(name:string)=>name==='publish_project'?{publication:{versionId:db.head(),assets:[],unchanged:true}}:{ok:true}};
+  const director=new Director(db,async()=>({url:'fixture',token:'fixture'}),()=>{},undefined,undefined,undefined,undefined,workspace);
+  // The triage asks both times; the second message answers the question, so it is not asked again.
+  const ask={question:'What should the motion tracking do?',options:['The camera follows Steve (zoom and pan keyframes)','A box or label follows Steve','Steve himself is outlined in red']};
+  director.inference=async(_model,_s,messages,_t,_turn,_f,purpose='execution')=>{purposes.push(purpose);
+   if(purpose==='triage')return{content:[{type:'text',text:JSON.stringify({kind:'edit',difficulty:3,work:'graphics',feedback:'none',vision:true,carriesStopped:false,parts:[],lookFor:'',title:'',ask,reason:'tracking is ambiguous'})}],stop_reason:'end_turn',usage:{}};
+   if(purpose==='execution'&&!sent.length)sent.push(JSON.stringify(messages));
+   return ++agent===1?toolUse('pub','publish_project',{}):toolUse('done','finish',{status:'complete',summary:'The camera now follows Steve.'});};
+  await director.message('at the start can you highlight steve in red and then add motion traking',[],'auto',[],'turn-a',undefined,'sonnet');
+  // Asked, and nothing edited: only the triage ran.
+  expect(purposes.filter(p=>p==='execution')).toHaveLength(0);expect(db.getMeta('ai_status')).toBe('complete');
+  const question=(db.db.prepare("SELECT text,report FROM messages WHERE role='assistant' ORDER BY rowid DESC LIMIT 1").get() as any);
+  expect(question.text).toContain('What should the motion tracking do?');expect(question.text).toContain('1. The camera follows Steve');expect(JSON.parse(question.report)).toMatchObject({kind:'question',options:ask.options});
+  await director.message('the first one',[],'auto',[],'turn-b',undefined,'sonnet');
+  expect(purposes.filter(p=>p==='execution').length).toBeGreaterThan(0);expect(db.getMeta('ai_status')).toBe('complete');
+  // The editing agent gets the answer with the request and the question it answers.
+  expect(sent[0]).toContain('the first one');expect(sent[0]).toContain('highlight steve in red');expect(sent[0]).toContain('The camera follows Steve');
+ }finally{db.close();}
+});

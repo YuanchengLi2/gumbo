@@ -44,7 +44,7 @@ it('lets the composer mode win, and carries a stopped request only while one exi
 
 it('runs triage as a small router call with its own reply schema, and sets the agent\'s effort from the score',()=>{
  const profile=intelligence('claude-haiku-5-5','triage');expect(profile).toMatchObject({role:'router',effort:'low'});expect(outputAllowance(profile)).toBe(2048);
- expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','title','reason']);
+ expect((inferencePolicy('claude-haiku-5-5','triage').output_config as any).format.schema.required).toEqual(['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','title','ask','reason']);
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:1}).effort).toBe('low');
  expect(intelligence('claude-sonnet-5-5','execution',{difficulty:3}).effort).toBe('medium');
  expect(intelligence('claude-opus-5-5','execution',{difficulty:5}).effort).toBe('high');

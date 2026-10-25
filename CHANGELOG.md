@@ -5,6 +5,12 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-25 · Gumbo asks when a request could mean different things
+Some requests can mean very different edits: "add motion tracking on Steve" could be the camera following him, a box
+that follows him, or Steve himself outlined. Gumbo used to pick one and could spend minutes on the wrong one. Now it
+asks one short question first, with the choices listed; reply with a number or in your own words and it does that.
+Clear requests, and anything quick to change afterwards, are still just done.
+
 ## 2026-10-25 · Speech in long videos is heard while they're still being added
 When you drop or pick a long video, Gumbo plays it before it has finished copying in. Hearing its speech at that moment
 could fail partway ("network error"), leaving the video with no transcript, so Roux couldn't find what was said. Now
