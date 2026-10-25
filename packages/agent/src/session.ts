@@ -39,7 +39,9 @@ export interface AgentHost{
 }
 /** journalEpoch: saved messages are kept as an append-only journal; a change to an earlier message (words added to the
  * last one, a compaction) starts a new one. */
-type Session={id:string;model:string;auto:boolean;effort:Effort;messages:Message[];known:string[];turns:Record<string,number>;compactions:number;createdAt:string;journalEpoch?:number};
+type Session={id:string;model:string;auto:boolean;effort:Effort;messages:Message[];known:string[];turns:Record<string,number>;compactions:number;createdAt:string;journalEpoch?:number;
+ /** The conversation's size as the model last counted it: its first messages, and their tokens. */
+ measured?:{messages:number;tokens:number}};
 type Run={turnId:string;mode:Mode;startedAt:number;spentAtStart:number;steps:number;nudges:number};
 const SESSION='agent-session';
 const RESULT_LIMIT=20_000,STEP_LIMIT=150,SUBAGENT_STEPS=40;
@@ -167,6 +169,7 @@ export class Agent {
     throw error;
    }
    run.steps++;
+   const usage=(response as any).usage;if(usage)session.measured={messages:session.messages.length,tokens:(usage.input_tokens??0)+(usage.cache_read_input_tokens??0)+(usage.cache_creation_input_tokens??0)};
    // A server tool call the provider left without a result could never be sent back: it is dropped.
    session.messages.push({role:'assistant',content:withoutUnansweredServerCalls(response.content)});this.save(session);
    const calls=response.content.filter((b:any)=>b.type==='tool_use');
@@ -281,9 +284,12 @@ export class Agent {
  // ---- Context size ----
 
  /** Compacts when the conversation passes its budget (estimated from its text, pictures at a fixed price), deep enough
-  * that the next compaction is far away: the summary and about a quarter of the budget of recent exchanges stay. */
+  * that the next compaction is far away: the summary and about a quarter of the budget of recent exchanges stay. The size
+  * is the model's own count from its last call plus an estimate of what came since: estimating every picture at a fixed
+  * price overcounted frames several times, and a look-heavy request (reframing) was summarized twice, 38 s of waiting. */
  private async compactIfNeeded(session:Session,turnId:string){
-  const target=contextTarget(session.model),size=estimateTokens({messages:session.messages});
+  const target=contextTarget(session.model),measured=session.measured&&session.measured.messages<=session.messages.length?session.measured:undefined;
+  const size=measured?measured.tokens+estimateTokens({messages:session.messages.slice(measured.messages)}):estimateTokens({messages:session.messages});
   if(size<=target)return;
   const cut=cutPoint(session.messages,Math.round(target*.25));if(cut<2)return;
   const first=session.messages[0],earlier=(Array.isArray(first.content)?first.content:[]).find((b:any)=>b.type==='text'&&String(b.text).startsWith(SUMMARY_MARK))?.text;
@@ -291,12 +297,12 @@ export class Agent {
   this.activity(turnId,'compaction:'+session.compactions,{kind:'action',text:'Tidying up my notes',status:'running'});
   let summary:string;
   try{
-   const response=await this.call({model:agentModels.haiku,system:summarySystem,messages:[{role:'user',content:transcript.slice(-400_000)}],tools:[],turnId,purpose:'compaction',phase:'compaction',max_tokens:4096,profile:profile('low')},this.signal());
+   const response=await this.call({model:agentModels.haiku,system:summarySystem,messages:[{role:'user',content:transcript.slice(-400_000)}],tools:[],turnId,purpose:'compaction',phase:'compaction',max_tokens:3000,profile:profile('low')},this.signal());
    summary=response.content.filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('').trim();
   }catch(error){if(this.signal().aborted)throw error;summary='';}
   // Without a summary the older part is still dropped, with its requests kept, so the conversation never outgrows the model.
   if(!summary)summary=transcriptOf(session.messages.slice(1,cut)).split('\n').filter(l=>l.startsWith('USER:')).join('\n').slice(-8000);
-  session.messages=compacted(session.messages,cut,summary);session.compactions++;session.journalEpoch=(session.journalEpoch??0)+1;
+  session.messages=compacted(session.messages,cut,summary);session.compactions++;session.journalEpoch=(session.journalEpoch??0)+1;session.measured=undefined;
   for(const [turn,index] of Object.entries(session.turns))session.turns[turn]=Math.max(0,index-cut+1);
   this.save(session);this.db.event('ai.compacted',{turnId,from:size,to:estimateTokens({messages:session.messages})});
   this.activity(turnId,'compaction:'+(session.compactions-1),{kind:'action',text:'Tidying up my notes',status:'complete'});

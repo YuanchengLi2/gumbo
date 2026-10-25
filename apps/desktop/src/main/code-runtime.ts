@@ -1,5 +1,5 @@
 import {spawn} from 'node:child_process';
-import {existsSync,readFileSync,mkdirSync,appendFileSync,writeFileSync,readdirSync,renameSync} from 'node:fs';
+import {existsSync,readFileSync,mkdirSync,appendFileSync,writeFileSync,readdirSync,renameSync,statSync} from 'node:fs';
 import {join,resolve,dirname,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {totalmem,setPriority,constants} from 'node:os';
@@ -8,6 +8,13 @@ import {workspacePath} from '../../../../packages/project-db/src/workspace-store
 import {extraPythonFolder} from './extra-libraries';
 
 const hash=(value:string|Buffer)=>createHash('sha256').update(value).digest('hex');
+/** Bundled runtimes already checked in this session, by path, size and modification time: hashing them (Node alone is
+ * 80 MB) took 300 ms before every command, and they do not change while the app runs. */
+const verified=new Map<string,string>();
+function verify(path:string,expected:string){
+ const stat=statSync(path),key=`${stat.size}:${stat.mtimeMs}`;if(verified.get(path)===key)return;
+ if(hash(readFileSync(path))!==expected)throw new Error('Bundled creation runtime integrity check failed.');verified.set(path,key);
+}
 /** Unix tools for programs that start their own shell: Python's os.system, Node's exec and npm scripts get cmd.exe on
  * Windows, where head, grep or sed did not exist ("'head' is not recognized"). Each is a one-line .cmd that runs BusyBox's
  * tool, placed last on PATH so the computer's own programs of the same name still win. */
@@ -49,7 +56,7 @@ export class CodeRuntime {
   if(existsSync(receiptPath)){const saved=JSON.parse(readFileSync(receiptPath,'utf8'));if(saved.commandHash!==commandHash)throw new Error('Process identity mismatch.');return{...saved,logPath};}
   if(existsSync(intentPath))throw new Error('This process was interrupted without a terminal receipt. Inspect its log and outputs before issuing a new command.');
   const manifest=local?{files:{}}:JSON.parse(readFileSync(join(this.paths.creation,'manifest.json'),'utf8'));
-  if(!local)for(const file of ['host/creation-host.exe','node/node.exe','python/python.exe','shell/busybox.exe'])if(hash(readFileSync(join(this.paths.creation,file)))!==manifest.files[file])throw new Error('Bundled creation runtime integrity check failed.');
+  if(!local)for(const file of ['host/creation-host.exe','node/node.exe','python/python.exe','shell/busybox.exe'])verify(join(this.paths.creation,file),manifest.files[file]);
   // Commands run in BusyBox's POSIX sh, so they quote like a terminal and have head, grep, sed, awk and find built in.
   const shell=join(this.paths.creation,'shell','busybox.exe');if(!existsSync(shell))throw new Error('The bundled command shell is missing. Stage the pinned runtimes.');
   // Inside the container BusyBox cannot hand itself over to a program, so a command's last line is never exec'd: the

@@ -380,7 +380,16 @@ export class Workspace implements AgentHost {
    return lines.length>12?[...lines.slice(0,12),`and ${lines.length-12} more`]:lines;}catch{return[];}
  }
  /** project.json or a scene in the edit changed since the edit was last applied (a command wrote it). */
+ /** Whether project.json (or a scene in the edit) differs from what is applied. Asked after every command, so the answer
+  * is kept while the head, project.json and the scene files are as they were (comparing took a quarter second). */
+ private unappliedCheck?:{key:string;result:boolean};
  private unapplied(){
+  const file=join(this.root,'project.json'),stat=existsSync(file)?statSync(file):undefined;
+  const key=[this.db.head(),stat?`${stat.size}:${stat.mtimeMs}`:'-',...authoredFiles(this.root).filter(p=>isEngineScene(p)||/\.(sfx|score)\.json$/.test(p)).map(p=>`${p}:${statSync(workspacePath(this.root,p)).mtimeMs}`)].join('|');
+  if(this.unappliedCheck?.key===key)return this.unappliedCheck.result;
+  const result=this.compareApplied();this.unappliedCheck={key,result};return result;
+ }
+ private compareApplied(){
   const hash=this.db.workspace.snapshot(this.db.head());if(!hash)return false;
   const published=this.db.workspace.files(hash),file=join(this.root,'project.json');
   if(!existsSync(file))return false;
@@ -408,11 +417,14 @@ export class Workspace implements AgentHost {
   signal.throwIfAborted();return result?this.described(result):this.stillRunning(input.processId,entry.output(),entry.started);
  }
  /** Copies of linked sources under Sources/, made before a command so code can read them by a stable path. */
+ /** Sources whose files on the computer this session already has leave to read: asking the app again before every
+  * command was a round trip each. */
+ private authorized=new Set<string>();
  private async sources(signal:AbortSignal){
   const root=join(this.db.folder,'Sources');mkdirSync(root,{recursive:true});
   for(const asset of this.db.assets()){signal.throwIfAborted();if(!existsSync(asset.originalPath))continue;
    if(relative(this.db.folder,asset.originalPath).replaceAll('\\','/').startsWith('Media/'))continue;
-   const local=relative(this.db.folder,asset.originalPath);if(local.startsWith('..')||/^[A-Za-z]:/.test(local))await this.onComputer({action:'authorize_import',paths:[asset.originalPath]},signal);
+   const local=relative(this.db.folder,asset.originalPath);if((local.startsWith('..')||/^[A-Za-z]:/.test(local))&&!this.authorized.has(asset.originalPath)){await this.onComputer({action:'authorize_import',paths:[asset.originalPath]},signal);this.authorized.add(asset.originalPath);}
    const destination=join(root,asset.id);mkdirSync(destination,{recursive:true});const target=join(destination,basename(asset.originalPath));if(!existsSync(target))copyFileSync(asset.originalPath,target);
    if(asset.sequence)for(let n=0;n<asset.sequence.frameCount;n++){const name=String(n).padStart(6,'0')+'.png',output=join(destination,name);if(!existsSync(output))copyFileSync(join(asset.sequence.directory,name),output);}
   }

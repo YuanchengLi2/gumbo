@@ -35,7 +35,7 @@ export function scriptedGateway(script:(body:any,step:number)=>any[],options:{pr
   const body=requestBody(init?.body);bodies.push(body);
   const messages:any[]=body.messages??[],asked=messages.findLastIndex(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text'))),step=messages.slice(asked+1).filter(m=>m.role==='assistant').length;
   const number=++responses,content=body.tools?.length&&!body.tools.some((t:any)=>t.type?.startsWith('web_search'))?script(body,step).map(b=>b.type==='tool_use'?{...b,id:`${b.id}-${number}`}:b):[{type:'text',text:options.helper?.(body)??'Fixture.'}];
-  return Response.json({content,stop_reason:content.some((b:any)=>b.type==='tool_use')?'tool_use':'end_turn',usage:options.usage?.(body)??{input_tokens:10,output_tokens:5}});
+  return Response.json({content,stop_reason:content.some((b:any)=>b.type==='tool_use')?'tool_use':'end_turn',usage:options.usage?.(body)??{input_tokens:Math.ceil(JSON.stringify(body.messages??[]).length/4),output_tokens:5}});
  }) as typeof globalThis.fetch;
  /** The result the model was given for a scripted call (ids are numbered: e becomes e-2). */
  const returned=(id:string)=>{for(const body of [...bodies].reverse())for(const m of body.messages??[])if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&new RegExp(`^${id}-\\d+$`).test(b.tool_use_id))return b;return undefined;};

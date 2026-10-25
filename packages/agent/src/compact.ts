@@ -44,7 +44,7 @@ export const summarySystem=`You condense the earlier part of a working session b
 - The edit so far: what was changed in the video, with the important source ranges and times.
 - Footage learned: what the sources contain that matters (moments, times, people, problems), with times.
 - Open: what is still to do or was promised, and anything that failed and why.
-Be specific and concise (at most about 1,500 words). Keep exact times, ids, names and numbers. Do not invent anything.`;
+Be specific and concise (at most about 900 words: it is written while the user waits). Keep exact times, ids, names and numbers. Do not invent anything.`;
 /** The conversation after compaction: the first message as it was plus the summary, then the kept tail. */
 export function compacted(messages:Message[],cut:number,summary:string):Message[]{
  const first=messages[0],content=typeof first.content==='string'?[{type:'text',text:first.content}]:[...first.content];
