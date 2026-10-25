@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import {HEADER,CAPACITY,type FsOp,type FsStat,type FsError} from './protocol';
+import {stagedFile,stageable,unstage} from '../staged';
 
 /** The storage worker: owns this browser's private file storage (OPFS) and answers the project worker's synchronous
  * file calls (protocol.ts). Paths are POSIX, from the OPFS root: /projects/<id>/…, /imports/…, /tmp/…. /granted/<id>/…
@@ -46,7 +47,9 @@ async function entry(path:string):Promise<FileSystemFileHandle|FileSystemDirecto
 }
 async function fileHandle(path:string,create=false){const [dir,name]=await parent(path,false);try{return await dir.getFileHandle(name,{create});}catch(error){throw (error as DOMException).name==='TypeMismatchError'?new Failure('EISDIR',`EISDIR: illegal operation on a directory, '${path}'`,path):enoent(path);}}
 async function exists(path:string){try{await entry(path);return true;}catch{return false;}}
-async function copyFile(from:string,to:string){const source=await (await fileHandle(from)).getFile(),target=await fileHandle(to,true),writer=await target.createWritable();await source.stream().pipeTo(writer);}
+/** A file's contents: from storage, or footage just dropped that is still being copied in, read where it lies (staged.ts). */
+async function contents(path:string):Promise<File>{try{return await (await fileHandle(path)).getFile();}catch(error){const staged=await stagedFile(path);if(staged)return staged;throw error;}}
+async function copyFile(from:string,to:string){const source=await contents(from),target=await fileHandle(to,true),writer=await target.createWritable();await source.stream().pipeTo(writer);}
 async function copyTree(from:string,to:string){const source=await directory(from);await directory(to,true);for await(const [name,handle] of (source as any).entries())handle.kind==='file'?await copyFile(`${from}/${name}`,`${to}/${name}`):await copyTree(`${from}/${name}`,`${to}/${name}`);}
 
 /** Open descriptors. A file opened for writing in this site's storage holds a sync access handle, which reads and writes
@@ -67,18 +70,18 @@ function release(path:string){const found=held.get(path);if(found&&--found.users
 async function open(path:string,flags:string){
  const write=/[wa+]/.test(flags),create=/[wa]/.test(flags);
  if(flags.includes('x')&&await exists(path))throw new Failure('EEXIST',`EEXIST: file already exists, open '${path}'`,path);
- if(!create&&!await exists(path))throw enoent(path);
+ if(!create&&!await exists(path)&&!(write?undefined:await stagedFile(path)))throw enoent(path);
  const holding=write?await hold(path,create):undefined;
  if(write&&!holding&&create&&!await exists(path)){const writer=await (await fileHandle(path,true)).createWritable();await writer.close();}
  if(flags.startsWith('w')){if(holding){holding.access.truncate(0);holding.modified=Date.now();}else if(write){const writer=await (await fileHandle(path,true)).createWritable();await writer.close();}}
  const fd=nextFd++;descriptors.set(fd,{path,write,append:flags.startsWith('a')});return fd;
 }
 const described=(fd:number)=>{const found=descriptors.get(fd);if(!found)throw new Failure('EBADF','EBADF: bad file descriptor');return found;};
-async function sizeOf(path:string){const holding=held.get(path);return holding?holding.access.getSize():(await (await fileHandle(path)).getFile()).size;}
+async function sizeOf(path:string){const holding=held.get(path);return holding?holding.access.getSize():(await contents(path)).size;}
 async function readAt(path:string,position:number,length:number){
  const holding=held.get(path),count=Math.max(0,Math.min(length,CAPACITY-4096));
  if(holding){const buffer=new Uint8Array(count);const read=holding.access.read(buffer,{at:position});return buffer.subarray(0,read);}
- const file=await (await fileHandle(path)).getFile();return new Uint8Array(await file.slice(position,Math.min(file.size,position+count)).arrayBuffer());
+ const file=await contents(path);return new Uint8Array(await file.slice(position,Math.min(file.size,position+count)).arrayBuffer());
 }
 async function writeAt(path:string,position:number|null,data:Uint8Array){
  const holding=held.get(path);
@@ -93,7 +96,8 @@ async function writeAt(path:string,position:number|null,data:Uint8Array){
 async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
  switch(request.op){
   case 'stat':{const holding=held.get(request.path);if(holding)return{json:{kind:'file',size:holding.access.getSize(),mtimeMs:holding.modified} satisfies FsStat};
-   const found=await entry(request.path);if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};
+   let found:FileSystemFileHandle|FileSystemDirectoryHandle;try{found=await entry(request.path);}catch(error){const staged=stageable(request.path)?await stagedFile(request.path):undefined;if(staged)return{json:{kind:'file',size:staged.size,mtimeMs:staged.lastModified} satisfies FsStat};throw error;}
+   if(found.kind==='directory')return{json:{kind:'directory',size:0,mtimeMs:0} satisfies FsStat};
    // Whether it exists is all existsSync asks: the file's size and time need it opened.
    if(request.exists)return{json:{kind:'file',size:0,mtimeMs:0} satisfies FsStat};const file=await found.getFile();return{json:{kind:'file',size:file.size,mtimeMs:file.lastModified} satisfies FsStat};}
   case 'open':return{json:{fd:await open(request.path,request.flags)}};
@@ -109,7 +113,7 @@ async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
    return{json:made??null};
   }
   case 'read':{if(held.has(request.path))return{json:{size:await sizeOf(request.path)},data:await readAt(request.path,request.offset,request.length)};
-   const file=await (await fileHandle(request.path)).getFile(),end=Math.min(file.size,request.offset+Math.min(request.length,CAPACITY-4096));return{json:{size:file.size},data:new Uint8Array(await file.slice(request.offset,end).arrayBuffer())};}
+   const file=await contents(request.path),end=Math.min(file.size,request.offset+Math.min(request.length,CAPACITY-4096));return{json:{size:file.size},data:new Uint8Array(await file.slice(request.offset,end).arrayBuffer())};}
   case 'write':{
    if(request.mode==='wx'&&await exists(request.path))throw new Failure('EEXIST',`EEXIST: file already exists, open '${request.path}'`,request.path);
    const holding=held.get(request.path);if(holding){if(request.mode==='w')holding.access.truncate(0);await writeAt(request.path,null,request.data);return{};}
@@ -119,8 +123,8 @@ async function handle(request:FsOp):Promise<{json?:unknown;data?:Uint8Array}>{
    if(request.mode==='a'){const size=(await target.getFile()).size;await writer.seek(size);}
    await writer.write(request.data as Uint8Array<ArrayBuffer>);await writer.close();return{};
   }
-  case 'unlink':{const [dir,name]=await parent(request.path);try{await dir.getFileHandle(name);}catch(error){throw (error as DOMException).name==='TypeMismatchError'?new Failure('EPERM',`EPERM: operation not permitted, unlink '${request.path}'`,request.path):enoent(request.path);}await dir.removeEntry(name);return{};}
-  case 'rm':{let dir:FileSystemDirectoryHandle,name:string;try{[dir,name]=await parent(request.path);await entry(request.path);}catch(error){if(request.force)return{};throw error;}
+  case 'unlink':{const [dir,name]=await parent(request.path);try{await dir.getFileHandle(name);}catch(error){if((error as DOMException).name!=='TypeMismatchError'&&await stagedFile(request.path,0)){unstage(request.path);return{};}throw (error as DOMException).name==='TypeMismatchError'?new Failure('EPERM',`EPERM: operation not permitted, unlink '${request.path}'`,request.path):enoent(request.path);}await dir.removeEntry(name);if(stageable(request.path))unstage(request.path);return{};}
+  case 'rm':{if(stageable(request.path))unstage(request.path);let dir:FileSystemDirectoryHandle,name:string;try{[dir,name]=await parent(request.path);await entry(request.path);}catch(error){if(request.force)return{};throw error;}
    try{await dir.removeEntry(name,{recursive:request.recursive});}catch(error){if((error as DOMException).name==='InvalidModificationError')throw new Failure('ENOTEMPTY',`ENOTEMPTY: directory not empty, rmdir '${request.path}'`,request.path);if(!request.force)throw error;}return{};}
   case 'rename':{
    const source=await entry(request.from);if(await exists(request.to)){const target=await entry(request.to);if(target.kind==='file'&&source.kind==='file'){const [dir,name]=await parent(request.to);await dir.removeEntry(name);}else if(target.kind!==source.kind)throw new Failure(target.kind==='directory'?'EISDIR':'ENOTDIR','rename across kinds',request.to);}

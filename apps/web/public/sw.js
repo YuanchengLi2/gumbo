@@ -13,12 +13,24 @@ const typeOf=file=>file.type||types[(file.name.split('.').pop()||'').toLowerCase
 
 function route(assetId,kind){return new Promise((resolve,reject)=>{const request=indexedDB.open('gumbo-media',1);request.onupgradeneeded=()=>request.result.createObjectStore('routes');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,get=db.transaction('routes').objectStore('routes').get(`${assetId}/${kind}`);get.onsuccess=()=>{db.close();resolve(get.result);};get.onerror=()=>{db.close();reject(get.error);};};});}
 function grant(id){return new Promise((resolve,reject)=>{const request=indexedDB.open('gumbo-grants',1);request.onupgradeneeded=()=>request.result.createObjectStore('grants');request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,get=db.transaction('grants').objectStore('grants').get(id);get.onsuccess=()=>{db.close();resolve(get.result);};get.onerror=()=>{db.close();reject(get.error);};};});}
+/** Footage just dropped or picked, while it is still being copied into storage: the page shares it on a channel
+ * (src/project/staged.ts, the same messages), and this worker, which may have been asleep when it was shared, asks. */
+const staged=new Map(),waiting=new Map(),channel=new BroadcastChannel('gumbo-staged');
+channel.onmessage=({data})=>{
+ if(data&&data.stage&&data.file){staged.set(data.stage,data.file);for(const answer of waiting.get(data.stage)||[])answer(data.file);waiting.delete(data.stage);}
+ else if(data&&typeof data.unstage==='string'){const root=data.unstage.replace(/\/+$/,'');for(const path of [...staged.keys()])if(path===root||path.startsWith(root+'/'))staged.delete(path);}
+};
+function stagedFile(path){
+ if(!path.startsWith('/imports/'))return Promise.resolve(null);if(staged.has(path))return Promise.resolve(staged.get(path));
+ return new Promise(resolve=>{const list=waiting.get(path)||[];list.push(resolve);waiting.set(path,list);channel.postMessage({want:path});setTimeout(()=>resolve(null),400);});
+}
 /** A file by its path in this browser's storage (the project worker's paths): OPFS from its root, or /granted/<id>/…
- * inside a folder the user granted, which needs its permission still in place. */
+ * inside a folder the user granted, which needs its permission still in place; or footage still being copied in. */
 async function fileAt(path){
  const parts=path.split('/').filter(Boolean).map(decodeURIComponent);let dir,start=0;
  if(parts[0]==='granted'){dir=await grant(parts[1]);if(!dir)return null;if(await dir.queryPermission({mode:'read'})!=='granted')return 'denied';start=2;}else dir=await navigator.storage.getDirectory();
- for(const part of parts.slice(start,-1))dir=await dir.getDirectoryHandle(part);return(await dir.getFileHandle(parts.at(-1))).getFile();
+ try{for(const part of parts.slice(start,-1))dir=await dir.getDirectoryHandle(part);return(await dir.getFileHandle(parts.at(-1))).getFile();}
+ catch(error){const file=parts[0]==='granted'?null:await stagedFile('/'+parts.join('/'));if(file)return file;throw error;}
 }
 async function fileFor(found){if(!found)return null;if(found.path)return fileAt(found.path);if(found.opfs)return fileAt(found.opfs);if(found.handle){if(await found.handle.queryPermission({mode:'read'})!=='granted')return 'denied';return found.handle.getFile();}return null;}
 /** The audio master is named .flac by the project service and holds WAV in the browser: its type comes from its bytes. */

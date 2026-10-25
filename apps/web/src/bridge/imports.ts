@@ -1,6 +1,7 @@
 import {grantFolder} from '../project/media/paths';
 import {keepStorage} from './awake';
 import {publish} from './events';
+import {stage,unstage} from '../project/staged';
 
 /** Footage on the web: files the user picks or drops are copied into this browser's private storage (/imports/<id>/
  * <name>), and the project service imports them from there by path, as it imports from the desktop's disk. The copy
@@ -14,15 +15,31 @@ export async function store(files:File[]):Promise<string[]>{
  void keepStorage();
  // The editor shows each file at once, while it is copied in and imported (media.incoming; ProjectMedia).
  publish('media.incoming',{files:files.map(file=>({name:safe(file.name),kind:file.type.split('/')[0]||'video'}))});
- const paths:string[]=[];
+ const paths:string[]=[],copies:{file:File;path:string;dir:FileSystemDirectoryHandle;name:string}[]=[];
  try{
-  for(const file of files){
-   const id=crypto.randomUUID().slice(0,8),name=safe(file.name),dir=await folder(['imports',id]),handle=await dir.getFileHandle(name,{create:true}),writer=await handle.createWritable();
-   await file.stream().pipeTo(writer);paths.push(`/imports/${id}/${name}`);
-  }
+  for(const file of files){const id=crypto.randomUUID().slice(0,8),name=safe(file.name),dir=await folder(['imports',id]),path=`/imports/${id}/${name}`;
+   // Readable by its path at once, by every worker, straight from the user's disk (staged.ts): a long recording plays
+   // and imports without waiting for its copy.
+   stage(path,file);paths.push(path);copies.push({file,path,dir,name});}
  }catch(error){publish('media.incoming',{files:[],failed:true});throw error;}
+ copying=copying.then(()=>copyIn(copies));
  return paths;
 }
+/** The copies into storage, behind the scenes and one at a time, each under a .part name until it is whole, so nothing
+ * reads half a file; then the shared file is let go. A project that already copied the footage into its own folder
+ * removes this one (project.worker.ts releaseStaged), and its copy stops there. */
+let copying=Promise.resolve();
+async function copyIn(copies:{file:File;path:string;dir:FileSystemDirectoryHandle;name:string}[]){
+ for(const {file,path,dir,name} of copies){
+  try{const part=await dir.getFileHandle(name+'.part',{create:true}),writer=await part.createWritable();await file.stream().pipeTo(writer);
+   if(typeof (part as any).move==='function')await (part as any).move(name);else{const whole=await (await dir.getFileHandle(name,{create:true})).createWritable();await (await part.getFile()).stream().pipeTo(whole);await dir.removeEntry(name+'.part');}
+   unstage(path);}
+  catch{/* removed by the project once it had its own copy, or storage is full: the file stays shared for this visit */}
+ }
+}
+/** Waits for the copies in storage to finish: before leaving the page (signing in), whose files must still be there on
+ * the way back. */
+export const copiesDone=()=>copying;
 /** A folder on the computer the user chooses, kept so it can be read and written by path (/granted/<name>-<id>); null
  * when they cancel. The picker remembers where it was last for each purpose. */
 export async function pickFolder(purpose:'gumbo-files'|'gumbo-exports'):Promise<string|null>{

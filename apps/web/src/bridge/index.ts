@@ -4,7 +4,7 @@ import {Account,appVersion as version,platform} from './account';
 import {onEvent,publish} from './events';
 import {loadSettings,saveSettings} from './settings';
 import {ProjectClient} from './project';
-import {pickFiles,pickFolder,store} from './imports';
+import {pickFiles,pickFolder,store,copiesDone} from './imports';
 import {reallow} from '../project/media/paths';
 import * as exporting from './export';
 import {shareExport} from './share';
@@ -30,7 +30,8 @@ let openProject=false;
 /** The account requests the editor sends as commands ({type:'account',action}), as main/index.ts answers them. */
 async function accountCommand(c:{action?:string;query?:string;email?:string;context?:Record<string,unknown>;profile?:unknown;plan?:string;packs?:number;flow?:string;turnId?:string;note?:string;kind?:'report'|'feedback'|'training';rating?:'up'|'down'}){
  switch(c.action){
-  case 'browser':{const url=await account.beginSignIn();setTimeout(()=>location.assign(url),50);return{started:true,url};}
+  // Footage still being copied in must be whole before the page leaves to sign in (imports.ts).
+  case 'browser':{const url=await account.beginSignIn();void copiesDone().then(()=>setTimeout(()=>location.assign(url),50));return{started:true,url};}
   case 'signout':return account.signout();
   case 'guest':return account.startGuest();
   case 'usage':return account.usage();

@@ -1,3 +1,4 @@
+import {stagedFile} from '../staged';
 /** Files by their POSIX path in this browser's storage, for the workers that read and write media asynchronously: OPFS
  * from its root, and /granted/<id>/… inside a folder the user granted (its File System Access handle, kept in IndexedDB
  * by the page). The storage worker answers the same paths synchronously (fs/storage.worker.ts). */
@@ -27,11 +28,12 @@ async function walk(list:string[],create:boolean){
  return dir;
 }
 export async function fileHandle(path:string,create=false){const list=parts(path);if(!list.length)throw new Error('A file path is needed.');const dir=await walk(list.slice(0,-1),create);try{return await dir.getFileHandle(list.at(-1)!,{create});}catch{throw Object.assign(new Error(`No such file: ${path}`),{code:'ENOENT'});}}
-export const fileAt=async(path:string)=>(await fileHandle(path)).getFile();
+/** A file's contents: from storage, or footage just dropped that is still being copied in (staged.ts). */
+export const fileAt=async(path:string)=>{try{return await (await fileHandle(path)).getFile();}catch(error){const staged=await stagedFile(path);if(staged)return staged;throw error;}};
 /** A writable stream for a new file at path (its folder is made), which mediabunny's StreamTarget writes into by position. */
 export async function writable(path:string){return (await fileHandle(path,true)).createWritable({keepExistingData:false});}
 export async function writeFile(path:string,data:Blob|Uint8Array<ArrayBuffer>){const out=await writable(path);await out.write(data);await out.close();}
-export async function exists(path:string){try{await fileHandle(path);return true;}catch{return false;}}
+export async function exists(path:string){try{await fileHandle(path);return true;}catch{return !!await stagedFile(path);}}
 /** Removes a file, or a folder with what is in it; a path that is not there is left alone. */
 export async function remove(path:string){
  const list=parts(path);if(!list.length)return;

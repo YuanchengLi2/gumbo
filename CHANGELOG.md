@@ -9,7 +9,9 @@ title once published, since it names the entry.
 Videos you add now play, go on the timeline and export straight away, instead of showing "Preparing…" while Gumbo
 made a copy it could play. MP4s were already quick; now iPhone and Android videos (where Chrome or Edge can play them,
 on most Windows and Mac computers), OBS recordings (.mkv) and camera files (.mts) are too. A 30-second OBS clip that
-took 20 seconds is ready in about 4. A file Gumbo can't open in the browser (like .avi) now says so plainly.
+took 20 seconds is ready in about 4. Long recordings no longer wait to be copied into your browser first: a 600 MB
+video plays the instant you drop it, and the copy finishes in the background. A file Gumbo can't open in the browser
+(like .avi) now says so plainly.
 
 ## 2026-10-24 · Try Gumbo without an account, with sample clips
 You can now try Gumbo before signing up: click "Try it free" on usegumbo.app. Add your own clips, or pick one of the
