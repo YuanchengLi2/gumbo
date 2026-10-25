@@ -40,7 +40,10 @@ export async function codeGateway(options:{script:Script;delayMs?:number;shortSe
   const tools:string[]=(body.tools??[]).map((t:any)=>t.name),step=messages.slice(asked+1).filter(m=>m.role==='assistant').length;calls.push({purpose:body.purpose,model:body.model,tools,step});
   let content:any[];
   // Real responses never reuse tool IDs; make scripted IDs unique per response.
-  {const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
+  // Helper calls without tools (shot descriptions, footage overviews, hearing, compaction) answer plainly and never reach
+  // the script, so a script's steps count only Roux's own calls.
+  if(!body.tools?.length)content=[{type:'text',text:body.purpose==='shot_index'?'[]':body.purpose==='listening'?'A steady test tone, no speech.':'Fixture.'}];
+  else{const number=++responses;content=options.script(body,step).map(block=>block.type==='tool_use'?{...block,id:block.id+'-'+number}:block);}
   const message={content,stop_reason:content.some(b=>b.type==='tool_use')?'tool_use':'end_turn',usage:{input_tokens:0,output_tokens:0}};
   if(!body.stream)return json(200,message);
   streams++;res.writeHead(200,{'Content-Type':'text/event-stream'});
@@ -74,7 +77,7 @@ export function scriptedEdit(prefix:string,edit:string){
 /** Roux's reply that ends a run: plain words, with no tool call. */
 export const finish=(_id:string,summary:string,question?:string)=>[{type:'text',text:question?`${summary} ${question}`:summary}];
 /** The text of the latest user message (a request, or the words that approve a plan). */
-const lastUserText=(body:any)=>{const messages:any[]=body.messages??[],m=messages.findLast(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text')));return typeof m?.content==='string'?m.content:(m?.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n');};
+export const lastUserText=(body:any)=>{const messages:any[]=body.messages??[],m=messages.findLast(m=>m.role==='user'&&(typeof m.content==='string'||m.content?.some((b:any)=>b.type==='text')));return typeof m?.content==='string'?m.content:(m?.content??[]).filter((b:any)=>b.type==='text').map((b:any)=>b.text).join('\n');};
 /** Plan mode proposes a two-step plan; once approved, the same conversation carries it out with one scripted edit, marks
  * the steps on its task list and replies. With blockOnce, it leaves the square format for the user to confirm and asks; a
  * follow-up that confirms it completes the list. */

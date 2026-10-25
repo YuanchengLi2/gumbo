@@ -18,7 +18,7 @@ test('the agent sees the captions and graphics of its published edit',async()=>{
  const log:string[]=[];
  const script=(body:any,step:number)=>{
   const last=(body.messages??[]).at(-1);log.push(step+': '+JSON.stringify(last?.content??'').slice(0,400));
-  if(step===7){const messages:any[]=body.messages??[];for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&/^v(-|$)/.test(b.tool_use_id))seen=b;}
+  if(step===6){const messages:any[]=body.messages??[];for(const m of messages)if(Array.isArray(m.content))for(const b of m.content)if(b.type==='tool_result'&&/^v(-|$)/.test(b.tool_use_id))seen=b;}
   return[
   [use('w','write',{path:'src/card.tsx',content:scene})],
   [use('e','edit',{path:'project.json',oldText:'"spine": [],',newText:`"spine": [{"id":"c1","assetId":"${ids.video}","srcIn":0,"srcOut":6,"speed":1,"audio":{"mute":true},"reason":"Clip"}],`})],

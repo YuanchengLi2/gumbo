@@ -2,14 +2,15 @@ import {test,expect,_electron as electron} from '@playwright/test';
 import {mkdtempSync,writeFileSync,existsSync,readFileSync,copyFileSync,renameSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {codeGateway,scriptedEdit,finish,assetIds,type Script,signIn} from '../fixtures/code-gateway';
+import {codeGateway,scriptedEdit,finish,assetIds,lastUserText,type Script,signIn} from '../fixtures/code-gateway';
 
 test('home creates a copied-media draft without login, then exposes the responsive AI workspace',async()=>{
  const notes=join(mkdtempSync(join(tmpdir(),'dream-home-files-')),'notes.txt');writeFileSync(notes,'Original notes');const profile=mkdtempSync(join(tmpdir(),'dream-home-profile-')),source=join(profile,'source.mp4');copyFileSync(resolve('artifacts/fixtures/source.mp4'),source);
  // Haiku alone for each request: scripted project.json edits through the sandbox, and an approved computer-file proposal.
  const latestAsset=(body:any)=>assetIds(body).at(-1);
  const script:Script=(body,step)=>{
-  const text=JSON.stringify(body.messages?.[0]??'');
+  // The project keeps one conversation: the request being answered is the latest one.
+  const text=lastUserText(body);
   if(text.includes('Organize notes'))return step===0?[{type:'tool_use',id:'notes-files',name:'propose_files',input:{title:'Update notes',operations:[{kind:'write',path:notes,text:'Edited notes'}]}}]:finish('notes-done','Your notes are updated.');
   if(text.includes('Add a title saying Our story'))return step===0?scriptedEdit('home-title',`p.timeline.attached.push({id:'home-title',type:'overlay',component:'lower_third',start:{kind:'project',at:'start',offsetSec:0},durationSec:2,layer:0,params:{text:'Our story',x:.5,y:.8},reason:'Requested title'})`):finish('title-done','Added the title.');
   return step===0?scriptedEdit('home-draft',`p.timeline.spine.splice(0,0,{id:'home-clip',assetId:'${latestAsset(body)}',srcIn:0,srcOut:3,speed:1,audio:{gainDb:0,fadeInSec:0,fadeOutSec:0,mute:false},reason:'First draft'})`):finish('draft-done','Your draft is ready.');

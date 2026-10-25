@@ -218,7 +218,9 @@ export class Agent {
    const output=await this.execute(call.name as ToolName,input,{callId:call.id,turnId:run.turnId,signal,readOnly,selection,session});
    if(call.name==='propose_plan')planned=true;
    block=resultBlock(call.id,output,false);
-   this.activity(run.turnId,id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete'});
+   // Media the call imported or looked at shows on its row as thumbnails.
+   const media=output&&typeof output==='object'&&Array.isArray((output as any).media)?(output as any).media.slice(0,24):undefined;
+   this.activity(run.turnId,id,{kind:'action',tool:call.name,text:toolActivity(call.name,input)??call.name,status:'complete',...(media?.length?{media}:{})});
   }catch(error){
    if(error instanceof FileApprovalRequired||signal.aborted)throw error;
    block=resultBlock(call.id,(error as Error).message||String(error),true);

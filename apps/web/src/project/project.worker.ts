@@ -43,7 +43,8 @@ async function boot(env:Record<string,string>){
  await exclusive();
  Object.assign(process.env,{DREAM_RUNTIME:'browser',DREAM_FFMPEG:'ffmpeg',DREAM_FFPROBE:'ffprobe',DREAM_INGEST_BINARY:'',DREAM_WHISPER_BINARY:'',DREAM_WHISPER_MODEL:'',...env});
  await connectFs(new Worker(new URL('./fs/storage.worker.ts',import.meta.url),{type:'module'}));
- connectPrograms(new Worker(new URL('./media/media.worker.ts',import.meta.url),{type:'module'}));
+ // Two media workers: a look at a few frames runs beside a long analysis instead of after it.
+ connectPrograms(...[0,1].map(()=>new Worker(new URL('./media/media.worker.ts',import.meta.url),{type:'module'})));
  await initSqlite();
  for(const folder of ['/tmp','/profile','/Dream/Projects'])mkdirSync(folder,{recursive:true});
  startFiles();startHost();
