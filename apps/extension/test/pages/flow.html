@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Project dashboard</title><link rel="stylesheet" href="style.css">
+<style>nav{display:flex;gap:10px;margin-bottom:16px}section{border:1px solid #ddd;padding:12px;min-height:60px}</style></head><body>
+<h1>Project dashboard</h1>
+<nav><button id="functions">Edge Functions</button><button id="logs">Logs</button><button id="settings">Settings</button><button id="delete">Delete project</button></nav>
+<section id="view">Overview</section>
+<script>
+const view=document.getElementById('view');
+for(const id of ['functions','logs','settings'])document.getElementById(id).addEventListener('click',()=>{view.textContent=id==='logs'?'Logs: 3 errors in the last hour':id==='functions'?'Edge Functions: dream-gateway':'Settings';view.dataset.view=id;});
+document.getElementById('delete').addEventListener('click',()=>{view.textContent='Deleted';view.dataset.view='deleted';});
+</script>
+</body></html>

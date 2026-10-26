@@ -87,6 +87,12 @@ export async function getMedia(id:string):Promise<Media|undefined>{const d=await
 export async function allVoices():Promise<Voice[]>{const d=await db();return openAll<Voice>(d,await d.getAll('voices'));}
 export async function passagesOfRef(ref:string):Promise<Passage[]>{const d=await db(),k=await keysFor(d);return openAll<Passage>(d,await d.getAllFromIndex('passages','ref',await hashOf(k,ref)));}
 export async function removePassages(ref:string){const d=await db(),k=await keysFor(d),keys=await d.getAllKeysFromIndex('passages','ref',await hashOf(k,ref));const tx=d.transaction('passages','readwrite');for(const key of keys)await tx.store.delete(key);await tx.done;}
+/** A single sealed value (what the learner knows, the history import's progress). */
+export async function putSealed(key:string,value:unknown){const d=await db(),k=await keysFor(d);await d.put('meta',{sealed:await seal(k,value)},'sealed:'+key);}
+export async function getSealed<T>(key:string):Promise<T|undefined>{
+ const d=await db(),row=await d.get('meta','sealed:'+key) as {sealed?:Box}|undefined;if(!row?.sealed)return;
+ try{return await open<T>(await keysFor(d),row.sealed);}catch{return;}
+}
 /** Timings are not about the user's content: kept in the clear for the meters. */
 export async function addTiming(value:TimingRecord){try{await (await db()).add('timings',value);}catch{}}
 export async function recentTimings(limit:number,since=0):Promise<TimingRecord[]>{

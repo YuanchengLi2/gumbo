@@ -9,7 +9,10 @@ export type Request=
  |{type:'spend'}
  |{type:'memory.counts'}
  |{type:'memory.forget';site?:string;since?:number}
- |{type:'meter.run';count?:number};
+ |{type:'meter.run';count?:number}
+ |{type:'meter.actions'}
+ |{type:'import.run'}
+ |{type:'import.state'};
 
 export type AuthState={signedIn:boolean;email?:string};
 export type Stats={tab:{p50?:number;p90?:number;samples:number};shown:number;accepted:number;dismissed:number;failures:number;byWhat:Record<string,number>};

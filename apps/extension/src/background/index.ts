@@ -13,6 +13,8 @@ import {capturePage} from './capture';
 import './budget';
 import './inline';
 import './card';
+import {measureActions} from './actions';
+import {importHistory,importState} from './history';
 import {measureTab} from './meter';
 
 /** The engine: sign-in, the gateway, memory and every surface. The worker sleeps when idle; what matters is kept in
@@ -28,6 +30,8 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'auth.signout':await signOut();await lock();return{};
   case 'auth.code':{
    const result=await finishSignIn(message.code,message.error);
+   // The first sign-in brings in what the user already has (history, bookmarks), in the background.
+   if(result.ok)void importState().then(s=>{if(s.state==='idle')void importHistory().catch(()=>{});}).catch(()=>{});
    // The tab the sign-in came back to becomes Gumbo's welcome page, which says what happened.
    const page=chrome.runtime.getURL('welcome.html')+(result.ok?'?signed=1':'?error='+encodeURIComponent(result.message));
    if(sender.tab?.id!==undefined)await chrome.tabs.update(sender.tab.id,{url:page});
@@ -38,6 +42,9 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'memory.counts':return counts();
   case 'memory.forget':await forget({site:message.site,since:message.since});return{};
   case 'meter.run':return measureTab(message.count);
+  case 'meter.actions':return measureActions();
+  case 'import.run':return importHistory();
+  case 'import.state':return importState();
  }
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void refresh();});
@@ -47,4 +54,4 @@ chrome.runtime.onInstalled.addListener(details=>{
 });
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
-(globalThis as any).gumbo={stats,capture:capturePage,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
+(globalThis as any).gumbo={stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};

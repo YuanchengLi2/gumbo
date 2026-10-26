@@ -12,6 +12,7 @@ import {deepActive} from './dom';
 import {startTab,tabState} from './tab';
 import {startInline} from './inline';
 import {startCapture} from './capture';
+import {startChips,chipState} from './chips';
 
 /** Gumbo in one frame (or one of the extension's own pages): tracks the field in focus, runs Tab, Ctrl+K and capture,
  * and answers the engine's requests (the page model, an action, and checks the tests use). */
@@ -26,7 +27,7 @@ export function start(_window:Window){
   const answer=handle(message);if(answer===undefined)return;
   answer.then(reply,error=>reply({ok:false,detail:(error as Error).message}));return true;
  });
- startTab();startInline();startCapture();
+ startTab();startInline();startCapture();startChips();
 }
 /** Requests from the engine. A request about the field in focus is answered only by the frame that has it, so the
  * reply comes from the right frame of a page with many. */
@@ -51,6 +52,7 @@ function handle(message:any):Promise<unknown>|undefined{
   }
   case 'debug.hide':hideGhost();return Promise.resolve({ok:true});
   case 'debug.tab':return mine?Promise.resolve(tabState()):undefined;
+  case 'debug.chip':return top?Promise.resolve(chipState()):undefined;
   case 'debug.insert':{if(!mine)return;hideGhost();return insert(focused!,message.text);}
  }
  return undefined;

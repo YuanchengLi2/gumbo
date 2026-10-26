@@ -14,11 +14,11 @@ const ms=(n?:number)=>n===undefined?'–':n<1000?`${Math.round(n)} ms`:`${(n/100
 
 function Popup(){
  const [auth,setAuth]=useState<AuthState>();const [settings,setSettings]=useState<Settings>();const [site,setSite]=useState('');
- const [stats,setStats]=useState<Stats>();const [meter,setMeter]=useState<any>();const [measuring,setMeasuring]=useState(false);const [spend,setSpend]=useState<{todayUsd?:number}>();const [kept,setKept]=useState<Record<string,number>>();
+ const [stats,setStats]=useState<Stats>();const [meter,setMeter]=useState<any>();const [imported,setImported]=useState<any>();const [measuring,setMeasuring]=useState(false);const [spend,setSpend]=useState<{todayUsd?:number}>();const [kept,setKept]=useState<Record<string,number>>();
  const refresh=()=>{void ask<Stats>({type:'stats'}).then(setStats);void ask({type:'memory.counts'}).then(setKept);};
  useEffect(()=>{
   void ask<AuthState>({type:'auth.state'}).then(setAuth);void loadSettings().then(setSettings);onSettings(setSettings);refresh();
-  void ask({type:'spend'}).then(setSpend).catch(()=>{});
+  void ask({type:'spend'}).then(setSpend).catch(()=>{});void ask({type:'import.state'}).then(setImported).catch(()=>{});
   void chrome.tabs.query({active:true,currentWindow:true}).then(([tab])=>setSite(siteOf(tab?.url??'')));
  },[]);
  if(!auth||!settings)return null;
@@ -49,6 +49,7 @@ function Popup(){
    <section>
     <h2>Memory, on this computer only</h2>
     <p className="muted">{kept?`${kept.writing??0} pieces of your writing · ${kept.pages??0} pages · ${kept.media??0} meetings and videos`:'…'}</p>
+    {imported&&<p className="muted">{imported.state==='done'?`Your history is in: ${imported.pages} pages, ${imported.visits} visits, ${imported.bookmarks} bookmarks`:imported.state==='running'?'Bringing in your history…':<button className="link" onClick={()=>{setImported({...imported,state:'running'});void ask({type:'import.run'}).then(setImported).catch(()=>{});}}>Bring in my history and bookmarks</button>}</p>}
     <div className="row">
      {site&&<button className="link" onClick={()=>void forget({site})}>Forget {site}</button>}
      <button className="link" onClick={()=>void forget({since:Date.now()-3_600_000})}>Forget the last hour</button>

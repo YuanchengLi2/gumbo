@@ -1,5 +1,12 @@
 # Dream decisions
 
+## October 25, 2026 — Tab for actions: the user's own habits, offered as a chip
+
+- Every click on something actionable (by its role, name and the words around it, never what was typed) and every page a tab opens is a step. The learner counts which step follows which on the same kind of page (an address with its ids replaced, so every project's logs page is one kind), by hour, with habits fading over a month. It is sealed in memory with everything else.
+- When a page settles, and a moment after each click, the usual next step is offered as a chip near what was just clicked. A habit seen five times and taken seven times in ten is offered with no model asked; a weaker one is offered only if Haiku picks it from the known candidates (it cannot invent one). Tab runs it (a click, checked and retried another way, or the page it opens); a final step (send, delete, pay…) asks for Enter; Esc dismisses. No chip while a field has the focus or a text suggestion shows.
+- Chrome's last 60 days of history (links followed between pages, typed addresses by hour) teach the learner on the first sign-in, and titles, addresses and bookmarks become searchable memory, in idle-time batches.
+- The action meter replays the user's own steps; on the test habit it showed the next step and was right more than 80% of the time. Package tracking numbers in formats that cannot be anything else become "Track package".
+
 ## October 25, 2026 — Ctrl+K: edit, ask and act in place
 
 - Ctrl+K (Alt+K on sites where the user keeps the site's own) opens only in a field or over selected text; otherwise the site's shortcut works as before. The selection is saved before anything takes the focus.
