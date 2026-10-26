@@ -2,6 +2,7 @@ import {InferenceRequests,requestStatus} from './inference-requests.ts';
 const compressedJSON='application/x-dream-json-gzip';
 import {activateAccess} from './access.ts';
 import {AuthCache,serverTiming} from './auth-cache.ts';
+import {memoryKey} from './memory-key.ts';
 import {countTokens} from './token-count.ts';
 import {handleAI} from './ai.ts';
 import {providerSecrets} from './providers.ts';
@@ -68,6 +69,8 @@ Deno.serve(async(req)=>{
  await sessions.set(bearer,session);const authMs=performance.now()-authStarted;
  if(action==='engine-policy')return json({version:1,profiles:['low','medium','high'],context:{router:12000,working:180000,haiku:90000},maxOutput:64000,recovery:true,maxWallMs:Math.min(350000,Number(Deno.env.get('DREAM_AI_MAX_WALL_MS'))||350000)});
  if(action==='account'){const {data}=await db.from('dream_accounts').select('email,status,plan,is_guest,beta_access,is_admin').eq('id',user.id).single();return json(data);}
+ // The key that seals the extension's memory on the user's computer (memory-key.ts); no memory comes here.
+ if(action==='memory-key'){const secret=Deno.env.get('DREAM_MEMORY_SECRET');if(!secret)return json({error:'Memory keys are not set up on the gateway.',code:'not_configured'},503);return Response.json({key:await memoryKey(secret,user.id)},{headers:{...cors,'Cache-Control':'no-store'}});}
  // Quick render: a pass for the cloud scene renderer, for the plans that have it (scene-render.ts).
  if(action==='scene-render-pass'){const {data}=await db.from('dream_accounts').select('plan,is_admin').eq('id',user.id).single();const result=await sceneRenderPass(user,data,name=>Deno.env.get(name));return json(result.body,result.status);}
  // Settings > Usage and billing: the credits requests took today, over the last 30 days, by day and by model.

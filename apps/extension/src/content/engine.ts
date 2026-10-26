@@ -9,7 +9,7 @@ import {layer} from './ui/root';
 import {pageModel} from './perceive';
 import {perform,irreversible,findTarget,type Action} from './act';
 import {deepActive} from './dom';
-import {startTab} from './tab';
+import {startTab,tabState} from './tab';
 import {startInline} from './inline';
 import {startCapture} from './capture';
 
@@ -50,6 +50,7 @@ function handle(message:any):Promise<unknown>|undefined{
    return Promise.resolve({ok:true,...showGhost(caret,message.text,{atLineEnd,singleLine:field.singleLine,ownWrapping:field.kind==='context'})});
   }
   case 'debug.hide':hideGhost();return Promise.resolve({ok:true});
+  case 'debug.tab':return mine?Promise.resolve(tabState()):undefined;
   case 'debug.insert':{if(!mine)return;hideGhost();return insert(focused!,message.text);}
  }
  return undefined;

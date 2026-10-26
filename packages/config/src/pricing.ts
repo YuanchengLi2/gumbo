@@ -15,9 +15,11 @@ export function providerRates(model:ModelInfo,usage:Record<string,any>,at=new Da
  if(model.offPeak&&!peak(at))rates={price:[rates.price[0]*model.offPeak,rates.price[1]*model.offPeak],cachedRead:rates.cachedRead*model.offPeak};
  return rates;
 }
+/** Models only Gumbo for Chrome uses (not in the editor's menu), at their gateway prices. */
+const extensionModels:{id:string;price:[number,number];cachedRead:number}[]=[{id:'groq-fast',price:[.59,.79],cachedRead:.59}];
 export function usageCost(model:string,usage:Record<string,any>,price:[number,number]=modelPrices[model]??[0,0],at=new Date()):number{
  // Other providers' models: uncached input, cache reads at that model's rate, and output (the gateway's providerCost).
- const other=modelCatalog.find(m=>m.id===model&&m.provider!=='anthropic');if(other){const rates=providerRates(other,usage,at);return((usage.input_tokens??0)*rates.price[0]+(usage.cache_read_input_tokens??0)*rates.cachedRead+(usage.output_tokens??0)*rates.price[1])/1e6;}
+ const other=modelCatalog.find(m=>m.id===model&&m.provider!=='anthropic')??extensionModels.find(m=>m.id===model) as ModelInfo|undefined;if(other){const rates=providerRates(other,usage,at);return((usage.input_tokens??0)*rates.price[0]+(usage.cache_read_input_tokens??0)*rates.cachedRead+(usage.output_tokens??0)*rates.price[1])/1e6;}
  if(Array.isArray(usage.iterations)&&usage.iterations.some((entry:any)=>entry?.type==='fallback_message'))return usage.iterations.reduce((sum:number,entry:any)=>{const served=typeof entry?.model==='string'?entry.model:model;return sum+usageCost(served,{...entry,iterations:undefined},attemptPrices[served]??price);},0);
  if(model==='claude-haiku-5-5')price=(usage.input_tokens??0)+(usage.cache_read_input_tokens??0)+(usage.cache_creation_input_tokens??0)>HAIKU_LONG_CONTEXT?[.5,2.5]:[.1,.5];
  const readMultiplier=model==='claude-opus-5-5'?.05:.1;

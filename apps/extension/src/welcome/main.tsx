@@ -4,6 +4,7 @@ import '../shared/tokens.css';
 import './welcome.css';
 import {Bowl} from '../shared/Bowl';
 import {ask,type AuthState} from '../shared/protocol';
+import {start} from '../content/engine';
 
 /** The first page Gumbo opens: sign in, then try Tab and Ctrl+K right here. It also says how a sign-in ended. */
 function Welcome(){
@@ -30,3 +31,5 @@ function Welcome(){
  </main>;
 }
 createRoot(document.getElementById('root')!).render(<Welcome/>);
+// Tab and Ctrl+K work on this page too, so they can be tried right here.
+start(window);

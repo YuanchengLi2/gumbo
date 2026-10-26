@@ -8,7 +8,8 @@ export type Request=
  |{type:'stats'}
  |{type:'spend'}
  |{type:'memory.counts'}
- |{type:'memory.forget';site?:string;since?:number};
+ |{type:'memory.forget';site?:string;since?:number}
+ |{type:'meter.run';count?:number};
 
 export type AuthState={signedIn:boolean;email?:string};
 export type Stats={tab:{p50?:number;p90?:number;samples:number};shown:number;accepted:number;dismissed:number;failures:number;byWhat:Record<string,number>};

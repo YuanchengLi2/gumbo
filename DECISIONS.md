@@ -1,5 +1,14 @@
 # Dream decisions
 
+## October 25, 2026 — Tab for text, and memory sealed on the computer
+
+- Tab asks after a pause (30 ms after a word ends, 120 ms inside one; longer on sites where suggestions are ignored), shows the first whole word as it streams, keeps a suggestion through matching keystrokes and Backspace with no new request, and stops the model when a sentence ends or when the request is no longer wanted. Tab takes all, Ctrl+→ a word, Esc dismisses; Tab is the page's again when nothing shows.
+- Two predictions run at once and only the words both begin with are shown; they stop when they part. On the development writing set (36 samples, 60 moments, Haiku 5.5) this took "right when shown" from 25% to 43% at a 62% show rate, the first word right 68% of the time. A single Sonnet 5.5 prediction was 32% right with the first word at about a second, too slow for Tab. Numbers on the user's own writing come from the popup's check.
+- The model restates the word at the caret before continuing (it finishes a half-typed word, and its own spacing says where the next word starts), and checks in code drop preambles, notes about the task, echoes, overlap with the text after the caret, other scripts, and any number, date, name or link the user cannot see.
+- Memory is sealed: every record is AES-256-GCM under a data key made once per account, stored wrapped by a key the gateway derives from the account (memory-key, from DREAM_MEMORY_SECRET; a key in the extension's own storage stands in until that is deployed, then the data key is re-wrapped). Sites and addresses are stored only as keyed hashes; the unwrapped key lives in memory only. Each account on a computer has its own database.
+- Memory stays within 2 GB (or a fifth of Chrome's quota): logs are capped and the pages read longest ago go first, hourly, only while the computer is idle.
+- The gateway gets a Groq route (`groq-fast`, Llama 3.3 70B on its existing key) for Tab if the first word through the deployed fast lane stays above half a second.
+
 ## October 25, 2026 — Gumbo for Chrome's field engine: one engine for every editor
 
 - Fields are found and read with no code for any one site: inputs, textareas, contenteditable from any framework, open shadow roots, every frame, and editors driven by Chrome's EditContext (Monaco). Passwords, card numbers, one-time codes, login forms and payment frames are never fields.

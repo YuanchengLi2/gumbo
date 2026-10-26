@@ -8,13 +8,13 @@ import {loadSettings,saveSettings,onSettings,activeOn,blockedSite,siteOf,type Se
 
 /** The toolbar popup: whether Gumbo is on here, pause, how Tab is doing on this computer, today's spend, what memory
  * keeps (and forgetting it), and the model for each surface. */
-const models:{id:string;name:string}[]=[{id:'claude-haiku-5-5',name:'Claude Haiku 5.5'},{id:'claude-sonnet-5-5',name:'Claude Sonnet 5.5'},{id:'claude-opus-5-5',name:'Claude Opus 5.5'},{id:'deepseek-flash',name:'DeepSeek V4.1 Flash'}];
+const models:{id:string;name:string}[]=[{id:'claude-haiku-5-5',name:'Claude Haiku 5.5'},{id:'claude-sonnet-5-5',name:'Claude Sonnet 5.5'},{id:'claude-opus-5-5',name:'Claude Opus 5.5'},{id:'deepseek-flash',name:'DeepSeek V4.1 Flash'},{id:'groq-fast',name:'Llama on Groq (fastest)'}];
 const surfaces:{id:Surface;name:string}[]=[{id:'tab',name:'Tab'},{id:'inline',name:'Ctrl+K'},{id:'notes',name:'Notes'},{id:'agent',name:'Agent'}];
 const ms=(n?:number)=>n===undefined?'–':n<1000?`${Math.round(n)} ms`:`${(n/1000).toFixed(1)} s`;
 
 function Popup(){
  const [auth,setAuth]=useState<AuthState>();const [settings,setSettings]=useState<Settings>();const [site,setSite]=useState('');
- const [stats,setStats]=useState<Stats>();const [spend,setSpend]=useState<{todayUsd?:number}>();const [kept,setKept]=useState<Record<string,number>>();
+ const [stats,setStats]=useState<Stats>();const [meter,setMeter]=useState<any>();const [measuring,setMeasuring]=useState(false);const [spend,setSpend]=useState<{todayUsd?:number}>();const [kept,setKept]=useState<Record<string,number>>();
  const refresh=()=>{void ask<Stats>({type:'stats'}).then(setStats);void ask({type:'memory.counts'}).then(setKept);};
  useEffect(()=>{
   void ask<AuthState>({type:'auth.state'}).then(setAuth);void loadSettings().then(setSettings);onSettings(setSettings);refresh();
@@ -43,6 +43,8 @@ function Popup(){
     <p>First word in {ms(stats?.tab.p50)} <span className="muted">typical · {ms(stats?.tab.p90)} at worst for 9 in 10</span></p>
     <p>{stats?.accepted??0} taken of {stats?.shown??0} shown{stats?.dismissed?` · ${stats.dismissed} dismissed`:''}{stats?.failures?<span className="bad"> · {stats.failures} failed</span>:''}</p>
     {spend?.todayUsd!==undefined&&<p className="muted">Today's AI: ${spend.todayUsd.toFixed(2)}</p>}
+    <div className="row"><button className="link" disabled={measuring} onClick={()=>{setMeasuring(true);void ask({type:'meter.run'}).then(setMeter).finally(()=>setMeasuring(false));}}>{measuring?'Checking Tab on your writing…':'Check Tab on my writing'}</button></div>
+    {meter&&('error' in meter?<p className="muted">{meter.error}</p>:<p className="muted">On your writing: shows {Math.round(meter.showRate*100)}% of the time, right {Math.round(meter.precision*100)}% when it does</p>)}
    </section>
    <section>
     <h2>Memory, on this computer only</h2>
