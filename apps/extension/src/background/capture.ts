@@ -20,9 +20,14 @@ on('capture.writing',async(message:{key:string;intent:string;label:string;editor
 
 on('capture.page',async(message:{title:string;text:string;visibleMs:number},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;
+ await capturePage({url,title:message.title,text:message.text,visibleMs:message.visibleMs});
+});
+/** Keeps a page (and its passages for search). */
+export async function capturePage(message:{url:string;title:string;text:string;visibleMs?:number}){
+ const url=message.url;
  try{
   const now=Date.now(),old=await getPage(url),text=message.text.slice(0,MAX_PAGE);
-  const page:Page={url,site:siteOf(url),title:message.title.slice(0,300)||old?.title||url,text:text.length>=(old?.text.length??0)*0.6?text:old!.text,firstSeen:old?.firstSeen??now,lastSeen:now,visibleMs:(old?.visibleMs??0)+Math.max(0,message.visibleMs),visits:(old?.visits??0)+(message.visibleMs?0:1),highlights:old?.highlights??[],source:'browser'};
+  const page:Page={url,site:siteOf(url),title:message.title.slice(0,300)||old?.title||url,text:text.length>=(old?.text.length??0)*0.6?text:old!.text,firstSeen:old?.firstSeen??now,lastSeen:now,visibleMs:(old?.visibleMs??0)+Math.max(0,message.visibleMs??0),visits:(old?.visits??0)+(message.visibleMs?0:1),highlights:old?.highlights??[],source:'browser'};
   await add('pages',page);
   // Passages are what search reads: re-cut when the text changed.
   if(page.text!==old?.text){
@@ -31,7 +36,7 @@ on('capture.page',async(message:{title:string;text:string;visibleMs:number},{url
   }
   invalidate();
  }catch{}
-});
+}
 
 on('capture.copy',async(message:{text:string},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;

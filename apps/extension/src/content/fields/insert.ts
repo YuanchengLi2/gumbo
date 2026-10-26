@@ -8,7 +8,7 @@ import {clean} from '../dom';
  *  3. a beforeinput event for editors that handle input themselves (Slate, Lexical);
  *  4. a paste of the text (and HTML, for rich text), which every editor handles.
  * A try that changed the field without the right result is undone before the next. */
-export type Inserted={ok:boolean;method?:'insertText'|'setRangeText'|'beforeinput'|'textupdate'|'paste';reason?:string};
+export type Inserted={ok:boolean;method?:'insertText'|'insertHTML'|'setRangeText'|'beforeinput'|'textupdate'|'paste';reason?:string};
 const norm=(text:string)=>clean(text).replace(/\s+/g,' ').trim();
 const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
 
@@ -19,6 +19,12 @@ export async function insert(field:Field,text:string,options:{from?:number;to?:n
  const expected=before.text.slice(0,from)+text+before.text.slice(to);
  const attempts:[Inserted['method'],()=>boolean|void][]=[];
  const paste=()=>{const data=new DataTransfer();data.setData('text/plain',text);if(options.html)data.setData('text/html',options.html);field.el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true,composed:true}));};
+ // Formatted text (a Ctrl+K rewrite of rich text) goes in as HTML first: a paste for editor libraries, which parse it
+ // into their own model, the browser's insertHTML for a plain editable element. Plain text is the fallback.
+ if(options.html&&field.kind==='editable'){
+  if(field.editor==='contenteditable')attempts.push(['insertHTML',()=>select(field,from,to)&&field.el.ownerDocument.execCommand('insertHTML',false,options.html!)]);
+  else attempts.push(['paste',()=>{select(field,from,to);paste();}]);
+ }
  if(field.kind==='context'){
   // An EditContext editor: a paste at its own caret is one edit (one Ctrl+Z); failing that, text as the browser gives
   // typed text: the context's text updated, then textupdate. The offsets are the EditContext's own (its selection), since

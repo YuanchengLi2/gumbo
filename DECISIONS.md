@@ -1,5 +1,13 @@
 # Dream decisions
 
+## October 25, 2026 — Ctrl+K: edit, ask and act in place
+
+- Ctrl+K (Alt+K on sites where the user keeps the site's own) opens only in a field or over selected text; otherwise the site's shortcut works as before. The selection is saved before anything takes the focus.
+- The card is an extension page in a frame inside Gumbo's closed shadow root, paired with its content script through the service worker by a session id only they know: the page never sees what is typed in it, and its own shortcuts (Gmail's single keys) never fire while typing there.
+- One model call names its mode on the first line: EDIT (only the new text), ANSWER (short, citing memory items by number, returned as links), ACT (one JSON object turned into a prefilled Google Calendar event, a mail, map or web search, a link, or a local note: no connector needed). The cache is warmed with the page, field and selection while the instruction is typed.
+- An edit streams as old text struck through above the new and becomes a word diff when done. Enter puts the selection back, checks it still holds the same text (or finds it again by its text), replaces it with the field's own undo, and reads it back; Esc changes nothing and restores focus and selection. Rich text goes to the model as light Markdown and comes back as HTML (a paste for editor libraries, insertHTML for a plain editable element), so bold stays bold.
+- Checked live on Haiku 5.5: formal rewrite, shortening, an answer, a calendar event, a reply written from nothing, a translation and a mail search each came back in the right mode and clean.
+
 ## October 25, 2026 — Tab for text, and memory sealed on the computer
 
 - Tab asks after a pause (30 ms after a word ends, 120 ms inside one; longer on sites where suggestions are ignored), shows the first whole word as it streams, keeps a suggestion through matching keystrokes and Backspace with no new request, and stops the model when a sentence ends or when the request is no longer wanted. Tab takes all, Ctrl+→ a word, Esc dismisses; Tab is the page's again when nothing shows.

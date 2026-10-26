@@ -9,8 +9,10 @@ import {connectSurfaces} from './surfaces';
 import {model} from './model';
 import {lock} from './vault';
 import './tab';
-import './capture';
+import {capturePage} from './capture';
 import './budget';
+import './inline';
+import './card';
 import {measureTab} from './meter';
 
 /** The engine: sign-in, the gateway, memory and every surface. The worker sleeps when idle; what matters is kept in
@@ -45,4 +47,4 @@ chrome.runtime.onInstalled.addListener(details=>{
 });
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
-(globalThis as any).gumbo={stats,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
+(globalThis as any).gumbo={stats,capture:capturePage,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};

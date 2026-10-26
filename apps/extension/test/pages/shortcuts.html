@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shortcuts</title><link rel="stylesheet" href="style.css"></head><body>
+<h1>A page with its own keyboard shortcuts</h1>
+<p id="lunch">Lunch with Sam on Friday, October 30 at 12:30 at Tartine.</p>
+<label for="ta">Reply</label><textarea id="ta"></textarea>
+<div id="pressed"></div>
+<script>
+// Like Gmail: single keys do things when not typing in a field of the page.
+window.pressed=[];
+document.addEventListener('keydown',e=>{const t=e.target;if(t.closest&&t.closest('textarea,input,[contenteditable]'))return;window.pressed.push(e.key);document.getElementById('pressed').textContent=window.pressed.join(',');});
+</script>
+</body></html>
