@@ -55,7 +55,8 @@ export async function pull(replica:Replica,remote:Remote,keys:SyncKeys):Promise<
  return{applied,unreadable};
 }
 
-export async function push(replica:Replica,remote:Remote,keys:SyncKeys,{batch=100,maxBytes=4_000_000,between}:{batch?:number;maxBytes?:number;between?:()=>Promise<void>}={}):Promise<{sent:number;full:boolean;tooLarge:number}>{
+/** `between` runs after each batch; false stops (the user is back, say), and the rest waits for the next push. */
+export async function push(replica:Replica,remote:Remote,keys:SyncKeys,{batch=100,maxBytes=4_000_000,between}:{batch?:number;maxBytes?:number;between?:()=>Promise<boolean|void>}={}):Promise<{sent:number;full:boolean;tooLarge:number}>{
  await replica.prepare(keys);
  let sent=0,tooLarge=0;
  for(;;){
@@ -73,8 +74,7 @@ export async function push(replica:Replica,remote:Remote,keys:SyncKeys,{batch=10
   const {taken,full}=await remote.push(rows);
   await replica.sent(items.slice(0,taken));sent+=taken;
   if(full)return{sent,full:true,tooLarge};
-  if(taken<rows.length)break;
-  await between?.();
+  if(taken<rows.length||await between?.()===false)break;
  }
  return{sent,full:false,tooLarge};
 }

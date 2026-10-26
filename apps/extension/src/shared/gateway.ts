@@ -24,6 +24,11 @@ export async function gatewayGet(base:string,token:string,route:string,fetcher:t
  const response=await fetcher(`${base}/${route}`,{headers:{Authorization:`Bearer ${token}`}});
  if(!response.ok)throw await failure(response);return response.json();
 }
+/** POST to one of the gateway's account routes (memory sync), the body gzipped as /ai's is. */
+export async function gatewayPost(base:string,token:string,route:string,body:unknown,fetcher:typeof fetch=fetch){
+ const response=await fetcher(`${base}/${route}`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/x-dream-json-gzip'},body:await gzip(JSON.stringify(body))});
+ if(!response.ok)throw await failure(response);return response.json();
+}
 async function failure(response:Response){
  const body=await response.json().catch(()=>({})) as any,error=body?.error;
  const message=typeof error==='string'?error:error?.message??`The gateway answered ${response.status}.`;
