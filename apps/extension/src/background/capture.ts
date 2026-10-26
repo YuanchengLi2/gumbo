@@ -10,12 +10,12 @@ const lastWriting=new Map<string,string>();
 
 async function allowed(url:string,incognito?:boolean){if(incognito)return false;const settings=await loadSettings();return activeOn(settings,siteOf(url));}
 
-on('capture.writing',async(message:{key:string;intent:string;label:string;editor:string;text:string},{url,port})=>{
+on('capture.writing',async(message:{key:string;intent:string;label:string;editor:string;text:string;replyTo?:string},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;
  const text=message.text.trim();if(text.length<12)return;
  // The same field sending the same words again (blur after send, a second blur) is one piece of writing.
  if(lastWriting.get(message.key)===text)return;lastWriting.set(message.key,text);if(lastWriting.size>500)lastWriting.delete(lastWriting.keys().next().value!);
- try{await add('writing',{site:siteOf(url),url,intent:message.intent,label:message.label.slice(0,160),editor:message.editor,text:text.slice(0,20_000),at:Date.now(),source:'browser'});invalidate();}catch{}
+ try{await add('writing',{site:siteOf(url),url,intent:message.intent,label:message.label.slice(0,160),editor:message.editor,text:text.slice(0,20_000),replyTo:message.replyTo?.slice(0,400),at:Date.now(),source:'browser'});invalidate();}catch{}
 });
 
 on('capture.page',async(message:{title:string;text:string;visibleMs:number},{url,port})=>{

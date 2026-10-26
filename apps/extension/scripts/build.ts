@@ -5,6 +5,7 @@
 import {context,build,type BuildOptions} from 'esbuild';
 import {cpSync,mkdirSync,readFileSync,writeFileSync,rmSync,existsSync,readdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
+import {ensureModels} from './models';
 const root=resolve(import.meta.dirname,'..'),out=resolve(root,'dist'),watch=process.argv.includes('--watch');
 const common:BuildOptions={bundle:true,target:'chrome120',sourcemap:'linked',logLevel:'info',outdir:out,define:{'process.env.NODE_ENV':'"production"'},jsx:'automatic',legalComments:'none'};
 const pages=['popup','welcome','sidepanel','offscreen','card'].filter(name=>existsSync(join(root,'src',name,'main.tsx'))||existsSync(join(root,'src',name,'main.ts')));
@@ -17,11 +18,15 @@ const builds:BuildOptions[]=[
 ];
 function statics(){
  mkdirSync(out,{recursive:true});
+ // ONNX Runtime's WebAssembly, served from the extension (extension pages may not load code from elsewhere).
+ const ort=resolve(root,'../../node_modules/onnxruntime-web/dist');mkdirSync(join(out,'ort'),{recursive:true});
+ for(const name of ['ort-wasm-simd-threaded.jsep.mjs','ort-wasm-simd-threaded.jsep.wasm','ort-wasm-simd-threaded.asyncify.mjs','ort-wasm-simd-threaded.asyncify.wasm','ort-wasm-simd-threaded.mjs','ort-wasm-simd-threaded.wasm'])if(existsSync(join(ort,name)))cpSync(join(ort,name),join(out,'ort',name));
  const manifest=JSON.parse(readFileSync(join(root,'manifest.json'),'utf8'));manifest.version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;
  writeFileSync(join(out,'manifest.json'),JSON.stringify(manifest,null,1));
  for(const name of pages){const html=join(root,'src',name,`${name}.html`);if(existsSync(html))cpSync(html,join(out,`${name}.html`));}
  if(existsSync(join(root,'public')))cpSync(join(root,'public'),out,{recursive:true});
 }
+await ensureModels();
 if(!watch)rmSync(out,{recursive:true,force:true});
 statics();
 if(watch){for(const options of builds)await (await context(options)).watch();console.log('Watching; reload the extension in chrome://extensions after a change to the service worker.');}

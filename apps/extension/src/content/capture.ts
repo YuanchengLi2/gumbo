@@ -26,7 +26,8 @@ export function startCapture(){
 function keepWriting(field:Field){
  if(!active())return;const snap=snapshot(field,1e9,1e9);if(!snap)return;
  const context=readContext(field);
- post({type:'capture.writing',key:keyOf(field),intent:context.intent,label:context.label,editor:field.editor,text:snap.text});
+ const last=context.thread?.at(-1);
+ post({type:'capture.writing',key:keyOf(field),intent:context.intent,label:context.label,editor:field.editor,text:snap.text,replyTo:last?`${last.author?last.author+': ':''}${last.text.slice(0,300)}`:undefined});
 }
 /** The page's text, once it has been on screen for a few seconds, and again when it changed a lot (a new address in an
  * app that never reloads, a feed that grew); how long it was in view, when it is left. */

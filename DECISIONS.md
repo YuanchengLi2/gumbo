@@ -1,5 +1,12 @@
 # Dream decisions
 
+## October 25, 2026 — Memory that finds things by meaning, and what the user already has
+
+- Memory search runs in an offscreen document (it outlives the service worker's naps): everything remembered (passages of pages read, the user's writing with what it replied to, notes, meetings) is opened once and indexed two ways, keywords (BM25 without filler words) and meaning (sentence embeddings made on the computer), fused by rank. A question about what the user said leans toward their writing; one about what someone said, toward meetings.
+- The embedding model ships inside the extension (bge-small-en-v1.5, 8-bit, 34 MB, pinned and checked by hash): on the recall test (41 questions asked in other words than the ones stored, with distractors) it put the answer in the top five 41 times, against 40 for MiniLM and 37 for keywords alone. Inside the extension, 23 of 23 page questions came back in the top five. Vectors are 8-bit and sealed like everything else; new memory is embedded in batches of sixteen with rests between them.
+- The offscreen document has no chrome.storage, so each request from the worker carries the account and its unwrapped memory key, kept in memory only there as in the worker.
+- What the user already has comes in: Chrome history and bookmarks (since Phase 5), the Gumbo profile at sign-in, settings through Chrome sync (a reinstall has them back), and another assistant's memory pasted on the welcome page, kept as notes, with its facts (name, sign-off, email) filled in only where the user set none.
+
 ## October 25, 2026 — Tab for actions: the user's own habits, offered as a chip
 
 - Every click on something actionable (by its role, name and the words around it, never what was typed) and every page a tab opens is a step. The learner counts which step follows which on the same kind of page (an address with its ids replaced, so every project's logs page is one kind), by hour, with habits fading over a month. It is sealed in memory with everything else.

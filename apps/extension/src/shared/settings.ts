@@ -20,7 +20,14 @@ export async function loadSettings():Promise<Settings>{
  const {settings}=await chrome.storage.local.get('settings') as {settings?:Partial<Settings>};
  return{...defaultSettings,...settings,models:{...defaultSettings.models,...settings?.models},facts:{...settings?.facts}};
 }
-export async function saveSettings(change:Partial<Settings>){const now=await loadSettings();await chrome.storage.local.set({settings:{...now,...change}});}
+/** Saved on this computer, and in Chrome sync, so a reinstall (or another computer signed in to Chrome) has them back. */
+export async function saveSettings(change:Partial<Settings>){const now=await loadSettings(),next={...now,...change};await chrome.storage.local.set({settings:next});await chrome.storage.sync?.set({settings:next}).catch(()=>{});}
+/** On install: the settings from Chrome sync, when this computer has none yet. */
+export async function restoreSettings(){
+ const local=(await chrome.storage.local.get('settings')).settings,synced=((await chrome.storage.sync?.get('settings').catch(()=>({})))as {settings?:unknown}|undefined)?.settings;
+ if(!local&&synced)await chrome.storage.local.set({settings:synced});
+ return !!(!local&&synced);
+}
 export function onSettings(listener:(settings:Settings)=>void){
  chrome.storage.onChanged.addListener((changes,area)=>{if(area==='local'&&changes.settings)void loadSettings().then(listener);});
 }

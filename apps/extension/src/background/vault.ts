@@ -22,8 +22,20 @@ const unb64=(text:string)=>Uint8Array.from(atob(text),c=>c.charCodeAt(0)) as Uin
 /** The database name for an account: a hash of its id, so the name says nothing about who it is. */
 export async function databaseName(user:string){return 'gumbo-memory-'+[...new Uint8Array(await crypto.subtle.digest('SHA-256',enc.encode('gumbo:'+user)))].slice(0,8).map(b=>b.toString(16).padStart(2,'0')).join('');}
 
+/** In the offscreen document, which has no chrome.storage: the account and its unwrapped data key, handed over by the
+ * worker with each request and kept in memory only, as in the worker. */
+let given:{user:string;raw:Uint8Array<ArrayBuffer>}|undefined;
+export function useKeys(user:string,dek:string){if(given?.user===user&&b64(given.raw)===dek)return;given={user,raw:unb64(dek)};keys=undefined;}
+/** The signed-in account's id, or null. */
+export async function currentUser():Promise<string|null>{if(given)return given.user;return(await session())?.user.id??null;}
+/** The unwrapped key, to hand to the offscreen document. */
+export async function exportKeys(meta:Parameters<typeof vaultKeys>[0]):Promise<{user:string;dek:string}>{
+ const k=await vaultKeys(meta);const cached=(await chrome.storage.session.get('vault')).vault as {user:string;dek:string}|undefined;
+ if(!cached||cached.user!==k.user)throw new Locked();return cached;
+}
 /** The keys for the signed-in account, unwrapping (or making) the data key on first use. */
 export async function vaultKeys(meta:{get:(key:string)=>Promise<unknown>;set:(key:string,value:unknown)=>Promise<void>}):Promise<Keys>{
+ if(given){if(keys?.user===given.user)return keys;return keys=await fromRaw(given.user,given.raw);}
  const now=await session();if(!now)throw new Locked();
  if(keys?.user===now.user.id)return keys;
  return opening??=(async()=>{
@@ -88,3 +100,8 @@ export async function hashOf(k:Keys,value:string):Promise<string>{
  const mac=new Uint8Array(await crypto.subtle.sign('HMAC',k.index,enc.encode(value.toLowerCase())));
  return b64(mac.slice(0,16)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
+/** Sealing bytes as they are (an embedding vector), without JSON in between. */
+export async function sealBytes(k:Keys,bytes:Uint8Array<ArrayBuffer>):Promise<Box>{
+ const iv=crypto.getRandomValues(new Uint8Array(12));return{iv,data:await crypto.subtle.encrypt({name:'AES-GCM',iv},k.dek,bytes)};
+}
+export async function openBytes(k:Keys,box:Box):Promise<Uint8Array>{return new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:box.iv},k.dek,box.data));}

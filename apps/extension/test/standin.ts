@@ -31,6 +31,7 @@ export async function startStandin(script:Script=()=>({text:''})):Promise<Standi
   const gateway='/functions/v1/dream-gateway/';
   if(url.pathname===gateway+'usage')return send(res,{todayCredits:4,monthCredits:120});
   if(url.pathname===gateway+'account')return send(res,{email:'friend@example.com',plan:'free'});
+  if(url.pathname===gateway+'profile')return send(res,{name:'Dana Park',makes:['youtube','podcasts'],experience:null,heard:null});
   if(url.pathname===gateway+'memory-key')return send(res,{key:Buffer.alloc(32,7).toString('base64')});
   if(url.pathname===gateway+'ai'){
    if(!String(req.headers.authorization??'').startsWith('Bearer ')){res.statusCode=401;return send(res,{error:'Dream AI connection required'});}

@@ -11,3 +11,11 @@ h1{font-size:32px;font-weight:600;letter-spacing:-.02em;margin:18px 0 8px}
 .try textarea:focus,.try .rich:focus{border-color:var(--n32)}
 .keys{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:14px;color:var(--n60)}
 kbd{font:12px var(--mono);border:1px solid var(--n12);border-bottom-width:2px;border-radius:5px;padding:1px 5px;color:var(--n81);background:var(--n0)}
+.bring{margin-top:36px;padding-top:24px;border-top:1px solid var(--n8)}
+.bring h2,.try h2{font-size:13px;font-weight:600;color:var(--n46);text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px}
+.bring p{color:var(--n60);margin:0 0 10px}
+.bring textarea{width:100%;min-height:90px;font:14px/1.5 var(--font);color:var(--n87);background:var(--n2);border:1px solid var(--n12);border-radius:10px;padding:10px 12px;outline:none;resize:vertical}
+.row{display:flex;gap:12px;align-items:center;margin-top:10px}
+.secondary{border:1px solid var(--n20);border-radius:999px;padding:7px 16px;font-weight:600}
+.secondary:disabled{opacity:.4;cursor:default}
+.muted{color:var(--n46)}

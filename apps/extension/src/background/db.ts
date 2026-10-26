@@ -1,12 +1,12 @@
 import {openDB,type IDBPDatabase} from 'idb';
-import {session} from './auth';
-import {vaultKeys,seal,open,hashOf,databaseName,Locked,type Box} from './vault';
+import {vaultKeys,seal,open,sealBytes,openBytes,hashOf,databaseName,Locked,currentUser,exportKeys,type Box} from './vault';
 /** Everything Gumbo remembers, in IndexedDB on this computer, sealed (vault.ts): each record is stored as the few things
  * lookups need in the clear (its time, and for some stores what kind of thing it is) plus hashed keys for site and
  * address, and a sealed box with the rest. Every record says where it came from (`source`: the browser today; other
  * apps could feed memory later). Requests take the few snippets they need; nothing is ever sent as a whole. */
 export type Source='browser'|'audio'|'import';
-export type Writing={id?:number;site:string;url:string;intent:string;label:string;editor:string;text:string;at:number;source:Source};
+export type Writing={id?:number;site:string;url:string;intent:string;label:string;editor:string;text:string;at:number;source:Source;
+ /** What it answered: the last message of the conversation above the field, so memory knows what the writing was about. */ replyTo?:string};
 export type SuggestionRecord={id?:number;site:string;intent:string;kind:'text'|'action';text:string;accepted:number;outcome:'accepted'|'partial'|'ignored'|'dismissed';latencyMs?:number;at:number};
 export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:'click'|'navigate'|'submit'|'key'|'open';role:string;name:string;path?:string;nearby?:string;title?:string;transition?:string;at:number;source:Source};
 export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source};
@@ -29,9 +29,11 @@ const clear:{[S in Sealed]:(v:Value[S])=>Record<string,unknown>}={
 let opened:{user:string;db:Promise<IDBPDatabase>}|undefined;
 
 export async function db():Promise<IDBPDatabase>{
- const now=await session();if(!now)throw new Locked();
- if(opened?.user===now.user.id)return opened.db;
- const promise=openDB(await databaseName(now.user.id),1,{upgrade(d){
+ const user=await currentUser();if(!user)throw new Locked();
+ if(opened?.user===user)return opened.db;
+ const promise=openDB(await databaseName(user),2,{upgrade(d,oldVersion){
+  // Version 2 adds the embedding vectors (keyed by the id of what they embed: a passage, a piece of writing, a note).
+  if(oldVersion<2&&oldVersion>=1){d.createObjectStore('vectors');return;}
   const auto={keyPath:'id',autoIncrement:true} as const;
   const writing=d.createObjectStore('writing',auto);writing.createIndex('site','site');writing.createIndex('intent','intent');writing.createIndex('at','at');
   const suggestions=d.createObjectStore('suggestions',auto);suggestions.createIndex('site','site');suggestions.createIndex('at','at');
@@ -44,11 +46,14 @@ export async function db():Promise<IDBPDatabase>{
   d.createObjectStore('failures',auto).createIndex('at','at');
   d.createObjectStore('timings',auto).createIndex('at','at');
   d.createObjectStore('meta');
+  d.createObjectStore('vectors');
  }});
- opened={user:now.user.id,db:promise};return promise;
+ opened={user,db:promise};return promise;
 }
 const metaOf=(d:IDBPDatabase)=>({get:(key:string)=>d.get('meta',key),set:async(key:string,value:unknown)=>{await d.put('meta',value,key);}});
 async function keysFor(d:IDBPDatabase){return vaultKeys(metaOf(d));}
+/** The unwrapped key for the offscreen document (vault.ts useKeys). */
+export async function vaultForOffscreen(){return exportKeys(metaOf(await db()));}
 
 /** Seals and stores a record; returns its key. */
 export async function add<S extends Sealed>(store:S,value:Value[S]):Promise<IDBValidKey>{
@@ -113,7 +118,7 @@ export async function counts(){
 /** Forgets what was kept for a site, since a time, or everything. Voices and notes go only with everything. */
 export async function forget({site,since}:{site?:string;since?:number}){
  const d=await db(),k=await keysFor(d),stores:Sealed[]=['writing','suggestions','events','pages','passages','media'];
- if(!site&&!since){const tx=d.transaction([...stores,'failures','timings','notes','voices'],'readwrite');for(const s of tx.objectStoreNames)await tx.objectStore(s).clear();await tx.done;return;}
+ if(!site&&!since){const tx=d.transaction([...stores,'failures','timings','notes','voices','vectors'],'readwrite');for(const s of tx.objectStoreNames)await tx.objectStore(s).clear();await tx.done;return;}
  const hashed=site?await hashOf(k,site):undefined;
  for(const s of stores){
   const tx=d.transaction(s,'readwrite');
@@ -124,3 +129,15 @@ export async function forget({site,since}:{site?:string;since?:number}){
   await tx.done;
  }
 }
+/** Embedding vectors (8-bit, sealed), by the id of what they embed. */
+export async function putVectors(entries:[string,Int8Array][]){
+ const d=await db(),k=await keysFor(d),sealed=await Promise.all(entries.map(async([id,v])=>[id,await sealBytes(k,new Uint8Array(v.buffer.slice(v.byteOffset,v.byteOffset+v.byteLength)) as Uint8Array<ArrayBuffer>)] as const));
+ const tx=d.transaction('vectors','readwrite');for(const [id,box] of sealed)await tx.store.put(box,id);await tx.done;
+}
+export async function allVectors():Promise<Map<string,Int8Array>>{
+ const d=await db(),k=await keysFor(d),out=new Map<string,Int8Array>(),tx=d.transaction('vectors');
+ const rows:[string,Box][]=[];for(let c=await tx.store.openCursor();c;c=await c.continue())rows.push([String(c.key),c.value]);
+ await Promise.all(rows.map(async([id,box])=>{try{const bytes=await openBytes(k,box);out.set(id,new Int8Array(bytes.buffer,bytes.byteOffset,bytes.byteLength));}catch{}}));
+ return out;
+}
+export async function vectorIds():Promise<Set<string>>{const d=await db();return new Set((await d.getAllKeys('vectors')).map(String));}

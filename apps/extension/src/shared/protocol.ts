@@ -12,7 +12,8 @@ export type Request=
  |{type:'meter.run';count?:number}
  |{type:'meter.actions'}
  |{type:'import.run'}
- |{type:'import.state'};
+ |{type:'import.state'}
+ |{type:'import.memory';text:string};
 
 export type AuthState={signedIn:boolean;email?:string};
 export type Stats={tab:{p50?:number;p90?:number;samples:number};shown:number;accepted:number;dismissed:number;failures:number;byWhat:Record<string,number>};

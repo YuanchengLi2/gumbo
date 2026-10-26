@@ -16,6 +16,10 @@ import './card';
 import {measureActions} from './actions';
 import {importHistory,importState} from './history';
 import {measureTab} from './meter';
+import {memoryReset,searchMemory} from './search';
+import {offscreen} from './offscreen';
+import {importProfile,importAssistantMemory} from './imports';
+import {restoreSettings} from '../shared/settings';
 
 /** The engine: sign-in, the gateway, memory and every surface. The worker sleeps when idle; what matters is kept in
  * storage and IndexedDB, so it picks up where it was when a page wakes it. */
@@ -31,7 +35,7 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'auth.code':{
    const result=await finishSignIn(message.code,message.error);
    // The first sign-in brings in what the user already has (history, bookmarks), in the background.
-   if(result.ok)void importState().then(s=>{if(s.state==='idle')void importHistory().catch(()=>{});}).catch(()=>{});
+   if(result.ok){void importProfile().catch(()=>{});void importState().then(s=>{if(s.state==='idle')void importHistory().catch(()=>{});}).catch(()=>{});}
    // The tab the sign-in came back to becomes Gumbo's welcome page, which says what happened.
    const page=chrome.runtime.getURL('welcome.html')+(result.ok?'?signed=1':'?error='+encodeURIComponent(result.message));
    if(sender.tab?.id!==undefined)await chrome.tabs.update(sender.tab.id,{url:page});
@@ -40,18 +44,19 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'stats':return stats();
   case 'spend':{const bearer=await token();if(!bearer)return{signedIn:false};const {gateway}=await endpoints();const usage=await gatewayGet(gateway,bearer,'usage');return{todayUsd:(usage.todayCredits??0)/100,monthUsd:(usage.monthCredits??0)/100};}
   case 'memory.counts':return counts();
-  case 'memory.forget':await forget({site:message.site,since:message.since});return{};
+  case 'memory.forget':await forget({site:message.site,since:message.since});memoryReset();return{};
   case 'meter.run':return measureTab(message.count);
   case 'meter.actions':return measureActions();
   case 'import.run':return importHistory();
   case 'import.state':return importState();
+  case 'import.memory':return importAssistantMemory(message.text);
  }
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void refresh();});
 chrome.runtime.onInstalled.addListener(details=>{
- // A first install opens the welcome page, which signs in and lets you try Tab at once.
- if(details.reason==='install')void chrome.tabs.create({url:chrome.runtime.getURL('welcome.html')});
+ // A first install brings back settings from Chrome sync and opens the welcome page, which signs in and lets you try Tab.
+ if(details.reason==='install'){void restoreSettings();void chrome.tabs.create({url:chrome.runtime.getURL('welcome.html')});}
 });
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
-(globalThis as any).gumbo={stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
+(globalThis as any).gumbo={importAssistantMemory,search:searchMemory,offscreen,stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
