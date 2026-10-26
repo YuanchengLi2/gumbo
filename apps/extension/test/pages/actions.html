@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Actions</title><link rel="stylesheet" href="style.css">
+<style>.row{display:flex;gap:12px;align-items:center;margin:6px 0}[role=listbox]{border:1px solid #bbb;width:200px}[role=option]{padding:4px 8px;cursor:pointer}</style></head><body>
+<h1>Actions</h1>
+<button id="toggle" onclick="document.getElementById('details').hidden=!document.getElementById('details').hidden">Show details</button>
+<div id="details" hidden>Here are the details.</div>
+<button id="dead">Does nothing</button>
+<label for="size">Size</label><select id="size"><option value="s">Small</option><option value="m">Medium</option><option value="l">Large</option></select>
+<div class="row"><span>Color</span><div id="combo" role="combobox" tabindex="0" aria-expanded="false" style="border:1px solid #bbb;padding:4px 8px;width:180px">Choose a color</div></div>
+<div id="list" role="listbox" hidden><div role="option">Red</div><div role="option">Green</div><div role="option">Blue</div></div>
+<div class="row"><span>Invoice 12</span><button onclick="this.closest('.row').remove()">Remove</button></div>
+<div class="row"><span>Invoice 13</span><button onclick="this.closest('.row').remove()">Remove</button></div>
+<form id="contact" onsubmit="event.preventDefault();document.getElementById('sent').hidden=false"><label for="name">Name</label><input id="name"><button type="submit">Send</button></form>
+<div id="sent" hidden>Thanks, sent.</div>
+<a href="#section2">Go to section 2</a>
+<button id="more">Load more</button>
+<h2 id="section2">Section 2</h2>
+<script>
+const combo=document.getElementById('combo'),list=document.getElementById('list');
+combo.addEventListener('click',()=>{list.hidden=false;combo.setAttribute('aria-expanded','true');});
+for(const o of list.children)o.addEventListener('click',()=>{combo.textContent=o.textContent;list.hidden=true;combo.setAttribute('aria-expanded','false');});
+document.getElementById('more').addEventListener('click',()=>setTimeout(()=>{const late=document.createElement('p');late.id='late';late.textContent='Loaded later';document.body.appendChild(late);},800));
+</script>
+</body></html>

@@ -1,5 +1,12 @@
 # Dream decisions
 
+## October 25, 2026 — Gumbo for Chrome's field engine: one engine for every editor
+
+- Fields are found and read with no code for any one site: inputs, textareas, contenteditable from any framework, open shadow roots, every frame, and editors driven by Chrome's EditContext (Monaco). Passwords, card numbers, one-time codes, login forms and payment frames are never fields.
+- Ghost text is drawn on the line box of the caret in the field's own font, wrapping at the field's own edges; editors that wrap by their own rule (Monaco) get a one-line ghost and a chip when it would wrap. The test that holds it: on every editor library (textarea, input, contenteditable, a scaled field, shadow DOM, right-to-left, ProseMirror, Lexical, Slate, Draft.js, Quill, CodeMirror 6, CKEditor 5, TinyMCE, Monaco) the ink of the ghost and of the text after accepting must match within a pixel.
+- Insertion tries the browser's insertText (the field's own undo), then setRangeText, beforeinput and a paste, reading the field back each time; EditContext editors get a paste first, because Monaco undoes a paste in one step but splits typed text at word boundaries. Ctrl+Z after accepting undoes it as each editor undoes typing.
+- Actions (click, type, key, select, scroll, wait, read) find their target by name, role and the words in its row, are checked afterwards (the page, the address or a value changed; a click focusing its own button is not a change) and retried another way once. Sending, posting, removing, paying and the like are held until confirmed.
+
 ## October 25, 2026 — Gumbo for Chrome's foundation: its own sign-in, and a fast lane in the gateway
 
 - The extension signs in through the existing sign-in page with its own PKCE verifier and returns to usegumbo.app/app/?ext=1, the address Supabase already allows; a content script that runs before the web app takes the code out of the address and hands it over. No change to the site or to Supabase, and the extension keeps its own session, so its refresh token never collides with the site's.

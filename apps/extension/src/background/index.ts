@@ -39,4 +39,4 @@ chrome.runtime.onInstalled.addListener(details=>{
 });
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
-(globalThis as any).gumbo={call:model};
+(globalThis as any).gumbo={call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};

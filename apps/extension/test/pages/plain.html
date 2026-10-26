@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Plain fields</title><link rel="stylesheet" href="style.css"></head><body>
+<h1>Plain fields</h1>
+<label for="ta">Notes</label><textarea id="ta"></textarea>
+<label for="in">Subject</label><input id="in" type="text">
+<label>Comment</label><div id="ce" class="editor" contenteditable="true" aria-label="Comment"></div>
+<form id="login"><label for="user">Email</label><input id="user" type="email" name="email"><label for="pw">Password</label><input id="pw" type="password"></form>
+<form id="pay"><label for="card">Card number</label><input id="card" autocomplete="cc-number"><label for="otp">Verification code</label><input id="otp" inputmode="numeric" maxlength="6"></form>
+<label for="search">Search</label><input id="search" type="search" placeholder="Search">
+<div style="transform:scale(1.25);transform-origin:0 0;margin-top:20px;height:200px"><label for="scaled">Scaled</label><textarea id="scaled"></textarea></div>
+<label>Right to left</label><div id="rtl" class="editor" contenteditable="true" dir="rtl" lang="he"></div>
+<div id="shadow-host"></div>
+<script>
+// A field inside an open shadow root, as web components have.
+const root=document.getElementById('shadow-host').attachShadow({mode:'open'});
+root.innerHTML='<style>textarea{font:16px/1.5 Arial,Helvetica,sans-serif;width:560px;height:80px;padding:8px 10px;border:1px solid #bbb;box-sizing:border-box;caret-color:transparent;outline:none;color:#111}</style><label style="font-size:13px;color:#555">Shadow notes</label><textarea id="shadow-ta" aria-label="Shadow notes"></textarea>';
+</script>
+</body></html>

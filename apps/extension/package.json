@@ -17,8 +17,31 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
+    "@lexical/history": "^0.52.0",
+    "@lexical/plain-text": "^0.52.0",
+    "@lexical/rich-text": "^0.52.0",
+    "@lexical/utils": "^0.52.0",
+    "@tiptap/core": "^3.32.0",
+    "@tiptap/pm": "^3.32.0",
+    "@tiptap/starter-kit": "^3.32.0",
     "@types/chrome": "^0.3.6",
+    "@types/pngjs": "^6.0.5",
+    "ckeditor5": "^49.0.0",
+    "codemirror": "^6.0.2",
+    "draft-js": "^0.11.7",
     "esbuild": "0.25.12",
+    "lexical": "^0.52.0",
+    "monaco-editor": "^0.57.0",
+    "pngjs": "^7.0.0",
+    "quill": "^2.0.3",
+    "react-dom18": "npm:react-dom@18.3.1",
+    "react18": "npm:react@18.3.1",
+    "slate": "^0.146.0",
+    "slate-history": "^0.144.0",
+    "slate-react": "^0.147.3",
+    "tinymce": "^8.10.0",
     "tsx": "^4.23.15"
   }
 }

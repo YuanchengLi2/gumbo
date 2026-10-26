@@ -26,3 +26,8 @@ export const test=base.extend<Fixtures>({
 export {expect} from '@playwright/test';
 /** The extension's own pages, by name. */
 export const extensionPage=(name:string)=>`chrome-extension://${EXTENSION_ID}/${name}`;
+
+/** Sends a request to the content scripts of a page's tab; null when no frame answers. */
+export async function tell(worker:Worker,page:Page,message:unknown):Promise<any>{
+ return worker.evaluate(async({url,message})=>{const [tab]=await chrome.tabs.query({url});try{return await (globalThis as any).gumbo.send(tab.id,message);}catch{return null;}},{url:page.url().split('#')[0],message});
+}

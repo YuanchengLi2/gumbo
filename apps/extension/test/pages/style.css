@@ -1,0 +1,7 @@
+/* Shared by the test pages: one plain font and size, and no caret (it blinks into screenshots). */
+body{font:16px/1.5 Arial,Helvetica,sans-serif;margin:40px;color:#111;background:#fff}
+*{caret-color:transparent}
+.editor{width:560px;min-height:120px;border:1px solid #bbb;padding:10px;outline:none;background:#fff}
+label{display:block;margin:14px 0 4px;font-size:13px;color:#555}
+textarea,input{font:16px/1.5 Arial,Helvetica,sans-serif;box-sizing:border-box;width:560px;padding:8px 10px;border:1px solid #bbb;outline:none;color:#111}
+textarea{height:120px;resize:none}
