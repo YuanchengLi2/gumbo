@@ -25,7 +25,9 @@ export function showGhost(caret:Caret,text:string,{atLineEnd,singleLine,ownWrapp
  }
  const box=chipAt(caret,text);return{mode:'chip',rect:box.getBoundingClientRect()};
 }
-function inline(caret:Caret,text:string,singleLine:boolean){
+function inline(caret:Caret,text:string,singleLine:boolean){const el=ghostAt(caret,text,singleLine);ghost=el;return el;}
+/** Ghost text at a caret, on its own (not the text suggestion): Tab for actions shows what it would type this way. */
+export function ghostAt(caret:Caret,text:string,singleLine:boolean){
  const el=document.createElement('div');el.className='ghost';
  const s=caret.scale,rtl=caret.direction==='rtl',width=(caret.right-caret.left)/s;
  const indent=(rtl?caret.right-caret.x:caret.x-caret.left)/s;
@@ -39,7 +41,7 @@ function inline(caret:Caret,text:string,singleLine:boolean){
  // Continuation lines cover what is below them with the field's own background (the first line ends where text ends).
  const first=document.createElement('span');first.textContent=text;
  if(!singleLine){first.style.background=caret.background;first.style.boxDecorationBreak='clone';first.style.setProperty('-webkit-box-decoration-break','clone');}
- el.appendChild(first);surface().appendChild(el);ghost=el;return el;
+ el.appendChild(first);surface().appendChild(el);return el;
 }
 function chipAt(caret:Caret,text:string){
  const box=document.createElement('div');box.className='chip';box.setAttribute('role','status');

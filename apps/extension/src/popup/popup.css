@@ -25,3 +25,8 @@ footer{display:flex;justify-content:space-between;align-items:center;border-top:
 .switch span::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--n0);transition:transform .15s}
 .switch input:checked+span{background:var(--n87)}
 .switch input:checked+span::after{transform:translateX(14px)}
+.connection{margin:4px 0}.connection .row{justify-content:space-between}.connection .token{margin:4px 0 8px}.connection input{flex:1;font:inherit;padding:4px 7px;border:1px solid var(--n20);border-radius:7px;background:var(--n0);color:var(--n100)}
+.sync input{display:block;width:100%;box-sizing:border-box;font:inherit;padding:5px 8px;margin:6px 0 0;border:1px solid var(--n20);border-radius:7px;background:var(--n0);color:var(--n100)}
+.sync .sync-status{font-weight:600}
+.sync .note{white-space:pre-wrap;font:11px/1.45 var(--mono);color:var(--n87);background:var(--n4);border:1px solid var(--n12);border-radius:7px;padding:8px;margin:6px 0;user-select:all}
+.failures pre{white-space:pre-wrap;font:11px/1.4 var(--mono);color:var(--n60);max-height:140px;overflow:auto;margin:4px 0}

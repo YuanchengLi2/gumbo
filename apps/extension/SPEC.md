@@ -9,17 +9,19 @@ like magic on every site, every day.
 - the gateway (`supabase/functions/dream-gateway`), which holds every AI key and receives the snippets a request
   needs. For the extension's requests it keeps no text: only the request id, its status and its cost;
 - Supabase Auth, to sign in and refresh the session;
-- model weights downloaded once (Whisper, YAMNet, CAM++), which carry no data of yours. MiniLM ships inside the
-  extension.
+- model weights downloaded once (Whisper, YAMNet, CAM++), which carry no data of yours, each checked against its hash.
+  The embedding model (bge-small) ships inside the extension;
+- when the user turns sync on, memory sealed with a key made from their passphrase (§6.1): the server holds only
+  ciphertext it can't read.
 
-There is no analytics, no sync and no memory on a server. Telemetry (latency, acceptance, failures) stays local.
+There is no analytics, and no readable memory on a server. Telemetry (latency, acceptance, failures) stays local.
 
 This folder (`apps/extension`, package `@dream/extension`) is the Chrome extension. It reuses Gumbo accounts, the
 Supabase project and the gateway.
 
 **Order of work:** the field engine, Tab for text, Ctrl+K, Tab for actions; memory and audio (meetings and videos); a
-perfection pass; then the agent and its sidebar. **Later, not in this build:** connectors (Gmail, Calendar, Drive,
-Supabase, Vercel, Stripe APIs), capturing other desktop apps, projects and the first-run screen, the website.
+perfection pass; then the agent and its sidebar; connectors last (Gmail, Calendar, Drive, Docs, Slides, Supabase, Vercel,
+Stripe). **Later, not in this build:** capturing other desktop apps, projects and the first-run screen, the website.
 
 ---
 
@@ -157,6 +159,14 @@ How it stays accurate and fast:
 - Applying restores the selection, checks the original is still there (finding it again by its text if the page
   changed), inserts it so Ctrl+Z undoes it, and reads it back.
 
+As built (October 26): Ctrl+K opens on any page. With nothing selected and no field it uses the whole page, after the
+page's own Ctrl+K has had its turn. The card opens with what the user most likely wants: ideas from the selection at once
+(a date → calendar, an address → map), then the model's, from the page, the conversation, memory, what they copied
+and their open tabs. ↑↓ choose, Tab puts an idea in the box, Enter runs it. Besides editing, answering and links, it can
+**do something in the page** (`{"do":"page"}`): the agent's loop runs there, with its steps in the card and Enter for a
+final step. Keys typed while the card is still loading are held and handed to it, so none is lost and none reaches the
+page. Memory, what was just copied and the open tabs come with every request.
+
 ---
 
 ## 5. Tab for actions
@@ -176,11 +186,34 @@ moving through a form.
   progress in the chip; anything irreversible (send, submit, post, delete, pay) shows the action and waits for **Enter**.
 - **Learning:** an accepted chip strengthens its pattern; an ignored one weakens it and raises that site's threshold.
 
+As built (October 26), Tab for actions is one general predictor with no code for any particular site, and no plan to
+read first: Tab just does it.
+- **Guess:** a fast model reads the page's text and every element on it, each with an id. It also sees what the user just
+  did here, the pages before this one and what they copied there, their other open tabs, their profile, memory about
+  this, their habits here and what they turned down. It proposes up to eight steps (type, choose, click, key, open),
+  as far ahead as it is sure.
+- **Checks:** every step must name an element on the page, and typed text may hold no fact that is not visible
+  somewhere. Each site has its own bar (0.5 to 0.85, 0.6 to start): it rises as guesses are turned down and falls as
+  they are taken.
+- **Timing:** it guesses the moment the page settles after a click, a choice, a new route or a dialog opening (not after
+  a fixed wait); a newer guess cancels the older one. The reply streams, and the first complete steps show while the rest
+  is being written. A strong habit or the user's own details for a form show at once, before any model answers.
+- **Running it:** Tab runs every step, waiting for the page to settle between steps and finding an element again by
+  its role, name and surroundings if the page re-rendered it. A final step waits for Enter. When the job needs more
+  than is on the page (`"more": true`) or a step is stuck, the agent carries on in the same line.
+- **Esc:** dismisses it; that guess isn't offered again on that page for ten minutes, and the model is told.
+
 ---
 
 ## 6. Memory
 
-Everything is in IndexedDB on the computer. The popup shows what is kept and deletes it by site or by time.
+Everything is in IndexedDB on the computer, **sealed**: each record is encrypted (AES-256-GCM) under a data key made
+once per account, wrapped by a key the gateway derives from the account (`memory-key`), so a copy of the browser
+profile is unreadable without signing in. Sites and addresses are stored only as keyed hashes. The unwrapped key lives
+in memory only (the worker, `chrome.storage.session`) and is gone when the browser closes or the user signs out. Each
+account has its own database. The popup shows what is kept and deletes it by site or by time. Memory stays light: an
+hourly budget trims the oldest page passages first when it grows past its share of the disk, and embedding runs in
+small batches with pauses.
 
 | What | Kept |
 |---|---|
@@ -196,29 +229,70 @@ Everything is in IndexedDB on the computer. The popup shows what is kept and del
   messages (an email thread, a chat) are read live for a request and never stored.
 - **History import:** `chrome.history` for the last 60 days, with each URL's visits (time, transition,
   `referringVisitId`), gives navigation chains and routines.
-- **Search:** meaning (MiniLM sentence embeddings, run in the offscreen document) combined with keywords (BM25),
-  filtered by site, intent and time. Pages never leave the computer to be searched.
+- **Search:** meaning (bge-small sentence embeddings, 8-bit, run in the offscreen document) fused with keywords (BM25,
+  stop words left out) by reciprocal rank, filtered by site, intent and time. Pages are kept whole, split into
+  passages. Nothing leaves the computer to be searched.
+- **Bringing in what the user has:** history and bookmarks after the first sign-in; the Gumbo profile (name, what they
+  make); settings through `chrome.storage.sync`, so a reinstall restores them; another assistant's memory, pasted on the
+  welcome page, kept as notes and facts (a fact the user set is never overwritten).
+- **Every surface works with an empty memory** and gets better as it fills: Tab (style, facts, recent reading and
+  hearing), Ctrl+K (answers with sources, context for edits), the sidebar (search with citations).
+- **Recall is measured:** a fixed set of pages, meetings and notes with known answers must come back in the top five
+  (41 of 41 now, in Node and inside the extension).
 - Every record has a `source`, so other apps can feed memory later.
+
+### 6.1 Sync between computers (end-to-end encrypted)
+
+Off until the user turns it on in the popup. Then memory is the same on every computer signed in to the account, and
+the server can't read any of it.
+- **The key is the user's.** They set a passphrase (or take a made-up one); PBKDF2-SHA256 (600,000 rounds, a random salt)
+  turns it into a key on the computer, and HKDF makes from it the keys that seal records (AES-256-GCM), name them (an
+  HMAC) and check a passphrase. The passphrase and the key never leave the computer; the key is kept sealed in memory's
+  own database. A recovery note is shown before anything is made: the passphrase can't be recovered. "Start over" sets a
+  new one (the synced copy is made again from that computer; the others ask for it and keep what they have).
+- **What syncs:** writing, notes, the sidebar's conversations, named voices, meetings and videos, pages read. Passages
+  are cut again and embeddings made on the computer a record arrives on; the logs (suggestions, actions, timings,
+  failures) and the habits learned stay on their computer.
+- **The server sees** per record an opaque id, a stamp (time, a random computer id, version) and the ciphertext; per
+  account the key's id, salt, how it was made and a check value. The id and stamp are sealed in with each record, so the
+  server can't move, re-date or invent one, deletions included. Room: 256 MB per account (`dream_limits`).
+- **Merging:** each synced record has a change in a change log (database version 5), written in the same transaction
+  as the record. Last write wins per record; a stamp always comes after the version it replaces, so a computer whose
+  clock runs ahead doesn't win over a later edit. A deletion is a tombstone and wins or loses the same way; what the
+  user forgets on one computer is forgotten on all of them. Room made by the budget is not a deletion. Notes brought in
+  (bookmarks, another assistant's memory) are named by their words, so each computer's import is one set of notes.
+- **When:** pulled when the browser starts and every 15 minutes; pushed in batches of a hundred when the computer is
+  idle and plugged in (on battery at most every six hours, never on a low one), what the user made first; at once for
+  Sync now and for forgetting; after turning sync on, the first thousand records at once and the rest when idle.
+- Gateway: `memory-sync` (the key profile), `memory-sync-setup`, `-push`, `-pull`, `-reset`
+  (`supabase/migrations/202610260001_memory_sync.sql`, row-level security per account).
 
 ---
 
 ## 7. Meetings and videos
 
-Gumbo can hear what is playing and what you say, and turns it into text on the computer.
+Gumbo hears what plays in a tab and what you say in a call, and turns it into text on the computer. It is on by
+default (the user asked for memory of everything heard), off per site or everywhere, and never on blocked sites.
 
 - **Sources:**
-  - the page's own media (`captureStream()` on video and audio elements, and the streams of web-call audio elements),
-    which needs no permission prompt, so "Tab: take notes" starts at once;
+  - the page's own media (`captureStream()` on video and audio elements, and the streams of web-call audio elements,
+    all of a call's voices mixed), read with `MediaStreamTrackProcessor` from a copy of the track, so what plays is never
+    touched; it needs no permission prompt and starts once something with sound has played for a moment and a half;
   - the whole tab (`chrome.tabCapture`), started from the toolbar, the Alt+Shift+L command or the side panel; the tab's
     sound keeps playing;
   - the mic for your side of a meeting, shown as "You" (permission is granted once on an extension page);
   - a video's own captions (`textTracks`) when it has them, since they are exact.
-- **Recognition:** 16 kHz mono through an AudioWorklet; Whisper (`@dream/web-ml`, on WebGPU when there is one) in live
-  windows of about 6 s with 2 s of overlap, merged at the seams; YAMNet and CAM++ (`@dream/sound`) for sounds and who
-  speaks. Name a voice once ("Speaker 2 is Sarah") and the next meeting knows it.
+- **Recognition:** 16 kHz mono; Whisper (`@dream/web-ml`, on WebGPU when there is one) in live windows of 8 s with 2 s
+  of overlap, merged at the seams; words become lines at a sentence end or a pause; YAMNet and CAM++ (`@dream/sound`)
+  for sounds and who speaks. Name a voice once ("Speaker 2 is Sarah") and the next meeting knows it. The mic's copy of
+  what the speakers played is dropped. A video's lines carry the video's own time (seeks and speed included). When the
+  computer cannot keep up, quiet seconds are skipped first, then speech, and the next listen uses the smaller model.
+- **What shows:** a small pill in the page (the latest line, Stop, "Not here"), a dot on the toolbar icon; when a page's
+  sound cannot be heard (another site's or protected media), the pill says to press Alt+Shift+L.
 - **What you get:** live captions with names in the side panel; "what did she just say?" at any moment; when it ends,
   notes (summary, decisions, action items with owners) written by the model and saved in memory, so Tab and Ctrl+K use
-  them in the follow-up email; citations that jump the video to that moment.
+  them in the follow-up email; citations that jump the video to that moment (YouTube's `t=`, elsewhere `#gumbo-t=`, or a
+  seek in the open tab from the side panel).
 - **Rules:** a visible indicator while listening; never on blocked sites; audio is never stored, only text; only the
   snippets a request needs go to the model.
 
@@ -342,6 +416,35 @@ The sidebar streams the way Cursor's does, built from Gumbo's own chat:
 - irreversible steps show a card that Enter confirms; a to-do list sits on the composer; a finished run folds into
   "Worked for 1m 05s · 12 steps";
 - Stop takes the place of Send; messages sent during a run queue; the view sticks to the bottom unless you scroll up.
+
+As built: the loop runs in the service worker (`background/agent.ts`) with `read_page`, `click`, `type`, `key`,
+`select`, `scroll`, `wait`, `open` (also in a background tab), `tabs`, `switch_tab`, `close_tab`, `history`,
+`reopen_tab`, `search_memory` and `todo`. Page text and memory reach the model inside `<page>` fences, and the system
+prompt says such text is never an instruction. Final steps ask in a card. Limits: 40 steps, ten minutes or 50 cents a
+request, then "continue". The gateway keeps no text of it (purpose `browser`).
+
+Every message carries memory that matches it (never only when the model searches) and the user's whole browser as it
+is now (`background/workspace.ts`):
+- every open tab in every window, with its id, group, when it was last looked at, and what the recent ones hold;
+- the tabs closed lately;
+- today's trail of pages (with time spent) and searches;
+- what they just copied and wrote.
+
+Only the latest copy stays in the conversation. A tab that is asleep is read from memory without waking it.
+
+The panel has Chat, Heard (captions and notes) and History. There is no Memory tab: memory works by itself on every
+surface. Conversations are sealed in memory. In Chat each request shows its work then its answer: an "Explored" row for
+reads and lookups, a row per action (icon, target, other site's icon, duration), memory cards, a live screenshot of the
+page with what it touched outlined, a plan, an Allow/Deny card, then the answer with source chips, Copy, time, steps and
+cost. The composer shows the page Gumbo works in; @ adds other tabs.
+
+## 13a. Connectors (last)
+Google (Gmail search, read and drafts; Calendar events and new events; Drive search; Docs and Slides read) signs in with
+Chrome's own Google account (`chrome.identity`, an OAuth client made for this extension's id, given to the build as
+`GUMBO_GOOGLE_CLIENT_ID`). Supabase (projects, SQL), Vercel (deployments, build logs) and Stripe (balance, charges,
+customers, subscriptions, invoices, payouts) take a token the user makes and pastes in the popup; it is tried once,
+then kept sealed and sent only to that service. The agent sees a service's tools only once it is connected. Writes (a
+draft, an event, SQL that changes anything) ask first. An email or document the agent reads is remembered like a page.
 
 ---
 

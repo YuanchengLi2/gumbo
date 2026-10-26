@@ -57,6 +57,12 @@ it('leaves other calls as they were: stored, at least 128 tokens, with the usual
  expect(claimed).toBe(true);expect(sent.max_tokens).toBe(128);expect(sent.thinking.type).toBe('adaptive');expect(sent.cache_control).toEqual({type:'ephemeral'});
 });
 
+it('stores no text of the browser agent, which still thinks as an agent',async()=>{
+ const {db}=database();let sent:any;
+ await handleAI({...tab,requestId:'agent',purpose:'browser',max_tokens:4000},'user',{db,key:'fixture',requests:noStore,fetcher:async(_url,init)=>{sent=JSON.parse(String(init?.body));return sse(reply('Done'));}});
+ expect(sent.max_tokens).toBe(4000);expect(sent.thinking.type).toBe('adaptive');
+});
+
 it('remembers a session for a minute, never past its token, and never under the token itself',async()=>{
  let now=1_000_000;const cache=new AuthCache(60_000,10,()=>now);
  const token=(exp:number)=>`h.${btoa(JSON.stringify({exp})).replace(/=+$/,'')}.s`;

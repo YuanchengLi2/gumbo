@@ -1,5 +1,7 @@
 import {openDB,type IDBPDatabase} from 'idb';
 import {vaultKeys,seal,open,sealBytes,openBytes,hashOf,databaseName,Locked,currentUser,exportKeys,type Box} from './vault';
+import {newer,nextStamp,type Outgoing} from '../shared/sync-engine';
+import type {Stamp} from '../shared/sync-crypto';
 /** Everything Gumbo remembers, in IndexedDB on this computer, sealed (vault.ts): each record is stored as the few things
  * lookups need in the clear (its time, and for some stores what kind of thing it is) plus hashed keys for site and
  * address, and a sealed box with the rest. Every record says where it came from (`source`: the browser today; other
@@ -12,33 +14,68 @@ export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:
 export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source};
 export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string};
 export type Segment={start:number;end:number;speaker:string;text:string};
-export type Media={id:string;url:string;site:string;title:string;kind:'meeting'|'video'|'audio';startedAt:number;endedAt?:number;segments:Segment[];sounds:{at:number;label:string}[];notes?:string;source:Source};
+export type Media={id:string;url:string;site:string;title:string;kind:'meeting'|'video'|'audio';startedAt:number;endedAt?:number;segments:Segment[];sounds:{at:number;label:string}[];notes?:string;source:Source;
+ /** The voices heard (their fingerprints), so a speaker can be named after the meeting too. */speakers?:{name:string;print:number[];count:number}[]};
 export type Voice={id:string;name:string;print:number[];count:number};
 export type Note={id?:number;text:string;url?:string;title?:string;at:number;source?:Source};
 export type Failure={id?:number;site:string;editor:string;what:'placement'|'insert'|'action'|'context'|'audio'|'model';detail:string;at:number};
+/** A conversation in the sidebar: what the user and the agent said and did (for the panel), and the model's messages. */
+export type Chat={id:string;title:string;at:number;turns:unknown[];messages:unknown[]};
 export type TimingRecord={id?:number;surface:string;ms:number;gateway?:Record<string,number>;at:number};
 
-type Value={writing:Writing;suggestions:SuggestionRecord;events:ActionEvent;pages:Page;passages:Passage;media:Media;voices:Voice;notes:Note;failures:Failure};
+type Value={writing:Writing;suggestions:SuggestionRecord;events:ActionEvent;pages:Page;passages:Passage;media:Media;voices:Voice;notes:Note;failures:Failure;chats:Chat};
 export type Store=keyof Value|'timings';
 type Sealed=keyof Value;
 /** What each store keeps in the clear for its indexes. */
 const clear:{[S in Sealed]:(v:Value[S])=>Record<string,unknown>}={
- writing:v=>({at:v.at,intent:v.intent}),suggestions:v=>({at:v.at,outcome:v.outcome,kind:v.kind}),events:v=>({at:v.at}),pages:v=>({lastSeen:v.lastSeen}),
- passages:v=>({at:v.at,kind:v.kind}),media:v=>({id:v.id,startedAt:v.startedAt}),voices:v=>({id:v.id}),notes:v=>({at:v.at}),failures:v=>({at:v.at}),
+ writing:v=>({at:v.at,intent:v.intent}),suggestions:v=>({at:v.at,outcome:v.outcome,kind:v.kind}),events:v=>({at:v.at}),pages:v=>({lastSeen:v.lastSeen,keep:keepOf(v)}),
+ passages:v=>({at:v.at,kind:v.kind}),media:v=>({id:v.id,startedAt:v.startedAt}),voices:v=>({id:v.id}),notes:v=>({at:v.at}),failures:v=>({at:v.at}),chats:v=>({id:v.id,at:v.at}),
 };
+/** How long a page is worth keeping when memory runs short (eviction removes the lowest first): when it was last seen,
+ * plus a day for each visit and for each two minutes spent on it (up to a month each). Using it in an answer moves it up
+ * (touchPages). Only this time is in the clear, never what made it. */
+const DAY=86_400_000;
+export const keepOf=(p:Page)=>p.lastSeen+Math.min(30,p.visits)*DAY+Math.min(30,Math.floor(p.visibleMs/120_000))*DAY;
+/** What syncs between the user's computers (sync.ts): what they wrote, read, heard, noted and asked. Passages and
+ * embeddings are made again from these on each computer; the logs and the habits learned stay with the computer. */
+export const SYNCED=['writing','notes','chats','voices','media','pages'] as const;
+export type Synced=typeof SYNCED[number];
+/** What is sent first: what the user made before what they read. */
+const PRIORITY:Record<Synced,number>={writing:6,notes:6,chats:5,voices:4,media:3,pages:2};
+/** Records named by what is inside them (a page by its address, writing and notes by their time and words, see
+ * nameChanges), which a deleted record no longer has; the rest are named by their key. */
+const namedInside=(store:Synced)=>store==='pages'||store==='writing'||store==='notes';
+/** The change log (database version 5), kept only while sync is on: one change per synced record, written in the same
+ * transaction as the record. Its stamp (when, on which computer, which version), whether it is deleted (a tombstone),
+ * whether it still has to be sent (dirty, by priority; 0 once sent or when it came from another computer), and its id in
+ * the synced copy (sid, given by sync.ts; sidless marks the ones still to be named). Nothing in it says what the record is. */
+export type Change=Stamp&{store:Synced;local:IDBValidKey;sid?:string;deleted:0|1;dirty:number;sidless?:1};
+const named=({sidless:_,...change}:Change):Change=>change.sid?change:{...change,sidless:1};
+/** This computer's id in the synced copy, set while sync is on (sync.ts). */
+type Syncing={device:string};
 let opened:{user:string;db:Promise<IDBPDatabase>}|undefined;
 
 export async function db():Promise<IDBPDatabase>{
  const user=await currentUser();if(!user)throw new Locked();
  if(opened?.user===user)return opened.db;
- const promise=openDB(await databaseName(user),2,{upgrade(d,oldVersion){
-  // Version 2 adds the embedding vectors (keyed by the id of what they embed: a passage, a piece of writing, a note).
-  if(oldVersion<2&&oldVersion>=1){d.createObjectStore('vectors');return;}
+ const changeLog=(d:IDBPDatabase)=>{const changes=d.createObjectStore('changes',{keyPath:['store','local']});changes.createIndex('sid','sid');changes.createIndex('dirty',['dirty','at']);changes.createIndex('sidless','sidless');};
+ const promise=openDB(await databaseName(user),5,{async upgrade(d,oldVersion,_newVersion,tx){
+  if(oldVersion>=1){
+   // Version 2 adds the embedding vectors (keyed by the id of what they embed: a passage, a piece of writing, a note).
+   if(oldVersion<2)d.createObjectStore('vectors');
+   // Version 3 adds the sidebar's conversations.
+   if(oldVersion<3)d.createObjectStore('chats',{keyPath:'id'}).createIndex('at','at');
+   // Version 4 orders pages by how long they are worth keeping (pages from before start at when they were last seen).
+   if(oldVersion<4){const pages=tx.objectStore('pages');pages.createIndex('keep','keep');for(let c=await pages.openCursor();c;c=await c.continue())if(c.value.keep===undefined)await c.update({...c.value,keep:c.value.lastSeen});}
+   // Version 5 adds the change log for sync (empty until sync is turned on).
+   if(oldVersion<5)changeLog(d);
+   return;
+  }
   const auto={keyPath:'id',autoIncrement:true} as const;
   const writing=d.createObjectStore('writing',auto);writing.createIndex('site','site');writing.createIndex('intent','intent');writing.createIndex('at','at');
   const suggestions=d.createObjectStore('suggestions',auto);suggestions.createIndex('site','site');suggestions.createIndex('at','at');
   const events=d.createObjectStore('events',auto);events.createIndex('site','site');events.createIndex('at','at');events.createIndex('pageKind','pageKind');
-  const pages=d.createObjectStore('pages',{keyPath:'key'});pages.createIndex('site','site');pages.createIndex('lastSeen','lastSeen');
+  const pages=d.createObjectStore('pages',{keyPath:'key'});pages.createIndex('site','site');pages.createIndex('lastSeen','lastSeen');pages.createIndex('keep','keep');
   const passages=d.createObjectStore('passages',auto);passages.createIndex('ref','ref');passages.createIndex('at','at');passages.createIndex('site','site');
   const media=d.createObjectStore('media',{keyPath:'id'});media.createIndex('startedAt','startedAt');media.createIndex('url','url');media.createIndex('site','site');
   d.createObjectStore('voices',{keyPath:'id'});
@@ -47,6 +84,8 @@ export async function db():Promise<IDBPDatabase>{
   d.createObjectStore('timings',auto).createIndex('at','at');
   d.createObjectStore('meta');
   d.createObjectStore('vectors');
+  d.createObjectStore('chats',{keyPath:'id'}).createIndex('at','at');
+  changeLog(d);
  }});
  opened={user,db:promise};return promise;
 }
@@ -55,17 +94,30 @@ async function keysFor(d:IDBPDatabase){return vaultKeys(metaOf(d));}
 /** The unwrapped key for the offscreen document (vault.ts useKeys). */
 export async function vaultForOffscreen(){return exportKeys(metaOf(await db()));}
 
-/** Seals and stores a record; returns its key. */
-export async function add<S extends Sealed>(store:S,value:Value[S]):Promise<IDBValidKey>{
- const d=await db(),k=await keysFor(d),v:any=value;
- const row:Record<string,unknown>={...clear[store](value as any),box:await seal(k,value)};
+/** A record as it is stored: what lookups need in the clear, hashed keys, and the sealed box. */
+async function rowOf<S extends Sealed>(k:Awaited<ReturnType<typeof keysFor>>,store:S,value:Value[S]){
+ const v:any=value,row:Record<string,unknown>={...clear[store](value as any),box:await seal(k,value)};
  if(v.site!==undefined)row.site=await hashOf(k,v.site);
  if(store==='events')row.pageKind=await hashOf(k,v.pageKind);
  if(store==='pages')row.key=await hashOf(k,v.url);
  if(store==='passages')row.ref=await hashOf(k,v.ref);
  if(store==='media')row.url=await hashOf(k,v.url);
- if(v.id!==undefined&&(store==='media'||store==='voices'))row.id=v.id;
- return store==='pages'||store==='media'||store==='voices'?d.put(store,row):d.add(store,row);
+ if(v.id!==undefined&&(store==='media'||store==='voices'||store==='chats'))row.id=v.id;
+ return row;
+}
+const isSynced=(store:string):store is Synced=>(SYNCED as readonly string[]).includes(store);
+/** Seals and stores a record; returns its key. While sync is on, a synced record's change is noted with it. */
+export async function add<S extends Sealed>(store:S,value:Value[S]):Promise<IDBValidKey>{
+ const d=await db(),row=await rowOf(await keysFor(d),store,value),keyed=store==='pages'||store==='media'||store==='voices'||store==='chats';
+ if(!isSynced(store))return keyed?d.put(store,row):d.add(store,row);
+ const tx=d.transaction([store,'changes','meta'],'readwrite');
+ const key=await (keyed?tx.objectStore(store).put(row):tx.objectStore(store).add(row));
+ const syncing=await tx.objectStore('meta').get('syncing') as Syncing|undefined;
+ if(syncing){
+  const changes=tx.objectStore('changes'),prev=await changes.get([store,key]) as Change|undefined;
+  await changes.put(named({store,local:key,sid:prev?.sid,...nextStamp(prev,syncing.device),deleted:0,dirty:PRIORITY[store]}));
+ }
+ await tx.done;return key;
 }
 /** Opens stored rows into records (rows that fail to open, from another key, are skipped). */
 async function openAll<T>(d:IDBPDatabase,rows:any[]):Promise<T[]>{
@@ -88,10 +140,31 @@ export async function getPage(url:string):Promise<Page|undefined>{
  const d=await db(),k=await keysFor(d),row=await d.get('pages',await hashOf(k,url));
  return row?(await openAll<Page>(d,[row]))[0]:undefined;
 }
+export async function getChat(id:string):Promise<Chat|undefined>{const d=await db(),row=await d.get('chats',id);return row?(await openAll<Chat>(d,[row]))[0]:undefined;}
+export async function removeChat(id:string){await remove('chats',id);}
+export async function removeMedia(id:string){await remove('media',id);}
+async function remove(store:Synced,key:IDBValidKey){const d=await db(),tx=d.transaction([store,'changes','meta'],'readwrite');await tx.objectStore(store).delete(key);await forgotten(tx,store,[key]);await tx.done;}
+/** Synced records the user removed: while sync is on, each one's change becomes a tombstone to send, so the other
+ * computers forget it too. One that was never named (sync.ts names them before forgetting) can't be, and is dropped. */
+async function forgotten(tx:any,store:Synced,keys:IDBValidKey[]){
+ const syncing=await tx.objectStore('meta').get('syncing') as Syncing|undefined;if(!syncing)return;
+ const changes=tx.objectStore('changes');
+ for(const key of keys){
+  const prev=await changes.get([store,key]) as Change|undefined;if(!prev||prev.deleted)continue;
+  if(!prev.sid&&namedInside(store)){await changes.delete([store,key]);continue;}
+  await changes.put(named({...prev,...nextStamp(prev,syncing.device),deleted:1,dirty:PRIORITY[store]}));
+ }
+}
 export async function getMedia(id:string):Promise<Media|undefined>{const d=await db(),row=await d.get('media',id);return row?(await openAll<Media>(d,[row]))[0]:undefined;}
 export async function allVoices():Promise<Voice[]>{const d=await db();return openAll<Voice>(d,await d.getAll('voices'));}
 export async function passagesOfRef(ref:string):Promise<Passage[]>{const d=await db(),k=await keysFor(d);return openAll<Passage>(d,await d.getAllFromIndex('passages','ref',await hashOf(k,ref)));}
-export async function removePassages(ref:string){const d=await db(),k=await keysFor(d),keys=await d.getAllKeysFromIndex('passages','ref',await hashOf(k,ref));const tx=d.transaction('passages','readwrite');for(const key of keys)await tx.store.delete(key);await tx.done;}
+export async function removePassages(ref:string){const d=await db(),k=await keysFor(d),keys=await d.getAllKeysFromIndex('passages','ref',await hashOf(k,ref));const tx=d.transaction(['passages','vectors'],'readwrite');for(const key of keys){await tx.objectStore('passages').delete(key);await tx.objectStore('vectors').delete('p'+key);}await tx.done;}
+/** Pages memory just used (in a suggestion, an answer): kept longer, as the ones that matter. */
+export async function touchPages(urls:string[]){
+ try{const d=await db(),k=await keysFor(d),until=Date.now()+14*DAY;
+  for(const url of urls){const key=await hashOf(k,url),row=await d.get('pages',key);if(row&&(row.keep??0)<until)await d.put('pages',{...row,keep:until});}
+ }catch{}
+}
 /** A single sealed value (what the learner knows, the history import's progress). */
 export async function putSealed(key:string,value:unknown){const d=await db(),k=await keysFor(d);await d.put('meta',{sealed:await seal(k,value)},'sealed:'+key);}
 export async function getSealed<T>(key:string):Promise<T|undefined>{
@@ -115,17 +188,28 @@ export async function counts(){
  try{const d=await db();const stores:Sealed[]=['writing','suggestions','events','pages','media','notes','passages'];return Object.fromEntries(await Promise.all(stores.map(async s=>[s,await d.count(s)])));}
  catch{return {};}
 }
-/** Forgets what was kept for a site, since a time, or everything. Voices and notes go only with everything. */
+/** Forgets what was kept for a site, since a time, or everything. Voices and notes go only with everything. While sync
+ * is on, what is forgotten here is forgotten on the user's other computers too. */
 export async function forget({site,since}:{site?:string;since?:number}){
  const d=await db(),k=await keysFor(d),stores:Sealed[]=['writing','suggestions','events','pages','passages','media'];
- if(!site&&!since){const tx=d.transaction([...stores,'failures','timings','notes','voices','vectors'],'readwrite');for(const s of tx.objectStoreNames)await tx.objectStore(s).clear();await tx.done;return;}
+ if(!site&&!since){
+  const tx=d.transaction([...stores,'failures','timings','notes','voices','vectors','chats','changes','meta'],'readwrite');
+  const syncing=await tx.objectStore('meta').get('syncing') as Syncing|undefined,changes=tx.objectStore('changes');
+  if(syncing)for(let c=await changes.openCursor();c;c=await c.continue()){
+   const prev=c.value as Change;if(prev.deleted)continue;
+   if(!prev.sid&&namedInside(prev.store))await c.delete();else await c.update(named({...prev,...nextStamp(prev,syncing.device),deleted:1,dirty:PRIORITY[prev.store]}));
+  }
+  for(const s of tx.objectStoreNames)if(s!=='meta'&&(s!=='changes'||!syncing))await tx.objectStore(s).clear();
+  await tx.done;return;
+ }
  const hashed=site?await hashOf(k,site):undefined;
  for(const s of stores){
-  const tx=d.transaction(s,'readwrite');
-  for(let c=await tx.store.openCursor();c;c=await c.continue()){
+  const tx=d.transaction(isSynced(s)?[s,'changes','meta']:[s],'readwrite'),gone:IDBValidKey[]=[];
+  for(let c=await tx.objectStore(s).openCursor();c;c=await c.continue()){
    const v=c.value,at=v.at??v.lastSeen??v.startedAt??0;
-   if((!hashed||v.site===hashed)&&(!since||at>=since))await c.delete();
+   if((!hashed||v.site===hashed)&&(!since||at>=since)){gone.push(c.primaryKey);await c.delete();}
   }
+  if(isSynced(s)&&gone.length)await forgotten(tx,s,gone);
   await tx.done;
  }
 }
@@ -141,3 +225,121 @@ export async function allVectors():Promise<Map<string,Int8Array>>{
  return out;
 }
 export async function vectorIds():Promise<Set<string>>{const d=await db();return new Set((await d.getAllKeys('vectors')).map(String));}
+
+/** Sync (sync.ts) works on the change log through these. */
+const stampOf=(c:Stamp):Stamp=>({at:c.at,device:c.device,version:c.version});
+/** This computer's id while sync is on. */
+export async function syncing():Promise<Syncing|undefined>{return (await db()).get('meta','syncing');}
+/** Turns the change log on, or off: then it is emptied, as nothing is kept for a sync that is off. */
+export async function setSyncing(value:Syncing|undefined){
+ const d=await db(),tx=d.transaction(['meta','changes'],'readwrite');
+ if(value)await tx.objectStore('meta').put(value,'syncing');else{await tx.objectStore('meta').delete('syncing');await tx.objectStore('changes').clear();}
+ await tx.done;
+}
+/** Every synced record gets a change to send: those from before sync was on get one stamped with their own time (so of
+ * two computers' copies of a page, the one seen last wins), and the rest are sent again. Under a new key they are all
+ * named again, and tombstones of records named by what was inside them are dropped, as they can't be. */
+export async function enroll({rename}:{rename:boolean}){
+ const d=await db(),syncing=await d.get('meta','syncing') as Syncing|undefined;if(!syncing)return 0;
+ const tx=d.transaction('changes','readwrite');
+ for(let c=await tx.store.openCursor();c;c=await c.continue()){
+  const v=c.value as Change;if(rename&&v.deleted&&namedInside(v.store)){await c.delete();continue;}
+  await c.update(named({...v,sid:rename?undefined:v.sid,dirty:PRIORITY[v.store]}));
+ }
+ await tx.done;
+ const time:Record<Synced,(row:any)=>number>={writing:r=>r.at,notes:r=>r.at,chats:r=>r.at,pages:r=>r.lastSeen,media:r=>r.startedAt,voices:()=>1};
+ let added=0;
+ for(const store of SYNCED){
+  for(let after:IDBValidKey|undefined,more=true;more;){
+   const tx=d.transaction([store,'changes'],'readwrite'),changes=tx.objectStore('changes');let n=0;
+   for(let c=await tx.objectStore(store).openCursor(after===undefined?undefined:IDBKeyRange.lowerBound(after,true));c&&n<500;c=await c.continue()){
+    n++;after=c.primaryKey;
+    if(await changes.getKey([store,c.primaryKey])===undefined){await changes.put(named({store,local:c.primaryKey,at:time[store](c.value)||1,device:syncing.device,version:1,deleted:0,dirty:PRIORITY[store]}));added++;}
+   }
+   await tx.done;more=n===500;await new Promise(r=>setTimeout(r,0));
+  }
+ }
+ return added;
+}
+/** Names the changes that have no id in the synced copy yet; name(store, what identifies the record) is sync.ts's keyed
+ * hash. Records named by what is inside them are opened for it; one that can't be (gone, or a tombstone) is dropped. */
+export async function nameChanges(name:(store:Synced,natural:string)=>Promise<string>){
+ const d=await db(),k=await keysFor(d);
+ for(;;){
+  const batch=await d.getAllFromIndex('changes','sidless',1,200) as Change[];if(!batch.length)return;
+  const sids:(string|null)[]=[];
+  for(const change of batch){
+   let natural:string|undefined;
+   if(!namedInside(change.store))natural=String(change.local);
+   // Notes brought in (bookmarks, another assistant's memory) are named by their words alone: each computer brings in
+   // the same ones, and they are one note in the synced copy.
+   else if(!change.deleted){const row=await d.get(change.store,change.local);try{const v=row&&await open<any>(k,row.box);if(v)natural=change.store==='pages'?v.url:`${v.source==='import'?'import':v.at}\n${v.text}`;}catch{}}
+   sids.push(natural===undefined?null:await name(change.store,natural));
+  }
+  const tx=d.transaction('changes','readwrite');
+  for(const [i,change] of batch.entries()){
+   const now=await tx.store.get([change.store,change.local]) as Change|undefined;if(!now?.sidless)continue;
+   if(sids[i]===null)await tx.store.delete([change.store,change.local]);else await tx.store.put(named({...now,sid:sids[i]!}));
+  }
+  await tx.done;
+ }
+}
+/** Up to `limit` changes waiting to be sent, most important and newest first, with what to send: the record as it is
+ * here, or nothing for a deletion. A record that is gone (memory made room) has nothing to send and is passed over. */
+export async function outgoing(limit:number):Promise<Outgoing[]>{
+ const d=await db(),k=await keysFor(d);
+ for(;;){
+  const picked:Change[]=[];
+  for(let c=await d.transaction('changes').store.index('dirty').openCursor(IDBKeyRange.lowerBound([1]),'prev');c&&picked.length<limit;c=await c.continue())if(c.value.sid)picked.push(c.value);
+  const out:Outgoing[]=[],passed:Outgoing[]=[],seen=new Set<string>();
+  for(const change of picked){
+   const item:Outgoing={sid:change.sid!,stamp:stampOf(change),body:{s:change.store}};
+   // Two records named the same (the same note twice in a millisecond) are one record in the synced copy.
+   if(seen.has(item.sid)){passed.push(item);continue;}seen.add(item.sid);
+   if(!change.deleted){
+    const row=await d.get(change.store,change.local);let value:any;
+    try{value=row&&await open<any>(k,row.box);}catch{}
+    if(!value){passed.push(item);continue;}
+    if(change.store==='writing'||change.store==='notes')delete value.id;
+    item.body.v=value;
+   }
+   out.push(item);
+  }
+  if(passed.length)await sent(passed);
+  if(out.length||!passed.length)return out;
+ }
+}
+/** Changes the server took: sent, unless they changed again since (then a later push takes them). */
+export async function sent(items:Outgoing[]){
+ const d=await db(),tx=d.transaction('changes','readwrite');
+ for(const item of items)for(const change of await tx.store.index('sid').getAll(item.sid) as Change[])if(change.dirty&&!newer(change,item.stamp))await tx.store.put({...change,dirty:0});
+ await tx.done;
+}
+/** A record from another computer: kept if it is newer than the version here, in one transaction with its change. No
+ * value is a deletion (a page's passages and embeddings go with it). True when memory changed here. */
+export async function arrive(store:Synced,sid:string,stamp:Stamp,value:any):Promise<boolean>{
+ const d=await db(),k=await keysFor(d);
+ if(value&&(store==='writing'||store==='notes'))delete value.id;
+ const row=value===undefined?undefined:await rowOf(k,store,value);
+ // A page is found by its address, a meeting, voice or conversation by its id, writing and notes by their name.
+ const local=row&&(store==='pages'?row.key:namedInside(store)?undefined:row.id) as IDBValidKey|undefined;
+ const tx=d.transaction(store==='pages'?[store,'changes','meta','passages','vectors']:[store,'changes','meta'],'readwrite'),changes=tx.objectStore('changes');
+ if(!await tx.objectStore('meta').get('syncing')){await tx.done;return false;}
+ const prev=(local!==undefined?await changes.get([store,local]) as Change|undefined:undefined)??await changes.index('sid').get(sid) as Change|undefined;
+ if(prev&&!newer(stamp,prev)){if(!prev.sid)await changes.put(named({...prev,sid}));await tx.done;return false;}
+ let changed=false;
+ if(row){
+  if(prev&&namedInside(store)&&store!=='pages')row.id=prev.local;
+  const key=await tx.objectStore(store).put(row);
+  await changes.put({store,local:key,sid,...stampOf(stamp),deleted:0,dirty:0});changed=true;
+ }else if(prev){
+  if(!prev.deleted){
+   await tx.objectStore(store).delete(prev.local);changed=true;
+   if(store==='pages'){const passages=tx.objectStore('passages');for(const key of await passages.index('ref').getAllKeys(prev.local)){await passages.delete(key);await tx.objectStore('vectors').delete('p'+key);}}
+  }
+  await changes.put(named({...prev,sid,...stampOf(stamp),deleted:1,dirty:0}));
+ }
+ await tx.done;return changed;
+}
+/** How much is waiting to be sent, and how many records the change log follows. */
+export async function syncCounts(){const d=await db();return{pending:await d.countFromIndex('changes','dirty',IDBKeyRange.lowerBound([1])),records:await d.count('changes')};}

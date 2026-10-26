@@ -12,9 +12,15 @@ export type Settings={
  models:Record<Surface,string>;
  /** Facts the user gave about themselves, which Tab may use: name, sign-off, email, anything else. */
  facts:{name?:string;signOff?:string;email?:string;other?:string};
+ /** Whether what plays in a tab (videos, talks, the other side of a call) is heard and remembered. */
+ listen:boolean;
+ /** Sites where Gumbo never listens. */
+ listenOff:string[];
+ /** Whether the user's microphone joins during a call (once Chrome allowed it). */
+ mic:boolean;
 };
 export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
- models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{}};
+ models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{},listen:true,listenOff:[],mic:false};
 
 export async function loadSettings():Promise<Settings>{
  const {settings}=await chrome.storage.local.get('settings') as {settings?:Partial<Settings>};
@@ -37,6 +43,8 @@ export function onSettings(listener:(settings:Settings)=>void){
 const blockedHosts=['chase.com','bankofamerica.com','wellsfargo.com','citi.com','capitalone.com','americanexpress.com','usbank.com','pnc.com','schwab.com','fidelity.com','vanguard.com','paypal.com','venmo.com','robinhood.com','coinbase.com','discover.com','ally.com','sofi.com','chime.com','tdbank.com','hsbc.com','barclays.co.uk','kp.org','mychart.com','healthcare.gov','zocdoc.com','labcorp.com','questdiagnostics.com','1password.com','bitwarden.com','lastpass.com','accounts.google.com','login.microsoftonline.com'];
 const blockedWords=/(^|[.-])(bank|banking|creditunion|mychart|patientportal)([.-]|$)/;
 export function blockedSite(host:string){host=host.toLowerCase().replace(/^www\./,'');return blockedHosts.some(b=>host===b||host.endsWith('.'+b))||blockedWords.test(host);}
+/** Whether Gumbo may listen on this site right now. */
+export function listensOn(settings:Settings,host:string,now=Date.now()){host=host.toLowerCase().replace(/^www\./,'');return settings.listen&&!settings.listenOff.includes(host)&&activeOn(settings,host,now);}
 /** Whether Gumbo may work on this site right now. */
 export function activeOn(settings:Settings,host:string,now=Date.now()){
  host=host.toLowerCase().replace(/^www\./,'');

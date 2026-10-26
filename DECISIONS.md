@@ -1,5 +1,119 @@
 # Dream decisions
 
+## October 26, 2026 — Gumbo for Chrome's memory syncs between computers, end-to-end encrypted
+
+- **The user holds the key.** A passphrase they set (or a made-up one, 20 random letters and digits) becomes a key on
+  the computer with PBKDF2-SHA256, 600,000 rounds and a random salt. PBKDF2 rather than Argon2: it runs in WebCrypto
+  off the worker's thread with nothing to ship. The profile on the server records how the key was made, so it can move to
+  Argon2id later. The passphrase never leaves the computer and is never kept; the key is kept sealed in memory's own
+  database, so it is there after a restart and gone with sign-out like the rest.
+- **The recovery note comes first.** The popup shows it (the passphrase, the account, how to use it on another
+  computer) before anything is made, because the popup closes easily and the passphrase can't be shown again. A lost
+  passphrase loses nothing: memory stays on each computer, and Start over makes the synced copy again under a new one.
+- **The server only ever holds ciphertext.** Per record: an id that is an HMAC under the user's key (so one page read
+  on two computers is one record, and the server can't tell what it is), a stamp (time, a random computer id, version)
+  and the sealed body, store name included. The id and stamp are the AES-GCM additional data, so the server can't move a
+  record, change its stamp or invent a deletion. Deletions are sealed like records, so the server can't tell them apart.
+- **Last write wins per record, with tombstones.** A change's stamp is always after the version it replaces, so a
+  computer whose clock runs ahead can't beat a later edit; at the same millisecond the higher computer id wins,
+  everywhere the same way. The gateway keeps a version only if it is newer (the same rule in SQL), and takes an
+  account's pushes one at a time under a lock, so a pull, which goes by the order records were taken in, never skips one.
+- **What syncs:** writing, notes, conversations, named voices, meetings and videos, pages. Passages and embeddings are
+  made again where a record arrives (smaller to send, and they follow the computer's own model). The logs and the habits
+  learned stay with their computer. Forgetting on one computer forgets everywhere; the disk budget making room is not a
+  deletion. Imported notes (bookmarks, another assistant's memory) are named by their words, since every computer
+  imports the same ones.
+- **It respects the computer.** Pull at browser start and every 15 minutes; push in batches of a hundred when the
+  computer is idle and plugged in (on battery every six hours at most, never on a low one), what the user made first.
+  Sync now and forgetting push at once; turning sync on sends the first thousand records at once and the rest when idle.
+- **Storage:** a table, not a storage bucket: records are small once compressed, and a table gives the ordering and the
+  newer-wins check in one transaction. Row-level security per account (a user can read only their own ciphertext;
+  only the gateway writes), 256 MB per account in `dream_limits`.
+- Tested: the crypto and merge cases in unit tests, the SQL in Postgres (PGlite), and two browser profiles end to end
+  against the stand-in gateway (a page and notes cross both ways, a wrong passphrase is refused, a forgotten site is
+  forgotten on both, the server holds no readable text).
+- **Not deployed yet:** the migration and the gateway routes wait for the user's go-ahead. Until then the popup says
+  sync isn't available.
+
+## October 26, 2026 — Gumbo for Chrome reads your mind: Tab acts on any page, memory everywhere, the agent knows your browser
+
+- **Tab is autocomplete for actions on every site.** One general predictor, with no code for particular apps and no plan
+  shown first. Tab does what the user was about to do: text, clicks, choices, keys and pages, chained as far as the
+  model is sure. When the job needs more than the page shows, the agent carries on.
+- **The guess shows sooner:**
+  - it is asked when the page settles after what the user did, not after a fixed wait;
+  - the older request is cancelled;
+  - the reply streams, and its first complete steps show while the rest is still being written (the model writes its
+    confidence and label first).
+- **What it knows:** what the user did just before, in other tabs: the pages, and what they copied (kept in session
+  storage, gone when the browser closes). Also their other open tabs, memory, habits, and what they turned down.
+- **Turned-down guesses:** a guess turned down on a page isn't offered there again for ten minutes. Each site's bar
+  moves with what the user takes and turns down (0.5 to 0.85).
+- **Ctrl+K** opens anywhere, offers what the user most likely wants, and can do things in the page. Keys typed while
+  its card loads are held and handed over: before this, they reached the page, where they could replace the selection.
+- **Memory is automatic everywhere** (Tab, Ctrl+K, the agent), never left to the model's choice. The Memory tab is gone:
+  the user wanted memory to just work, not to be browsed.
+- **On disk:** records of 512 bytes or more are compressed before sealing. When room runs short, the pages used least
+  recently go first, and pages memory keeps bringing up are kept longest.
+- **The agent knows the browser the way Cursor knows a codebase.** Each message carries every open tab in every window
+  (id, group, when last looked at, what the recent ones hold), the tabs closed lately, today's trail of pages and
+  searches, and what the user just copied and wrote. Tabs on sites where Gumbo is off show only as that. New tools:
+  `history` (searches visits) and `reopen_tab` (brings back a closed tab). Older copies of the browser are dropped
+  from the conversation, so it doesn't grow with every message.
+- **Live captions:** words not yet in a finished line are shown at once, in a lighter shade, in the pill and the
+  side panel. Before, a line waited for its sentence to end and for Whisper's 8-second window. On a GPU, every 1.5
+  seconds the sound since the last settled word (up to 14 seconds) is also heard on its own and shown as a guess.
+  Real lines replace the guesses. The guess pass runs only while Whisper keeps up and the computer is plugged in.
+  It turns itself off for the session if one guess takes over 1.2 seconds.
+- **Battery:** work nobody is waiting for (embedding what memory kept, the sounds around speech, caption guesses) rests
+  six times longer on battery, and waits for the charger below a fifth. Searches and caption lines always run.
+  Embedding, Whisper and the sound models already run in Web Workers.
+- **Syncing across computers** with end-to-end encryption and a key the user holds came next (the entry above).
+- **Like Cursor's Tab:**
+  - **Asking ahead:** when the pointer rests on a field for 150 ms, the guess for "the cursor is in that field" is asked
+    then. The engine shares it with the identical guess the click makes, so the click finds it ready.
+  - **Learning from you:** the last guesses you took and turned down on each site go with the next guess, as examples
+    of this person.
+  - **Less waiting:**
+    - a guess starts on mouse-down;
+    - a finished sentence is answered after 0.45 s instead of 1.3 s;
+    - the page settles for a beat, not up to 1.5 s, after a click into a field;
+    - memory waits at most 0.12 s;
+    - a one-step guess shows the moment its step is whole.
+- **Measured live** (the deployed gateway's code with the real model, `test/e2e/live.spec.ts`, GUMBO_LIVE=1; 11 of 11
+  pass; $0.09 spent in all):
+  - with the pointer resting on the field, the guess (street and city split from a copied address) showed 10 ms after
+    the click;
+  - a Google search from copied notes showed in 0.17 s;
+  - a cold click with no rest first took 1.9 s, and a reply's Send 1.7 s after typing stopped (the model's first token
+    is about 0.6 s at the median);
+  - on pages with no obvious next step (Wikipedia, GitHub, Hacker News, MDN) it rightly offers nothing.
+  - Ctrl+K explained a Wikipedia paragraph plainly, rewrote a message formally, and opened with fitting ideas.
+  - The agent found the tab about a drink and switched to it, reopened a closed tab, read a tab without leaving the
+    current one, and wrote and sent a reply after Allow.
+- **The agent's prompt was wrong:** with Haiku it typed the reply, then asked in words whether to send. The prompt now
+  says the tool itself asks (the Allow card), so it clicks Send when told to.
+- **The gateway** was deployed (version 78) with the agent's no-text lane and the old answer formats.
+
+## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
+
+- The agent is one loop, as Roux is: the message joins the conversation, the model (the Agent setting, DeepSeek V4.1 Flash by default) gets the browser's tools, the tools run in the user's tabs through the same checked action vocabulary Tab's chips use, results go back, until it answers without a tool. A final step (send, post, buy, delete, submit) asks in a card; a no is passed back so the model says what is ready instead. Limits: 40 steps, ten minutes, 50 cents per request, then "continue".
+- Page text, memory and connector results reach the model inside `<page>` fences, and the system prompt says such text is never an instruction. Hidden text is not page text (innerText). Older page reads are left out of the conversation after the latest two, which keeps steps small.
+- The gateway gets a `browser` purpose: it thinks as an agent does but, like Tab's fast lane, keeps no request text, so pages the agent reads stay off the server. Conversations are sealed in the extension's memory (database version 3 adds `chats`).
+- The panel streams as Cursor's does, from the editor's chat: the whole turn is sent at most every 40 ms; text is revealed a little each frame (faster when far behind); thinking folds into "Thought for Ns"; each tool is one row filled in from its streamed arguments (a tolerant parser closes what has arrived); more than three in a row fold into "N steps"; a to-do list; "Worked for…"; Stop (or Esc); messages sent meanwhile wait their turn; it sticks to the bottom unless scrolled up.
+- Later the same day the user found the first sidebar "too simple". Redone after looking at how Cursor, ChatGPT's agent, Comet and Dia show work: each request is its work, then its answer. Reading and lookups fold into one "Explored" row with the sites' icons (Cursor folds exploration the same way); each click, keystroke or write has its own row with an icon, what it touched, where (a site icon only when it is another site) and how long; thinking folds into "Thought for 4s"; memory the agent used shows as cards (kind, title, when, the matching words); a live look at the page (a small screenshot after each step, never kept or sent, with what it touched outlined) as ChatGPT's agent shows its browser; a step that can't be undone asks in a card (Enter allows, Esc denies); a plan ticks off with a bar; the answer ends with source chips, Copy, how long it worked, its steps and its cost. The composer shows the page Gumbo works in and takes other tabs with @ (as Dia does); before the first message the panel shows what it sees and suggests questions from memory ("What was decided in …", "Remind me what … said").
+- (Removed on October 26: memory now works by itself on every surface.) Memory got its own tab: one box searches everything kept (by meaning and words, as every surface does), filters by kind, marks the matching words, and with nothing typed lists what was kept lately, day by day; any result can become a question for the agent. The panel warms memory and its embedding model as it opens, so the first search answers at once. Gumbo's own pages (its welcome page) are no longer remembered.
+- Connectors come last: Google through Chrome's own account (`chrome.identity`; the build needs `GUMBO_GOOGLE_CLIENT_ID`, an OAuth client for this extension's id), Supabase, Vercel and Stripe through a token the user pastes, tried once and kept sealed. Their tools show only once connected; writes ask first; an email or document read is remembered like a page.
+
+## October 25, 2026 — Gumbo for Chrome hears what plays, and remembers it
+
+- Listening is on by default (the user asked for memory of everything heard), off per site or everywhere, never on blocked sites or in incognito, with a pill in the page while it listens (the latest line, Stop, "Not here") and a dot on the toolbar icon. The audio itself is never kept, only the words.
+- A page's own sound is tapped from a copy of its track (`captureStream()` on video and audio elements, a call's streams mixed), read with `MediaStreamTrackProcessor`, so nothing the page plays is touched and no permission prompt is needed. Sound that can't be heard that way (another site's or protected media comes out as digital silence) gets a hint to press Alt+Shift+L, which hears the whole tab through `tabCapture` and plays it back. A video's own captions are used instead of Whisper when it has them.
+- In the offscreen document: Whisper in 8-second windows with 2 seconds of overlap; words become lines at a sentence end, a pause of 0.9 s or 18 s; who said it from a CAM++ voice fingerprint matched against voices the user named (0.6) and this session's voices (0.55); YAMNet sounds every 10 s. The microphone joins only in calls once allowed, as "You", and its copy of what the speakers played is dropped (a held line that the call's feed also said). A video's lines carry the video's own time, through seeks and speed changes, so citations jump to the moment (YouTube's `t=`, elsewhere `#gumbo-t=`, or a seek in the open tab from the side panel).
+- When Whisper falls behind, quiet seconds are skipped first, then speech once it is over 8 pushes behind (the skipped time is kept so later times stay right), and the next listen uses the smaller model. A page that went away silently stops being heard after 90 s. Starting is atomic: if memory cannot keep the recording, nothing starts, and that media is tried again a minute later rather than on every scan.
+- When it ends, Haiku writes notes (summary, decisions, to-dos with owners, key points with times) for a meeting with a minute of speech or a video of a few minutes; they are kept with it. Speakers can be named in the side panel, during or after; the voice print is kept for next time.
+- Tested end to end in headless Chromium with a stand-in for Whisper (a page's audio, a call, a site turned off, a moment link, notes and naming in the side panel); the real models run on the Gettysburg Address with GUMBO_REAL_AUDIO=1 (word error rate, speakers, caption lag). A test profile must sit on a short path: past Windows' 260 characters IndexedDB cannot open.
+
 ## October 25, 2026 — Memory that finds things by meaning, and what the user already has
 
 - Memory search runs in an offscreen document (it outlives the service worker's naps): everything remembered (passages of pages read, the user's writing with what it replied to, notes, meetings) is opened once and indexed two ways, keywords (BM25 without filler words) and meaning (sentence embeddings made on the computer), fused by rank. A question about what the user said leans toward their writing; one about what someone said, toward meetings.

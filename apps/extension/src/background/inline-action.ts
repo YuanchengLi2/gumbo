@@ -1,6 +1,6 @@
 /** Ctrl+K's actions without a connector: the model's JSON turned into a link that does the thing (a prefilled calendar
  * event, a mail, map or web search, a page) or a note to keep. */
-export type Action={do:'calendar'|'search'|'note'|'open';label:string;url?:string;text?:string};
+export type Action={do:'calendar'|'search'|'note'|'open'|'page';label:string;url?:string;text?:string;task?:string};
 const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone;
 /** The model's action as something to do: a link to open, or a note to keep. */
 export function actionOf(text:string):Action|undefined{
@@ -21,6 +21,8 @@ export function actionOf(text:string):Action|undefined{
   return{do:'search',label:`${where==='mail'?'Search your mail':where==='maps'?'Find on Google Maps':'Search the web'}: ${a.query}`,url:target};
  }
  if(a.do==='note'&&a.text)return{do:'note',label:`Save to your notes: ${String(a.text).slice(0,80)}`,text:String(a.text)};
+ // Something done in this page: the agent does it there, step by step, in the card.
+ if(a.do==='page'&&a.task)return{do:'page',label:`Do it here: ${String(a.task).slice(0,120)}`,task:String(a.task)};
  if(a.do==='open'&&/^https?:\/\//.test(a.url??''))return{do:'open',label:`Open ${new URL(a.url).hostname}`,url:a.url};
 }
 

@@ -8,9 +8,12 @@ export const TASK_BUDGET_BETA='task-budgets-2026-03-13';
 export function inferencePolicy(model:string,purpose:unknown='routine',profile?:{effort:string},options:PolicyOptions={}){
  const effort=profile?.effort??(purpose==='consultation'?'medium':'low');
  const budget=options.taskBudget?{task_budget:{type:'tokens',total:options.taskBudget.total,...(options.taskBudget.remaining!==undefined?{remaining:options.taskBudget.remaining}:{})}}:{};
+ // Older app builds (installed desktop apps, a web app not yet updated to Roux 2) still send triage, parts and routing
+ // calls: their answer formats stay until no build sends them, so deploying the gateway never breaks them.
+ const format=purpose==='triage'?{format:{type:'json_schema',schema:{type:'object',properties:{kind:{type:'string',enum:['edit','answer','plan','continue']},difficulty:{type:'integer'},work:{type:'string',enum:['talk','look','write','fix','footage','graphics','sound','restructure']},feedback:{type:'string',enum:['positive','negative','none']},model:{type:'string'},vision:{type:'boolean'},carriesStopped:{type:'boolean'},parts:{type:'array',items:{type:'string'}},lookFor:{type:'string'},title:{type:'string'},ask:{type:'object',properties:{question:{type:'string'},options:{type:'array',items:{type:'string'}}},required:['question','options'],additionalProperties:false},reason:{type:'string'}},required:['kind','difficulty','work','feedback','model','vision','carriesStopped','parts','lookFor','title','ask','reason'],additionalProperties:false}}}:purpose==='request_parts'?{format:{type:'json_schema',schema:{type:'object',properties:{parts:{type:'array',items:{type:'string'}}},required:['parts'],additionalProperties:false}}}:purpose==='model_routing'?{format:{type:'json_schema',schema:{type:'object',properties:{model:{type:'string'},reason:{type:'string'}},required:['model','reason'],additionalProperties:false}}}:purpose==='routing'?{format:{type:'json_schema',schema:{type:'object',properties:{route:{type:'string',enum:['local','question','plan','continue']},intelligence:{type:'string',enum:['haiku','sonnet','opus']},complexity:{type:'string',enum:['simple','normal','difficult']},reason:{type:'string'},projectTitle:{type:'string'},approvalQuote:{type:['string','null']}},required:['route','intelligence','complexity','reason','approvalQuote','projectTitle'],additionalProperties:false}}}:{};
  // Haiku's summarized thinking costs the same as omitted; the app shows it as transient progress on the worker's row.
- if(model==='claude-haiku-5-5')return{thinking:{type:'adaptive',display:'summarized',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...budget}};
- if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...budget}};
+ if(model==='claude-haiku-5-5')return{thinking:{type:'adaptive',display:'summarized',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...format,...budget}};
+ if(model==='claude-sonnet-5-5'||model==='claude-opus-5-5')return{thinking:{type:'adaptive',display:'updates',block_binding:{prefix_mismatch_behavior:'drop_block'}},output_config:{effort,...format,...budget}};
  return{};
 }
 /** The extension's quick calls (Gumbo for Chrome): a Tab suggestion, a Ctrl+K rewrite, ranking a next action, warming
@@ -18,6 +21,9 @@ export function inferencePolicy(model:string,purpose:unknown='routine',profile?:
  * store), so closing the connection stops the model at once. */
 export const fastPurposes=new Set(['tab','inline','action','prewarm']);
 export const isFast=(purpose:unknown)=>typeof purpose==='string'&&fastPurposes.has(purpose);
+/** The extension's agent (the sidebar, working in the user's pages) thinks as an agent does, but like the quick calls it
+ * keeps no text here: pages and memory it reads stay off the server. */
+export const keepsNoText=(purpose:unknown)=>isFast(purpose)||purpose==='browser';
 export function fastPolicy(model:string){
  // Haiku and Sonnet can turn thinking off at low effort; Opus always thinks, so it runs at its lowest effort.
  if(model==='claude-haiku-5-5')return{thinking:{type:'disabled'},output_config:{effort:'low'}};

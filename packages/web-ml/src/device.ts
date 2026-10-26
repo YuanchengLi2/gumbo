@@ -17,10 +17,10 @@ export function modelChoice(size:ModelSize,device:Device,decoderDevice:Device,sh
  * which was faster per token on the same machine (small: 106 ms against 116; whole runs 0.52 against 0.66 of real time).
  * small (better words, about twice the time of base) only where a GPU with fp16, memory and cores to spare suggest it can
  * keep up; the speed probe has the last word. */
-export function chooseModel(caps:Capabilities,override:{size?:ModelSize;device?:Device;decoderDevice?:Device}={}):ModelChoice{
+export function chooseModel(caps:Capabilities,override:{size?:ModelSize;device?:Device;decoderDevice?:Device;fullPrecision?:boolean}={}):ModelChoice{
  const device=override.device??(caps.webgpu&&!caps.adapter?.fallback?'webgpu':'wasm'),decoderDevice=override.decoderDevice??'wasm';
  const roomy=(caps.deviceMemoryGB??8)>=8&&(caps.maxBufferMB??0)>=1024&&caps.cores>=8;
- return modelChoice(override.size??(device==='webgpu'&&caps.shaderF16&&roomy?'small':'base'),device,decoderDevice,caps.shaderF16);
+ return modelChoice(override.size??(device==='webgpu'&&caps.shaderF16&&roomy?'small':'base'),device,decoderDevice,caps.shaderF16&&!override.fullPrecision);
 }
 
 export async function capabilities():Promise<Capabilities>{

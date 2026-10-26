@@ -5,6 +5,7 @@ import './welcome.css';
 import {Bowl} from '../shared/Bowl';
 import {ask,type AuthState} from '../shared/protocol';
 import {start} from '../content/engine';
+import {saveSettings} from '../shared/settings';
 
 /** The first page Gumbo opens: sign in, then try Tab and Ctrl+K right here. It also says how a sign-in ended. */
 function Welcome(){
@@ -24,6 +25,7 @@ function Welcome(){
    <button className="primary" onClick={()=>void ask({type:'auth.signin'})}>Sign in with your Gumbo account</button>
   </>}
   {auth.signedIn&&<Bring/>}
+  <Hear/>
   <section className="try">
    <h2>Try it here</h2>
    <textarea id="try" placeholder="Write a note to a friend…" spellCheck={false}/>
@@ -42,6 +44,18 @@ function Bring(){
   <p>Ask ChatGPT or Claude "What do you remember about me?" and paste the answer here:</p>
   <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Paste what your other assistant remembers about you" spellCheck={false}/>
   <div className="row"><button className="secondary" disabled={!text.trim()} onClick={()=>void ask<any>({type:'import.memory',text}).then(r=>{setDone(`Kept ${r.notes} things about you${r.facts?.name?`, ${r.facts.name}`:''}.`);setText('');})}>Bring it in</button>{done&&<span className="muted">{done}</span>}</div>
+ </section>;
+}
+/** Meetings: what a call plays is heard on its own; the user's own side needs the microphone, allowed once here. */
+function Hear(){
+ const [state,setState]=useState<PermissionState|'asking'>('prompt');
+ useEffect(()=>{void navigator.permissions.query({name:'microphone' as PermissionName}).then(p=>{setState(p.state);p.onchange=()=>setState(p.state);}).catch(()=>{});if(location.hash==='#mic')document.getElementById('mic')?.scrollIntoView({block:'center'});},[]);
+ const allow=async()=>{setState('asking');try{const stream=await navigator.mediaDevices.getUserMedia({audio:true});stream.getTracks().forEach(t=>t.stop());await saveSettings({mic:true});setState('granted');}catch{setState('denied');}};
+ return <section className="bring" id="mic">
+  <h2>Meetings and videos</h2>
+  <p>What plays in a tab (a video, a talk, the other side of a call) is heard and written down on this computer, with who said what. The sound itself is never kept, and a small pill shows while Gumbo listens.</p>
+  <p>{state==='granted'?'Gumbo hears your side of calls too, as "You".':state==='denied'?'The microphone is blocked for Gumbo. Allow it from the icon in the address bar, then come back.':'For your own side of a call, Gumbo needs the microphone (only while a call is on):'}</p>
+  {state!=='granted'&&state!=='denied'&&<div className="row"><button className="secondary" disabled={state==='asking'} onClick={()=>void allow()}>Let Gumbo hear my side of calls</button></div>}
  </section>;
 }
 createRoot(document.getElementById('root')!).render(<Welcome/>);

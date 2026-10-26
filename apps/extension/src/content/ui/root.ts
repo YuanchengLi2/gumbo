@@ -10,6 +10,7 @@ const css=`
 .chip .text{overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .chip kbd,.card kbd{font:11px Consolas,ui-monospace,monospace;border:1px solid rgba(0,0,0,.14);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:#555;background:#fafafa;white-space:nowrap}
 .chip .progress{color:#777}
+.tab-ring{position:fixed;pointer-events:none;border:1.5px solid rgba(0,0,0,.55);border-radius:7px;box-shadow:0 0 0 3px rgba(255,255,255,.7);animation:in .12s ease-out}
 @keyframes in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
 @media (prefers-color-scheme:dark){.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
 `;

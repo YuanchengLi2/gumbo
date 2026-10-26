@@ -1,0 +1,199 @@
+/* Gumbo's side panel. Black and white (tokens.css), paprika only on the bowl and Send; quiet grey for what the agent did,
+ * ink for what it says. Each view scopes its own rules. */
+html,body,#root{height:100%}
+main{display:flex;flex-direction:column;height:100%}
+main>header{flex:none;display:flex;align-items:center;gap:6px;padding:10px 12px 8px;border-bottom:1px solid var(--n6)}
+main>header nav{display:flex;gap:1px;margin-left:4px}
+main>header nav button{display:flex;align-items:center;gap:5px;color:var(--n60);padding:5px 8px;border-radius:8px;font-size:12.5px}
+main>header nav button:hover{color:var(--n100);background:var(--n4)}
+main>header nav button.on{color:var(--n100);background:var(--n6);font-weight:600}
+main>header .new{margin-left:auto;color:var(--n60);padding:5px;border-radius:8px;display:grid;place-items:center}
+main>header .new:hover:not(:disabled){color:var(--n100);background:var(--n4)}main>header .new:disabled{opacity:.35;cursor:default}
+.view{flex:1;min-height:0;display:flex;flex-direction:column}.view[hidden]{display:none}
+.dot{display:inline-block;flex:none;width:6px;height:6px;border-radius:50%;background:var(--n100);animation:breathe 1.8s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.3}}
+.fav{flex:none;border-radius:3px;color:var(--n46)}.kind{flex:none;color:var(--n46)}
+kbd{font:10.5px var(--mono);border:1px solid var(--n20);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--n60);background:var(--n2)}
+.spin{animation:spin .9s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.shimmer{background:linear-gradient(90deg,var(--n46) 0%,var(--n46) 35%,var(--n100) 50%,var(--n46) 65%,var(--n46) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 1.8s linear infinite}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
+@media (prefers-reduced-motion:reduce){.shimmer{animation:none;color:var(--n60);background:none}.spin,.dot{animation:none}}
+h2{font-size:11.5px;font-weight:600;color:var(--n46);margin:16px 0 6px;letter-spacing:.01em}
+.meta{color:var(--n46);font-size:12px;margin:0}
+.empty{color:var(--n60);line-height:1.5}
+
+/* ---- Chat ---- */
+.chat{flex:1;display:flex;flex-direction:column;min-height:0}
+.chat .turns{flex:1;overflow:auto;padding:14px 14px 8px;scroll-behavior:auto}
+.chat .welcome{padding:18px 4px}
+.chat .welcome h1{font-size:17px;font-weight:600;color:var(--n100);margin:0 0 6px}
+.chat .welcome .lede{color:var(--n60);line-height:1.5;margin:0 0 14px}
+.chat .sees{display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--n8);border-radius:10px;margin-bottom:12px;min-width:0}
+.chat .sees .label{font-size:11px;color:var(--n46);text-transform:uppercase;letter-spacing:.05em}
+.chat .sees .title{color:var(--n100);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.chat .sees .site{margin-left:auto;color:var(--n46);font-size:11.5px;flex:none}
+.chat .welcome .knows{margin:-6px 0 12px 2px;font-size:12px;color:var(--n46)}
+.chat .ideas{display:flex;flex-direction:column;gap:4px}
+.chat .ideas button{display:flex;align-items:center;gap:8px;text-align:left;padding:7px 10px;border-radius:9px;color:var(--n72)}
+.chat .ideas button:hover{background:var(--n4);color:var(--n100)}.chat .ideas svg{flex:none;color:var(--n46)}
+
+.chat .ask{margin:0 0 22px;animation:rise .18s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.chat .you{background:var(--n4);border-radius:12px;padding:9px 12px;margin-bottom:12px}
+.chat .you p{margin:0;color:var(--n100);white-space:pre-wrap;line-height:1.5}
+.chat .ctx{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.chat .chip{display:inline-flex;align-items:center;gap:5px;max-width:220px;padding:2px 7px 2px 6px;border-radius:999px;background:var(--n0);border:1px solid var(--n8);font-size:11.5px;color:var(--n60)}
+.chat .chip span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chat .chip button{display:grid;place-items:center;color:var(--n46);margin-right:-3px}.chat .chip button:hover{color:var(--n100)}
+
+/* Work: thinking, steps, the live view, the plan, questions. */
+.chat .thinking{margin:2px 0 6px;font-size:12.5px;color:var(--n60)}
+.chat .thinking summary{display:flex;align-items:center;gap:7px;cursor:pointer;list-style:none;padding:3px 0}
+.chat .thinking summary::-webkit-details-marker{display:none}
+.chat .thinking summary svg{flex:none;color:var(--n46)}
+.chat .thinking p{white-space:pre-wrap;color:var(--n46);margin:2px 0 8px 6px;padding-left:13px;border-left:1px solid var(--n12);line-height:1.5}
+.chat .chev{flex:none;color:var(--n32);transition:transform .15s}.chat details[open]>summary .chev,.chat .chev.open{transform:rotate(90deg)}
+.chat .steps{margin:4px 0 10px;padding:2px 0 2px 2px;position:relative}
+.chat .steps::before{content:"";position:absolute;left:8px;top:12px;bottom:12px;width:1px;background:var(--n8)}
+.chat .step{position:relative}
+.chat .step .row{display:flex;align-items:center;gap:8px;width:100%;min-width:0;padding:4px 6px 4px 0;border-radius:7px;text-align:left;font-size:12.5px;color:var(--n60);cursor:default;list-style:none}
+.chat .step .row::-webkit-details-marker{display:none}
+.chat .step button.row:not(:disabled),.chat .step.group>summary{cursor:pointer}
+.chat .step button.row:not(:disabled):hover,.chat .step.group>summary:hover{color:var(--n87);background:var(--n2)}
+.chat .step .icon{flex:none;width:15px;height:15px;display:grid;place-items:center;background:var(--n0);color:var(--n46);position:relative;z-index:1}
+.chat .step .label{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chat .step .target{color:var(--n87);background:var(--n4);border-radius:5px;padding:0 5px;font-size:12px}
+.chat .step .favs{display:flex;gap:2px;flex:none}
+.chat .step .time{margin-left:auto;flex:none;color:var(--n32);font-size:11px;font-variant-numeric:tabular-nums}
+.chat .step.failed .row,.chat .step.failed .icon{color:var(--bad)}
+.chat .step.declined .row{color:var(--n46)}.chat .step.declined .label{text-decoration:line-through}
+.chat .step .nested{margin-left:7px;padding-left:12px;border-left:1px solid var(--n8)}
+.chat .step .detail{margin:2px 0 6px 23px;font-size:12px;color:var(--n60)}
+.chat .step .detail .meta{display:flex;align-items:center;gap:5px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chat .step .detail .quote{margin:0;padding:6px 9px;background:var(--n2);border-radius:7px;color:var(--n72);white-space:pre-wrap}
+.chat .step .detail pre{margin:0;padding:6px 9px;background:var(--n2);border-radius:7px;font:11.5px/1.45 var(--mono);white-space:pre-wrap}
+.chat .memories{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.chat .memories a{display:block;padding:7px 9px;border:1px solid var(--n8);border-radius:9px;color:inherit;text-decoration:none}
+.chat .memories a:hover{border-color:var(--n20);background:var(--n2)}
+.chat .memories .head{display:flex;align-items:center;gap:6px;min-width:0}
+.chat .memories .title{color:var(--n87);font-weight:500;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.chat .memories .when{margin-left:auto;flex:none;color:var(--n46);font-size:11px}
+.chat .memories .n{flex:none;font-size:10px;color:var(--n46);border:1px solid var(--n12);border-radius:4px;padding:0 4px}
+.chat .memories .snippet{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-top:3px;color:var(--n60);line-height:1.45}
+.chat .live-view{margin:6px 0 4px 23px;border:1px solid var(--n8);border-radius:10px;overflow:hidden;background:var(--n2)}
+.chat .live-view .shot{position:relative;max-height:200px;overflow:hidden}
+.chat .live-view img{display:block;width:100%}
+.chat .live-view .box{position:absolute;border:2px solid var(--n100);border-radius:5px;box-shadow:0 0 0 2px rgba(255,255,255,.85),0 0 0 9999px rgba(0,0,0,.06);transition:all .25s ease}
+.chat .live-view figcaption{display:flex;align-items:center;gap:6px;padding:5px 8px;font-size:11.5px;color:var(--n60);border-top:1px solid var(--n8);background:var(--n0)}
+.chat .live-view figcaption .title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.chat .live-view .live{margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--n72);font-weight:500}
+.chat .live-view .when{margin-left:auto;color:var(--n46)}
+.chat .live-view:not(.running) .shot{max-height:110px;opacity:.85}
+.chat .plan{border:1px solid var(--n8);border-radius:10px;padding:8px 10px;margin:0 0 10px}
+.chat .plan .head{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--n72);font-weight:600}
+.chat .plan .count{color:var(--n46);font-weight:400}
+.chat .plan .bar{margin-left:auto;width:60px;height:4px;border-radius:2px;background:var(--n8);overflow:hidden}
+.chat .plan .bar span{display:block;height:100%;background:var(--n100);transition:width .3s}
+.chat .plan ul{list-style:none;margin:6px 0 0;padding:0}
+.chat .plan li{display:flex;align-items:baseline;gap:8px;padding:2px 0;color:var(--n72);font-size:12.5px}
+.chat .plan .box{flex:none;width:12px;height:12px;border:1.5px solid var(--n32);border-radius:4px;display:grid;place-items:center;transform:translateY(2px)}
+.chat .plan li.done{color:var(--n46);text-decoration:line-through}.chat .plan li.done .box{background:var(--n100);border-color:var(--n100);color:var(--n0)}
+.chat .plan li.now{color:var(--n100)}.chat .plan li.now .box{border-color:var(--n100)}
+.chat .confirm{border:1px solid var(--n100);border-radius:12px;padding:10px 12px;margin:8px 0 10px;box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.chat .confirm .head{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--n60);text-transform:uppercase;letter-spacing:.04em}
+.chat .confirm .what{display:flex;align-items:center;gap:8px;margin:7px 0 10px;color:var(--n100);font-size:13.5px;line-height:1.4}
+.chat .confirm .row{display:flex;gap:8px}
+.chat .confirm button{display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:9px;border:1px solid var(--n20);color:var(--n87)}
+.chat .confirm button.yes{background:var(--n100);color:var(--n0);border-color:var(--n100)}
+.chat .confirm button.yes kbd{background:transparent;color:var(--n20);border-color:var(--n60)}
+.chat .decided{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--n60);margin:2px 0 8px;padding:4px 0}
+.chat .decided.no{color:var(--n46)}
+.chat .working{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--n60);margin:4px 0}
+.chat .working svg{color:var(--n46)}.chat .working .time{color:var(--n32);font-size:11px;font-variant-numeric:tabular-nums}
+
+/* Words: notes between steps, then the answer, its sources and its footer. */
+.chat .note{color:var(--n72);margin:4px 0 6px}
+.chat .answer{color:var(--n87);margin:6px 0 4px}
+.chat .message-prose{line-height:1.6}
+.chat .message-prose p{margin:0 0 8px}.chat .message-prose p:last-child{margin-bottom:0}
+.chat .message-prose ul,.chat .message-prose ol{margin:4px 0 8px;padding-left:20px}.chat .message-prose li{margin:2px 0}
+.chat .message-prose h2,.chat .message-prose h3,.chat .message-prose h4{font-size:13.5px;color:var(--n100);margin:12px 0 4px;letter-spacing:0}
+.chat .message-prose strong{color:var(--n100);font-weight:600}
+.chat .message-prose pre{background:var(--n4);border-radius:8px;padding:8px 10px;overflow:auto;font:12px/1.45 var(--mono)}
+.chat .message-prose code{font:12px var(--mono);background:var(--n4);border-radius:4px;padding:0 3px}.chat .message-prose pre code{background:none;padding:0}
+.chat .message-prose a{color:var(--n100);text-decoration:underline;text-decoration-color:var(--n32);text-underline-offset:2px}
+.chat .message-prose a.cite,.chat .message-prose .cite{display:inline-grid;place-items:center;min-width:15px;height:15px;padding:0 3px;margin:0 1px;border-radius:4px;background:var(--n6);color:var(--n60);font-size:10px;text-decoration:none;vertical-align:1px;line-height:1}
+.chat .message-prose a.cite:hover{background:var(--n100);color:var(--n0)}
+.chat .message-prose table{border-collapse:collapse;margin:6px 0;font-size:12.5px}.chat .message-prose td,.chat .message-prose th{border:1px solid var(--n12);padding:3px 7px}
+.chat .message-prose blockquote{margin:6px 0;padding-left:10px;border-left:2px solid var(--n12);color:var(--n60)}
+.chat .stream-cursor{display:inline-block;width:6px;height:13px;margin-left:2px;vertical-align:-2px;background:var(--n46);border-radius:1px;animation:breathe 1s ease-in-out infinite}
+.chat .sources{display:flex;flex-wrap:wrap;gap:5px;margin:10px 0 2px}
+.chat .source{display:inline-flex;align-items:center;gap:5px;max-width:200px;padding:3px 8px 3px 4px;border:1px solid var(--n8);border-radius:999px;font-size:11.5px;color:var(--n60);text-decoration:none}
+.chat a.source:hover{border-color:var(--n32);color:var(--n100)}
+.chat .source .n{display:grid;place-items:center;min-width:15px;height:15px;border-radius:50%;background:var(--n6);font-size:10px;color:var(--n60)}
+.chat .source .title{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.chat .foot{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11.5px;color:var(--n46)}
+.chat .foot button{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;color:var(--n46)}.chat .foot button:hover{background:var(--n4);color:var(--n100)}
+.chat .failed{border:1px solid var(--n12);border-radius:10px;padding:8px 10px;margin-top:8px;color:var(--bad)}
+.chat .failed p{margin:0 0 6px}.chat .failed button{display:flex;align-items:center;gap:6px;color:var(--n72)}
+.chat .queued{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--n46);font-size:12px;margin:0 0 8px}
+
+/* The composer: the page Gumbo works in, tabs added with @, the message, Send or Stop. */
+.chat .composer{flex:none;position:relative;margin:0 10px 10px;padding:7px 8px 7px 10px;border:1px solid var(--n12);border-radius:14px;background:var(--n0);box-shadow:0 2px 10px rgba(0,0,0,.04)}
+.chat .composer:focus-within{border-color:var(--n32)}
+.chat .composer .chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:5px}
+.chat .composer .chip.here{background:var(--n4);border-color:transparent;color:var(--n72)}
+.chat .composer .chip.add{color:var(--n46);border-style:dashed}.chat .composer .chip.add:hover{color:var(--n100);border-color:var(--n32)}
+.chat .composer textarea{display:block;width:100%;resize:none;border:0;outline:0;background:none;color:var(--n100);font:inherit;font-size:13.5px;line-height:1.45;max-height:180px;padding:2px 0}
+.chat .composer .bar{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.chat .composer .hint{font-size:11px;color:var(--n32)}
+.chat .composer .send{width:28px;height:28px;border-radius:50%;background:var(--paprika);color:#fff;display:grid;place-items:center}
+.chat .composer .send:hover:not(:disabled){background:var(--paprika-hover)}
+.chat .composer .send:disabled{background:var(--n8);color:var(--n46);cursor:default}
+.chat .composer .stop{width:28px;height:28px;border-radius:50%;background:var(--n100);display:grid;place-items:center}
+.chat .composer .stop span{width:9px;height:9px;border-radius:2px;background:var(--n0)}
+.chat .picker{position:absolute;left:0;right:0;bottom:calc(100% + 6px);background:var(--n0);border:1px solid var(--n12);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.12);padding:5px;z-index:5;animation:rise .12s ease-out}
+.chat .picker .title{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--n46);padding:3px 7px 5px}
+.chat .picker button{display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;border-radius:8px;text-align:left;min-width:0}
+.chat .picker button.on{background:var(--n4)}
+.chat .picker button .title{color:var(--n87);font-size:12.5px;padding:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.chat .picker button .site{margin-left:auto;flex:none;color:var(--n46);font-size:11px}
+.chat .picker .meta{padding:4px 8px}
+
+/* ---- History ---- */
+.history{flex:1;overflow:auto;padding:6px 14px 20px}
+.history .list{list-style:none;margin:0;padding:0}
+.history .list button{display:flex;align-items:center;gap:8px;width:calc(100% + 16px);margin:0 -8px;padding:7px 8px;border-radius:8px;text-align:left;color:var(--n46)}
+.history .list button:hover{background:var(--n4)}
+.history .list .title{color:var(--n100);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.history .list .meta{margin-left:auto;flex:none;font-size:11.5px}
+
+/* ---- Heard (captions and notes) ---- */
+.heard{flex:1;overflow:auto;padding:6px 14px 20px}
+.heard h1{font-size:15px;line-height:1.35;margin:6px 0 2px;color:var(--n100);font-weight:600}
+.heard h1 a{color:inherit;text-decoration:none}.heard h1 a:hover{text-decoration:underline}
+.heard h3{font-size:12.5px;font-weight:600;color:var(--n100);margin:10px 0 2px}
+.heard .meta{margin:0 0 8px}
+.heard .now{display:flex;gap:9px;align-items:baseline;width:100%;text-align:left;padding:9px 10px;border-radius:10px;background:var(--n4);margin-bottom:6px}
+.heard .now:hover{background:var(--n6)}
+.heard .now .last{display:block;color:var(--n60);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin-top:2px}
+.heard .list{list-style:none;margin:0;padding:0}
+.heard .list button{display:block;width:calc(100% + 16px);text-align:left;padding:7px 8px;border-radius:8px;margin:0 -8px}
+.heard .list button:hover{background:var(--n4)}
+.heard .list .title{display:block;color:var(--n100);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.heard .list .meta{display:block;margin:1px 0 0}
+.heard .bar{display:flex;justify-content:space-between;align-items:center}
+.heard .back{color:var(--n60)}.heard .back:hover{color:var(--n100)}
+.heard .live{display:flex;gap:6px;align-items:center;color:var(--n60);font-size:12px}
+.heard .notes{border-left:2px solid var(--n12);padding:2px 0 2px 12px;margin:10px 0 14px}
+.heard .notes p{margin:2px 0}.heard .notes p.item{padding-left:12px;text-indent:-12px}.heard .notes p.item::before{content:"– ";color:var(--n46)}
+.heard .turn{margin:0 0 12px}
+.heard .who{display:flex;gap:8px;align-items:baseline;margin-bottom:1px}
+.heard .who .name{font-weight:600;color:var(--n100)}.heard .who .name:not(:disabled):hover{text-decoration:underline}.heard .who .name:disabled{cursor:default}
+.heard .who input{font:inherit;font-weight:600;border:1px solid var(--n20);border-radius:6px;padding:1px 6px;background:var(--n0);color:var(--n100);width:160px}
+.heard .time{color:var(--n46);font-size:11.5px;font-variant-numeric:tabular-nums}
+.heard button.time:hover{color:var(--n100);text-decoration:underline}
+.heard .turn p{margin:0;color:var(--n87);line-height:1.5}
+.heard .turn.now p{color:var(--n46)}
+.chat .memories .more{font-size:11.5px;color:var(--n46);padding:2px 4px}.chat .memories .more:hover{color:var(--n100)}
+.chat .remembered{margin:0 0 6px}.chat .remembered .more{color:var(--n46);font-size:11.5px}

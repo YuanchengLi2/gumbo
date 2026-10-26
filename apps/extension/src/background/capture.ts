@@ -1,6 +1,7 @@
 import {on} from './surfaces';
 import {add,getPage,removePassages,type Page} from './db';
 import {invalidate,passagesOf} from './recall';
+import {noteCopy} from './lately';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 /** What pages hand to memory: the user's own writing, the pages they read (in full, as passages for search), what they
  * copied or highlighted. Nothing is kept from sites where Gumbo is off, blocked or paused, or from incognito windows;
@@ -8,7 +9,8 @@ import {loadSettings,activeOn,siteOf} from '../shared/settings';
 const MAX_PAGE=200_000;
 const lastWriting=new Map<string,string>();
 
-async function allowed(url:string,incognito?:boolean){if(incognito)return false;const settings=await loadSettings();return activeOn(settings,siteOf(url));}
+/** Only the web is remembered: not Gumbo's own pages, not the browser's. */
+async function allowed(url:string,incognito?:boolean){if(incognito||!/^(https?|file):/.test(url))return false;const settings=await loadSettings();return activeOn(settings,siteOf(url));}
 
 on('capture.writing',async(message:{key:string;intent:string;label:string;editor:string;text:string;replyTo?:string},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;
@@ -40,6 +42,7 @@ export async function capturePage(message:{url:string;title:string;text:string;v
 
 on('capture.copy',async(message:{text:string},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;
+ void noteCopy(url,port.sender?.tab?.title??'',message.text);
  try{
   const page=await getPage(url);if(!page)return;
   const text=message.text.trim().slice(0,2000);if(!text||page.highlights.includes(text))return;

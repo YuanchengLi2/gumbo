@@ -1,0 +1,190 @@
+import {test,expect,tell,extensionPage} from '../fixtures';
+import {liveLog,liveSpent} from '../standin';
+import type {Page,Frame,Worker,BrowserContext} from '@playwright/test';
+import {appendFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+
+/** Live: Tab, Ctrl+K and the agent with the real model (GUMBO_LIVE=1; it costs money, a few cents a run, and stops at
+ * the ledger's cap). Every request goes through the gateway's own code to Anthropic, as it does when deployed; the
+ * agent runs on Haiku here (the DeepSeek key lives only on the server). Each scenario is something a person does, with
+ * what a mind-reader would offer: what was copied goes into the form that asks for it, a written reply gets sent, the
+ * search they were about to run is typed. What each surface did is printed at the end, with its time and cost. */
+test.skip(!process.env.GUMBO_LIVE,'Set GUMBO_LIVE=1 to run against the real model (costs money).');
+// Every scenario runs even when one before it fails (one worker keeps them in order and shares the results list).
+test.describe.configure({timeout:240_000});
+const results:string[]=[];
+/** Each result also goes to a file: a failed test restarts the worker, and the list with it. */
+const resultsFile=process.env.GUMBO_LIVE_RESULTS??resolve(tmpdir(),'gumbo-live-results.txt');
+const note=(line:string)=>{results.push(line);appendFileSync(resultsFile,line+'\n');};
+test.afterAll(()=>{
+ const usd=liveLog.reduce((s,c)=>s+c.usd,0),by=new Map<string,{n:number;usd:number;first:number[]}>();
+ for(const c of liveLog){const b=by.get(c.purpose)??{n:0,usd:0,first:[]};b.n++;b.usd+=c.usd;if(c.firstMs!==undefined)b.first.push(c.firstMs);by.set(c.purpose,b);}
+ const mid=(a:number[])=>a.length?a.slice().sort((x,y)=>x-y)[Math.floor(a.length/2)]:0;
+ console.log(`\nLive results:\n${results.join('\n')}\n\nCalls: ${[...by].map(([p,b])=>`${p} ${b.n} ($${b.usd.toFixed(4)}, first token p50 ${mid(b.first)} ms)`).join('; ')}\nThis run: $${usd.toFixed(4)} · all live runs so far: $${liveSpent().toFixed(4)}`);
+});
+const predict=(w:Worker,p:Page)=>tell(w,p,{type:'debug.predict'});
+const setModels=(w:Worker,models:Record<string,string>)=>w.evaluate(m=>chrome.storage.local.get('settings').then(({settings})=>chrome.storage.local.set({settings:{...(settings as any),models:{...(settings as any)?.models,...m}}})),models);
+/** Copies words from a page as a person would (select, Ctrl+C). */
+async function copy(page:Page,selector:string,words:string){
+ await page.bringToFront();
+ await page.evaluate(([sel,t])=>{const node=document.querySelector(sel)!.firstChild!,s=node.textContent!,i=s.indexOf(t),r=document.createRange();r.setStart(node,i);r.setEnd(node,i+t.length);getSelection()!.removeAllRanges();getSelection()!.addRange(r);},[selector,words]);
+ await page.keyboard.press('Control+c');await page.waitForTimeout(300);
+ await page.evaluate(()=>getSelection()?.removeAllRanges());
+}
+/** Waits for Tab's guess (its whole plan), and how long it took to show from now. */
+async function guess(w:Worker,p:Page,ms=15_000):Promise<{state:any;shownMs?:number}>{
+ const started=Date.now();let shownMs:number|undefined;
+ await expect.poll(async()=>{const s=await predict(w,p).catch(()=>null);if(s?.showing&&shownMs===undefined)shownMs=Date.now()-started;return !!(s?.showing&&s.final);},{timeout:ms,intervals:[150]}).toBe(true).catch(()=>{});
+ return{state:await predict(w,p).catch(()=>null),shownMs};
+}
+const describe=(s:any)=>s?.showing?`“${s.label}” → ${(s.plan?.steps??[]).map((x:any)=>x.do==='type'?`type “${x.text}”`:x.do==='select'?`choose “${x.option}”`:x.do==='key'?`press ${x.combo}`:x.do==='open'?`open ${x.url}`:'click').join(', ')}${s.plan?.more?' (then the agent)':''}`:'nothing offered';
+async function card(page:Page):Promise<Frame>{
+ await expect.poll(()=>page.frames().some(f=>f.url().includes('card.html')),{timeout:5000}).toBe(true);
+ const frame=page.frames().find(f=>f.url().includes('card.html'))!;await frame.locator('#instruction').waitFor();return frame;
+}
+// What the worker logged, and what was asked of the model, print when a scenario fails.
+const logs:string[]=[];
+test.beforeEach(({standin,worker})=>{standin.script=()=>({live:true});logs.length=0;worker.on('console',m=>logs.push(`worker ${m.type()}: ${m.text()}`));});
+test.afterEach(({standin},info)=>{if(info.status!==info.expectedStatus)console.log(`asked: ${standin.bodies.map((b:any)=>b.purpose).join(', ')}\n${logs.slice(-30).join('\n')}`);});
+
+test('Tab: an address copied in another tab goes into the shipping form',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);
+ await copy(page,'#hotel','3-7-1-2 Nishishinjuku, Shinjuku City, Tokyo');
+ const shop=await context.newPage();await shop.goto(`${standin.url}/pages/shipping.html`);await shop.bringToFront();await shop.locator('#street').click();
+ const {state,shownMs}=await guess(signedIn,shop);
+ note(`  Copied address → shipping form: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''}${state?.preview?` · previewed “${state.preview}”`:''}`);
+ expect(state?.showing).toBe(true);
+ expect(JSON.stringify(state.plan.steps)).toContain('Nishishinjuku');
+ await shop.keyboard.press('Tab');
+ await expect.poll(()=>shop.locator('#street').inputValue(),{timeout:8000}).toContain('Nishishinjuku');
+ await expect.poll(()=>shop.locator('#city').inputValue(),{timeout:5000}).not.toBe('').catch(()=>{});
+ note(`    Tab filled: street “${await shop.locator('#street').inputValue()}”, city “${await shop.locator('#city').inputValue()}”`);
+});
+
+test('Tab, asked ahead: the pointer rests on the field, and the click finds the guess ready',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);
+ await copy(page,'#hotel','3-7-1-2 Nishishinjuku, Shinjuku City, Tokyo');
+ const shop=await context.newPage();await shop.goto(`${standin.url}/pages/shipping.html`);await shop.bringToFront();
+ await shop.waitForTimeout(2500);
+ // As a person does: the pointer comes to rest on the field a moment before the click.
+ await shop.locator('#street').hover();await shop.waitForTimeout(2500);
+ await shop.locator('#street').click();
+ const {state,shownMs}=await guess(signedIn,shop);
+ note(`  Asked ahead, then clicked: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''}`);
+ expect(state?.showing).toBe(true);
+ expect(shownMs??9999).toBeLessThan(600);
+});
+
+test('Tab: a reply that is written gets sent, the send waiting for Enter',async({page,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/forms.html`);await page.locator('#msg').click();
+ await page.keyboard.type('Yes, I will be there on Friday!',{delay:25});
+ const {state,shownMs}=await guess(signedIn,page);
+ note(`  Reply written → ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the pause)`:''}`);
+ expect(state?.showing).toBe(true);
+ await page.keyboard.press('Tab');
+ await expect.poll(async()=>(await predict(signedIn,page))?.waiting,{timeout:8000}).toBe(true);
+ expect(await page.locator('#status').textContent()).toBe('');
+ await page.keyboard.press('Enter');
+ await expect(page.locator('#status')).toHaveText('Sent: Yes, I will be there on Friday!');
+});
+
+test('Tab: the search they were about to run, on Google, from what they copied',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);await copy(page,'#food','best ramen in Shinjuku');
+ const google=await context.newPage();
+ try{await google.goto('https://www.google.com/',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Google: unreachable');return;}
+ await google.bringToFront();await google.waitForTimeout(1500);await google.locator('textarea[name=q]').first().click().catch(()=>{});
+ const {state,shownMs}=await guess(signedIn,google);
+ note(`  Google, after copying “best ramen in Shinjuku”: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
+ expect(state?.showing).toBe(true);expect(JSON.stringify(state.plan.steps).toLowerCase()).toContain('ramen');
+});
+
+test('Tab on real pages with nothing copied: what it offers (or rightly nothing)',async({page,signedIn})=>{
+ for(const [name,url] of [['Wikipedia: Tea','https://en.wikipedia.org/wiki/Tea'],['GitHub: vscode','https://github.com/microsoft/vscode'],['Hacker News','https://news.ycombinator.com/'],['MDN: JavaScript','https://developer.mozilla.org/en-US/docs/Web/JavaScript']]){
+  try{await page.goto(url,{waitUntil:'domcontentloaded',timeout:30_000});}catch{note(`  ${name}: unreachable`);continue;}
+  const {state,shownMs}=await guess(signedIn,page,9000);
+  note(`  ${name} (just opened): ${describe(state)}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
+ }
+});
+
+test('Ctrl+K: explains a selection on a real page, from the page',async({page,signedIn})=>{
+ void signedIn;
+ try{await page.goto('https://en.wikipedia.org/wiki/Tea',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Ctrl+K on Wikipedia: unreachable');return;}
+ await page.evaluate(()=>{const p=[...document.querySelectorAll('#mw-content-text p')].find(p=>(p.textContent??'').trim().length>120)!;const r=document.createRange();r.selectNodeContents(p);getSelection()!.removeAllRanges();getSelection()!.addRange(r);});
+ const started=Date.now();await page.keyboard.press('Control+k');const frame=await card(page);
+ await page.keyboard.type('explain this simply');await page.keyboard.press('Enter');
+ await expect.poll(async()=>((await frame.locator('.body').textContent().catch(()=>''))??'').length,{timeout:20_000}).toBeGreaterThan(60).catch(async e=>{note(`  Ctrl+K on Wikipedia showed: “${await frame.locator('#card').innerText().catch(()=>'')}”`);throw e;});
+ await page.waitForTimeout(2500);
+ const answer=((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').trim();
+ note(`  Ctrl+K “explain this simply” on Wikipedia (${Date.now()-started} ms to a full answer): ${answer.slice(0,220)}${answer.length>220?'…':''}`);
+ expect(answer.toLowerCase()).toContain('tea');
+});
+
+test('Ctrl+K: rewrites a rough message, Enter keeps it',async({page,signedIn,standin})=>{
+ void signedIn;await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
+ await page.keyboard.type('hey can u send me the file tmrw');await page.keyboard.press('Control+a');await page.keyboard.press('Control+k');
+ const frame=await card(page);await page.keyboard.type('more formal');await page.keyboard.press('Enter');
+ await expect(frame.locator('ins').first()).toBeVisible({timeout:20_000});
+ await page.waitForTimeout(1500);await page.keyboard.press('Enter');
+ const value=await page.locator('#ta').inputValue();
+ note(`  Ctrl+K “more formal”: “${value}”`);
+ expect(value.toLowerCase()).toContain('tomorrow');
+});
+
+test('Ctrl+K: opens with what they most likely want',async({page,signedIn,standin})=>{
+ void signedIn;await page.goto(`${standin.url}/pages/forms.html`);
+ await page.locator('#meeting').selectText();await page.keyboard.press('Control+k');
+ const frame=await card(page);await page.waitForTimeout(6000);
+ const ideas=(await frame.locator('.idea').allTextContents()).map(t=>t.replace(/^\W+/,'').trim());
+ note(`  Ctrl+K ideas for “${'The offsite is on Friday, November 6 at 10 AM at 410 Lakeview Drive.'}”: ${ideas.join(' · ')||'none'}`);
+ expect(ideas.length).toBeGreaterThan(0);
+});
+
+test('Tab for text: the next words',async({page,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
+ await page.keyboard.type('Thanks for sending the deck over. I',{delay:30});await page.keyboard.type("'ll",{delay:30});
+ await expect.poll(async()=>(await tell(signedIn,page,{type:'debug.tab'}))?.showing,{timeout:8000}).toBe(true).catch(()=>{});
+ const s=await tell(signedIn,page,{type:'debug.tab'});
+ note(`  Tab for text after “Thanks for sending the deck over. I'll”: ${s?.showing?`“${s.rest}”`:'nothing'}`);
+});
+
+async function panelFor(context:BrowserContext){const panel=await context.newPage();await panel.goto(extensionPage('sidepanel.html'));return panel;}
+const ask=async(panel:Page,text:string)=>{const box=panel.getByPlaceholder(/Ask, or tell Gumbo|Add to the queue/);await box.fill(text);await box.press('Enter');};
+
+test('Agent: knows the open tabs and what was closed; switches to one, brings one back',async({page,context,signedIn})=>{
+ await setModels(signedIn,{agent:'claude-haiku-5-5'});
+ const tabs:Page[]=[];
+ for(const url of ['https://en.wikipedia.org/wiki/Tea','https://github.com/microsoft/vscode']){const t=await context.newPage();await t.goto(url,{waitUntil:'domcontentloaded',timeout:30_000}).catch(()=>{});tabs.push(t);}
+ const hn=await context.newPage();await hn.goto('https://news.ycombinator.com/',{waitUntil:'domcontentloaded',timeout:30_000}).catch(()=>{});await hn.waitForTimeout(800);await hn.close();
+ await page.goto('about:blank');
+ const panel=await panelFor(context);await tabs[1].bringToFront();
+ await ask(panel,'Which of my open tabs is about a drink? Switch to it.');
+ await expect(panel.locator('.foot').last()).toContainText(/Worked for|Done|steps/,{timeout:90_000}).catch(()=>{});
+ const active=await signedIn.evaluate(()=>chrome.tabs.query({active:true,lastFocusedWindow:true}).then(([t])=>t?.url??''));
+ const said1=((await panel.locator('.turns').innerText().catch(()=>''))??'').replace(/\s+/g,' ').trim().slice(-220);
+ note(`  Agent “which tab is about a drink? switch to it” → now on ${active} · said: ${said1.slice(0,160)}`);
+ expect(active).toContain('wiki/Tea');
+ await ask(panel,'Bring back the Hacker News tab I closed.');
+ await expect.poll(()=>context.pages().some(p=>p.url().includes('news.ycombinator.com')),{timeout:90_000}).toBe(true);
+ note('  Agent “bring back the Hacker News tab I closed” → reopened');
+ // What is in a tab, read without going there.
+ const before=await signedIn.evaluate(()=>chrome.tabs.query({active:true,lastFocusedWindow:true}).then(([t])=>t?.url??''));
+ await ask(panel,'Without switching tabs: what is the project in my GitHub tab, in one sentence?');
+ await expect.poll(async()=>((await panel.locator('.turns').innerText())??'').match(/Worked for/g)?.length??0,{timeout:90_000}).toBeGreaterThanOrEqual(3).catch(()=>{});
+ const said3=((await panel.locator('.turns').innerText())??'').replace(/\s+/g,' ').trim().slice(-260);
+ const after=await signedIn.evaluate(()=>chrome.tabs.query({active:true,lastFocusedWindow:true}).then(([t])=>t?.url??''));
+ note(`  Agent “what is the project in my GitHub tab?” (stayed on the same tab: ${before===after}) · said: ${said3}`);
+ expect(said3.toLowerCase()).toMatch(/visual studio code|vs ?code|code editor/);
+});
+
+test('Agent: does a task in the page from start to the final step, which waits for a yes',async({page,context,signedIn,standin})=>{
+ await setModels(signedIn,{agent:'claude-haiku-5-5'});
+ await page.goto(`${standin.url}/pages/agent.html`);
+ const panel=await panelFor(context);await page.bringToFront();
+ await ask(panel,"Reply to Dana that I'll be there, and send it.");
+ await expect(panel.locator('.confirm')).toBeVisible({timeout:90_000});
+ const typed=await page.locator('#message').inputValue();
+ await panel.getByRole('button',{name:/Allow/}).click();
+ await expect(page.locator('#status')).toContainText('Sent:',{timeout:30_000});
+ note(`  Agent reply-and-send: typed “${typed}”, sent after the user allowed it`);
+});

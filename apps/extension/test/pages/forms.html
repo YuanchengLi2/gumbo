@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Team portal</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main>
+ <h1>Team portal</h1>
+ <p id="meeting">The offsite is on Friday, November 6 at 10 AM at 410 Lakeview Drive.</p>
+ <form id="reply" onsubmit="event.preventDefault();document.getElementById('status').textContent='Sent: '+document.getElementById('msg').value;">
+  <p>Dana: Are you coming to the offsite?</p>
+  <label for="msg">Message</label>
+  <textarea id="msg" rows="3"></textarea>
+  <button type="submit">Send</button>
+ </form>
+ <form id="find" role="search" onsubmit="event.preventDefault();document.getElementById('status').textContent='Searched: '+document.getElementById('q').value;">
+  <input id="q" type="search" placeholder="Search the portal">
+ </form>
+ <form id="signup" onsubmit="event.preventDefault();">
+  <label for="first">First name</label><input id="first" autocomplete="given-name">
+  <label for="last">Last name</label><input id="last" autocomplete="family-name">
+  <label for="email">Email</label><input id="email" type="email" autocomplete="email">
+  <label for="company">Company</label><input id="company">
+  <button type="submit">Sign up</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

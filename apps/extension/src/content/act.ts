@@ -22,7 +22,8 @@ export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:un
 const finalWords=/\b(send|submit|post|publish|tweet|reply|delete|remove|discard|pay|purchase|buy|order|place order|checkout|confirm|transfer|sign|merge|deploy|unsubscribe|cancel (subscription|plan)|archive|block|report)\b/i;
 export function irreversible(action:Action,el?:Element|null):boolean{
  if(action.do==='click'&&el){const name=nameOf(el,60);return finalWords.test(name)||(el instanceof HTMLButtonElement&&el.type==='submit'&&!!el.form)||(el instanceof HTMLInputElement&&el.type==='submit');}
- if(action.do==='key')return /(^|\+)enter$/i.test(action.combo)&&!!action.target&&!!findTarget(action.target)?.closest('form');
+ // Enter in a form submits it, unless it is a search (running a search changes nothing).
+ if(action.do==='key'){const el=action.target?findTarget(action.target):null;return /(^|\+)enter$/i.test(action.combo)&&!!el?.closest('form')&&!el.closest('[role=search]')&&!(el instanceof HTMLInputElement&&el.type==='search');}
  return false;
 }
 
@@ -61,7 +62,15 @@ export async function perform(action:Action):Promise<Done>{
    const field=el?fieldOf(el instanceof HTMLElement&&el.isContentEditable?el:el):null;
    if(!field)return{ok:false,detail:'There is no field to type in there (or it is one Gumbo never types in).'};
    field.el.focus({preventScroll:false});
-   const now=snapshot(field,1e9,1e9);if(!now)return{ok:false,detail:'The field has no caret.'};
+   const now=snapshot(field,1e9,1e9);
+   // Some inputs (email, number) have no caret to read or place: their value is set the way typing would set it.
+   if(!now&&field.el instanceof HTMLInputElement){
+    const input=field.el,value=action.replace?action.text:input.value+action.text;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,value);
+    input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:action.text}));input.dispatchEvent(new Event('change',{bubbles:true}));
+    return{ok:input.value===value,changed:true,detail:`Typed into ${nameOf(input,60)||'the field'}.`,item:describe(input)};
+   }
+   if(!now)return{ok:false,detail:'The field has no caret.'};
    const result=await insert(field,action.text,action.replace?{from:0,to:now.text.length}:{});
    return{ok:result.ok,changed:result.ok,detail:result.ok?`Typed into ${nameOf(field.el,60)||'the field'}.`:`Could not type into ${nameOf(field.el,60)||'the field'} (${result.reason}).`,item:describe(field.el)};
   }

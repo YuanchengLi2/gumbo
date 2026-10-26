@@ -9,7 +9,10 @@ type Fixtures={standin:Standin;context:BrowserContext;worker:Worker;signedIn:Wor
 export const test=base.extend<Fixtures>({
  standin:async({},use)=>{const standin=await startStandin();await use(standin);await standin.close();},
  context:async({},use)=>{
-  const context=await chromium.launchPersistentContext('',{channel:'chromium',headless:true,args:[`--disable-extensions-except=${dist}`,`--load-extension=${dist}`],viewport:{width:1200,height:800}});
+  // GUMBO_PROFILE keeps one browser profile between runs, so models downloaded once (Whisper) stay cached.
+  // GUMBO_GPU uses the computer's graphics card (headless Chromium otherwise draws, and runs WebGPU, in software).
+  const gpu=process.env.GUMBO_GPU?['--enable-gpu','--use-angle=d3d11','--enable-unsafe-webgpu','--ignore-gpu-blocklist']:[];
+  const context=await chromium.launchPersistentContext(process.env.GUMBO_PROFILE??'',{channel:'chromium',headless:true,args:[`--disable-extensions-except=${dist}`,`--load-extension=${dist}`,...gpu],viewport:{width:1200,height:800}});
   await use(context);await context.close();
  },
  worker:async({context,standin},use)=>{

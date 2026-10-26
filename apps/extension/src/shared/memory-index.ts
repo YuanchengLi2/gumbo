@@ -1,5 +1,6 @@
 import MiniSearch from 'minisearch';
 import type {Passage,Writing,Note,Media} from '../background/db';
+import {momentUrl} from './moment';
 /** One index over everything remembered: the passages of pages read, the user's own writing, notes, and what was said in
  * meetings and videos (half a minute of speech per passage, pointing at its moment). A question is matched two ways
  * and the two rankings are fused (reciprocal rank fusion): by keywords (BM25, with prefix and fuzzy matches) and by
@@ -21,7 +22,7 @@ export function docsFrom({passages,writing,notes,media}:{passages:Passage[];writ
 /** A meeting or video as passages of about half a minute of speech by one speaker, each with its moment; and its notes. */
 export function mediaDocs(m:Media):Doc[]{
  const out:Doc[]=[];let text='',start=0,speaker='',n=0;
- const flush=()=>{if(text.trim())out.push({id:`m${m.id}:${n++}`,kind:'media',title:`${m.title}${speaker?` — ${speaker}`:''}`,url:m.url,text,at:m.startedAt+start*1000,site:m.site,start});text='';};
+ const flush=()=>{if(text.trim())out.push({id:`m${m.id}:${n++}`,kind:'media',title:`${m.title}${speaker?` — ${speaker}`:''}`,url:m.kind==='meeting'?m.url:momentUrl(m.url,start),text,at:m.startedAt+start*1000,site:m.site,start});text='';};
  for(const s of m.segments){if(text&&(s.start-start>30||s.speaker!==speaker))flush();if(!text){start=s.start;speaker=s.speaker;}text+=(text?' ':'')+s.text;}
  flush();
  if(m.notes)out.push({id:`mn${m.id}`,kind:'media',title:`Notes: ${m.title}`,url:m.url,text:m.notes,at:m.endedAt??m.startedAt,site:m.site});

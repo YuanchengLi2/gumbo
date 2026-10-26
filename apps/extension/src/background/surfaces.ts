@@ -13,7 +13,7 @@ export function connectSurfaces(){
   if(port.name!=='gumbo')return;
   const running=new Map<string,AbortController>();let open=true;
   const send:Send=message=>{if(open)try{port.postMessage(message);}catch{open=false;}};
-  port.onDisconnect.addListener(()=>{open=false;for(const c of running.values())c.abort();running.clear();});
+  port.onDisconnect.addListener(()=>{open=false;if(running.size)console.warn(`A page's connection closed with ${[...running.keys()].join(', ')} still running (${port.sender?.url?.slice(0,80)})`);for(const c of running.values())c.abort();running.clear();});
   port.onMessage.addListener(async(message:any)=>{
    if(message?.type==='cancel'){running.get(message.id)?.abort();running.delete(message.id);return;}
    const handler=handlers.get(message?.type);if(!handler){send({type:'error',id:message?.id,message:`Unknown request ${message?.type}`});return;}

@@ -33,10 +33,11 @@ export function nearbyText(el:Element):string|undefined{
  return undefined;
 }
 export function pageModel(limit=250):PageModel{
- const items=deepQuery(interactive).filter(el=>visible(el)).map(describe);
- // What is on screen first, then the rest in page order.
- items.sort((a,b)=>Number(b.inView)-Number(a.inView));
+ // What is on screen first, then the rest in page order; only the ones kept are described (the words around each cost a
+ // layout read, and a big app has thousands of controls).
+ const found=deepQuery(interactive).filter(el=>visible(el)).map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
+ const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>describe(f.el));
  const focused=document.activeElement&&document.activeElement!==document.body?idOf(document.activeElement):undefined;
- return{url:location.href,title:document.title,items:items.slice(0,limit),headings:[...document.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,20),focused};
+ return{url:location.href,title:document.title,items,headings:[...document.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,20),focused};
 }
 export {parentOf};

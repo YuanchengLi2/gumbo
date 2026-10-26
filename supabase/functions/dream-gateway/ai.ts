@@ -2,7 +2,7 @@ import {requestStatus,type RequestStore} from './inference-requests.ts';
 import {streamProvider} from './streaming.ts';
 import {readMessageStream} from '../_shared/stream.ts';
 import {providerModels,providerRates,providerSecrets,providerNames,providerEndpoints,deepseekMessagesEndpoint,chatRequest,responsesRequest,messagesRequest,anthropicStream,anthropicMessages,type ProviderId,type ProviderModel} from './providers.ts';
-import {inferencePolicy,fastPolicy,isFast,cachedPrompt,usageCost,validProfile,validTaskBudget,providerHeaders,pricingVersion,promptEstimate,refusalFallback,gatewayFeatures,FALLBACK_BETA,TASK_BUDGET_BETA} from './inference-policy.ts';
+import {inferencePolicy,fastPolicy,isFast,keepsNoText,cachedPrompt,usageCost,validProfile,validTaskBudget,providerHeaders,pricingVersion,promptEstimate,refusalFallback,gatewayFeatures,FALLBACK_BETA,TASK_BUDGET_BETA} from './inference-policy.ts';
 
 // Disabled for this instance if the provider rejects requests carrying fallbacks while accepting them without it.
 let fallbackAccepted=true;
@@ -28,7 +28,7 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
  // A quick call may be as short as a few words; a warm-up generates nothing and only writes the prompt's start to the cache.
  const maxTokens=Math.min(64000,Math.max(fast?(prewarm?0:16):128,Math.floor(requested)));
  // Quick calls keep no text here: no request store, so nothing is saved to replay and a closed connection stops the model.
- const store=fast?undefined:requests;
+ const store=keepsNoText(body.purpose)?undefined:requests;
  if(store){try{const claimed=await store.claim(body,userId,timeoutMs);if(!claimed.owner)return requestStatus(await store.read(userId,body.requestId));}catch(error){return failed((error as Error).message,409,'request_conflict');}}
  const estimatedInput=promptEstimate({system:body.system,messages:body.messages,tools:body.tools}),reservationPrice=other?providerRates(other,{input_tokens:estimatedInput}).price:body.model==='claude-haiku-5-5'&&estimatedInput>100000?[.5,2.5]:prices[body.model];
  const estimate=(estimatedInput*reservationPrice[0]+maxTokens*reservationPrice[1])/1e6;

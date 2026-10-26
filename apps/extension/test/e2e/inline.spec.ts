@@ -9,6 +9,10 @@ async function card(page:Page):Promise<Frame>{
  const frame=page.frames().find(f=>f.url().includes('card.html'))!;await frame.locator('#instruction').waitFor();return frame;
 }
 const inlineBodies=(standin:any)=>standin.bodies.filter((b:any)=>b.purpose==='inline');
+// A failed test prints what the worker and the page logged, and what the stand-in was asked.
+const logs:string[]=[];
+test.beforeEach(({worker,page})=>{logs.length=0;worker.on('console',m=>logs.push(`worker ${m.type()}: ${m.text()}`));page.on('console',m=>logs.push(`page ${m.type()}: ${m.text()}`));page.on('pageerror',e=>logs.push(`page error: ${e.message}`));});
+test.afterEach(async({standin},info)=>{if(info.status!==info.expectedStatus)console.log(`asked: ${standin.bodies.map((b:any)=>b.purpose).join(', ')}\n${logs.slice(-40).join('\n')}`);});
 
 test('edits a selection: the diff streams in the card, Enter replaces it, Ctrl+Z takes it back',async({page,signedIn,standin})=>{
  standin.script=b=>b.purpose==='inline'?{text:'EDIT\nCould you please send me the file tomorrow?',chunkMs:15}:{text:''};
@@ -87,4 +91,33 @@ test('writes into an empty field from an instruction',async({page,signedIn,stand
  const frame=await card(page);await expect(frame.locator('.new')).toContainText('Unfortunately');
  await page.keyboard.press('Enter');
  await expect(page.locator('#ce')).toHaveText("Thanks for the invite! Unfortunately I can't make it on Friday.");
+});
+
+test('memory is in every Ctrl+K, edits too: a rewrite can use what was read before',async({page,signedIn,standin})=>{
+ await signedIn.evaluate(()=>(globalThis as any).gumbo.capture({url:'https://notes.example.com/offsite',title:'Offsite plan',text:'The team offsite is at the Lakeview Lodge on Friday. Bring the Q3 roadmap.'}));
+ standin.script=b=>b.purpose==='inline'?{text:'EDIT\nSee you at the offsite at the Lakeview Lodge on Friday, with the Q3 roadmap.'}:{text:''};
+ await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
+ await page.keyboard.type('see u at the offsite');await page.keyboard.press('Control+a');await page.keyboard.press('Control+k');
+ await card(page);await page.keyboard.type('add where and when, and what to bring');await page.keyboard.press('Enter');
+ await expect.poll(()=>inlineBodies(standin).length).toBeGreaterThan(0);
+ const prompt=JSON.stringify(inlineBodies(standin).at(-1).messages);
+ expect(prompt).toContain('<their_memory>');expect(prompt).toContain('Lakeview Lodge');
+});
+
+test('Ctrl+K opens on any page with nothing selected, answers about the page, and leaves a site\'s own Ctrl+K alone',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>b.purpose==='inline'?{text:'ANSWER\nThe offsite is on Friday, November 6 at 10 AM.'}:{text:''};
+ await page.goto(`${standin.url}/pages/forms.html`);await page.locator('h1').click();
+ await page.keyboard.press('Control+k');
+ const frame=await card(page);
+ await page.keyboard.type('when is the offsite?');await page.keyboard.press('Enter');
+ await expect(frame.locator('.body')).toContainText('Friday, November 6');
+ // The page's own text went with the question.
+ expect(JSON.stringify(inlineBodies(standin).at(-1).messages)).toContain('410 Lakeview Drive');
+ await page.keyboard.press('Escape');
+ // A page that uses Ctrl+K itself keeps it.
+ await page.evaluate(()=>window.addEventListener('keydown',e=>{if(e.ctrlKey&&e.code==='KeyK'){e.preventDefault();document.title='site search';}}));
+ await page.locator('h1').click();await page.keyboard.press('Control+k');await page.waitForTimeout(800);
+ expect(page.frames().some(f=>f.url().includes('card.html'))).toBe(false);
+ expect(await page.title()).toBe('site search');
 });

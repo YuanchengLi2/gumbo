@@ -6,6 +6,8 @@ import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {tabRequest,stableContext,TAB_SYSTEM} from '../shared/prompts';
 import {cleanSuggestion,lastWordOf,agreed} from '../shared/suggestion';
 import type {FieldContext} from '../content/context';
+import {fieldMemory,fieldReady,fieldKey,fieldQuery,writingQuery} from './memory-context';
+import {lately} from './lately';
 /** Tab in the engine: a page asks with the field's context and the text around the caret; the answer streams back
  * through the suggestion checks a whole word at a time, and the model is stopped the moment the suggestion is complete
  * (a sentence ended), which saves both time and tokens. Focusing a field warms the model's cache with the part of the
@@ -17,6 +19,13 @@ on('tab',async(message:Ask,{send,signal,url})=>{
  const settings=await loadSettings(),site=siteOf(url)||message.context.site;
  if(!activeOn(settings,site)){send({type:'tab.text',id:message.id,text:'',final:true});return;}
  const recall=await recallFor({site,intent:message.context.intent,before:message.before,thread:message.context.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text});
+ // All of memory, always: what was found for this field (and its last sentence) is given at once; a newer search runs
+ // behind it. Only the first suggestion in a field may wait, briefly, for the search its focus started.
+ const c=message.context,key=fieldKey(site,c.intent,c.label,c.thread);
+ recall.memory=fieldMemory(key,fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),c.url);
+ if(!recall.memory.length)recall.memory=await fieldReady(key);
+ // What they copied a few minutes ago, in any tab (held in the worker: no wait).
+ recall.copied=(await lately(c.url)).copied.filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
  const {system,messages,known}=tabRequest(message.context,message.before,message.after,recall);
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:message.context.singleLine,known,final,lastWord});
  // Two predictions run at once, and only the words both begin with are shown: where they part, the writer's next words
@@ -57,6 +66,8 @@ on('tab.prewarm',async(message:{context:FieldContext},{url})=>{
  const settings=await loadSettings(),site=siteOf(url)||message.context.site;
  if(!activeOn(settings,site))return;
  const recall=await recallFor({site,intent:message.context.intent,before:''});
+ // The field's memory is searched now, so it is there when the first suggestion is asked for.
+ const c=message.context;fieldMemory(fieldKey(site,c.intent,c.label,c.thread),fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings}),c.url);
  const stable=stableContext(message.context,recall),key=`${settings.models.tab}|${stable.length}|${stable.slice(0,400)}`;
  if(Date.now()-(warmed.get(key)??0)<240_000)return;warmed.set(key,Date.now());
  if(warmed.size>200)warmed.delete(warmed.keys().next().value!);

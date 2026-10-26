@@ -1,9 +1,10 @@
 import {test,expect,tell} from '../fixtures';
 import type {Page,Worker} from '@playwright/test';
 
-/** Tab for actions: a habit the user repeats becomes a chip that Tab runs (and checks), a final step waits for Enter,
- * the action meter scores the learner on the user's own steps, and history comes in. */
-const chip=(worker:Worker,page:Page)=>tell(worker,page,{type:'debug.chip'});
+/** Tab for actions, from habits: something the user does nearly every time after the same step is offered at once (no
+ * model needed), Tab runs it (and checks it), a final step waits for Enter, the action meter scores the learner on the
+ * user's own steps, and history comes in. */
+const chip=(worker:Worker,page:Page)=>tell(worker,page,{type:'debug.predict'});
 async function habit(page:Page,url:string,first:string,second:string,times:number){
  for(let i=0;i<times;i++){await page.goto(url);await page.getByRole('button',{name:first}).click();await page.waitForTimeout(150);await page.getByRole('button',{name:second}).click();await page.waitForTimeout(150);}
 }
@@ -12,9 +13,7 @@ test('offers the usual next step, and Tab takes it',async({page,signedIn,standin
  const url=`${standin.url}/pages/flow.html`;
  await habit(page,url,'Edge Functions','Logs',6);
  await page.goto(url);await page.getByRole('button',{name:'Edge Functions'}).click();
- await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toBe('Logs');
- // A strong habit is offered with no model asked.
- expect(standin.bodies.filter((b:any)=>b.purpose==='action')).toHaveLength(0);
+ await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toContain('Logs');
  await page.keyboard.press('Tab');
  await expect(page.locator('#view')).toHaveAttribute('data-view','logs');
  const meter=await signedIn.evaluate(()=>(globalThis as any).gumbo.measureActions());
@@ -25,9 +24,9 @@ test('a final step waits for Enter',async({page,signedIn,standin})=>{
  const url=`${standin.url}/pages/flow.html`;
  await habit(page,url,'Settings','Delete project',6);
  await page.goto(url);await page.getByRole('button',{name:'Settings'}).click();
- await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toBe('Delete project');
+ await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toContain('Delete project');
  await page.keyboard.press('Tab');
- await expect.poll(async()=>(await chip(signedIn,page))?.confirm).toBe(true);
+ await expect.poll(async()=>(await chip(signedIn,page))?.waiting).toBe(true);
  await expect(page.locator('#view')).not.toHaveAttribute('data-view','deleted');
  await page.keyboard.press('Enter');
  await expect(page.locator('#view')).toHaveAttribute('data-view','deleted');

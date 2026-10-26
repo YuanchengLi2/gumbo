@@ -12,7 +12,7 @@ import {session,token} from './auth';
  *   and which pages' content scripts cannot read), so it is gone when the browser closes or the user signs out.
  * Each account on a computer has its own database. */
 export class Locked extends Error{constructor(){super('Memory is locked: sign in to Gumbo.');}}
-export type Box={iv:Uint8Array<ArrayBuffer>;data:ArrayBuffer};
+export type Box={iv:Uint8Array<ArrayBuffer>;data:ArrayBuffer;/** Compressed before sealing. */z?:1};
 type Keys={user:string;dek:CryptoKey;index:CryptoKey};
 const enc=new TextEncoder(),dec=new TextDecoder();
 let keys:Keys|undefined,opening:Promise<Keys>|undefined;
@@ -90,11 +90,22 @@ async function localKek(user:string,create:boolean):Promise<CryptoKey|null>{
  return crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);
 }
 
-export async function seal(k:Keys,value:unknown):Promise<Box>{
- const iv=crypto.getRandomValues(new Uint8Array(12));
- return{iv,data:await crypto.subtle.encrypt({name:'AES-GCM',iv},k.dek,enc.encode(JSON.stringify(value)))};
+/** Sealed records are compressed first when they are long (page text shrinks three to five times), so memory takes
+ * a fraction of the disk; z marks a compressed box, and boxes from before compression open as they are. */
+const COMPRESS_FROM=512;
+async function squeeze(bytes:Uint8Array,how:'compress'|'decompress'){
+ const stream=new Blob([bytes as BlobPart]).stream().pipeThrough(how==='compress'?new CompressionStream('deflate-raw'):new DecompressionStream('deflate-raw'));
+ return new Uint8Array(await new Response(stream).arrayBuffer());
 }
-export async function open<T>(k:Keys,box:Box):Promise<T>{return JSON.parse(dec.decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:box.iv},k.dek,box.data)));}
+export async function seal(k:Keys,value:unknown):Promise<Box>{
+ const iv=crypto.getRandomValues(new Uint8Array(12)),plain=enc.encode(JSON.stringify(value)),z=plain.length>=COMPRESS_FROM;
+ const data=await crypto.subtle.encrypt({name:'AES-GCM',iv},k.dek,z?await squeeze(plain,'compress'):plain);
+ return z?{iv,data,z:1}:{iv,data};
+}
+export async function open<T>(k:Keys,box:Box):Promise<T>{
+ const plain=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:box.iv},k.dek,box.data));
+ return JSON.parse(dec.decode(box.z?await squeeze(plain,'decompress'):plain));
+}
 /** A keyed hash for lookups (a site, an address): equal values give equal hashes, and nothing can be read back. */
 export async function hashOf(k:Keys,value:string):Promise<string>{
  const mac=new Uint8Array(await crypto.subtle.sign('HMAC',k.index,enc.encode(value.toLowerCase())));

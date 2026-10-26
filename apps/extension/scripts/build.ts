@@ -22,6 +22,8 @@ function statics(){
  const ort=resolve(root,'../../node_modules/onnxruntime-web/dist');mkdirSync(join(out,'ort'),{recursive:true});
  for(const name of ['ort-wasm-simd-threaded.jsep.mjs','ort-wasm-simd-threaded.jsep.wasm','ort-wasm-simd-threaded.asyncify.mjs','ort-wasm-simd-threaded.asyncify.wasm','ort-wasm-simd-threaded.mjs','ort-wasm-simd-threaded.wasm'])if(existsSync(join(ort,name)))cpSync(join(ort,name),join(out,'ort',name));
  const manifest=JSON.parse(readFileSync(join(root,'manifest.json'),'utf8'));manifest.version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;
+ // Google's connector signs in with Chrome's Google account; it needs an OAuth client made for this extension's id.
+ if(process.env.GUMBO_GOOGLE_CLIENT_ID)manifest.oauth2={client_id:process.env.GUMBO_GOOGLE_CLIENT_ID,scopes:['openid','email']};
  writeFileSync(join(out,'manifest.json'),JSON.stringify(manifest,null,1));
  for(const name of pages){const html=join(root,'src',name,`${name}.html`);if(existsSync(html))cpSync(html,join(out,`${name}.html`));}
  if(existsSync(join(root,'public')))cpSync(join(root,'public'),out,{recursive:true});

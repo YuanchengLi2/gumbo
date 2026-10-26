@@ -17,6 +17,12 @@ export async function insert(field:Field,text:string,options:{from?:number;to?:n
  const before=snapshot(field,1e9,1e9);if(!before)return{ok:false,reason:'no-caret'};
  const from=options.from??before.start,to=options.to??before.end;
  const expected=before.text.slice(0,from)+text+before.text.slice(to);
+ // An email input has no selection to place: its value is set as typing would set it, with the event frameworks read.
+ if(field.el instanceof HTMLInputElement&&field.el.selectionStart===null){
+  const input=field.el;Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,expected);
+  input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:text}));input.dispatchEvent(new Event('change',{bubbles:true}));
+  return input.value===expected?{ok:true,method:'setRangeText'}:{ok:false,reason:'not-set'};
+ }
  const attempts:[Inserted['method'],()=>boolean|void][]=[];
  const paste=()=>{const data=new DataTransfer();data.setData('text/plain',text);if(options.html)data.setData('text/html',options.html);field.el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true,composed:true}));};
  // Formatted text (a Ctrl+K rewrite of rich text) goes in as HTML first: a paste for editor libraries, which parse it
@@ -60,7 +66,7 @@ async function landed(field:Field,old:string,expected:string,text:string):Promis
 /** Puts the selection (or caret) on a span of the field's text, focusing the field. */
 export function select(field:Field,from:number,to:number):boolean{
  const el=field.el;if(el.ownerDocument.activeElement!==el&&!el.contains(el.ownerDocument.activeElement))el.focus({preventScroll:true});
- if(field.kind==='text'){(el as HTMLInputElement).setSelectionRange(from,to);return true;}
+ if(field.kind==='text'){try{(el as HTMLInputElement).setSelectionRange(from,to);}catch{/* an email input: no selection */}return true;}
  if(field.kind==='context'){const context=editContextOf(el);if(context.selectionStart!==from||context.selectionEnd!==to)context.updateSelection(from,to);return true;}
  const range=rangeOf(textMap(el),from,to);if(!range)return false;
  const selection=selectionIn(el)??el.ownerDocument.getSelection();if(!selection)return false;

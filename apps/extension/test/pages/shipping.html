@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Checkout: shipping</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main>
+ <h1>Where should we ship it?</h1>
+ <form id="ship" onsubmit="event.preventDefault();document.getElementById('status').textContent='Shipping to '+document.getElementById('street').value;">
+  <label for="street">Street address</label><input id="street" autocomplete="off">
+  <label for="city">City</label><input id="city" autocomplete="off">
+  <button type="submit">Continue</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

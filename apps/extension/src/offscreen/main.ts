@@ -1,12 +1,15 @@
 /// <reference types="chrome" />
-import {search,refresh,reset,stats,lastActive} from './memory';
-import {listening,startListening,listenAudio,stopListening} from './listen';
+import {search,refresh,reset,stats,warm,lastActive} from './memory';
+import {listening,startListening,listenAudio,stopListening,listenCues,nameVoice,listenState,log} from './listen';
 import {useKeys} from '../background/vault';
+import {powerNow} from './power';
 /** The offscreen document: Gumbo's long-lived part, for what needs a page (WebAssembly and WebGPU models, workers, audio)
  * and outlives the service worker's naps: memory search, embedding, and listening. The worker talks to it with
  * {target:'offscreen'} messages; it closes itself after ten minutes with nothing to do. */
-chrome.runtime.onMessage.addListener((message,_sender,reply)=>{
- if(message?.target!=='offscreen')return;
+chrome.runtime.onMessage.addListener((message,sender,reply)=>{
+ if(message?.target!=='offscreen'||sender.id!==chrome.runtime.id)return;
+ // Pages send only their audio and captions here; everything else comes from the worker.
+ if(sender.tab&&message.type!=='listen.audio'&&message.type!=='listen.cues')return;
  handle(message).then(reply,error=>reply({error:(error as Error).message}));
  return true;
 });
@@ -17,10 +20,16 @@ async function handle(message:any){
   case 'index.changed':await refresh();return{};
   case 'index.reset':reset();return{};
   case 'index.stats':return stats();
+  case 'index.warm':return warm();
   case 'listen.start':return startListening(message);
   case 'listen.audio':return listenAudio(message);
   case 'listen.stop':return stopListening(message.session);
+  case 'listen.cues':return listenCues(message);
+  case 'listen.name':return nameVoice(message);
+  case 'listen.state':return listenState();
   case 'ping':return{ok:true};
+  case 'power':return{power:await powerNow()};
+  case 'debug.logs':return{log};
  }
  return{error:`Unknown ${message.type}`};
 }

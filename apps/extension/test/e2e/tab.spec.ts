@@ -84,3 +84,15 @@ test('memory is sealed on disk and feeds the next field: the user\'s own writing
  const prompt=JSON.stringify(second().messages);
  expect(prompt).toContain('examples_of_their_own_writing');expect(prompt).toContain('Lisbon offsite');
 });
+
+test('every suggestion carries what memory knows, and a fact from memory may be suggested',async({page,signedIn,standin})=>{
+ // Read days ago: in memory, not on this page.
+ await signedIn.evaluate(()=>(globalThis as any).gumbo.capture({url:'https://notes.example.com/offsite',title:'Offsite plan',text:'The team offsite is at the Lakeview Lodge on Friday. Bring the Q3 roadmap.'}));
+ standin.script=b=>b.purpose==='tab'?{text:' Lakeview Lodge on Friday.'}:{text:''};
+ await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
+ await page.keyboard.type('See you at the team offsite next week at the',{delay:15});
+ // The place comes from memory, so the facts guard lets it through (a place nobody mentioned would be cut).
+ await expect.poll(async()=>(await tabState(signedIn,page))?.rest,{timeout:8000}).toBe(' Lakeview Lodge on Friday.');
+ const prompt=JSON.stringify(standin.bodies.filter(b=>b.purpose==='tab').at(-1).messages);
+ expect(prompt).toContain('from_their_memory');expect(prompt).toContain('Bring the Q3 roadmap');
+});

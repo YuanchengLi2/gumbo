@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Notes editor</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<main>
+ <h1>Notes editor</h1>
+ <div role="toolbar"><button id="font" aria-haspopup="menu" onclick="document.getElementById('menu').hidden=false">Font: Arial</button></div>
+ <div id="menu" role="menu" hidden>
+  <div role="menuitem" tabindex="0" onclick="document.getElementById('font').textContent='Font: Roboto';document.getElementById('menu').hidden=true;document.getElementById('doc').style.fontFamily='Roboto'">Roboto</div>
+  <div role="menuitem" tabindex="0" onclick="document.getElementById('font').textContent='Font: Georgia';document.getElementById('menu').hidden=true">Georgia</div>
+ </div>
+ <div id="doc" contenteditable="true" aria-label="Document">Quarterly notes</div>
+</main>
+</body>
+</html>
