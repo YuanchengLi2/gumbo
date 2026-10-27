@@ -32,12 +32,13 @@ const activity:{kind:string;label:string;text?:string}[]=[];
 const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame()&&!unseenFrame();
 const actionable='a[href],button,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],summary,input[type=submit],input[type=button],input[type=checkbox],input[type=radio],label';
 const dialogs='[role=dialog],[role=alertdialog],dialog,[aria-modal=true]';
-const did=(kind:string,label:string,text?:string)=>{
+/** A step the user took here: the context of the next guess, and memory's (memory/live.ts keeps the tab's trail across
+ * pages, the event log keeps it for good, chained). what: the element it touched (its role, name and place, never what was
+ * typed), and value, an option chosen or a box's state. Typing on in one field is sent at most every 1.5 s. */
+const did=(kind:string,label:string,text?:string,what?:{role:string;name:string;path?:string;nearby?:string},value?:string)=>{
  const prev=activity.at(-1);if(prev&&prev.kind===kind&&prev.label===label)activity.pop();activity.push({kind,label:label.slice(0,80),text:text?.slice(-200)});if(activity.length>10)activity.shift();
- // The tab's trail across pages (session.ts), from the top page: what they have been doing, so Tab knows where they are
- // heading. Typing on in one field is sent at most every 1.5 s.
- if(inFrame||(kind==='typed'&&prev?.kind==='typed'&&prev.label===label.slice(0,80)&&Date.now()-lastLogged<1500))return;
- lastLogged=Date.now();post({type:'session.did',kind,label:label.slice(0,80),text:text?.slice(-200),title:document.title});
+ if(kind==='typed'&&prev?.kind==='typed'&&prev.label===label.slice(0,80)&&Date.now()-lastLogged<1500)return;
+ lastLogged=Date.now();post({type:'event',kind,label:label.slice(0,80),text:text?.slice(-200),title:document.title,...what,value});
 };
 let lastLogged=0;
 /** What a hand touched, in a few words: the card, row, item or control it belongs to. */
@@ -108,7 +109,7 @@ export function startPredict(){
  },true);
  // The faint text belongs to the field the cursor is in: it goes when the cursor leaves.
  document.addEventListener('focusout',()=>{if(previews.length)setTimeout(()=>{if(hint)drawPreviews();},0);},true);
- document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text);task(t,150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60));task(t,150);}else if(t instanceof HTMLInputElement&&t.type==='range'){did('set',nameOf(t,60),t.value);task(t,150);}},true);
+ document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text,{role:'combobox',name:nameOf(t,60)},t.selectedOptions[0]?.text);task(t,150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60),undefined,{role:t.type,name:nameOf(t,60)},t.checked?'on':'off');task(t,150);}else if(t instanceof HTMLInputElement&&t.type==='range'){did('set',nameOf(t,60),t.value,{role:'slider',name:nameOf(t,60)},t.value);task(t,150);}},true);
  document.addEventListener('paste',e=>{const f=fieldOf(deepActive());if(f&&e.isTrusted&&!running){did('pasted into',nameOf(f.el,60)||'a field',e.clipboardData?.getData('text/plain')?.slice(0,200));task(f.el,250,true);}},true);
  // A finished sentence is a likely end of what they meant to write (the send, the search comes next): asked sooner.
  // Only the user's own typing in a text field is typing: a slider moved, a box checked, or what Tab itself typed is not.
@@ -158,7 +159,7 @@ function onClick(event:MouseEvent){
  if(!alive())return;
  if(!event.isTrusted||(chip&&event.composedPath().includes(chip)))return;
  const target=(event.composedPath()[0] as Element|undefined)?.closest?.(actionable);
- if(active()&&target&&!fieldOf(target)){const item=describe(target);if(item.name){did('clicked',item.name);post({type:'capture.event',role:roleOf(target),name:item.name,path:item.path,nearby:item.nearby});}}
+ if(active()&&target&&!fieldOf(target)){const item=describe(target);if(item.name)did('clicked',item.name,undefined,{role:roleOf(target),name:item.name,path:item.path,nearby:item.nearby});}
  // A click on a drawing has no element to name: where it was (in the view's pixels) is what the next guess knows.
  else if(event.composedPath()[0] instanceof HTMLCanvasElement)did('clicked on the drawing',`at ${Math.round(event.clientX)}, ${Math.round(event.clientY)}`);
  // The click that ends a press on a field: its guess is already on the way (or showing).
@@ -452,7 +453,7 @@ async function go(){
    if(result.inFrame&&step.do==='type')result=await request<Done>({type:'tab.typeFocused',text:step.text},'tab.typed',5000)??{ok:false,detail:'Nothing took the typing.'};
    if(!result.ok){ok=false;post({type:'failure',site:location.hostname,editor:'page',what:'action',detail:`Tab: ${result.detail}`});break;}
    // A click Tab made for them is one of their steps too: habits learn from it.
-   if(step.do==='click'&&el){const item=describe(el);if(item.name)post({type:'capture.event',role:roleOf(el),name:item.name,path:item.path,nearby:item.nearby});}
+   if(step.do==='click'&&el){const item=describe(el);if(item.name)post({type:'event',kind:'clicked',label:item.name,title:document.title,role:roleOf(el),name:item.name,path:item.path,nearby:item.nearby,learn:true});}
    if(current.plan.steps.length>1)await settled(40,300);
   }
  }finally{running=false;}

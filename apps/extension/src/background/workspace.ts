@@ -1,5 +1,5 @@
 import {recent,getPage} from './db';
-import {lately} from './lately';
+import {lately} from './memory/live';
 import {loadSettings,activeOn,siteOf,type Settings} from '../shared/settings';
 import {shortUrl,searchOf} from '../shared/address';
 /** The user's browser as the agent knows it, the way a code editor knows the open files and the recent edits: every open

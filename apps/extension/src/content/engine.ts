@@ -15,6 +15,7 @@ import {startDrawnTab,showDrawnWords,hideDrawnWords,drawnWords} from './drawn-ta
 import {startCapture,pageText} from './capture';
 import {startPredict,predictState} from './predict';
 import {startListen,listenState} from './listen';
+import {startSeen} from './seen';
 
 /** Gumbo in one frame (or one of the extension's own pages): tracks the field in focus, runs Tab, Ctrl+K and capture,
  * and answers the engine's requests (the page model, an action, and checks the tests use). */
@@ -36,7 +37,7 @@ export function start(_window:Window){
   const answer=handle(message);if(answer===undefined)return;
   answer.then(reply,error=>reply({ok:false,detail:(error as Error).message}));return true;
  });
- startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();
+ startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();startSeen();
 }
 /** Requests from the engine. A request about the field in focus is answered only by the frame that has it, so the
  * reply comes from the right frame of a page with many. */

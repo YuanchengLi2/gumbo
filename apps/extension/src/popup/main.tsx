@@ -47,6 +47,7 @@ function Popup(){
     {!!stats?.failures&&<Failures/>}
     {spend?.todayUsd!==undefined&&<p className="muted">Today's AI: ${spend.todayUsd.toFixed(2)}</p>}
     <Hits/>
+    <div className="row"><button className="link" onClick={()=>void chrome.tabs.create({url:chrome.runtime.getURL('debug.html')})}>Memory, from the inside</button></div>
     {spend?.thrifty&&<p className="muted">Saving credits: Tab guesses once you act, not ahead of you.</p>}
     <div className="row"><button className="link" disabled={measuring} onClick={()=>{setMeasuring(true);void ask({type:'meter.run'}).then(setMeter).finally(()=>setMeasuring(false));}}>{measuring?'Checking Tab on your writing…':'Check Tab on my writing'}</button></div>
     {meter&&('error' in meter?<p className="muted">{meter.error}</p>:<p className="muted">On your writing: shows {Math.round(meter.showRate*100)}% of the time, right {Math.round(meter.precision*100)}% when it does</p>)}

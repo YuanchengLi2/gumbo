@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {search,refresh,reset,stats,warm,lastActive} from './memory';
+import {search,refresh,reset,stats,warm,lastActive,embed} from './memory';
 import {listening,startListening,listenAudio,stopListening,listenCues,nameVoice,listenState,log} from './listen';
 import {useKeys} from '../background/vault';
 import {powerNow} from './power';
@@ -21,6 +21,8 @@ async function handle(message:any){
   case 'index.reset':reset();return{};
   case 'index.stats':return stats();
   case 'index.warm':return warm();
+  // Texts as vectors (8-bit, as memory keeps them), for grouping visits into projects.
+  case 'embed':return{vectors:(await embed((message.texts as string[]).slice(0,64))).map(v=>[...v])};
   case 'listen.start':return startListening(message);
   case 'listen.audio':return listenAudio(message);
   case 'listen.stop':return stopListening(message.session);

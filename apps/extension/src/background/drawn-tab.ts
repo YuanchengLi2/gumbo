@@ -2,7 +2,7 @@ import {on} from './surfaces';
 import {model} from './model';
 import {viewPicture} from './predict';
 import {fieldMemory,fieldReady} from './memory-context';
-import {lately} from './lately';
+import {lately} from './memory/live';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {DRAWN_TAB_SYSTEM} from '../shared/prompts';
 import {textOf} from '../shared/gateway';

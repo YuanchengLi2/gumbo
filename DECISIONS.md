@@ -1,5 +1,45 @@
 # Dream decisions
 
+## October 27, 2026 — Gumbo for Chrome has one central memory: visits, projects, a profile, and getContext
+
+- **Every navigation is a visit, kept for good.** `chrome.webNavigation` (a new permission, with the same "read your
+  browsing history" warning `history` and `tabs` already have) reports each committed navigation, each route change in
+  an app that never reloads, and each tab opened from another. Each visit links to where it came from (the page before
+  it in the tab, or the visit in the tab that opened it), and is timed three ways: active (in front, window focused, not
+  idle), visible, and read (text in view while the user is about, from an IntersectionObserver in the page). A redirect
+  within 5 s is the same visit. History import also writes visits, chained by `referringVisitId`. Database version 6
+  adds `visits` and `projects`.
+- **One hot copy of the session** (`memory/live.ts`) replaces `lately.ts` and `session.ts`. It holds each tab's trail of
+  visits, what is on its screen now (words in view, the focused field and what is typed, the selection), its steps, the
+  closed tabs, the switch order and what was copied. It is saved to session storage, so a worker that slept rebuilds it
+  at once. Page events (`did()` and clicks) are one `event` message, and each is kept chained to the one before it.
+- **What was read is known.** When a visit ends, the dwell of each block in view goes onto the passage that holds it
+  (`seenMs`), and ranking counts it.
+- **Projects group visits by meaning, with the threshold measured, not guessed.** On 1,332 real visits on the first
+  computer, title embeddings told related pages from unrelated ones only loosely: pages reached one from the other had
+  p10 0.61 and median 0.63, unrelated pairs on different days and sites had median 0.57 and p90 0.68. The best single cut
+  (0.59) let in 41% of unrelated pairs. So the join bar is the larger of the best cut and the unrelated p90 (0.70
+  here). The chain (+0.15) and the site (+0.10) bring in related pages. Every computer learns its own bar from its
+  history (`calibrate`). Search pages, inboxes and pages with a bare title join only through their chain. A thread
+  starts as a candidate and becomes a project at 3 visits over 5 minutes.
+- **Project notes and the profile are written by Haiku, a little at a time.** A note (goal, where they left off, what is
+  open, what was decided) is rewritten from the old one and what happened since, after 5 visits or 10 active minutes, or
+  when the user moves to other work, at most every 15 minutes, never twice for the same input. The profile's facts,
+  style and routines are computed locally; who they are, their work, people, places, tools and tone change by small
+  operations merged into what is there. Both use the gateway's no-store purpose `action`, so no gateway deploy is
+  needed. There are no plan limits yet, at the user's request.
+- **One `getContext` for every surface.** It returns `stable` (the profile slice for this field, plus the project note:
+  cached right after the system prompt), `fresh` (this session and the past, ranked together, without repeats, within a
+  token budget) and `items`, each with its score part by part.
+  - Ranking is `0.35·cos + 0.20·bm25 + 0.15·recency + 0.10·project + 0.10·chain + 0.05·site + 0.05·seen + 0.05·useful`,
+    then MMR. All weights are config values (`memory/config.ts`, overridable in storage), so evals can tune them.
+  - Tab's assembly measured 3–5 ms: its search is kept per field and refreshed behind it, and a first ask waits 80 ms.
+  - Ctrl+K and the sidebar wait for their search, longer while memory is still starting, and add a Haiku rerank. Ctrl+K
+    starts the rerank when the card opens.
+  - Ctrl+K in a field now also gets the page and the conversation above it.
+- **A debug page** (from the popup: "Memory, from the inside") shows the session tab by tab, the projects and notes, the
+  profile, what each surface was last given and why, the speeds, and the calibration.
+
 ## October 26, 2026 — Gumbo for Chrome's memory syncs between computers, end-to-end encrypted
 
 - **The user holds the key.** A passphrase they set (or a made-up one, 20 random letters and digits) becomes a key on

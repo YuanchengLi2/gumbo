@@ -7,9 +7,8 @@ import {tabRequest,stableContext,TAB_SYSTEM} from '../shared/prompts';
 import {cleanSuggestion,lastWordOf,agreed} from '../shared/suggestion';
 import type {FieldContext} from '../content/context';
 import {fieldMemory,fieldReady,fieldCurrent,fieldKey,fieldQuery,writingQuery} from './memory-context';
-import {lately} from './lately';
+import {lately,doingText} from './memory/live';
 import {justLeft} from './workspace';
-import {doingText} from './session';
 /** Tab in the engine: a page asks with the field's context and the text around the caret; the answer streams back
  * through the suggestion checks a whole word at a time, and the model is stopped the moment the suggestion is complete
  * (a sentence ended), which saves both time and tokens. Focusing a field warms the model's cache with the part of the

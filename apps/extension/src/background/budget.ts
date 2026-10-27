@@ -1,14 +1,19 @@
-import {db} from './db';
+import {db,compactOldPages,dropUnvisitedImports,dropOldVisits} from './db';
 import {invalidate} from './recall';
 /** Memory never weighs the computer down. Once an hour, and only while the computer is idle, in small batches that yield
  * between them:
- * - the logs that grow with every keystroke and click are capped (suggestions, actions, timings, failures);
+ * - the logs that grow with every keystroke and click are capped (suggestions, actions, timings, failures), and so are
+ *   writing, notes and conversations (the oldest go first);
+ * - visits are kept a year, and those left within seconds with nothing done, a month;
+ * - a page not seen for a month keeps only what was read of it (and its opening); addresses brought in from Chrome's
+ *   history and never visited again go after three months;
  * - when everything together passes the budget (1 GB, or a tenth of what Chrome allows on this disk, whichever is
  *   less), the pages least worth keeping go first (least recently seen or used in an answer, fewest visits, least time
  *   on them), with their passages and embeddings (their address and title stay in Chrome's own history); writing,
  *   meetings and notes are kept. Records are compressed before they are sealed, so this is rarely reached.
  * Everything here works on the sealed rows (times and hashed keys), so nothing is opened to do it. */
-const caps:Record<string,number>={suggestions:20_000,events:200_000,timings:5_000,failures:2_000};
+const caps:Record<string,number>={suggestions:20_000,events:200_000,timings:5_000,failures:2_000,writing:50_000,notes:50_000,chats:1_000};
+const DAY=86_400_000;
 const yieldNow=()=>new Promise(resolve=>setTimeout(resolve,0));
 
 export async function keepWithinBudget({force=false}:{force?:boolean}={}){
@@ -23,6 +28,11 @@ export async function keepWithinBudget({force=false}:{force?:boolean}={}){
    await tx.done;await yieldNow();if(!batch)break;
   }
  }
+ const now=Date.now();
+ removed+=await dropOldVisits(now).catch(()=>0);await yieldNow();
+ const compacted=await compactOldPages(now-30*DAY).catch(()=>0);await yieldNow();
+ removed+=await dropUnvisitedImports(now-90*DAY).catch(()=>0);
+ if(compacted)removed++;
  // A gigabyte at most, and never more than a tenth of what Chrome allows on this disk.
  const estimate=await navigator.storage.estimate(),budget=Math.min(1024**3,(estimate.quota??10*1024**3)*0.1);
  let usage=estimate.usage??0,trimmed=0;

@@ -21,7 +21,7 @@ import {htmlToMarkdown,markdownToHtml,plainOf,hasFormatting} from '../shared/ric
  * (from the selection at once, then from the page, the conversation and memory). Something to do in the page runs there,
  * step by step, with its steps in the card and Enter to allow a final one. Ctrl+K stays the site's own on sites the user
  * chose (Alt+K opens Gumbo there), and is left alone when there is no field and no selection. */
-type Open={session:string;frame:HTMLIFrameElement;field:Field|null;start:number;end:number;original:string;rich:boolean;pageRange?:Range;context:{site:string;title:string;intent?:string;label?:string;before:string;after:string;page:string};request?:string;mode?:'edit'|'answer'|'act';text:string;final:boolean;action?:any;html?:string;
+type Open={session:string;frame:HTMLIFrameElement;field:Field|null;start:number;end:number;original:string;rich:boolean;pageRange?:Range;context:{site:string;title:string;intent?:string;label?:string;before:string;after:string;page:string;thread?:string};request?:string;mode?:'edit'|'answer'|'act';text:string;final:boolean;action?:any;html?:string;
  /** Something being done in the page: the agent's conversation, the final step waiting for Enter, whether it ended. */doing?:{chat?:string;confirm?:string;done?:boolean};
  /** Keys pressed before the card could take them (it is still loading): they go to the card, never to the page. */early:string[];ready:boolean;
  /** Opened over a drawing (Google Docs, a design): what had the focus (the editor's typing box, or the frame it is in), and
@@ -97,6 +97,8 @@ function begin(field:Field|null,drawing?:Open['drawing']){
   if(field.kind==='editable'&&snap.range&&!snap.range.collapsed){const md=htmlToMarkdown(snap.range.cloneContents());if(hasFormatting(md)){original=md;rich=true;}}
   anchor=snap.range&&!snap.range.collapsed?snap.range.getBoundingClientRect():undefined;
   if(!anchor||!anchor.height){layer();const caret=caretOf(field);anchor=caret?new DOMRect(caret.x,caret.top,1,caret.height):field.el.getBoundingClientRect();}
+  // In a field too, the page it is on (a reply needs what it replies to).
+  page=pageText(2500);
  }else{
   const selection=getSelection();
   // Text selected on the page: the words around it (its passage) go with it, and the page's own text.
@@ -114,7 +116,7 @@ function begin(field:Field|null,drawing?:Open['drawing']){
  const width=Math.min(560,innerWidth-16),left=Math.max(8,Math.min(anchor.left-10,innerWidth-width-8)),below=anchor.bottom+4,above=anchor.top-4;
  Object.assign(frame.style,{position:'fixed',left:`${left}px`,top:`${below+150>innerHeight&&above>150?Math.max(8,above-150):below}px`,width:`${width}px`,height:'72px',border:'0',background:'transparent',colorScheme:'normal',pointerEvents:'auto',zIndex:'2147483647'});
  layer();raise();surface().appendChild(frame);
- open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after,page},text:'',final:false,early:[],ready:false,drawing};
+ open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after,page,thread:context?.thread?.slice(-6).map(m=>`${m.author?`${m.author}: `:''}${m.text.slice(0,500)}`).join('\n')},text:'',final:false,early:[],ready:false,drawing};
  post({type:'card.open',session});
  // A card that never comes up (the extension was updated under the page, the worker could not answer) must not keep
  // the keys: the page gets them and its selection back.
@@ -130,7 +132,7 @@ function around(range:Range,selected:string):[string,string]{
  const text=block instanceof HTMLElement?block.innerText??'':'',at=text.indexOf(selected.slice(0,200));
  return at<0?['','']:[text.slice(Math.max(0,at-2500),at),text.slice(at+selected.length,at+selected.length+2000)];
 }
-const stableOf=(o:Open)=>({site:o.context.site,title:o.context.title,intent:o.context.intent,label:o.context.label,selection:o.original,before:o.context.before,after:o.context.after,page:o.context.page||undefined,inField:!!o.field});
+const stableOf=(o:Open)=>({site:o.context.site,title:o.context.title,intent:o.context.intent,label:o.context.label,selection:o.original,before:o.context.before,after:o.context.after,page:o.context.page||undefined,thread:o.context.thread||undefined,inField:!!o.field});
 const view=(o:Open,v:Record<string,unknown>)=>post({type:'card.to',session:o.session,payload:{type:'view',...v}});
 
 function onMessage(message:any){

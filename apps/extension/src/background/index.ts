@@ -16,7 +16,14 @@ import './card';
 import './memory-view';
 import './predict';
 import './drawn-tab';
-import './session';
+import './memory/live';
+import {flushVisits} from './memory/visits';
+import {snapshot as liveSnapshot} from './memory/live';
+import {all as allProjects,calibrate,writeNote,forgetProjects} from './memory/projects';
+import {profile,updateProfile,forgetProfile} from './memory/profile';
+import {getContext,lastContexts} from './memory/context';
+import {config} from './memory/config';
+import {getSealed} from './db';
 import {thrifty} from './thrift';
 import {measureActions} from './actions';
 import {importHistory,importState} from './history';
@@ -57,7 +64,7 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'spend':{const bearer=await token();if(!bearer)return{signedIn:false};const {gateway}=await endpoints();const [usage,saving]=await Promise.all([gatewayGet(gateway,bearer,'usage'),thrifty()]);return{todayUsd:(usage.todayCredits??0)/100,monthUsd:(usage.monthCredits??0)/100,thrifty:saving};}
   case 'memory.counts':return counts();
   // While sync is on, what is forgotten here is forgotten on the user's other computers too, at once.
-  case 'memory.forget':await beforeForget().catch(()=>{});await forget({site:message.site,since:message.since});memoryReset();void syncNow({push:'force'});return{};
+  case 'memory.forget':await beforeForget().catch(()=>{});await forget({site:message.site,since:message.since});memoryReset();forgetProjects();forgetProfile();void syncNow({push:'force'});return{};
   case 'sync.state':return syncState();
   case 'sync.account':return syncAccount();
   case 'sync.setup':return setUp(message.passphrase);
@@ -76,7 +83,18 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   case 'listen.name':return nameSpeaker(message);
   case 'listen.recent':return{items:(await recent('media',60)).map(m=>({id:m.id,title:m.title,url:m.url,kind:m.kind,startedAt:m.startedAt,endedAt:m.endedAt,seconds:Math.round((m.segments.at(-1)?.end??0)-(m.segments[0]?.start??0)),lines:m.segments.length,notes:!!m.notes}))};
   case 'listen.media':return(await getMedia(message.id))??null;
+  case 'debug.memory':return debugMemory();
+  case 'debug.calibrate':return calibrate();
  }
+}
+/** Everything memory holds and did, for the debug page: the session, projects, profile, what each surface was last given
+ * and why, the numbers in effect, and how fast and how often each surface ran (from the timings on this computer). */
+async function debugMemory(){
+ const [live,projects,me,cfg,calibration,timings,count]=await Promise.all([liveSnapshot(),allProjects().then(m=>[...m.values()]).catch(()=>[]),profile().catch(()=>undefined),config(),getSealed('calibration').catch(()=>undefined),recentTimings(5000,Date.now()-7*86_400_000).catch(()=>[]),counts()]);
+ const by=new Map<string,number[]>();for(const t of timings)by.set(t.surface,[...(by.get(t.surface)??[]),t.ms]);
+ const pct=(xs:number[],p:number)=>{const y=[...xs].sort((a,b)=>a-b);return y.length?Math.round(y[Math.floor(p*(y.length-1))]):undefined;};
+ const speed=Object.fromEntries([...by].map(([s,xs])=>[s,{n:xs.length,p50:pct(xs,0.5),p90:pct(xs,0.9)}]));
+ return{live,projects:projects.map(({centroid,noteInput,...p})=>p),profile:me,contexts:lastContexts(),config:cfg,calibration,speed,counts:count};
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void refresh();});
 chrome.runtime.onInstalled.addListener(details=>{
@@ -92,4 +110,5 @@ async function intoOpenTabs(){
 }
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
-(globalThis as any).gumbo={sync:{now:syncNow,state:syncState},agent:agentDebug,importAssistantMemory,listenState,toggleTab,stopListening,writeNotes,nameSpeaker,search:searchMemory,offscreen,stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
+(globalThis as any).gumbo={sync:{now:syncNow,state:syncState},agent:agentDebug,importAssistantMemory,listenState,toggleTab,stopListening,writeNotes,nameSpeaker,search:searchMemory,offscreen,stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId}),
+ memory:{live:liveSnapshot,flush:flushVisits,projects:async()=>[...(await allProjects()).values()],calibrate,writeNote,profile,updateProfile,context:getContext,debug:debugMemory}};

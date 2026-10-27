@@ -8,11 +8,30 @@ import type {Stamp} from '../shared/sync-crypto';
  * apps could feed memory later). Requests take the few snippets they need; nothing is ever sent as a whole. */
 export type Source='browser'|'audio'|'import';
 export type Writing={id?:number;site:string;url:string;intent:string;label:string;editor:string;text:string;at:number;source:Source;
- /** What it answered: the last message of the conversation above the field, so memory knows what the writing was about. */ replyTo?:string};
-export type SuggestionRecord={id?:number;site:string;intent:string;kind:'text'|'action';text:string;accepted:number;outcome:'accepted'|'partial'|'ignored'|'dismissed';latencyMs?:number;at:number};
-export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:'click'|'navigate'|'submit'|'key'|'open';role:string;name:string;path?:string;nearby?:string;title?:string;transition?:string;at:number;source:Source};
+ /** What it answered: the last message of the conversation above the field, so memory knows what the writing was about. */ replyTo?:string;
+ /** The visit it was written on, and that visit's project. */visit?:number;project?:string};
+export type SuggestionRecord={id?:number;site:string;intent:string;kind:'text'|'action';text:string;accepted:number;outcome:'accepted'|'partial'|'ignored'|'dismissed'|'undone';latencyMs?:number;at:number;
+ /** The memory items the suggestion was made with (their ids in memory's index), so what helped counts next time. */used?:string[]};
+/** Something the user did on a page: a click, a choice, a box ticked, a paste, a drag, a page reached. Each points to the one
+ * before it in the same tab (prev), so what follows what can be learned; value only where it is safe (an option chosen,
+ * a box's state), never what was typed. */
+export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:'click'|'navigate'|'submit'|'key'|'open'|'type'|'select'|'check'|'paste'|'copy'|'drag'|'switch'|'scroll'|'dialog';role:string;name:string;path?:string;nearby?:string;title?:string;transition?:string;at:number;source:Source;
+ tab?:number;visit?:number;prev?:number;value?:string;project?:string};
 export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source};
-export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string};
+export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string;
+ /** The visit it was read on, and how long it was actually in view while they were there (ms). */visit?:number;seenMs?:number};
+/** What kind of page a visit was (memory/page-kind.ts). */
+export type PageCategory='inbox'|'thread'|'doc'|'search'|'results'|'form'|'dashboard'|'article'|'video'|'chat'|'product'|'checkout'|'settings'|'other';
+/** A page in a tab, from when it was reached to when it was left: every navigation (a link, an address typed, a route in
+ * an app that never reloads, a new tab opened from another) is one, linked to where it came from (from: the visit before it
+ * in the tab, or the one in the tab that opened it). Times are what memory ranks by: active (in front, the window focused,
+ * the user not idle), visible (in front in its window) and read (text in view while active). */
+export type Visit={id?:number;tab:number;window:number;session:number;url:string;site:string;title:string;pageKind:string;kind:PageCategory;
+ in:number;out?:number;activeMs:number;visibleMs:number;readMs:number;from?:number;opener?:number;transition:string;project?:string;events?:number;source:Source};
+/** A thread of work across visits (a trip being planned, a bug being fixed, a course): what it is called, and a short
+ * rolling note of where it stands, kept by memory/projects.ts. */
+export type ProjectNote={goal:string;leftOff:string;open:string[];decisions:string[]};
+export type Project={id:string;name:string;note?:ProjectNote;noteAt?:number;notedVisits?:number;notedActiveMs?:number;noteInput?:string;sites:string[];centroid?:number[];firstAt:number;lastAt:number;visits:number;activeMs:number;candidate?:boolean};
 export type Segment={start:number;end:number;speaker:string;text:string};
 export type Media={id:string;url:string;site:string;title:string;kind:'meeting'|'video'|'audio';startedAt:number;endedAt?:number;segments:Segment[];sounds:{at:number;label:string}[];notes?:string;source:Source;
  /** The voices heard (their fingerprints), so a speaker can be named after the meeting too. */speakers?:{name:string;print:number[];count:number}[]};
@@ -23,13 +42,15 @@ export type Failure={id?:number;site:string;editor:string;what:'placement'|'inse
 export type Chat={id:string;title:string;at:number;turns:unknown[];messages:unknown[]};
 export type TimingRecord={id?:number;surface:string;ms:number;gateway?:Record<string,number>;at:number};
 
-type Value={writing:Writing;suggestions:SuggestionRecord;events:ActionEvent;pages:Page;passages:Passage;media:Media;voices:Voice;notes:Note;failures:Failure;chats:Chat};
+type Value={writing:Writing;suggestions:SuggestionRecord;events:ActionEvent;pages:Page;passages:Passage;media:Media;voices:Voice;notes:Note;failures:Failure;chats:Chat;visits:Visit;projects:Project};
 export type Store=keyof Value|'timings';
 type Sealed=keyof Value;
-/** What each store keeps in the clear for its indexes. */
+/** What each store keeps in the clear for its indexes. A visit's project id is a random id, and brief marks a visit left
+ * within seconds with nothing done (what retention drops first). */
 const clear:{[S in Sealed]:(v:Value[S])=>Record<string,unknown>}={
  writing:v=>({at:v.at,intent:v.intent}),suggestions:v=>({at:v.at,outcome:v.outcome,kind:v.kind}),events:v=>({at:v.at}),pages:v=>({lastSeen:v.lastSeen,keep:keepOf(v)}),
  passages:v=>({at:v.at,kind:v.kind}),media:v=>({id:v.id,startedAt:v.startedAt}),voices:v=>({id:v.id}),notes:v=>({at:v.at}),failures:v=>({at:v.at}),chats:v=>({id:v.id,at:v.at}),
+ visits:v=>({at:v.in,...(v.project?{project:v.project}:{}),brief:v.out!==undefined&&v.activeMs<5000&&!v.events?1:0}),projects:v=>({id:v.id,at:v.lastAt}),
 };
 /** How long a page is worth keeping when memory runs short (eviction removes the lowest first): when it was last seen,
  * plus a day for each visit and for each two minutes spent on it (up to a month each). Using it in an answer moves it up
@@ -59,7 +80,11 @@ export async function db():Promise<IDBPDatabase>{
  const user=await currentUser();if(!user)throw new Locked();
  if(opened?.user===user)return opened.db;
  const changeLog=(d:IDBPDatabase)=>{const changes=d.createObjectStore('changes',{keyPath:['store','local']});changes.createIndex('sid','sid');changes.createIndex('dirty',['dirty','at']);changes.createIndex('sidless','sidless');};
- const promise=openDB(await databaseName(user),5,{async upgrade(d,oldVersion,_newVersion,tx){
+ const visitsAndProjects=(d:IDBPDatabase)=>{
+  const visits=d.createObjectStore('visits',{keyPath:'id',autoIncrement:true});visits.createIndex('at','at');visits.createIndex('project','project');visits.createIndex('url','url');visits.createIndex('site','site');
+  d.createObjectStore('projects',{keyPath:'id'}).createIndex('at','at');
+ };
+ const promise=openDB(await databaseName(user),6,{async upgrade(d,oldVersion,_newVersion,tx){
   if(oldVersion>=1){
    // Version 2 adds the embedding vectors (keyed by the id of what they embed: a passage, a piece of writing, a note).
    if(oldVersion<2)d.createObjectStore('vectors');
@@ -69,6 +94,8 @@ export async function db():Promise<IDBPDatabase>{
    if(oldVersion<4){const pages=tx.objectStore('pages');pages.createIndex('keep','keep');for(let c=await pages.openCursor();c;c=await c.continue())if(c.value.keep===undefined)await c.update({...c.value,keep:c.value.lastSeen});}
    // Version 5 adds the change log for sync (empty until sync is turned on).
    if(oldVersion<5)changeLog(d);
+   // Version 6 adds visits (every page in every tab, chained) and projects (memory/visits.ts, memory/projects.ts).
+   if(oldVersion<6)visitsAndProjects(d);
    return;
   }
   const auto={keyPath:'id',autoIncrement:true} as const;
@@ -85,7 +112,7 @@ export async function db():Promise<IDBPDatabase>{
   d.createObjectStore('meta');
   d.createObjectStore('vectors');
   d.createObjectStore('chats',{keyPath:'id'}).createIndex('at','at');
-  changeLog(d);
+  changeLog(d);visitsAndProjects(d);
  }});
  opened={user,db:promise};return promise;
 }
@@ -101,14 +128,14 @@ async function rowOf<S extends Sealed>(k:Awaited<ReturnType<typeof keysFor>>,sto
  if(store==='events')row.pageKind=await hashOf(k,v.pageKind);
  if(store==='pages')row.key=await hashOf(k,v.url);
  if(store==='passages')row.ref=await hashOf(k,v.ref);
- if(store==='media')row.url=await hashOf(k,v.url);
- if(v.id!==undefined&&(store==='media'||store==='voices'||store==='chats'))row.id=v.id;
+ if(store==='media'||store==='visits')row.url=await hashOf(k,v.url);
+ if(v.id!==undefined&&(store==='media'||store==='voices'||store==='chats'||store==='projects'))row.id=v.id;
  return row;
 }
 const isSynced=(store:string):store is Synced=>(SYNCED as readonly string[]).includes(store);
 /** Seals and stores a record; returns its key. While sync is on, a synced record's change is noted with it. */
 export async function add<S extends Sealed>(store:S,value:Value[S]):Promise<IDBValidKey>{
- const d=await db(),row=await rowOf(await keysFor(d),store,value),keyed=store==='pages'||store==='media'||store==='voices'||store==='chats';
+ const d=await db(),row=await rowOf(await keysFor(d),store,value),keyed=store==='pages'||store==='media'||store==='voices'||store==='chats'||store==='projects';
  if(!isSynced(store))return keyed?d.put(store,row):d.add(store,row);
  const tx=d.transaction([store,'changes','meta'],'readwrite');
  const key=await (keyed?tx.objectStore(store).put(row):tx.objectStore(store).add(row));
@@ -136,6 +163,20 @@ export async function forSite<S extends 'writing'|'suggestions'|'events'|'pages'
  const d=await db(),k=await keysFor(d),rows=await d.getAllFromIndex(store,'site',await hashOf(k,site));
  return(await openAll<Value[S]>(d,rows.reverse().slice(0,limit)));
 }
+/** Stores a record of a store that is never synced under its own id (a visit as it goes on, a passage seen longer). */
+export async function save<S extends 'visits'|'passages'|'events'|'suggestions'>(store:S,value:Value[S]&{id:number}):Promise<void>{
+ const d=await db(),row=await rowOf(await keysFor(d),store,value);row.id=value.id;await d.put(store,row);
+}
+export async function getVisit(id:number):Promise<Visit|undefined>{const d=await db(),row=await d.get('visits',id);return row?(await openAll<Visit>(d,[row]))[0]:undefined;}
+/** The visits of a project, or of an address, newest first. */
+export async function visitsBy(by:{project?:string;url?:string},limit=200):Promise<Visit[]>{
+ const d=await db(),k=await keysFor(d),[index,key]=by.project?['project',by.project]:['url',await hashOf(k,by.url!)];
+ const rows:any[]=[];for(let c=await d.transaction('visits').store.index(index).openCursor(IDBKeyRange.only(key),'prev');c&&rows.length<limit;c=await c.continue())rows.push(c.value);
+ return openAll<Visit>(d,rows);
+}
+export async function getProject(id:string):Promise<Project|undefined>{const d=await db(),row=await d.get('projects',id);return row?(await openAll<Project>(d,[row]))[0]:undefined;}
+export async function allProjects():Promise<Project[]>{const d=await db();return openAll<Project>(d,await d.getAll('projects'));}
+export async function removeProject(id:string){await (await db()).delete('projects',id);}
 export async function getPage(url:string):Promise<Page|undefined>{
  const d=await db(),k=await keysFor(d),row=await d.get('pages',await hashOf(k,url));
  return row?(await openAll<Page>(d,[row]))[0]:undefined;
@@ -171,6 +212,36 @@ export async function getSealed<T>(key:string):Promise<T|undefined>{
  const d=await db(),row=await d.get('meta','sealed:'+key) as {sealed?:Box}|undefined;if(!row?.sealed)return;
  try{return await open<T>(await keysFor(d),row.sealed);}catch{return;}
 }
+/** Retention (budget.ts): a page not seen for a month keeps only what was actually read of it (passages in view for
+ * three seconds or more) and its opening passage; the rest goes, with their embeddings. Done once per page. */
+export async function compactOldPages(before:number,limit=200):Promise<number>{
+ const d=await db(),keys:IDBValidKey[]=[];
+ for(let c=await d.transaction('pages').store.index('lastSeen').openCursor(IDBKeyRange.upperBound(before));c&&keys.length<limit;c=await c.continue())if(!c.value.compact)keys.push(c.primaryKey);
+ for(const key of keys){
+  const rows=await d.getAllFromIndex('passages','ref',key),passages=await openAll<Passage>(d,rows),first=Math.min(...rows.map(r=>r.id));
+  const drop=passages.filter(p=>p.id!==first&&(p.seenMs??0)<3000).map(p=>p.id!);
+  const tx=d.transaction(['pages','passages','vectors'],'readwrite');
+  for(const id of drop){await tx.objectStore('passages').delete(id);await tx.objectStore('vectors').delete('p'+id);}
+  const page=await tx.objectStore('pages').get(key);if(page)await tx.objectStore('pages').put({...page,compact:1});
+  await tx.done;
+ }
+ return keys.length;
+}
+/** Retention: addresses brought in from Chrome's history that were never visited again (no page was kept for them). */
+export async function dropUnvisitedImports(before:number,limit=2000):Promise<number>{
+ const d=await db(),tx=d.transaction(['passages','pages','vectors'],'readwrite');let n=0;
+ for(let c=await tx.objectStore('passages').index('at').openCursor(IDBKeyRange.upperBound(before));c&&n<limit;c=await c.continue()){
+  if(c.value.kind!=='page'||await tx.objectStore('pages').getKey(c.value.ref)!==undefined)continue;
+  await tx.objectStore('vectors').delete('p'+c.primaryKey);await c.delete();n++;
+ }
+ await tx.done;return n;
+}
+/** Retention: visits older than a year, and visits left within seconds with nothing done, after a month. */
+export async function dropOldVisits(now=Date.now()):Promise<number>{
+ const d=await db(),tx=d.transaction('visits','readwrite');let n=0;
+ for(let c=await tx.store.index('at').openCursor(IDBKeyRange.upperBound(now-30*DAY));c&&n<5000;c=await c.continue())if(c.value.at<now-365*DAY||c.value.brief===1){await c.delete();n++;}
+ await tx.done;return n;
+}
 /** Timings are not about the user's content: kept in the clear for the meters. */
 export async function addTiming(value:TimingRecord){try{await (await db()).add('timings',value);}catch{}}
 export async function recentTimings(limit:number,since=0):Promise<TimingRecord[]>{
@@ -185,21 +256,23 @@ export async function suggestionOutcomes(since:number){
  return out;
 }
 export async function counts(){
- try{const d=await db();const stores:Sealed[]=['writing','suggestions','events','pages','media','notes','passages'];return Object.fromEntries(await Promise.all(stores.map(async s=>[s,await d.count(s)])));}
+ try{const d=await db();const stores:Sealed[]=['writing','suggestions','events','pages','media','notes','passages','visits','projects'];return Object.fromEntries(await Promise.all(stores.map(async s=>[s,await d.count(s)])));}
  catch{return {};}
 }
-/** Forgets what was kept for a site, since a time, or everything. Voices and notes go only with everything. While sync
- * is on, what is forgotten here is forgotten on the user's other computers too. */
+/** Forgets what was kept for a site, since a time, or everything. Voices, notes and projects go only with everything.
+ * While sync is on, what is forgotten here is forgotten on the user's other computers too. */
 export async function forget({site,since}:{site?:string;since?:number}){
- const d=await db(),k=await keysFor(d),stores:Sealed[]=['writing','suggestions','events','pages','passages','media'];
+ const d=await db(),k=await keysFor(d),stores:Sealed[]=['writing','suggestions','events','pages','passages','media','visits'];
  if(!site&&!since){
-  const tx=d.transaction([...stores,'failures','timings','notes','voices','vectors','chats','changes','meta'],'readwrite');
+  const tx=d.transaction([...stores,'failures','timings','notes','voices','vectors','chats','projects','changes','meta'],'readwrite');
   const syncing=await tx.objectStore('meta').get('syncing') as Syncing|undefined,changes=tx.objectStore('changes');
   if(syncing)for(let c=await changes.openCursor();c;c=await c.continue()){
    const prev=c.value as Change;if(prev.deleted)continue;
    if(!prev.sid&&namedInside(prev.store))await c.delete();else await c.update(named({...prev,...nextStamp(prev,syncing.device),deleted:1,dirty:PRIORITY[prev.store]}));
   }
   for(const s of tx.objectStoreNames)if(s!=='meta'&&(s!=='changes'||!syncing))await tx.objectStore(s).clear();
+  // What was learned from it goes too: the profile, the habits, what Tab learned per site.
+  for(const key of ['profile','learner','action-bars','calibration'])await tx.objectStore('meta').delete('sealed:'+key);
   await tx.done;return;
  }
  const hashed=site?await hashOf(k,site):undefined;

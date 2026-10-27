@@ -350,7 +350,7 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  // Selected and copied as a person does it (Ctrl+C).
  await page.evaluate(()=>{const t=document.getElementById('meeting')!.firstChild!,s=t.textContent!,r=document.createRange();r.setStart(t,s.indexOf('410'));r.setEnd(t,s.indexOf('Drive')+5);getSelection()!.removeAllRanges();getSelection()!.addRange(r);});
  await page.keyboard.press('Control+c');
- await expect.poll(()=>signedIn.evaluate(()=>chrome.storage.session.get('lately').then(r=>JSON.stringify(r))),{timeout:5000}).toContain('410 Lakeview Drive');
+ await expect.poll(()=>signedIn.evaluate(()=>chrome.storage.session.get('live').then(r=>JSON.stringify(r))),{timeout:5000}).toContain('410 Lakeview Drive');
  const second=await context.newPage();
  await second.goto(`${standin.url}/pages/shipping.html`);await second.bringToFront();await second.locator('#street').click();
  await expect.poll(async()=>(await tab(signedIn,second))?.label,{timeout:8000}).toBe('Use the address you copied');

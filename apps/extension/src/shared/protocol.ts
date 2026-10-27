@@ -27,7 +27,9 @@ export type Request=
  |{type:'listen.state';tabId?:number}
  |{type:'listen.name';media:string;speaker:string;name:string}
  |{type:'listen.recent'}
- |{type:'listen.media';id:string};
+ |{type:'listen.media';id:string}
+ |{type:'debug.memory'}
+ |{type:'debug.calibrate'};
 
 export type AuthState={signedIn:boolean;email?:string};
 export type Stats={tab:{p50?:number;p90?:number;samples:number};shown:number;accepted:number;dismissed:number;failures:number;byWhat:Record<string,number>};

@@ -8,7 +8,7 @@ import {resolve,join} from 'node:path';
 import {ensureModels} from './models';
 const root=resolve(import.meta.dirname,'..'),out=resolve(root,'dist'),watch=process.argv.includes('--watch');
 const common:BuildOptions={bundle:true,target:'chrome120',sourcemap:'linked',logLevel:'info',outdir:out,define:{'process.env.NODE_ENV':'"production"'},jsx:'automatic',legalComments:'none'};
-const pages=['popup','welcome','sidepanel','offscreen','card'].filter(name=>existsSync(join(root,'src',name,'main.tsx'))||existsSync(join(root,'src',name,'main.ts')));
+const pages=['popup','welcome','sidepanel','offscreen','card','debug'].filter(name=>existsSync(join(root,'src',name,'main.tsx'))||existsSync(join(root,'src',name,'main.ts')));
 const entry=(name:string)=>existsSync(join(root,'src',name,'main.tsx'))?join(root,'src',name,'main.tsx'):join(root,'src',name,'main.ts');
 const builds:BuildOptions[]=[
  {...common,format:'esm',entryPoints:{background:join(root,'src/background/index.ts')}},
