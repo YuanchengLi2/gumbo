@@ -15,6 +15,8 @@ import './inline';
 import './card';
 import './memory-view';
 import './predict';
+import './drawn-tab';
+import {thrifty} from './thrift';
 import {measureActions} from './actions';
 import {importHistory,importState} from './history';
 import {measureTab} from './meter';
@@ -51,7 +53,7 @@ async function handle(message:Request,sender:chrome.runtime.MessageSender){
   }
   case 'stats':return stats();
   case 'failures':return recent('failures',30);
-  case 'spend':{const bearer=await token();if(!bearer)return{signedIn:false};const {gateway}=await endpoints();const usage=await gatewayGet(gateway,bearer,'usage');return{todayUsd:(usage.todayCredits??0)/100,monthUsd:(usage.monthCredits??0)/100};}
+  case 'spend':{const bearer=await token();if(!bearer)return{signedIn:false};const {gateway}=await endpoints();const [usage,saving]=await Promise.all([gatewayGet(gateway,bearer,'usage'),thrifty()]);return{todayUsd:(usage.todayCredits??0)/100,monthUsd:(usage.monthCredits??0)/100,thrifty:saving};}
   case 'memory.counts':return counts();
   // While sync is on, what is forgotten here is forgotten on the user's other computers too, at once.
   case 'memory.forget':await beforeForget().catch(()=>{});await forget({site:message.site,since:message.since});memoryReset();void syncNow({push:'force'});return{};

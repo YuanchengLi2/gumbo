@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Acme: home</title>
+<style>
+ body{margin:0;font-family:system-ui,sans-serif}
+ nav ul{list-style:none;margin:0;padding:0;display:flex;gap:24px;background:#222}
+ nav li{position:relative}
+ nav a{display:block;padding:12px 8px;color:#fff;text-decoration:none}
+ /* The submenu opens on hover by CSS alone: no script, no event a page can send opens it. */
+ nav li ul{display:none;position:absolute;top:100%;left:0;flex-direction:column;gap:0;min-width:160px}
+ nav li:hover > ul{display:flex}
+ main{padding:24px}
+</style></head>
+<body>
+<nav><ul>
+ <li><a href="#home">Home</a></li>
+ <li><a href="#products">Products</a>
+  <ul><li><a href="#pricing" onclick="document.getElementById('status').textContent='Opened Pricing'">Pricing</a></li><li><a href="#docs">Docs</a></li></ul>
+ </li>
+ <li><a href="#about">About</a></li>
+</ul></nav>
+<main><h1>Acme</h1><p>Tools for teams.</p><p id="status"></p></main>
+</body>
+</html>

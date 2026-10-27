@@ -99,6 +99,16 @@ As built (October 26), Tab for actions and Ctrl+K see any page drawn as pixels, 
 - **Real input:** for pages that ignore synthetic events, the popup's "Use real clicks in drawing apps" asks for the
   `debugger` permission; Tab then clicks and types through `Input.dispatchMouseEvent` and `Input.insertText`.
 
+**Editors that type through a hidden box.** Google Docs takes keys through an EditContext in a frame one pixel tall at
+the caret; the box holds none of the words. A field nobody sees (it, or its frame, a line or less; Monaco and CodeMirror
+excepted) is never treated as a field:
+- **Ctrl+K** opens in the page itself, below the caret. The picture is taken as the key is pressed, while the selection
+  is still highlighted, and the model is told highlighted words are the selection. A kept edit goes in once through
+  the box (a paste the editor takes), since it can't be read back.
+- **Tab for text:** at a pause, the model reads a picture with the caret drawn in red and what was just typed (so the
+  words meet it exactly). The words show under the caret; Tab types them through the box.
+- **Tab for actions** in the box's frame never guesses: the page around it does.
+
 ---
 
 ## 3. Tab for text
@@ -232,6 +242,11 @@ hands off to it.
   re-rendered it. Drags send the native drag events, or a press, moves and a release; a slider is set where the drag
   leaves it. A move that sends, buys or deletes waits for Enter.
 - **Esc:** dismisses it; that guess isn't offered again on that page for ten minutes, and the model is told.
+- **Menus that open on hover by CSS alone:** their hidden items (in a nav, header or menu bar) are listed with their
+  menu, the ring goes on the menu's trigger, and the move hovers the trigger, then clicks the hidden item.
+- **Saving credits:** on the Free plan, or with less than a sixth of a plan's credits left, nothing is guessed ahead of
+  the user (the first field, a resting pointer, typing not yet paused, coming back to a tab); guesses come once they
+  act, and Tab for text over a drawing waits for a longer pause. The popup says so.
 
 ---
 

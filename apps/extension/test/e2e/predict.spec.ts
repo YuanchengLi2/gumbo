@@ -212,6 +212,50 @@ test('Ctrl+K on a page drawn as pixels sends a picture of it',async({page,signed
  expect(standin.bodies.filter(b=>b.purpose==='inline').at(-1).messages[0].content.some((c:any)=>c.type==='image')).toBe(true);
 });
 
+test('Ctrl+K in a drawn document that types through a hidden frame (as Google Docs does): the card opens by the selection, sees it in the picture, and the edit goes in through the frame',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>b.purpose==='inline'?{text:'EDIT\nsoon'}:{text:''};
+ await page.goto(`${standin.url}/pages/drawn-doc.html`);await page.waitForTimeout(800);
+ // Double-click "will" (drawn at about x 230 to 262, on the line at y 200).
+ await page.mouse.dblclick(245,195);await page.waitForTimeout(300);
+ await page.keyboard.press('Control+k');
+ const frame=await card(page);
+ // The card is in the page itself (not in the one-pixel frame), just below the selected line.
+ expect(frame.parentFrame()).toBe(page.mainFrame());
+ const box=(await (await frame.frameElement()).boundingBox())!;
+ expect(box.y).toBeGreaterThan(190);expect(box.y).toBeLessThan(260);
+ await page.keyboard.type('a shorter word');await page.keyboard.press('Enter');
+ await expect(frame.locator('.body')).toContainText('soon');
+ const asked=standin.bodies.filter(b=>b.purpose==='inline').at(-1);
+ expect(asked.messages[0].content.some((c:any)=>c.type==='image')).toBe(true);
+ expect(JSON.stringify(asked.messages[0].content)).toContain('highlighted');
+ // Kept: typed into the frame, which still holds the selection.
+ await page.keyboard.press('Enter');
+ await expect(page.locator('#status')).toContainText('pasted: Launch plan Our launch soon happen');
+ // Tab for text never asks about the hidden frame (it holds none of their words).
+ expect(standin.bodies.some(b=>b.purpose==='tab')).toBe(false);
+});
+
+test('Tab for text in a drawn document: the words come from a picture with the cursor marked, show by the cursor, and Tab types them through the hidden box',async({page,signedIn,standin,worker})=>{
+ void signedIn;
+ // What they typed goes with the picture (the words meet it exactly); once the summer is there, the next words differ.
+ standin.script=b=>b.purpose!=='tab'||!/drawn as pixels/.test(JSON.stringify(b.system))?{text:''}:/just typed “[^”]*summer/.test(JSON.stringify(b.messages))?{text:' with ten teams'}:{text:' before the summer'};
+ await page.goto(`${standin.url}/pages/drawn-doc.html`);await page.waitForTimeout(800);
+ await page.mouse.dblclick(245,195);await page.waitForTimeout(300);
+ await page.keyboard.type('soon');
+ await expect.poll(()=>tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown),{timeout:8000}).toBe(' before the summer');
+ const asked=standin.bodies.filter(b=>b.purpose==='tab').at(-1);
+ expect(asked.messages[0].content[0].type).toBe('image');
+ await page.keyboard.press('Tab');
+ await expect(page.locator('#status')).toContainText('pasted: Launch plan Our launch soon before the summer happen');
+ expect(await tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown)).toBeUndefined();
+ // Another key instead of Tab puts the words away.
+ await page.keyboard.type(',');
+ await expect.poll(()=>tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown),{timeout:8000}).toBe(' with ten teams');
+ await page.keyboard.press('a');
+ await expect.poll(()=>tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown),{timeout:2000}).toBeUndefined();
+});
+
 test('a frame the user has not worked in never asks',async({page,signedIn,standin})=>{
  void signedIn;
  await page.goto(`${standin.url}/pages/lesson.html`);await page.waitForTimeout(2500);
@@ -258,6 +302,31 @@ test('what the user turned down is not offered again on that page, and the model
  await page.waitForTimeout(700);
  expect((await tab(signedIn,page))?.showing).toBeFalsy();
  expect(JSON.stringify(standin.bodies.filter(isPredict).at(-1).messages)).toContain('they_turned_down_here');
+});
+
+test('a menu that opens on hover by CSS alone: its hidden items are seen with their menu, marked on its trigger, and Tab opens one',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>isPredict(b)&&/opened|went to/.test(JSON.stringify(b.messages))?{text:JSON.stringify({confidence:0.9,label:'Open Pricing',steps:[{do:'click',id:/(e\d+) link "Pricing" \[in the “Products” menu, shown on hover\]/.exec(b.messages[0].content.map((c:any)=>c.text).join('\n'))?.[1]}]})}:{text:''};
+ await page.goto(`${standin.url}/pages/hover-menu.html`);
+ await page.mouse.click(600,400);
+ await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Open Pricing');
+ // A ring shows, on what opens the menu (the item itself is hidden, and would have none).
+ expect((await tab(signedIn,page)).outlined).toBe(1);
+ await page.keyboard.press('Tab');
+ await expect(page.locator('#status')).toHaveText('Opened Pricing');
+});
+
+test('saving credits (the Free plan): nothing is guessed ahead of the user, and the move comes once they act',async({page,signedIn,standin})=>{
+ void signedIn;standin.billing={plan:'free',credits:{left:40,planTotal:50}};
+ standin.script=b=>isPredict(b)?{text:JSON.stringify({confidence:0.9,label:'Continue to payment',steps:[{do:'click',id:idIn(b,'Continue')}]})}:{text:''};
+ await page.goto(`${standin.url}/pages/shipping.html`);
+ // The page opening (its first field asked ahead) and the pointer resting on a field: no model is asked for either.
+ await page.locator('#city').hover();await page.waitForTimeout(1200);
+ // At most the page as it opened was asked about (with credits to spare, the first field and the hover are too).
+ const before=standin.bodies.filter(isPredict).length;expect(before).toBeLessThanOrEqual(1);
+ await page.locator('#city').click();
+ await expect.poll(()=>standin.bodies.filter(isPredict).length,{timeout:8000}).toBeGreaterThan(before);
+ await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Continue to payment');
 });
 
 test('what was copied a moment ago in another tab is what Tab fills in',async({page,context,signedIn,standin})=>{

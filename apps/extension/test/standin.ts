@@ -16,14 +16,15 @@ export type Reply={text?:string;json?:unknown;firstMs?:number;chunkMs?:number;ch
 export type Script=(body:any)=>Reply|Promise<Reply>;
 export type Standin={url:string;bodies:any[];script:Script;timing:string;close():Promise<void>;
  /** Calls to the stand-in services the connectors use (Supabase's management API here). */services:{method:string;path:string;auth?:string;body?:any}[];
- /** The synced memory the stand-in gateway holds, by account: exactly what the server would see. */sync:Map<string,SyncAccount>};
+ /** The synced memory the stand-in gateway holds, by account: exactly what the server would see. */sync:Map<string,SyncAccount>;
+ /** The plan and credits the gateway reports (a paid plan with plenty left, unless a test says otherwise). */billing:{plan:string;credits:{left:number;planTotal:number}}};
 const pages=resolve(import.meta.dirname,'pages'),modules=resolve(import.meta.dirname,'../../../node_modules'),audio=resolve(import.meta.dirname,'../../../packages/web-ml/test/fixtures');
 const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.ogg':'audio/ogg','.wav':'audio/wav','.mp4':'video/mp4','.webm':'video/webm','.png':'image/png'};
 const wait=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 
 export async function startStandin(script:Script=()=>({text:''})):Promise<Standin>{
  const synced=memorySyncServer();
- const state:Standin={url:'',bodies:[],script,timing:'auth;dur=4, reserve;dur=12, provider;dur=150',close:async()=>{},services:[],sync:synced.accounts};
+ const state:Standin={url:'',bodies:[],script,timing:'auth;dur=4, reserve;dur=12, provider;dur=150',close:async()=>{},services:[],sync:synced.accounts,billing:{plan:'pro',credits:{left:1100,planTotal:1250}}};
  const server=createServer((req,res)=>void route(req,res).catch(error=>{res.statusCode=500;res.end(String(error));}));
  async function route(req:IncomingMessage,res:ServerResponse){
   const url=new URL(req.url??'/','http://x');
@@ -48,6 +49,7 @@ export async function startStandin(script:Script=()=>({text:''})):Promise<Standi
   const gateway='/functions/v1/dream-gateway/';
   if(url.pathname===gateway+'usage')return send(res,{todayCredits:4,monthCredits:120});
   if(url.pathname===gateway+'account')return send(res,{email:'friend@example.com',plan:'free'});
+  if(url.pathname===gateway+'billing')return send(res,state.billing);
   if(url.pathname===gateway+'profile')return send(res,{name:'Dana Park',makes:['youtube','podcasts'],experience:null,heard:null});
   if(url.pathname===gateway+'memory-key')return send(res,{key:Buffer.alloc(32,7).toString('base64')});
   // Memory sync, through the gateway's own handler over the synced copy in memory (sync-server.ts).

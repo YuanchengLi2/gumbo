@@ -51,7 +51,7 @@ function fillVectors(){
     await putVectors(missing.map((d,i)=>[d.id,vectors[i]]));
     await rest(250);
    }
-  }catch(error){console.warn('Embedding paused:',error);}
+  }catch(error){paused=String((error as Error)?.message??error);console.warn('Embedding paused:',error);}
   finally{backfill=undefined;}
  })();
 }
@@ -65,4 +65,6 @@ export async function search(query:string,options:{k?:number;since?:number;kinds
 }
 /** Loads memory and the embedding model ahead of the first question (the side panel opening is a good moment). */
 export async function warm(){lastActive=Date.now();await load();await embed([forQuery('warm')]).catch(()=>{});return{ok:true};}
-export async function stats(){const built=await load();return{docs:built.size,vectors:built.vectors.size};}
+/** Why embedding last stopped, if it failed (keywords find what it missed meanwhile). */
+let paused:string|undefined;
+export async function stats(){const built=await load();return{docs:built.size,vectors:built.vectors.size,embedding:backfill?'running':'idle',paused};}

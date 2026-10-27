@@ -42,6 +42,18 @@ export function fieldOf(target:EventTarget|null):Field|null{
  const singleLine=host.getAttribute('aria-multiline')==='false'||(host.getAttribute('role')==='textbox'&&host.getAttribute('aria-multiline')!=='true'&&host.getBoundingClientRect().height<40&&editor==='contenteditable');
  return{el:host,kind:'editable',editor,singleLine};
 }
+/** A field nobody sees: the box a drawn editor (Google Docs, a design tool) takes the keys through, while its words and
+ * selection live in the drawing (Docs types through an EditContext in a frame one pixel tall). It, or the frame it is
+ * in, is a line or less; Monaco's and CodeMirror's boxes are not (their words are on the page). */
+export function hiddenBox(f:Field):boolean{
+ if(f.editor==='gdocs')return true;
+ if(f.editor==='monaco'||f.editor==='codemirror')return false;
+ return tiny(f.el)||tiny(frameOf(f.el.ownerDocument.defaultView));
+}
+const tiny=(el:Element|null)=>{if(!el)return false;const r=el.getBoundingClientRect();return r.width<3||r.height<3;};
+const frameOf=(win:Window|null)=>{try{return win?.frameElement??null;}catch{return null;}};
+/** Whether this frame is one nobody sees (a drawn editor's typing box lives in it). */
+export const unseenFrame=()=>window!==window.top&&tiny(frameOf(window));
 /** The outermost element of an editable region. */
 export function editingHost(el:HTMLElement):HTMLElement|null{
  let host:HTMLElement|null=el.isContentEditable?el:null;

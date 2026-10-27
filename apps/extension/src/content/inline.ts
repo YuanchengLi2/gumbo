@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 import {diffWords} from 'diff';
-import {fieldOf,type Field} from './fields/field';
+import {fieldOf,hiddenBox,type Field} from './fields/field';
 import {snapshot,textMap,rangeOf,selectionIn} from './fields/text';
 import {caretOf} from './fields/caret';
 import {insert,select} from './fields/insert';
@@ -8,7 +8,7 @@ import {readContext} from './context';
 import {layer,surface} from './ui/root';
 import {hideGhost} from './ui/ghost';
 import {deepActive} from './dom';
-import {post,listen} from './port';
+import {post,listen,ask as request} from './port';
 import {pageText} from './capture';
 import {drawnSurface} from './predict';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
@@ -23,8 +23,12 @@ import {htmlToMarkdown,markdownToHtml,plainOf,hasFormatting} from '../shared/ric
  * chose (Alt+K opens Gumbo there), and is left alone when there is no field and no selection. */
 type Open={session:string;frame:HTMLIFrameElement;field:Field|null;start:number;end:number;original:string;rich:boolean;pageRange?:Range;context:{site:string;title:string;intent?:string;label?:string;before:string;after:string};request?:string;mode?:'edit'|'answer'|'act';text:string;final:boolean;action?:any;html?:string;
  /** Something being done in the page: the agent's conversation, the final step waiting for Enter, whether it ended. */doing?:{chat?:string;confirm?:string;done?:boolean};
- /** Keys pressed before the card could take them (it is still loading): they go to the card, never to the page. */early:string[];ready:boolean};
+ /** Keys pressed before the card could take them (it is still loading): they go to the card, never to the page. */early:string[];ready:boolean;
+ /** Opened over a drawing (Google Docs, a design): what had the focus (the editor's typing box, or the frame it is in), and
+  * whether an edit can go back in through it. */drawing?:{back:Element|null;editable:boolean}};
 let settings:Settings|undefined,open:Open|null=null,seq=0;
+/** Where the user last pressed: on a drawing, what they selected is there, and the card opens beside it. */
+let lastPress:{x:number;y:number;at:number}|undefined;
 const site=()=>location.hostname.replace(/^www\./,'');
 
 export function startInline(){
@@ -32,6 +36,7 @@ export function startInline(){
  window.addEventListener('keydown',onKey,true);
  window.addEventListener('keydown',onDoingKey,true);
  window.addEventListener('keydown',onEarlyKey,true);
+ window.addEventListener('pointerup',e=>{if(e.isTrusted)lastPress={x:e.clientX,y:e.clientY,at:Date.now()};},true);
  listen(onMessage);
 }
 /** Typing straight after Ctrl+K: the card takes a moment to load, and what is typed meanwhile is held and handed to it,
@@ -54,6 +59,13 @@ function onKey(event:KeyboardEvent){
  const pressed=alt?event.altKey&&!event.ctrlKey&&!event.metaKey&&event.code==='KeyK':(event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyK';
  if(!pressed)return;
  const field=fieldOf(deepActive()),pageText=field?'':(getSelection()?.toString()??'').trim();
+ // A drawn editor's hidden typing box (Google Docs' frame): its words and selection are in the drawing, so the card opens
+ // in the page itself, which sees the drawing (a frame asks the page to).
+ if(field&&hiddenBox(field)){
+  event.preventDefault();event.stopImmediatePropagation();
+  if(window===window.top)openOverDrawing(true);else post({type:'inline.top',editable:true});
+  return;
+ }
  if(!field&&!pageText){
   // Nothing selected and no field: the page has the key first (many sites use Ctrl+K). A listener added now runs after
   // all of the page's (last, as the key leaves the window), still in time to keep Chrome from taking the key itself.
@@ -64,7 +76,14 @@ function onKey(event:KeyboardEvent){
  if(open)close(true);
  begin(field);
 }
-function begin(field:Field|null){
+/** Ctrl+K over a drawing: no field, the picture of the view goes with the question, and the card opens by the caret or by
+ * where they last pressed. */
+export function openOverDrawing(editable:boolean){
+ if(!settings||!activeOn(settings,location.hostname))return;
+ if(open)close(true);
+ begin(null,{back:document.activeElement,editable});
+}
+function begin(field:Field|null,drawing?:Open['drawing']){
  hideGhost();
  const session=crypto.randomUUID();let start=0,end=0,original='',rich=false,anchor:DOMRect|undefined,pageRange:Range|undefined,before='',after='';
  if(field){
@@ -78,15 +97,18 @@ function begin(field:Field|null){
   const selection=getSelection();
   if(selection&&selection.rangeCount&&selection.toString().trim()){pageRange=selection.getRangeAt(0).cloneRange();original=selection.toString().trim();anchor=pageRange.getBoundingClientRect();}
   // The whole page: the card opens at the top, and the page's text goes with the request.
-  else{anchor=new DOMRect(innerWidth/2-280,64,560,0);before=pageText(6000);}
+  else{anchor=(drawing||drawnSurface())&&drawnAnchor()||new DOMRect(innerWidth/2-280,64,560,0);before=pageText(6000);}
  }
+ // Over a drawing the picture is taken now, while what they selected is highlighted as they see it: it fades once the
+ // card has the focus.
+ if(window===window.top&&!field&&(drawing||drawnSurface()))post({type:'inline.picture',session,view:[innerWidth,innerHeight]});
  const context=field?readContext(field):undefined;
  const frame=document.createElement('iframe');
  frame.src=chrome.runtime.getURL('card.html')+'#s='+session;frame.allow='clipboard-write';frame.setAttribute('allowtransparency','true');
  const width=Math.min(560,innerWidth-16),left=Math.max(8,Math.min(anchor.left-10,innerWidth-width-8)),below=anchor.bottom+4,above=anchor.top-4;
  Object.assign(frame.style,{position:'fixed',left:`${left}px`,top:`${below+150>innerHeight&&above>150?Math.max(8,above-150):below}px`,width:`${width}px`,height:'72px',border:'0',background:'transparent',colorScheme:'normal',pointerEvents:'auto',zIndex:'2147483647'});
  layer();surface().appendChild(frame);
- open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after},text:'',final:false,early:[],ready:false};
+ open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after},text:'',final:false,early:[],ready:false,drawing};
  post({type:'card.open',session});
  // A card that never comes up (the extension was updated under the page, the worker could not answer) must not keep
  // the keys: the page gets them and its selection back.
@@ -106,7 +128,7 @@ function onMessage(message:any){
    // whatever was typed while it loaded.
    o.ready=true;o.frame.focus();
    // No state with it: the card starts asking, and may already be working on what was typed straight into it.
-   view(o,{inField:!!o.field,selected:o.original});
+   view(o,{inField:!!o.field||!!o.drawing?.editable,selected:o.original});
    // Always sent, empty or not: the card holds what is typed into it until this arrives, to keep the order.
    post({type:'card.to',session:o.session,payload:{type:'keys',keys:o.early}});o.early=[];
    post({type:'card.to',session:o.session,payload:{type:'focus'}});
@@ -132,7 +154,7 @@ function onMessage(message:any){
   o.text=message.text;
   if(o.mode==='edit'){
    const plain=o.rich?plainOf(o.text):o.text,old=o.rich?plainOf(o.original):o.original;
-   view(o,{state:message.final?'edit':'working',old:o.original?old:undefined,text:plain,final:message.final,inField:!!o.field,diff:message.final&&o.original?diffWords(old,plain).map(part=>({t:part.added?'add':part.removed?'del':'same',v:part.value})):undefined});
+   view(o,{state:message.final?'edit':'working',old:o.original?old:undefined,text:plain,final:message.final,inField:!!o.field||!!o.drawing?.editable,diff:message.final&&o.original?diffWords(old,plain).map(part=>({t:part.added?'add':part.removed?'del':'same',v:part.value})):undefined});
   }else view(o,{state:message.final?'answer':'working',text:o.text,final:message.final,sources:message.sources});
  }
 }
@@ -140,8 +162,8 @@ function ask(o:Open,instruction:string,previous?:string){
  if(o.request)post({type:'cancel',id:o.request});
  o.request=`k${++seq}`;o.text='';o.final=false;o.action=undefined;
  // A page drawn as pixels (a document, a design): the engine looks at a picture of the view as well.
- const drawn=window===window.top&&!o.field&&drawnSurface();
- post({type:'inline',id:o.request,...stableOf(o),instruction,previous,...(drawn?{drawn:true,view:[innerWidth,innerHeight]}:{})});
+ const drawn=window===window.top&&!o.field&&(!!o.drawing||drawnSurface());
+ post({type:'inline',id:o.request,session:o.session,...stableOf(o),instruction,previous,...(drawn?{drawn:true,view:[innerWidth,innerHeight]}:{})});
 }
 /** Something to do in the page: the agent does it in this tab, its steps shown in the card. */
 function doInPage(o:Open,task:string){
@@ -153,7 +175,8 @@ function answer(o:Open,yes:boolean){if(o.doing?.chat&&o.doing.confirm){post({typ
 function stopDoing(o:Open){if(o.doing?.chat&&!o.doing.done)post({type:'agent.stop',chat:o.doing.chat});close(false);}
 /** Puts the kept edit into the field: the selection back, its text checked, replaced with the field's own undo, read back. */
 async function keep(o:Open){
- const field=o.field;if(!field||o.mode!=='edit'){close(true);return;}
+ const field=o.field;if(o.drawing?.editable&&!field&&o.mode==='edit'){await keepInDrawing(o);return;}
+ if(!field||o.mode!=='edit'){close(true);return;}
  const now=snapshot(field,1e9,1e9),plainOriginal=o.rich?plainOf(o.original):o.original;
  let {start,end}=o;
  if(now&&now.text.slice(start,end).replace(/\s+/g,' ')!==plainOriginal.replace(/\s+/g,' ')){
@@ -167,6 +190,22 @@ async function keep(o:Open){
  if(!done.ok){post({type:'failure',site:location.hostname,editor:field.editor,what:'insert',detail:`Ctrl+K: ${done.reason}`});try{await navigator.clipboard.writeText(text);}catch{}}
  finish(o);
 }
+/** An edit of words selected in a drawing goes in through the editor's typing box, which still holds their selection:
+ * the focus goes back to it and the words are typed there, as Tab types. */
+async function keepInDrawing(o:Open){
+ o.frame.remove();(o.drawing?.back as HTMLElement|null)?.focus?.({preventScroll:true});
+ const text=o.rich?plainOf(o.text):o.text;
+ const done=await request<{ok:boolean;detail?:string}>({type:'tab.typeFocused',text},'tab.typed',5000);
+ if(!done?.ok){post({type:'failure',site:location.hostname,editor:'drawing',what:'insert',detail:`Ctrl+K: ${done?.detail??'no answer'}`});try{await navigator.clipboard.writeText(text);}catch{}}
+ finish(o);
+}
+/** Where the card opens over a drawing: below the editor's typing box when it sits at the caret (a line or less, in view),
+ * else below where they last pressed, in the last half minute. */
+function drawnAnchor():DOMRect|undefined{
+ const a=document.activeElement,r=a&&a!==document.body?a.getBoundingClientRect():undefined;
+ if(r&&(r.width<3||r.height<3)&&r.top>=0&&r.top<innerHeight-30&&r.left>=0&&r.left<innerWidth)return new DOMRect(r.left,r.top,1,24);
+ if(lastPress&&Date.now()-lastPress.at<30_000)return new DOMRect(lastPress.x,lastPress.y-12,1,24);
+}
 function findNear(text:string,needle:string,near:number){
  if(!needle)return near<=text.length?near:-1;
  let best=-1;for(let i=text.indexOf(needle);i>=0;i=text.indexOf(needle,i+1))if(best<0||Math.abs(i-near)<Math.abs(best-near))best=i;
@@ -179,6 +218,7 @@ function close(restore:boolean){
  o.frame.remove();
  if(restore){
   if(o.field){o.field.el.focus({preventScroll:true});select(o.field,o.start,o.end);}
+  else if(o.drawing)(o.drawing.back as HTMLElement|null)?.focus?.({preventScroll:true});
   else if(o.pageRange){const s=getSelection();s?.removeAllRanges();s?.addRange(o.pageRange);}
  }
  finish(o);

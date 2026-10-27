@@ -15,7 +15,7 @@ const ms=(n?:number)=>n===undefined?'–':n<1000?`${Math.round(n)} ms`:`${(n/100
 
 function Popup(){
  const [auth,setAuth]=useState<AuthState>();const [settings,setSettings]=useState<Settings>();const [site,setSite]=useState('');
- const [stats,setStats]=useState<Stats>();const [meter,setMeter]=useState<any>();const [imported,setImported]=useState<any>();const [measuring,setMeasuring]=useState(false);const [spend,setSpend]=useState<{todayUsd?:number}>();const [kept,setKept]=useState<Record<string,number>>();const [tabId,setTabId]=useState<number>();const [heard,setHeard]=useState<string|undefined>();const [mic,setMic]=useState<PermissionState>('prompt');const [synced,setSynced]=useState(false);
+ const [stats,setStats]=useState<Stats>();const [meter,setMeter]=useState<any>();const [imported,setImported]=useState<any>();const [measuring,setMeasuring]=useState(false);const [spend,setSpend]=useState<{todayUsd?:number;thrifty?:boolean}>();const [kept,setKept]=useState<Record<string,number>>();const [tabId,setTabId]=useState<number>();const [heard,setHeard]=useState<string|undefined>();const [mic,setMic]=useState<PermissionState>('prompt');const [synced,setSynced]=useState(false);
  const refresh=()=>{void ask<Stats>({type:'stats'}).then(setStats);void ask({type:'memory.counts'}).then(setKept);};
  useEffect(()=>{
   void ask<AuthState>({type:'auth.state'}).then(setAuth);void loadSettings().then(setSettings);onSettings(setSettings);refresh();
@@ -46,6 +46,7 @@ function Popup(){
     <p>{stats?.accepted??0} taken of {stats?.shown??0} shown{stats?.dismissed?` · ${stats.dismissed} dismissed`:''}{stats?.failures?<span className="bad"> · {stats.failures} failed</span>:''}</p>
     {!!stats?.failures&&<Failures/>}
     {spend?.todayUsd!==undefined&&<p className="muted">Today's AI: ${spend.todayUsd.toFixed(2)}</p>}
+    {spend?.thrifty&&<p className="muted">Saving credits: Tab guesses once you act, not ahead of you.</p>}
     <div className="row"><button className="link" disabled={measuring} onClick={()=>{setMeasuring(true);void ask({type:'meter.run'}).then(setMeter).finally(()=>setMeasuring(false));}}>{measuring?'Checking Tab on your writing…':'Check Tab on my writing'}</button></div>
     {meter&&('error' in meter?<p className="muted">{meter.error}</p>:<p className="muted">On your writing: shows {Math.round(meter.showRate*100)}% of the time, right {Math.round(meter.precision*100)}% when it does</p>)}
     {/* Drawing apps (Docs, Figma, boards) that ignore simulated clicks get real ones; Chrome asks once, and shows a bar while Tab acts. */}

@@ -1,4 +1,4 @@
-import {deepQuery,elementById,describe,idOf,pageModel,type Item} from './perceive';
+import {deepQuery,elementById,describe,idOf,pageModel,hoverOwner,type Item} from './perceive';
 import {nameOf,roleOf,visible,squash,deepActive} from './dom';
 import {fieldOf} from './fields/field';
 import {insert} from './fields/insert';
@@ -60,6 +60,9 @@ export async function perform(action:Action):Promise<Done>{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
    // A spot on a drawing: clicked there, as it is (what it changes is pixels, which nothing here can watch).
    if(action.target.point){const changed=await watch(()=>pointerClick(el,action.target.point),400,false);return{ok:true,changed,detail:`Clicked at ${action.target.point.map(Math.round).join(', ')}.`};}
+   // An item of a menu that opens on hover: the pointer goes to its trigger first (a script-driven menu opens; a CSS one
+   // stays shut, and its hidden item still takes the click).
+   const owner=visible(el)?null:hoverOwner(el);if(owner){hover(owner);await frames(2);}
    el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
    // A click focusing what it clicked is not the page reacting.
    let changed=await watch(()=>pointerClick(el),700,false);

@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {fieldOf,type Field} from './fields/field';
+import {fieldOf,hiddenBox,type Field} from './fields/field';
 import {snapshot} from './fields/text';
 import {caretOf} from './fields/caret';
 import {insert} from './fields/insert';
@@ -39,7 +39,7 @@ export function startTab(){
 const fieldIsFocused=(field:Field)=>{const a=deepActive();return !!a&&(a===field.el||field.el.contains(a));};
 
 function onFocus(){
- if(!active())return;const field=fieldOf(deepActive());if(!field)return;
+ if(!active())return;const field=fieldOf(deepActive());if(!field||hiddenBox(field))return;
  const key=keyOf(field);if(Date.now()-(warmed.get(key)??0)<60_000)return;warmed.set(key,Date.now());
  // Wake the engine and warm the model's cache for this field while the user starts typing.
  post({type:'tab.prewarm',context:readContext(field)});
@@ -48,7 +48,8 @@ function onFocus(){
 
 function onInput(event:Event){
  if(!active()||composing)return;
- const field=fieldOf(deepActive());if(!field){clear();return;}
+ // A drawn editor's hidden typing box holds none of their words: there is nothing to continue from.
+ const field=fieldOf(deepActive());if(!field||hiddenBox(field)){clear();return;}
  const snap=snapshot(field);if(!snap||snap.selected){clear();return;}
  lastInput=performance.now();
  // The suggestion still fits what is now before the caret: keep showing the rest, with no new request.

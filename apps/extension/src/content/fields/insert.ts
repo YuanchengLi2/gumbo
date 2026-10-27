@@ -1,4 +1,4 @@
-import {editContextOf,type Field} from './field';
+import {editContextOf,hiddenBox,type Field} from './field';
 import {snapshot,textMap,rangeOf,selectionIn} from './text';
 import {clean} from '../dom';
 /** Putting text into a field so it sticks, the way typing would: the field's own undo works, and React, ProseMirror,
@@ -14,6 +14,7 @@ const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>setTimeout(
 
 /** Replaces the text from `from` to `to` (default: the selection) with `text`; `html` is offered to rich editors. */
 export async function insert(field:Field,text:string,options:{from?:number;to?:number;html?:string}={}):Promise<Inserted>{
+ if(hiddenBox(field))return blindInsert(field,text);
  const before=snapshot(field,1e9,1e9);if(!before)return{ok:false,reason:'no-caret'};
  const from=options.from??before.start,to=options.to??before.end;
  const expected=before.text.slice(0,from)+text+before.text.slice(to);
@@ -50,6 +51,18 @@ export async function insert(field:Field,text:string,options:{from?:number;to?:n
   if(result==='changed'){field.el.ownerDocument.execCommand('undo');await frame();if(norm(snapshot(field,1e9,1e9)?.text??'')!==norm(before.text))return{ok:false,method,reason:'changed-wrongly'};}
  }
  return{ok:false,reason:'not-inserted'};
+}
+/** A drawn editor's hidden typing box (Google Docs) keeps none of the words, so what it took cannot be read back: the
+ * text goes in once, at its own caret (which still holds their selection), as a paste the editor takes (it says so by
+ * handling the event), else as typed text. */
+function blindInsert(field:Field,text:string):Inserted{
+ const data=new DataTransfer();data.setData('text/plain',text);
+ const event=new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true,composed:true});field.el.dispatchEvent(event);
+ if(event.defaultPrevented)return{ok:true,method:'paste'};
+ try{
+  if(field.kind==='context'){const context=editContextOf(field.el),start=context.selectionStart,end=context.selectionEnd,caret=start+text.length;context.updateText(start,end,text);context.updateSelection(caret,caret);context.dispatchEvent(new (window as any).TextUpdateEvent('textupdate',{updateRangeStart:start,updateRangeEnd:end,text,selectionStart:caret,selectionEnd:caret}));return{ok:true,method:'textupdate'};}
+  return field.el.ownerDocument.execCommand('insertText',false,text)?{ok:true,method:'insertText'}:{ok:false,reason:'not-inserted'};
+ }catch{return{ok:false,reason:'not-inserted'};}
 }
 /** Waits a few frames for the editor to apply the change, then compares. */
 async function landed(field:Field,old:string,expected:string,text:string):Promise<'yes'|'no'|'changed'>{

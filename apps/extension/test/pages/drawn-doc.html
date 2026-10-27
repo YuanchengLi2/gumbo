@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Launch plan</title>
+<style>
+ body{margin:0;font-family:system-ui,sans-serif}
+ #page{display:block}
+ #status{position:fixed;right:8px;bottom:4px;margin:0;font-size:12px}
+</style></head>
+<body>
+<canvas id="page" width="1200" height="700"></canvas>
+<p id="status"></p>
+<script>
+ // As Google Docs works: the words are drawn, and the keys go through an EditContext in a frame one pixel tall that sits
+ // at the caret (it holds only "_"). A double-click selects the word under it (drawn highlighted), a click puts the caret
+ // at the end of a word; what is typed or pasted replaces the selection, or goes in at the caret.
+ const cv=document.getElementById('page'),g=cv.getContext('2d');
+ const lines=[['Launch','plan'],['Our','launch','will','happen','in','three','phases','over','the','spring.'],['First,','we']];
+ let at=null,whole=false;
+ const typing=document.createElement('iframe');typing.className='docs-texteventtarget-iframe';
+ Object.assign(typing.style,{position:'absolute',left:'0px',top:'0px',width:'600px',height:'1px',border:'0'});
+ document.body.appendChild(typing);
+ const box=()=>typing.contentDocument.getElementById('content');
+ typing.contentDocument.body.innerHTML='<div id="content" aria-label="Document content" style="height:16px"></div>';
+ box().editContext=new EditContext({text:'_',selectionStart:1,selectionEnd:1});
+ const text=()=>lines.map(l=>l.join(' ')).join('\n');
+ const put=(t,how)=>{
+  if(!at)return;const [l,i]=at;
+  lines[l][i]=whole?t.trim():lines[l][i]+t;whole=false;
+  document.getElementById('status').textContent=`${how}: ${text()}`;draw();
+ };
+ box().addEventListener('paste',e=>{e.preventDefault();put(e.clipboardData.getData('text/plain'),'pasted');});
+ box().editContext.addEventListener('textupdate',e=>{put(e.text,'typed');box().editContext.updateText(0,box().editContext.text.length,'_');});
+ let spots=[];
+ const lineY=l=>l===0?120:200+(l-1)*40;
+ function draw(){
+  g.clearRect(0,0,cv.width,cv.height);spots=[];
+  lines.forEach((words,l)=>{
+   g.font=l===0?'bold 28px system-ui':'20px system-ui';let x=120;const y=lineY(l);
+   words.forEach((w,i)=>{
+    const width=g.measureText(w).width;spots.push({l,i,x,y,width});
+    if(at&&at[0]===l&&at[1]===i&&whole){g.fillStyle='#b3d4ff';g.fillRect(x-2,y-20,width+4,28);}
+    g.fillStyle='#111';g.fillText(w,x,y);
+    if(at&&at[0]===l&&at[1]===i){
+     Object.assign(typing.style,{left:`${x+width}px`,top:`${y-20}px`});
+     if(!whole){g.fillRect(x+width+1,y-20,1.5,26);}
+    }
+    x+=width+g.measureText(' ').width;
+   });
+  });
+ }
+ const hit=e=>spots.find(s=>e.offsetX>=s.x-4&&e.offsetX<=s.x+s.width+4&&e.offsetY>=s.y-24&&e.offsetY<=s.y+8);
+ cv.addEventListener('click',e=>{const s=hit(e);if(s){at=[s.l,s.i];whole=false;draw();}box().focus();});
+ cv.addEventListener('dblclick',e=>{const s=hit(e);if(s){at=[s.l,s.i];whole=true;draw();}box().focus();});
+ draw();
+</script>
+</body>
+</html>

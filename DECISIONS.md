@@ -156,6 +156,28 @@
     page opened showed its move 0.8 to 1.0 s later, usually (1.1 to 1.3 s after the page opened: about 0.3 s for memory,
     0.6 s for the model's first word, 0.2 s for the first whole step). Before, the test harness loaded the gateway's
     code on the first call, which made first guesses look 1 to 1.5 s slower than they are.
+- **Google Docs, and editors that type through a hidden box:**
+  - **How Docs works now:** its words are drawn on canvases, and the keys go to an EditContext ("Document content")
+    inside a frame one pixel tall that sits at the caret. That box holds only "_". Ctrl+K pressed there used to open
+    its card inside the one-pixel frame (invisible), and asked about an "empty field".
+  - **Ctrl+K:** a field nobody sees (the box, or the frame it is in, a line or less; Monaco and CodeMirror excepted)
+    hands Ctrl+K to the page itself. The card opens below the caret. The picture is taken as Ctrl+K is pressed, while
+    the selection is still blue (it fades once the card has the focus), and the model is told highlighted words are the
+    selection. A kept edit goes back in through the box, once, as a paste the editor takes. It can't be read back, so it
+    is never tried twice. Live, on a public Doc: "explain this" on a double-clicked word explained that word in context
+    (it had said nothing was selected).
+  - **Tab for text over a drawing:** at a pause in typing, the engine reads a picture with the caret drawn in red, with
+    what was just typed so the words meet it exactly (the same overlap checks as any Tab suggestion, except the facts
+    guard, since the facts are in the picture). The words show under the caret, and Tab types them through the box.
+    Live on a stand-in document: "First, we will open the beta to" got " a small group of users", 1.0 to 1.5 s after
+    the pause (0.65 s of it the pause). Not tried on a real Doc yet, since editing needs a signed-in account.
+- **Menus that open on hover by CSS alone:** no event a page sends opens them, so Tab never saw their items. Hidden
+  items of a nav, header or menu bar are now listed with their menu ("in the Products menu, shown on hover"), the ring
+  goes on the menu's trigger, and running the move hovers the trigger, then clicks the hidden item (a click works on it).
+- **Saving credits:** on the Free plan, or on any plan with less than a sixth of its credits left, Tab guesses nothing
+  ahead of the user: not the first field as a page opens, not a field the pointer rests on, not while they type, not on
+  coming back to a tab. It still guesses the moment they act. Tab for text over a drawing (a picture each time) waits
+  for a longer pause. The popup says so. The plan and credits come from the gateway's billing route, every ten minutes.
 
 ## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
 

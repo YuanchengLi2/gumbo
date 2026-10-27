@@ -48,7 +48,31 @@ export function pageModel(limit=250):PageModel{
  for(const z of zones)if(!have.has(z))els.push(z);
  const found=els.map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
  const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>describe(f.el));
+ // Menus that open on hover by CSS alone (no event a page script sends opens them): their items are in the page, hidden,
+ // and listed with the menu they are in, so a move can go straight to one.
+ for(const {el,owner} of hoverMenuItems(Math.max(0,Math.min(40,limit-items.length)))){
+  const item=describe(el),trigger=describe(owner);
+  items.push({...item,rect:trigger.rect,inView:trigger.inView,state:[...(item.state??[]),`in the “${cut(trigger.name,40)}” menu, shown on hover`]});
+ }
  const focused=document.activeElement&&document.activeElement!==document.body?idOf(document.activeElement):undefined;
  return{url:location.href,title:document.title,items,headings:[...document.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,20),focused};
+}
+/** The hidden items of navigation menus that open on hover: links and menu items in a nav, header or menu bar that are
+ * not shown while the item of the menu that holds them is (its trigger: what the pointer rests on to open it). */
+function hoverMenuItems(limit:number):{el:Element;owner:Element}[]{
+ const out:{el:Element;owner:Element}[]=[];if(!limit)return out;
+ for(const el of deepQuery('nav a[href],header a[href],[role=menubar] a[href],nav [role=menuitem],header [role=menuitem],[role=menubar] [role=menuitem]')){
+  if(out.length>=limit)break;
+  if(visible(el))continue;
+  const owner=hoverOwner(el);if(owner)out.push({el,owner});
+ }
+ return out;
+}
+/** What opens the hover menu an element is hidden in: the first shown control of the list item that holds its menu. */
+export function hoverOwner(el:Element):Element|null{
+ const menu=el.closest('ul,ol,[role=menu]'),holder=menu?.parentElement?.closest('li,[role=none],[role=menuitem]');
+ if(!holder||!visible(holder))return null;
+ const trigger=[...holder.querySelectorAll(':scope > a,:scope > button,:scope > [role=menuitem],:scope > span,:scope > div > a,:scope > div > button')].find(t=>visible(t)&&!t.contains(el));
+ return trigger??null;
 }
 export {parentOf};

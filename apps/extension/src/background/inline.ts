@@ -15,7 +15,7 @@ import {actionOf,type Action} from './inline-action';
  * names a mode on its first line (edit, answer, act) and the rest streams back. An edit is only the new text; an answer
  * may cite memory, whose items go back with it as links; an action comes as one JSON object, turned here into a link to
  * open (a prefilled calendar event, a search) or a note to keep. Nothing on the page changes until the user keeps it. */
-type Ask={id:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;instruction:string;previous?:string;
+type Ask={id:string;session?:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;instruction:string;previous?:string;
  /** The page is drawn as pixels (a document, a design): a picture of the view goes with the question. */drawn?:boolean;view?:[number,number]};
 const warmed=new Map<string,number>();
 const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -57,6 +57,13 @@ function cardContext(m:Omit<Ask,'id'|'instruction'>,tab:number|undefined):Promis
 }
 const withContext=(stable:string,context:string)=>context?`${stable}${context}\n`:stable;
 
+/** The picture taken as a card opened over a drawing, while what they selected was still highlighted as they saw it (it
+ * fades once the card has the focus): the card's questions look at it. */
+const held=new Map<string,ReturnType<typeof viewPicture>>();
+on('inline.picture',(m:{session:string;view:[number,number]},{port})=>{
+ held.set(m.session,viewPicture(port.sender?.tab,m.view,true));if(held.size>20)held.delete(held.keys().next().value!);
+});
+
 on('inline.prewarm',async(message:Omit<Ask,'id'|'instruction'>,{url,port})=>{
  const settings=await loadSettings();if(!activeOn(settings,siteOf(url)||message.site))return;
  // Memory and its model get ready while the instruction is typed (a moment after the card has opened and has the keys).
@@ -95,9 +102,9 @@ on('inline',async(message:Ask,{send,signal,url,port})=>{
   memoryFor(message),
   asksAboutNow(message.instruction)?heardJustNow():Promise.resolve(undefined),
   cardContext(message,port.sender?.tab?.id),
-  message.drawn&&!port.sender?.frameId?viewPicture(port.sender?.tab,message.view):Promise.resolve(null),
+  message.drawn&&!port.sender?.frameId?(message.session&&held.get(message.session))||viewPicture(port.sender?.tab,message.view):Promise.resolve(null),
  ]);
- const picture=shot?[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:'This page is drawn as pixels: what it shows (its text, its design) is in this picture of their view.'}]:[];
+ const picture=shot?[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:'This page is drawn as pixels: what it shows (its text, its design) is in this picture of their view. Words highlighted in it (a tinted band behind them) are what they selected, even when no selection is given above: "this" means those words, and an edit is new text for exactly them.'}]:[];
  const memory=[...(heard?[heard]:[]),...found].map((m,i)=>({n:i+1,title:m.title,url:m.url,when:m.when,text:m.text}));
  const stable=withContext(inlineStable({...message,facts:settings.facts,style:recall.style}),context);
  const fresh=inlineFresh({instruction:message.instruction,now:new Date(),timeZone:timeZone(),memory,previous:message.previous});
@@ -121,6 +128,12 @@ on('inline',async(message:Ask,{send,signal,url,port})=>{
  const body=parse(true)??'';
  if(mode==='act'){const action=actionOf(body);send({type:'inline.text',id:message.id,mode:action?'act':'answer',text:action?action.label:'That could not be turned into an action.',action,final:true});return;}
  send({type:'inline.text',id:message.id,mode,text:shape(body,message),final:true,sources:mode==='answer'?memory.map(m=>({n:m.n,title:m.title,url:m.url})):undefined});
+});
+
+/** Ctrl+K pressed in a drawn editor's hidden typing box inside a frame (Google Docs): the card opens in the page itself. */
+on('inline.top',async(m:{editable?:boolean},{port})=>{
+ const tab=port.sender?.tab?.id;if(tab===undefined)return;
+ await chrome.tabs.sendMessage(tab,{type:'inline.open',editable:!!m.editable},{frameId:0}).catch(()=>{});
 });
 
 /** An edit keeps the selection's own spacing at its edges; quotes or fences around the whole answer go. */

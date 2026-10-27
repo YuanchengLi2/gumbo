@@ -1,7 +1,7 @@
 import {test,expect,tell,extensionPage} from '../fixtures';
 import {liveLog,liveSpent} from '../standin';
 import type {Page,Frame,Worker,BrowserContext} from '@playwright/test';
-import {appendFileSync} from 'node:fs';
+import {appendFileSync,writeFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 
@@ -169,6 +169,66 @@ test('A real drawing app (Excalidraw): what Tab and Ctrl+K make of it',async({pa
  await page.keyboard.press('Escape');await page.keyboard.press('Control+k');
  const frame=await card(page).catch(()=>null);
  if(frame){await page.keyboard.type('what can I do here?');await page.keyboard.press('Enter');await page.waitForTimeout(6000);note(`  Ctrl+K on Excalidraw: ${((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').slice(0,180)}`);}
+});
+
+/** What the model was shown for the last Ctrl+K (its picture, its words), kept beside the screenshots. */
+const seen=(standin:{bodies:any[]},name:string,purpose='inline')=>{
+ const dir=process.env.GUMBO_SHOTS,b=standin.bodies.filter(x=>x.purpose===purpose).at(-1);if(!dir||!b)return;
+ for(const c of b.messages[0].content)if(c.type==='image')writeFileSync(`${dir}/${name}.jpg`,Buffer.from(c.source.data,'base64'));
+ writeFileSync(`${dir}/${name}.txt`,b.messages[0].content.filter((c:any)=>c.type==='text').map((c:any)=>c.text).join('\n----\n'));
+};
+/** Screenshots of the real-app checks, when GUMBO_SHOTS names a folder for them. */
+const shot=async(page:Page,name:string)=>{if(process.env.GUMBO_SHOTS)await page.screenshot({path:`${process.env.GUMBO_SHOTS}/${name}.png`}).catch(()=>{});};
+/** How much of the view canvases cover (what makes a page "drawn" for Tab and Ctrl+K). */
+const canvasCover=(page:Page)=>page.evaluate(()=>{let c=0;for(const el of document.querySelectorAll('canvas')){const r=el.getBoundingClientRect();c+=Math.max(0,Math.min(r.right,innerWidth)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0));}return Math.round(100*c/(innerWidth*innerHeight));}).catch(()=>-1);
+/** Ctrl+K with a question; what the card answered (or that it never opened). */
+async function cardAnswer(page:Page,question:string,ms=9000){
+ await page.keyboard.press('Control+k');
+ const frame=await card(page).catch(()=>null);if(!frame)return '(the card did not open)';
+ await page.keyboard.type(question);await page.keyboard.press('Enter');
+ await expect.poll(async()=>((await frame.locator('.body').textContent().catch(()=>''))??'').length,{timeout:ms}).toBeGreaterThan(80).catch(()=>{});
+ await page.waitForTimeout(2500);
+ const text=((await frame.locator('.body').textContent().catch(()=>''))??'').replace(/\s+/g,' ').slice(0,260);
+ await page.keyboard.press('Escape');return text||'(no answer)';
+}
+
+test('Google Docs, a public design doc (view only): what Tab and Ctrl+K make of it',async({page,signedIn,standin})=>{
+ try{await page.goto('https://docs.google.com/document/d/1Iqe_CzFVA6hyxe7h2bUKusxsjB6frXfdAYLerM3JjPo/edit',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Docs: unreachable');return;}
+ await page.waitForTimeout(7000);await shot(page,'docs');
+ note(`  Docs: canvases cover ${await canvasCover(page)}% of the view; title “${await page.title()}”`);
+ await page.mouse.click(640,420);
+ const {state}=await guess(signedIn,page,10_000);
+ note(`  Docs, after a click in the text: ${describe(state)}${state?.plan?.steps?.[0]?.at?` at ${state.plan.steps[0].at}`:''}`);
+ await page.keyboard.press('Escape');
+ note(`  Ctrl+K, nothing selected, “what is this doc about?”: ${await cardAnswer(page,'what is this doc about, in two sentences?')}`);
+ // A word selected the way a person does it (double-click), then Ctrl+K.
+ await page.mouse.dblclick(400,420);await page.waitForTimeout(500);
+ note(`  Ctrl+K on a double-clicked word, “explain this”: ${await cardAnswer(page,'explain this')}`);
+ seen(standin,'docs-asked');
+});
+
+test('Tab for text in a document drawn as pixels (as Google Docs draws its text): the words are read from a picture',async({page,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/drawn-doc.html`);await page.waitForTimeout(1000);
+ // The caret after “First, we” on the third line, then a few words typed as a person types them.
+ await page.mouse.click(195,235);await page.waitForTimeout(200);
+ await page.keyboard.type(' will open the beta to',{delay:45});
+ const typed=Date.now();let shownMs:number|undefined;
+ await expect.poll(async()=>{const s=await tell(signedIn,page,{type:'debug.drawn'}).catch(()=>null);if(s?.shown&&shownMs===undefined)shownMs=Date.now()-typed;return !!s?.shown;},{timeout:10_000,intervals:[100]}).toBe(true).catch(()=>{});
+ const s=await tell(signedIn,page,{type:'debug.drawn'}).catch(()=>null);
+ note(`  Drawn document, “First, we will open the beta to”: ${s?.shown?`offered “${s.shown}” (${shownMs} ms after the last key, 650 of them the pause)`:'nothing offered'}`);
+ seen(standin,'drawn-tab','tab');
+ if(s?.shown){await page.keyboard.press('Tab');await page.waitForTimeout(400);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
+});
+
+test('Figma, a public prototype: what Tab and Ctrl+K make of it',async({page,signedIn})=>{
+ try{await page.goto('https://www.figma.com/proto/NI8q8DJRvFhfevXhtYfOBL/%E7%84%A1%E9%A1%8C?type=design&node-id=3-2&scaling=contain&page-id=0%3A1&starting-point-node-id=3%3A2',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Figma: unreachable');return;}
+ await page.waitForTimeout(9000);await shot(page,'figma');
+ note(`  Figma: canvases cover ${await canvasCover(page)}% of the view; title “${await page.title()}”`);
+ await page.mouse.click(640,400);
+ const {state}=await guess(signedIn,page,12_000);
+ note(`  Figma, after a click on the design: ${describe(state)}${state?.plan?.steps?.[0]?.at?` at ${state.plan.steps[0].at}`:''}`);
+ await page.keyboard.press('Escape');
+ note(`  Ctrl+K, “what does this screen show?”: ${await cardAnswer(page,'what does this screen show?')}`);
 });
 
 test('Tab on a board, after the user dragged a card by hand',async({page,signedIn,standin})=>{

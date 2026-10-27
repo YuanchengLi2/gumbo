@@ -6,6 +6,7 @@ import {getSealed,putSealed} from './db';
 import {lately,latelyKnown} from './lately';
 import {workspace,justLeft,justLeftText} from './workspace';
 import {offscreen} from './offscreen';
+import {thrifty} from './thrift';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {textOf} from '../shared/gateway';
 import {pageKindOf} from '../shared/learn';
@@ -20,7 +21,8 @@ import {planOf,partialPlan,stepKey,type Plan,type PlanStep} from '../shared/plan
  * offered again for a while. Tab is the next move, never a run of them: longer jobs are the agent's. */
 type Item={id:string;role:string;name:string;value?:string;state?:string[];inView:boolean;nearby?:string};
 type Ask={id:string;title:string;items:Item[];text:string;activity:{kind:string;label:string;text?:string}[];focused?:string;
- /** Asked ahead of the moment (the pointer resting on a field, typing about to stop): nobody is waiting yet. */ahead?:boolean;
+ /** Asked ahead of the moment (the pointer resting on a field, typing about to stop, coming back to a tab): nobody is
+  * waiting yet. */ahead?:boolean;
  /** The page is drawn as pixels; the size of their view, in the page's pixels. */drawn?:boolean;view?:[number,number]};
 const SYSTEM=`You are Gumbo's Tab: autocomplete for what a person does in their browser, as a code editor's Tab completes the next edit. You see the page (its address, title, main text, and the elements they can use, each with an id; a frame embedded in a page is a page of its own here), what they just did here, the words of the tab they just left, their whole browser (every open tab, what they closed, today's pages and searches, what they copied and wrote), what memory holds about this, what you know about them, what they usually do here, and what they turned down. Predict their next move: the one thing they are about to do. When they press Tab, Gumbo does it; then it offers the move after.
 A move is one of: click something; double-click; right-click; point at something to open its menu or card (hover); drag something onto something else or by some pixels (a card to a column, a row to a new place, a slider, a file onto an upload area); choose an option; press a key; scroll to something; go back; open a page; or fill in fields: the fields of the form they are in, each with the exact text they would type.
@@ -79,6 +81,8 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
  const answer=(plan:Plan|null,final=true,source='model')=>{if(!signal.aborted)send({type:'predict.plan',id:m.id,plan,final,source});};
  const settings=await loadSettings();
  if(tab===undefined||port.sender?.tab?.incognito||!/^https?:/.test(url)||!activeOn(settings,siteOf(url))){answer(null);return;}
+ // Saving credits (the Free plan, or few left): nothing is guessed before the user acts (thrift.ts).
+ if(m.ahead&&await thrifty()){answer(null);return;}
  const ids=new Set(m.items.map(i=>i.id)),facts=settings.facts,down=declined(tab,url);
  // At once, before anything is read from memory: the user's own details for an empty form; then a near-certain habit
  // here (it takes the learner from the sealed store), which comes first when there is one.
@@ -146,20 +150,24 @@ chrome.tabs.onActivated.addListener(()=>warmMemory());
 
 /** A picture of what they see (the visible tab), for a page drawn as pixels: as wide as their view, 1280 pixels at most,
  * so a point in it maps back to the page by one scale. Chrome takes at most two a second: guesses a moment apart share
- * one, and none is sent when it cannot be taken. */
+ * one, and none is sent when it cannot be taken. fresh: the picture must be of this moment (taken again if Chrome says
+ * wait). mark: a caret to draw in red (x, top, height in the page's pixels); a marked picture is for its asker alone. */
 const pictures=new Map<number,{at:number;shot:Promise<{data:string;w:number;h:number}|null>}>();
-export function viewPicture(tab:chrome.tabs.Tab|undefined,view?:[number,number]){
+export function viewPicture(tab:chrome.tabs.Tab|undefined,view?:[number,number],fresh=false,mark?:[number,number,number]){
  if(tab?.id===undefined||tab.windowId===undefined||!view)return Promise.resolve(null);
- const had=pictures.get(tab.id);if(had&&Date.now()-had.at<700)return had.shot;
+ const had=pictures.get(tab.id);if(had&&!mark&&Date.now()-had.at<(fresh?120:700))return had.shot;
  const shot=(async()=>{
-  const url=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'jpeg',quality:70}).catch(()=>null);if(!url)return null;
+  const take=()=>chrome.tabs.captureVisibleTab(tab.windowId!,{format:'jpeg',quality:70}).catch(()=>null);
+  const url=await take()??(fresh?await new Promise<string|null>(r=>setTimeout(()=>void take().then(r),520)):null);if(!url)return null;
   const bitmap=await createImageBitmap(await (await fetch(url)).blob());
   const w=Math.min(1280,Math.round(view[0])),h=Math.round(bitmap.height*w/bitmap.width);
-  const canvas=new OffscreenCanvas(w,h);canvas.getContext('2d')!.drawImage(bitmap,0,0,w,h);bitmap.close();
+  const canvas=new OffscreenCanvas(w,h),g=canvas.getContext('2d')!;g.drawImage(bitmap,0,0,w,h);bitmap.close();
+  if(mark){const s=w/view[0];g.fillStyle='#ff1a1a';g.fillRect(Math.round(mark[0]*s)-1,Math.round(mark[1]*s),Math.max(2,Math.round(2*s)),Math.round(mark[2]*s));}
   const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:0.65})).arrayBuffer());
   let text='';for(let i=0;i<bytes.length;i+=0x8000)text+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
   return{data:btoa(text),w,h};
  })().catch(()=>null);
+ if(mark)return shot;
  pictures.set(tab.id,{at:Date.now(),shot});if(pictures.size>20)pictures.delete(pictures.keys().next().value!);
  return shot;
 }

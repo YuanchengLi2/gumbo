@@ -1,7 +1,7 @@
 /// <reference types="chrome" />
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
-import {describe,pageModel,deepQuery,type Item} from './perceive';
-import {fieldOf,inPaymentFrame} from './fields/field';
+import {describe,pageModel,deepQuery,hoverOwner,type Item} from './perceive';
+import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {perform,irreversible,findTarget,type Action,type Target,type Done} from './act';
 import {pageText} from './capture';
@@ -26,7 +26,8 @@ let timer:number|undefined,wave=0,seq=0,asking:string|undefined,lastKey=0,runnin
 /** The elements the current guess was made from, so a step finds its element again if the page re-rendered it. */
 let seen=new Map<string,Item>();
 const activity:{kind:string;label:string;text?:string}[]=[];
-const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame();
+// A frame nobody sees (a drawn editor's typing box) has nothing to guess from: the page around it guesses.
+const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame()&&!unseenFrame();
 const actionable='a[href],button,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],summary,input[type=submit],input[type=button],input[type=checkbox],input[type=radio],label';
 const dialogs='[role=dialog],[role=alertdialog],dialog,[aria-modal=true]';
 const did=(kind:string,label:string,text?:string)=>{const prev=activity.at(-1);if(prev&&prev.kind===kind&&prev.label===label)activity.pop();activity.push({kind,label:label.slice(0,80),text:text?.slice(-200)});if(activity.length>10)activity.shift();};
@@ -48,7 +49,7 @@ export function startPredict(){
  void loadSettings().then(s=>{settings=s;opening();});onSettings(s=>{settings=s;if(!active())hide();});
  // A page opened behind another tab has its first moment when it comes into view; coming back to a tab is a moment too
  // (what they did in the tab they left is part of it).
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running)soon(250);});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){soon(250);returned=true;}});
  if(inFrame)for(const type of ['pointerdown','keydown','focusin'])document.addEventListener(type,e=>{if(e.isTrusted)touched=true;},true);
  window.addEventListener('blur',()=>{if(!running&&!waitEnter&&!taking)hide();});
  did('opened',document.title);
@@ -122,7 +123,8 @@ function onClick(event:MouseEvent){
  * busy the page itself keeps being. */
 function soon(ms:number,quick=false){
  if(!touched)return;
- clearTimeout(timer);const mine=++wave;
+ // A newer moment (the user did something) is not the return to the tab.
+ clearTimeout(timer);const mine=++wave;returned=false;
  timer=window.setTimeout(()=>void (quick?settled(60,250):settled()).then(()=>{if(mine===wave)void guess();}),ms);
 }
 function settled(quiet=120,max=1500):Promise<void>{
@@ -137,7 +139,9 @@ function settled(quiet=120,max=1500):Promise<void>{
 let typingFor=1100;
 const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
 
-const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:id.startsWith('a'),
+/** The next guess is for coming back to this tab: asked before the user does anything here (ahead, for thrift.ts). */
+let returned=false;
+const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:back||id.startsWith('a'),
  // A page drawn as pixels: the engine looks at a picture of the view, and moves may point at spots in it.
  ...(!inFrame&&drawnSurface()?{drawn:true,view:[innerWidth,innerHeight]}:{})});
 /** Whether the page is mostly drawn as pixels (a document, a sheet, a design, a board, a map): canvases cover a good part
@@ -158,7 +162,8 @@ async function guess(){
  const id=`p${++seq}`,model=pageModel(160),focus=fieldOf(deepActive());
  asking=id;for(const i of model.items)seen.set(i.id,i);
  listen(id);
- ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined);
+ const back=returned;returned=false;
+ ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined,back);
 }
 /** Asked ahead: the pointer resting on a field is the moment before the user clicks into it, so the guess for "the
  * cursor is in that field" is asked then, exactly as it will be asked after the click; the engine keeps its answer, and
@@ -244,7 +249,8 @@ function show(plan:Plan,final:boolean,source?:string){
  marked=plan.steps.flatMap((step):Mark[]=>{
   // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).
   if(step.at)return[{el:document.documentElement,to:false,point:step.at},...(step.toAt?[{el:document.documentElement,to:true,point:step.toAt}]:[])];
-  const at=touches(step)?findTarget(targetOf(step)):null,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
+  // An item hidden in a menu that opens on hover is marked on the menu's trigger.
+  const found=touches(step)?findTarget(targetOf(step)):null,at=found&&!visible(found)?hoverOwner(found)??found:found,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
   return[...(at?[{el:at,to:false,text:step.do==='type'?step.text:undefined}]:[]),...(drop?[{el:drop,to:true}]:[])];
  });
  for(const m of marked)if(m.point||visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.point?' dot':'')+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
