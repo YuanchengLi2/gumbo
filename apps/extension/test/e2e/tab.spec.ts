@@ -13,7 +13,8 @@ test('suggests after a pause, Tab accepts it into the field, Ctrl+Z takes it bac
  await page.keyboard.type('Thanks for',{delay:20});
  const shown=await ghost(signedIn,page);expect(shown.rest).toBe(' the notes from our call.');
  const body=standin.bodies.find(b=>b.purpose==='tab');
- expect(body).toMatchObject({model:'claude-haiku-5-5',stream:true,max_tokens:40});
+ // DeepSeek by default, told not to think (a quick call).
+ expect(body).toMatchObject({model:'deepseek-flash',stream:true,max_tokens:40,dream_thinking:'off'});
  // Two predictions are asked at once (only what both say shows): requests come in identical pairs, the first pair as
  // soon as a word ended ("Thanks "), the next after the pause.
  const asked=standin.bodies.filter(b=>b.purpose==='tab');expect(asked.length%2).toBe(0);

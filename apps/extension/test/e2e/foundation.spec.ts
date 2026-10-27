@@ -21,6 +21,16 @@ test('signs in through usegumbo.app with its own PKCE session, out of the web ap
  await stray.waitForURL(/welcome\.html\?error=/);await expect(stray.getByText('This sign-in was not started from Gumbo for Chrome')).toBeVisible();
 });
 
+test('models nobody picked follow the new defaults (DeepSeek, GPT-6.1 Terra for the agent); one the user picked stays',async({signedIn,page})=>{
+ // Settings saved before October 26: Tab, next moves and notes still on the old defaults, Ctrl+K chosen by the user.
+ await signedIn.evaluate(()=>chrome.storage.local.set({settings:{enabled:true,pausedUntil:0,siteOff:[],altK:[],models:{tab:'claude-haiku-5-5',inline:'groq-fast',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{},listen:true,listenOff:[],mic:false}}));
+ await page.goto(extensionPage('popup.html'));
+ const selects=page.locator('select');
+ await expect(selects.nth(0)).toHaveValue('deepseek-flash');
+ await expect(selects.nth(1)).toHaveValue('groq-fast');
+ await expect(selects.nth(3)).toHaveValue('gpt-6.1-terra');
+});
+
 test('the popup shows the site, pause, Tab numbers, spend and memory when signed in',async({signedIn,page})=>{
  await page.goto(extensionPage('popup.html'));
  await expect(page.getByText('Tab on this computer')).toBeVisible();

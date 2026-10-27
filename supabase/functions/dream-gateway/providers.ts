@@ -15,6 +15,8 @@ export type ProviderModel=Rates&{provider:ProviderId;api:'responses'|'chat'|'mes
 export const providerModels:Record<string,ProviderModel>={
  'gpt-6-astra':{provider:'openai',api:'responses',price:[10,50],cachedRead:1,longContext:{above:272_000,price:[20,75],cachedRead:2},vision:true,reasoning:true},
  'gpt-6.1-sol':{provider:'openai',api:'responses',price:[2,10],cachedRead:.1,longContext:{above:272_000,price:[4,15],cachedRead:.2},vision:true,reasoning:true},
+ // Terra (October 26, 2026): between Sol and Luna, made for computer use; Gumbo for Chrome's agent runs on it.
+ 'gpt-6.1-terra':{provider:'openai',api:'responses',price:[1,5],cachedRead:.05,vision:true,reasoning:true},
  'gpt-6-luna':{provider:'openai',api:'responses',price:[.1,.5],cachedRead:.01,longContext:{above:272_000,price:[.2,.75],cachedRead:.02},vision:true,reasoning:true},
  'gemini-4-argon':{provider:'google',api:'chat',price:[2,10],cachedRead:.1,change:{from:'2026-12-01T00:00:00Z',price:[4,20],cachedRead:.2},vision:true,reasoning:true},
  'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,change:{from:'2027-01-01T00:00:00Z',price:[1.5,7.5],cachedRead:.15},vision:true,reasoning:true},

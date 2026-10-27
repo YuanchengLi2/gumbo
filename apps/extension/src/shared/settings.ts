@@ -10,6 +10,8 @@ export type Settings={
  /** Sites where Ctrl+K stays the site's own and Gumbo opens on Alt+K. */
  altK:string[];
  models:Record<Surface,string>;
+ /** Which set of default models the stored ones were made against (see firstDefaults). */
+ modelsVersion?:number;
  /** Facts the user gave about themselves, which Tab may use: name, sign-off, email, anything else. */
  facts:{name?:string;signOff?:string;email?:string;other?:string};
  /** Whether what plays in a tab (videos, talks, the other side of a call) is heard and remembered. */
@@ -23,11 +25,16 @@ export type Settings={
  realInput?:boolean;
 };
 export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
- models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{},listen:true,listenOff:[],mic:false};
+ models:{tab:'deepseek-flash',inline:'deepseek-flash',action:'deepseek-flash',notes:'deepseek-flash',agent:'gpt-6.1-terra'},modelsVersion:2,facts:{},listen:true,listenOff:[],mic:false};
+/** The defaults before version 2 (October 26): a model still set to one of them was never picked, so it follows the new
+ * default; a model the user chose stays. */
+const firstDefaults:Record<Surface,string>={tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'};
 
 export async function loadSettings():Promise<Settings>{
  const {settings}=await chrome.storage.local.get('settings') as {settings?:Partial<Settings>};
- return{...defaultSettings,...settings,models:{...defaultSettings.models,...settings?.models},facts:{...settings?.facts}};
+ const stored=settings?.models??{},current=(settings?.modelsVersion??1)>=2;
+ const chosen=current?stored:Object.fromEntries(Object.entries(stored).filter(([surface,id])=>firstDefaults[surface as Surface]!==id));
+ return{...defaultSettings,...settings,models:{...defaultSettings.models,...chosen},modelsVersion:2,facts:{...settings?.facts}};
 }
 /** Saved on this computer, and in Chrome sync, so a reinstall (or another computer signed in to Chrome) has them back. */
 export async function saveSettings(change:Partial<Settings>){const now=await loadSettings(),next={...now,...change};await chrome.storage.local.set({settings:next});await chrome.storage.sync?.set({settings:next}).catch(()=>{});}

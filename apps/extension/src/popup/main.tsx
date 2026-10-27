@@ -9,7 +9,7 @@ import {loadSettings,saveSettings,onSettings,activeOn,listensOn,blockedSite,site
 
 /** The toolbar popup: whether Gumbo is on here, pause, how Tab is doing on this computer, today's spend, what memory
  * keeps (and forgetting it), and the model for each surface. */
-const models:{id:string;name:string}[]=[{id:'claude-haiku-5-5',name:'Claude Haiku 5.5'},{id:'claude-sonnet-5-5',name:'Claude Sonnet 5.5'},{id:'claude-opus-5-5',name:'Claude Opus 5.5'},{id:'deepseek-flash',name:'DeepSeek V4.1 Flash'},{id:'groq-fast',name:'Llama on Groq (fastest)'}];
+const models:{id:string;name:string}[]=[{id:'claude-haiku-5-5',name:'Claude Haiku 5.5'},{id:'claude-sonnet-5-5',name:'Claude Sonnet 5.5'},{id:'claude-opus-5-5',name:'Claude Opus 5.5'},{id:'deepseek-flash',name:'DeepSeek V4.1 Flash'},{id:'gpt-6.1-terra',name:'GPT-6.1 Terra'},{id:'groq-fast',name:'Llama on Groq (fastest)'}];
 const surfaces:{id:Surface;name:string}[]=[{id:'tab',name:'Tab'},{id:'inline',name:'Ctrl+K'},{id:'notes',name:'Notes'},{id:'agent',name:'Agent'}];
 const ms=(n?:number)=>n===undefined?'–':n<1000?`${Math.round(n)} ms`:`${(n/1000).toFixed(1)} s`;
 

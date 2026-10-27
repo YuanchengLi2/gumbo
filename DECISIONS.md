@@ -174,6 +174,11 @@
 - **Menus that open on hover by CSS alone:** no event a page sends opens them, so Tab never saw their items. Hidden
   items of a nav, header or menu bar are now listed with their menu ("in the Products menu, shown on hover"), the ring
   goes on the menu's trigger, and running the move hovers the trigger, then clicks the hidden item (a click works on it).
+- **Models (later the same night, at the user's request):** DeepSeek V4.1 Flash replaces Haiku 5.5 for Tab, Ctrl+K,
+  next moves and notes; GPT-6.1 Terra (released that day, made for computer use) runs the agent. Quick calls tell
+  DeepSeek not to think, and cache warm-ups go only to Claude. Models nobody picked follow the new defaults. Not yet
+  measured live: this computer has only an Anthropic key, and Terra needs the gateway deployed. DeepSeek's list price is
+  above Haiku 5.5's, and its speed for Tab is the open question.
 - **Saving credits:** on the Free plan, or on any plan with less than a sixth of its credits left, Tab guesses nothing
   ahead of the user: not the first field as a page opens, not a field the pointer rests on, not while they type, not on
   coming back to a tab. It still guesses the moment they act. Tab for text over a drawing (a picture each time) waits

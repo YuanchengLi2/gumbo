@@ -2,7 +2,8 @@ import {readMessageStream,type StreamEvent} from '../../../../supabase/functions
 /** One call to the gateway's /ai. Requests are sent gzipped (page text can look like an attack to the firewall in front
  * of the function, as the agent's code once did), streamed as Anthropic events, and timed: the gateway's Server-Timing
  * says where its part of the wait went. */
-export type GatewayCall={model:string;system?:unknown;messages:unknown[];max_tokens:number;purpose:string;stream?:boolean;tools?:unknown[];tool_choice?:unknown;requestId?:string;turnId?:string};
+export type GatewayCall={model:string;system?:unknown;messages:unknown[];max_tokens:number;purpose:string;stream?:boolean;tools?:unknown[];tool_choice?:unknown;requestId?:string;turnId?:string;
+ /** DeepSeek's thinking for this call ('off': none; the gateway's own default otherwise). */dream_thinking?:'off'};
 export type Timing={auth?:number;reserve?:number;provider?:number;headers?:number;total?:number};
 export class GatewayError extends Error{
  constructor(message:string,public status:number,public type:string,public retryable=false,public retryAfterMs?:number){super(message);}
