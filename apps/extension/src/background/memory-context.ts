@@ -44,6 +44,9 @@ export function fieldMemory(key:string,query:string,page?:string,k=3):Remembered
 /** Waits (briefly) for a field's first search only: the first suggestion after focusing a field gets memory too, and a
  * field memory has nothing for never waits again. */
 export async function fieldReady(key:string,ms=80){const field=fields.get(key);if(field?.searching&&!field.at)await Promise.race([field.searching,new Promise(r=>setTimeout(r,ms))]);return fields.get(key)?.items??[];}
+/** Waits (up to ms) for the search a new question started, however many came before it: what Tab for actions asks is
+ * the moment as it is now (the field just entered), and an answer for the page as it opened is the wrong memory. */
+export async function fieldCurrent(key:string,ms:number){const field=fields.get(key);if(field?.searching)await Promise.race([field.searching,new Promise(r=>setTimeout(r,ms))]);return{items:fields.get(key)?.items??[],searching:!!fields.get(key)?.searching};}
 export const fieldKey=(site:string,intent:string,label:string,thread?:{text:string}[])=>`${site}|${intent}|${label}|${thread?.at(-1)?.text.slice(0,80)??''}`;
 /** The last finished sentence of what is being written (memory is searched again only when it changes). */
 export function lastSentence(before:string){const done=before.match(/[^.!?\n]{8,}[.!?\n]/g);return done?.at(-1)?.trim()??'';}

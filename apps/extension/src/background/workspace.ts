@@ -1,4 +1,4 @@
-import {recent} from './db';
+import {recent,getPage} from './db';
 import {lately} from './lately';
 import {loadSettings,activeOn,siteOf,type Settings} from '../shared/settings';
 import {shortUrl,searchOf} from '../shared/address';
@@ -91,6 +91,28 @@ export async function workspace(options:{here?:number;opened?:Set<number>;compac
  const copied=before.copied.slice().reverse().map(c=>`- ${ago(c.at)}, on “${cut(c.title,60)}”: “${cut(squash(c.text),300)}”`);
  return['<your_browser>',tabs,closed.lines.length?`\nClosed lately:\n${closed.lines.join('\n')}`:'',today.length?`\nToday, newest first:\n${today.join('\n')}`:'',copied.length?`\nThey copied:\n${copied.join('\n')}`:'',wrote.length?`\nThey wrote:\n${wrote.join('\n')}`:'','</your_browser>'].filter(Boolean).join('\n');
 }
+/** A tab's text as it is now (or what memory kept of it while it is asleep); nothing from a site where Gumbo is off. */
+export async function readTab(tabId:number):Promise<{title:string;url:string;text:string}|null>{
+ const t=await chrome.tabs.get(tabId).catch(()=>undefined);
+ if(!t?.url||!/^https?:|^file:/.test(t.url)||!activeOn(await loadSettings(),siteOf(t.url)))return null;
+ const page=t.discarded?undefined:await chrome.tabs.sendMessage(tabId,{type:'page.text'},{frameId:0}).catch(()=>undefined) as any;
+ if(page)return{title:String(page.title??t.title??''),url:t.url,text:String(page.text??'')};
+ const kept=await getPage(t.url).catch(()=>undefined);
+ return kept?{title:kept.title,url:t.url,text:kept.text}:null;
+}
+/** The tab they were on just before this one (the one looked at most recently, in the last half hour), with its words as
+ * they are now: what they were reading or were told a moment ago (an assistant's answer, an email, a lesson) is often
+ * what this page is about to need. Its start and its end (where a chat's newest answer is); a moment's wait at most.
+ * Tab and Ctrl+K are given it. */
+export async function justLeft(tab:number|undefined):Promise<{title:string;url:string;text:string}|null>{
+ const tabs=(await chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])).filter(t=>t.id!==tab&&!t.incognito&&/^(https?|file):/.test(t.url??'')).sort((a,b)=>(b.lastAccessed??0)-(a.lastAccessed??0));
+ const prev=tabs[0];if(prev?.id===undefined||Date.now()-(prev.lastAccessed??0)>30*60_000)return null;
+ const read=await Promise.race([readTab(prev.id).catch(()=>null),new Promise<null>(r=>setTimeout(()=>r(null),350))]);
+ if(!read?.text)return null;
+ const words=read.text.replace(/\s+/g,' ').trim();
+ return{title:read.title,url:read.url,text:words.length>3200?`${words.slice(0,700)} … ${words.slice(-2500)}`:words};
+}
+export const justLeftText=(left:{title:string;url:string;text:string}|null)=>left?`<the_tab_they_just_left title="${left.title.slice(0,120)}" url="${left.url}">\n${left.text}\n</the_tab_they_just_left>`:'';
 /** The open tabs in a few lines (titles and sites), for the quick surfaces: Tab and Ctrl+K. */
 export async function tabsBrief(here?:string,limit=15):Promise<string>{
  const settings=await loadSettings(),tabs=(await chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])).filter(t=>!t.incognito&&allowed(settings,t.url)&&t.url!==here);

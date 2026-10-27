@@ -120,6 +120,23 @@
   answer" was the next move. All live runs so far: $0.10.
 - **Esc now stops the guess still on its way,** and that move stays away on that page for ten minutes: before, a late
   answer could bring it straight back.
+- **Speed and memory, measured live:**
+  - **Tab asks ahead at three more moments:** for the first empty field 0.8 s after a page opens; for the next field
+    when the user moves into one; and while they type (as a sentence ends, and every 1.5 s). At the pause, a move asked
+    ahead that types nothing into the field (the send, the search) shows at once.
+  - **Results:** a cold click on a field a few seconds after the page opened showed its move in 0.02 s. Send after a
+    reply shows 0.77 s after typing stops (was 1.6 s). The quiz in a frame showed in 0.26 s (a pointer resting on a
+    field now counts as working in that frame).
+  - **Tab's memory follows the moment:** each guess waits briefly for the search for its own moment (0.15 s, or 0.7 s
+    when asked ahead). An answer made while that search was still running is not reused. Live, trip notes read and
+    closed earlier filled a check-in form's flight number and date, previewed in both fields, in 0.13 s.
+  - **Ctrl+K never waits long on memory:** its search starts as the card opens. At Enter the question's own search gets
+    0.15 s, and up to 1.5 s only when nothing is in hand yet. Ctrl+K also gets the agent's view of the browser and the
+    tab just left, taken once per card and kept inside the warmed prompt. First words come about 1.1 s after Enter.
+    Asked about a flight it answered from the notes.
+  - **Ctrl+K reads, not rewrites:** text selected on a page, with "explain" or "simplify", is answered, not rewritten.
+  - **Moves are marked on the page:** every element a move touches is outlined (a drag's drop dashed), and the words it
+    would type show faintly in each empty field it fills.
 
 ## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
 

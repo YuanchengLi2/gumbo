@@ -107,6 +107,36 @@ test('Studying: an assistant chat in one tab, the course\'s quiz in a frame in t
  note(`    next: ${describe(next.state)}`);
 });
 
+test('Tab, cold: a field clicked a moment after the page opens, no resting on it first',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);
+ await copy(page,'#hotel','3-7-1-2 Nishishinjuku, Shinjuku City, Tokyo');
+ const shop=await context.newPage();await shop.goto(`${standin.url}/pages/shipping.html`);await shop.bringToFront();
+ await shop.waitForTimeout(3000);
+ await shop.locator('#street').click();
+ const {state,shownMs}=await guess(signedIn,shop);
+ note(`  Cold click 3 s after the page opened: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''} · ${state?.outlined??0} outlined, previews ${JSON.stringify(state?.previews??[])}`);
+ expect(state?.showing).toBe(true);
+});
+
+test('Memory: a page read earlier (its tab since closed) is what Tab and Ctrl+K draw on',async({page,context,signedIn,standin})=>{
+ const notes=await context.newPage();await notes.goto(`${standin.url}/pages/notes.html`);await notes.bringToFront();await notes.waitForTimeout(4000);
+ await notes.close();
+ await expect.poll(()=>signedIn.evaluate(()=>(globalThis as any).gumbo.db.recent('pages',10).then((p:any[])=>p.some(x=>x.title==='Trip notes'))),{timeout:15_000}).toBe(true);
+ await page.goto(`${standin.url}/pages/checkin.html`);await page.bringToFront();await page.waitForTimeout(2500);
+ await page.locator('#flight').hover();await page.waitForTimeout(1500);await page.locator('#flight').click();
+ const {state,shownMs}=await guess(signedIn,page,12_000);
+ note(`  Check-in form, trip notes read earlier and closed: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms)`:''} · previews ${JSON.stringify(state?.previews??[])}`);
+ // Ctrl+K on the same page, nothing selected: a question only memory can answer.
+ await page.keyboard.press('Escape');await page.locator('h1').click();await page.evaluate(()=>getSelection()?.removeAllRanges());
+ const started=Date.now();await page.keyboard.press('Control+k');const frame=await card(page);
+ await page.keyboard.type('when does my flight leave?');await page.keyboard.press('Enter');
+ let firstMs:number|undefined;
+ await expect.poll(async()=>{const t=((await frame.locator('.body').textContent().catch(()=>''))??'').trim();if(t&&firstMs===undefined&&!/Thinking/.test(t))firstMs=Date.now()-started;return /November|Nov|11:05/i.test(t);},{timeout:20_000,intervals:[100]}).toBe(true).catch(()=>{});
+ const answer=((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').trim();
+ note(`  Ctrl+K “when does my flight leave?” (first words ${firstMs??'?'} ms after Ctrl+K): ${answer.slice(0,200)}`);
+ expect(answer).toMatch(/November 12|Nov(ember)? 12/i);
+});
+
 test('Tab on a board, after the user dragged a card by hand',async({page,signedIn,standin})=>{
  await page.goto(`${standin.url}/pages/board.html`);await page.waitForTimeout(1500);
  await page.locator('#c1').dragTo(page.locator('#done'));
@@ -118,7 +148,8 @@ test('Tab on a board, after the user dragged a card by hand',async({page,signedI
 
 test('Tab: a reply that is written gets sent, the send waiting for Enter',async({page,signedIn,standin})=>{
  await page.goto(`${standin.url}/pages/forms.html`);await page.locator('#msg').click();
- await page.keyboard.type('Yes, I will be there on Friday!',{delay:25});
+ // At a person's speed (about 12 keys a second).
+ await page.keyboard.type('Yes, I will be there on Friday!',{delay:85});
  const {state,shownMs}=await guess(signedIn,page);
  note(`  Reply written → ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the pause)`:''}`);
  expect(state?.showing).toBe(true);
@@ -152,7 +183,10 @@ test('Ctrl+K: explains a selection on a real page, from the page',async({page,si
  try{await page.goto('https://en.wikipedia.org/wiki/Tea',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Ctrl+K on Wikipedia: unreachable');return;}
  await page.evaluate(()=>{const p=[...document.querySelectorAll('#mw-content-text p')].find(p=>(p.textContent??'').trim().length>120)!;const r=document.createRange();r.selectNodeContents(p);getSelection()!.removeAllRanges();getSelection()!.addRange(r);});
  const started=Date.now();await page.keyboard.press('Control+k');const frame=await card(page);
- await page.keyboard.type('explain this simply');await page.keyboard.press('Enter');
+ await page.keyboard.type('explain this simply');const asked=Date.now();await page.keyboard.press('Enter');
+ let firstMs:number|undefined;
+ await expect.poll(async()=>{const t=((await frame.locator('.body').textContent().catch(()=>''))??'').trim();if(t.length>12&&!/Thinking/.test(t)&&firstMs===undefined)firstMs=Date.now()-asked;return firstMs!==undefined;},{timeout:15_000,intervals:[50]}).toBe(true).catch(()=>{});
+ note(`  Ctrl+K “explain this simply”: first words ${firstMs??'?'} ms after Enter`);
  await expect.poll(async()=>((await frame.locator('.body').textContent().catch(()=>''))??'').length,{timeout:20_000}).toBeGreaterThan(60).catch(async e=>{note(`  Ctrl+K on Wikipedia showed: “${await frame.locator('#card').innerText().catch(()=>'')}”`);throw e;});
  await page.waitForTimeout(2500);
  const answer=((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').trim();

@@ -1,11 +1,10 @@
 import {on} from './surfaces';
 import {model} from './model';
 import {brain,lastStep} from './actions';
-import {fieldMemory,fieldReady} from './memory-context';
+import {fieldMemory,fieldCurrent} from './memory-context';
 import {getSealed,putSealed} from './db';
 import {lately,latelyKnown} from './lately';
-import {workspace} from './workspace';
-import {readTab} from './agent';
+import {workspace,justLeft,justLeftText} from './workspace';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {textOf} from '../shared/gateway';
 import {pageKindOf} from '../shared/learn';
@@ -19,7 +18,8 @@ import {planOf,partialPlan,stepKey,type Plan,type PlanStep} from '../shared/plan
  * move without another call; a newer question from the tab stops the older one; what they turned down here is not
  * offered again for a while. Tab is the next move, never a run of them: longer jobs are the agent's. */
 type Item={id:string;role:string;name:string;value?:string;state?:string[];inView:boolean;nearby?:string};
-type Ask={id:string;title:string;items:Item[];text:string;activity:{kind:string;label:string;text?:string}[];focused?:string};
+type Ask={id:string;title:string;items:Item[];text:string;activity:{kind:string;label:string;text?:string}[];focused?:string;
+ /** Asked ahead of the moment (the pointer resting on a field, typing about to stop): nobody is waiting yet. */ahead?:boolean};
 const SYSTEM=`You are Gumbo's Tab: autocomplete for what a person does in their browser, as a code editor's Tab completes the next edit. You see the page (its address, title, main text, and the elements they can use, each with an id; a frame embedded in a page is a page of its own here), what they just did here, the words of the tab they just left, their whole browser (every open tab, what they closed, today's pages and searches, what they copied and wrote), what memory holds about this, what you know about them, what they usually do here, and what they turned down. Predict their next move: the one thing they are about to do. When they press Tab, Gumbo does it; then it offers the move after.
 A move is one of: click something; double-click; right-click; point at something to open its menu or card (hover); drag something onto something else or by some pixels (a card to a column, a row to a new place, a slider, a file onto an upload area); choose an option; press a key; scroll to something; go back; open a page; or fill in fields: the fields of the form they are in, each with the exact text they would type.
 Also give "then": the move they will most likely make right after this one, shown the moment this one is done. Its element may be one that is not on the page yet (it appears after this move): then name it by role and name instead of an id.
@@ -98,7 +98,9 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   // they just did and copied matter more to the next step than memory does, and every moment of waiting is felt.
   const where=`predict|${placeOf(tab,url)}`;
   let memory=fieldMemory(where,`${m.title}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`,url,5);
-  if(!memory.length)memory=await fieldReady(where,120);
+  // The search for this moment gets a moment (more when asked ahead: nobody is waiting yet); an answer made while it was
+  // still running is not kept for the next guess, which will have it.
+  const now=await fieldCurrent(where,m.ahead?700:150);memory=now.items;const memoryLate=now.searching;
   if(signal.aborted)return;
   const profile=Object.entries(facts).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
   // Elements that share a name are told apart by the words around them.
@@ -109,7 +111,7 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   const outer=port.sender?.frameId&&port.sender.tab?`This is an embedded frame (${url}) inside the page “${(port.sender.tab.title??'').slice(0,120)}” (${port.sender.tab.url}).\n`:'';
   const title=(m.title||port.sender?.tab?.title||'').slice(0,150);
   const page=`${outer}<page url="${url}" title="${title}">\n${m.text.slice(0,3500)}\n</page>\n<elements>\n${listing}\n</elements>`;
-  const fresh=[left?`<the_tab_they_just_left title="${left.title.slice(0,120)}" url="${left.url}">\n${left.text}\n</the_tab_they_just_left>`:'',browser,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',profile?`<about_them>\n${profile}\n</about_them>`:'',memory.length?`<their_memory>\n${memory.map(r=>`${r.title} (${r.when}): ${r.text.slice(0,400)}`).join('\n')}\n</their_memory>`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
+  const fresh=[justLeftText(left),browser,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',profile?`<about_them>\n${profile}\n</about_them>`:'',memory.length?`<their_memory>\n${memory.map(r=>`${r.title} (${r.when}): ${r.text.slice(0,400)}`).join('\n')}\n</their_memory>`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
   const known=`${m.text}\n${listing}\n${profile}\n${memory.map(r=>r.text).join('\n')}\n${m.activity.map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${latelyKnown(before)}\n${left?.text??''}\n${browser}`;
   // The first complete steps are offered while the rest is still being written; the whole plan replaces them.
   let raw='',shown=0;
@@ -120,7 +122,7 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
    if(early&&early.confidence>=bar&&early.steps.length>shown){shown=early.steps.length;answer(early,false,'stream');}
   }});
   const plan=allowedPlan(planOf(textOf(message)||raw,ids,known),down),sure=plan&&plan.confidence>=bar?plan:null;
-  decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);
+  if(!memoryLate){decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);}
   done(sure);answer(sure??instant);
  }catch{if(!signal.aborted)answer(instant);}
  // However it ended (answered, stopped, failed), whoever waits on it hears: no answer is null.
@@ -135,17 +137,6 @@ async function browserOf(tab:number){
  const text=await workspace({here:tab,compact:true}).catch(()=>'');
  browsers.set(tab,{at:Date.now(),text});if(browsers.size>50)browsers.delete(browsers.keys().next().value!);
  return text;
-}
-/** The tab they were on just before this one (the one looked at most recently, in the last half hour), with its words as
- * they are now: what they were reading or were told a moment ago (an assistant's answer, an email, a lesson) is often
- * what this page is about to need. Its start and its end (where a chat's newest answer is); a moment's wait at most. */
-async function justLeft(tab:number):Promise<{title:string;url:string;text:string}|null>{
- const tabs=(await chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])).filter(t=>t.id!==tab&&!t.incognito&&/^(https?|file):/.test(t.url??'')).sort((a,b)=>(b.lastAccessed??0)-(a.lastAccessed??0));
- const prev=tabs[0];if(prev?.id===undefined||Date.now()-(prev.lastAccessed??0)>30*60_000)return null;
- const read=await Promise.race([readTab(prev.id).catch(()=>null),new Promise<null>(r=>setTimeout(()=>r(null),350))]);
- if(!read?.text)return null;
- const words=read.text.replace(/\s+/g,' ').trim();
- return{title:read.title,url:read.url,text:words.length>3200?`${words.slice(0,700)} … ${words.slice(-2500)}`:words};
 }
 
 /** A habit they have nearly every time on this kind of page after this step: offered at once. */

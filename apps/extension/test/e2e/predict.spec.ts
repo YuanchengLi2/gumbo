@@ -91,6 +91,8 @@ test('Tab fills a form with the user’s own details at once, before any model a
  standin.script=()=>({text:'',firstMs:3000});
  await page.goto(`${standin.url}/pages/forms.html`);await page.locator('#first').click();
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:2500}).toBe('Fill in your details');
+ // Every field it fills is outlined, and what goes in each shows faintly in it.
+ const shown=await tab(signedIn,page);expect(shown.outlined).toBe(3);expect(shown.previews).toEqual(['Dana','Lee','dana@example.com']);
  await page.keyboard.press('Tab');
  await expect(page.locator('#first')).toHaveValue('Dana');await expect(page.locator('#last')).toHaveValue('Lee');
  await expect(page.locator('#email')).toHaveValue('dana@example.com');

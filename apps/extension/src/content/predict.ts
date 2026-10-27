@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
-import {describe,pageModel,type Item} from './perceive';
+import {describe,pageModel,deepQuery,type Item} from './perceive';
 import {fieldOf,inPaymentFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {perform,irreversible,findTarget,type Action,type Target} from './act';
@@ -38,7 +38,8 @@ const what=(el?:Element|null)=>{if(!el)return 'something';const at=el.closest(`[
  * when the user goes elsewhere, so one move shows at a time. */
 const inFrame=window!==window.top;let touched=!inFrame;
 export function startPredict(){
- void loadSettings().then(s=>{settings=s;if(!inFrame)soon(500);});onSettings(s=>{settings=s;if(!active())hide();});
+ // As the page opens: what to do here, and, asked ahead, the first empty field in view (where a form starts).
+ void loadSettings().then(s=>{settings=s;if(!inFrame){soon(500);setTimeout(()=>{const first=emptyFieldsAfter()[0];if(first)aheadInto(first);},800);}});onSettings(s=>{settings=s;if(!active())hide();});
  if(inFrame)for(const type of ['pointerdown','keydown','focusin'])document.addEventListener(type,e=>{if(e.isTrusted)touched=true;},true);
  window.addEventListener('blur',()=>{if(!running&&!waitEnter&&!taking)hide();});
  did('opened',document.title);
@@ -46,9 +47,14 @@ export function startPredict(){
  document.addEventListener('pointerover',onRest,true);
  // A press on a field starts the guess at once (the focus and the click follow a moment later and are not waited for again).
  document.addEventListener('pointerdown',e=>{const t=e.composedPath()[0] as Element|undefined,f=t instanceof Element?fieldOf(t):null;if(f&&e.isTrusted){pressed={el:f.el,at:Date.now()};soon(0,true);}},true);
- document.addEventListener('focusin',()=>{const f=fieldOf(deepActive());if(hint)drawPreview();if(f){did('focused',nameOf(f.el,60)||'a field');if(!(pressed&&pressed.el===f.el&&Date.now()-pressed.at<500))soon(120,true);}},true);
+ document.addEventListener('focusin',()=>{
+  const f=fieldOf(deepActive());if(hint)drawPreviews();if(!f)return;
+  did('focused',nameOf(f.el,60)||'a field');if(!(pressed&&pressed.el===f.el&&Date.now()-pressed.at<500))soon(120,true);
+  // The next field in the form is where they go after this one: asked ahead, once this one's guess is on its way.
+  setTimeout(()=>{const next=emptyFieldsAfter(f.el)[0];if(next)aheadInto(next);},700);
+ },true);
  // The faint text belongs to the field the cursor is in: it goes when the cursor leaves.
- document.addEventListener('focusout',()=>{if(preview)setTimeout(()=>{if(hint)drawPreview();},0);},true);
+ document.addEventListener('focusout',()=>{if(previews.length)setTimeout(()=>{if(hint)drawPreviews();},0);},true);
  document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text);soon(150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60));soon(150);}else if(t instanceof HTMLInputElement&&t.type==='range'){did('set',nameOf(t,60),t.value);soon(150);}},true);
  // A finished sentence is a likely end of what they meant to write (the send, the search comes next): asked sooner.
  // Only the user's own typing in a text field is typing: a slider moved, a box checked, or what Tab itself typed is not.
@@ -57,8 +63,11 @@ export function startPredict(){
   const f=fieldOf(deepActive()),t=e.composedPath()[0];
   if(!f||!(t instanceof Node)||!(f.el===t||f.el.contains(t)))return;
   lastKey=Date.now();hide();
-  const s=snapshot(f),ended=/[.!?…]["”')]?\s*$/.test(s?.before??'');typingFor=ended?400:1100;
-  did('typed',nameOf(f.el,60)||'a field',s?.before);soon(ended?450:1300,true);
+  const s=snapshot(f),ended=/[.!?…]["”')]?\s*$/.test(s?.before??'');typingFor=ended?250:1100;
+  did('typed',nameOf(f.el,60)||'a field',s?.before);soon(ended?300:1300,true);
+  // Asked ahead of the pause: the moment a sentence ends, and every second and a half while the typing goes on.
+  clearTimeout(typedTimer);typedTimer=window.setTimeout(aheadOfPause,ended?0:450);
+  if(Date.now()-lastAhead>1500&&lastAhead)aheadOfPause();else if(!lastAhead)lastAhead=Date.now();
  },true);
  watchHands();
  window.addEventListener('keydown',onKey,true);
@@ -117,32 +126,70 @@ function settled(quiet=120,max=1500):Promise<void>{
 let typingFor=1100;
 const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
 
-const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused});
+const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:id.startsWith('a')});
 async function guess(){
  if(!active()||running||taking||typing()||document.visibilityState!=='visible')return;
  if(asking)post({type:'cancel',id:asking});
+ // A move asked ahead while they typed shows the moment they stop; this guess, with every word, follows it.
+ const ready=aheadForPause();if(ready&&!hint)show(ready,false,'ahead');
  const id=`p${++seq}`,model=pageModel(160),focus=fieldOf(deepActive());
- asking=id;seen=new Map(model.items.map(i=>[i.id,i]));
+ asking=id;for(const i of model.items)seen.set(i.id,i);
  listen(id);
  ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined);
 }
 /** Asked ahead: the pointer resting on a field is the moment before the user clicks into it, so the guess for "the
  * cursor is in that field" is asked then, exactly as it will be asked after the click; the engine keeps its answer, and
  * the click finds it ready. Nothing shows from this by itself. */
-let restTimer:number|undefined,ahead=0;const askedAhead=new WeakMap<Element,number>();
+let restTimer:number|undefined,typedTimer:number|undefined,ahead=0;const askedAhead=new WeakMap<Element,number>();
 function onRest(event:PointerEvent){
  clearTimeout(restTimer);
  const t=event.composedPath()[0],f=t instanceof Element?fieldOf(t):null;
- if(!f||!event.isTrusted||event.pointerType==='touch'||f.el===fieldOf(deepActive())?.el||Date.now()-(askedAhead.get(f.el)??0)<30_000)return;
- restTimer=window.setTimeout(()=>{
-  if(!active()||running||taking||typing()||document.visibilityState!=='visible')return;
-  askedAhead.set(f.el,Date.now());
-  const name=nameOf(f.el,60)||'a field',last=activity.at(-1);
-  // The moments as they will be once the click focuses it (did() keeps one entry for a repeat).
-  const moments=last?.kind==='focused'&&last.label===name.slice(0,80)?activity:[...activity,{kind:'focused',label:name.slice(0,80)}].slice(-10);
-  const model=pageModel(160);for(const i of model.items)seen.set(i.id,i);
-  ask(`a${++ahead}`,model,moments,name);
- },150);
+ if(!f||!event.isTrusted||event.pointerType==='touch')return;
+ // Resting on a field is working in it (a frame's quiz box is asked about before its first click).
+ restTimer=window.setTimeout(()=>{touched=true;aheadInto(f.el);},90);
+}
+/** Asked ahead for the field the user is about to go into (the pointer rests on it, it is the first empty one when the
+ * page opens, it is the next one in the form they are filling): the guess "the cursor is in that field" is asked as the
+ * focus will ask it, and the click (or Tab key) finds it ready. */
+function aheadInto(el:Element){
+ if(!active()||running||taking||typing()||!touched||document.visibilityState!=='visible'||el===fieldOf(deepActive())?.el||Date.now()-(askedAhead.get(el)??0)<30_000)return;
+ askedAhead.set(el,Date.now());
+ const name=nameOf(el,60)||'a field',last=activity.at(-1);
+ // The moments as they will be once the focus is there (did() keeps one entry for a repeat).
+ const moments=last?.kind==='focused'&&last.label===name.slice(0,80)?activity:[...activity,{kind:'focused',label:name.slice(0,80)}].slice(-10);
+ const model=pageModel(160);for(const i of model.items)seen.set(i.id,i);
+ ask(`a${++ahead}`,model,moments,name);
+}
+/** Asked ahead for the moment typing stops (a sentence ended, a pause began): the same question the pause will ask, so
+ * the send, the search or the next field is ready when they look up. */
+function aheadOfPause(){
+ const f=fieldOf(deepActive());
+ if(!f||!active()||running||taking||ghostShown()||document.visibilityState!=='visible'||(snapshot(f)?.text.trim().length??0)<8)return;
+ lastAhead=Date.now();
+ const id=`a${++ahead}`,model=pageModel(160);for(const i of model.items)seen.set(i.id,i);
+ // Its answer is kept: when they stop, a move that does not hang on the exact words (the send, the search, the next
+ // field) shows at once, while the guess for the final words is made.
+ const stop=portListen(m=>{if(m?.type!=='predict.plan'||m.id!==id||!m.final)return;stop();if(m.plan)typedAhead={el:f.el,plan:m.plan,at:Date.now()};});
+ setTimeout(stop,8000);
+ ask(id,model,activity,nameOf(f.el,60)||'a field');
+}
+let typedAhead:{el:Element;plan:Plan;at:number}|undefined,lastAhead=0;
+/** The move asked ahead while they typed, if it still holds now that they stopped: for this field, a few seconds old,
+ * and typing nothing into it (what they wrote since would change that). */
+function aheadForPause():Plan|undefined{
+ const a=typedAhead,f=fieldOf(deepActive());
+ if(!a||!f||a.el!==f.el||Date.now()-a.at>5000)return;
+ const intoHere=a.plan.steps.some(s=>s.do==='type'&&s.id&&(()=>{const el=findTarget(targetOf(s));return !!el&&(el===f.el||f.el.contains(el));})());
+ return intoHere?undefined:a.plan;
+}
+const empty=(el:Element)=>el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement?!el.value:!(el.textContent??'').trim();
+/** The empty fields in view, in the order a person fills them. */
+function emptyFieldsAfter(from?:Element):Element[]{
+ const all=deepQuery('input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button]):not([type=range]),textarea,[contenteditable=true],[role=textbox]',document,3000)
+  .filter(el=>visible(el)&&!!fieldOf(el)&&empty(el)&&(()=>{const r=el.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight;})());
+ if(!from)return all;
+ const i=all.findIndex(el=>el===from||el.contains(from)||from.contains(el));
+ return i<0?all.filter(el=>from.compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING):all.slice(i+1);
 }
 let stopListening:(()=>void)|undefined;
 function listen(id:string){
@@ -170,18 +217,41 @@ function show(plan:Plan,final:boolean,source?:string){
  chip=document.createElement('div');chip.className='chip';chip.setAttribute('role','status');
  const key=document.createElement('kbd');key.textContent='Tab';const text=document.createElement('span');text.className='text';text.textContent=plan.label;
  chip.append(key,text);chip.addEventListener('mousedown',e=>{e.preventDefault();void go();});surface().appendChild(chip);
- // What it touches is outlined; a drag's drop, dashed.
- const drop=first.do==='drag'&&first.to?findTarget(targetOf({do:'click',id:first.to})):null;
- for(const [at,kind] of [[el,''],[drop,' to']] as [Element|null|undefined,string][])if(at&&visible(at)){const ring=document.createElement('div');ring.className='tab-ring'+kind;surface().appendChild(ring);rings.push(ring);}
+ // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
+ marked=plan.steps.flatMap(step=>{
+  const at=touches(step)?findTarget(targetOf(step)):null,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
+  return[...(at?[{el:at,to:false,text:step.do==='type'?step.text:undefined}]:[]),...(drop?[{el:drop,to:true}]:[])];
+ });
+ for(const m of marked)if(visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
  place();
 }
-/** Text its first step would type into the field the cursor is in (an empty one), shown faintly where it would land. */
-function drawPreview(){
- preview?.remove();preview=null;
- const first=hint?.plan.steps[0],focus=fieldOf(deepActive());
- if(first?.do!=='type'||!first.text||!focus||!hint?.el||!(focus.el===hint.el||focus.el.contains(hint.el)||hint.el.contains(focus.el)))return;
- const snap=snapshot(focus);if(!snap||snap.before.trim()||snap.after.trim())return;
- const caret=caretOf(focus);if(caret)preview=ghostAt(caret,focus.singleLine?first.text.split('\n')[0]:first.text,focus.singleLine);
+type Mark={el:Element;to:boolean;text?:string;ring?:HTMLDivElement};
+let marked:Mark[]=[];
+/** The words a move would type, faintly, where they would land: at the caret in the field the cursor is in, at the start
+ * of any other empty field it fills. A field that already has text keeps it in view (its outline says it changes). */
+function drawPreviews(){
+ for(const g of previews)g.remove();previews=[];preview=null;
+ const focus=fieldOf(deepActive());
+ for(const m of marked){
+  if(!m.text||!m.el.isConnected)continue;const field=fieldOf(m.el);if(!field)continue;
+  const single=field.singleLine,text=single?m.text.split('\n')[0]:m.text;
+  let g:HTMLDivElement|null=null;
+  if(focus&&field.el===focus.el){const snap=snapshot(focus);if(!snap||snap.before.trim()||snap.after.trim())continue;const caret=caretOf(focus);if(caret)g=ghostAt(caret,text,single);}
+  else if(empty(field.el))g=ghostIn(field.el,text,single);
+  if(g){previews.push(g);preview??=g;}
+ }
+}
+let previews:HTMLDivElement[]=[];
+/** Faint text at the start of a field the cursor is not in, in the field's own font. */
+function ghostIn(el:Element,text:string,single:boolean){
+ const s=getComputedStyle(el),r=el.getBoundingClientRect(),px=(v:string)=>parseFloat(v)||0;
+ const left=r.left+px(s.borderLeftWidth)+px(s.paddingLeft),width=Math.max(0,r.width-px(s.borderLeftWidth)-px(s.paddingLeft)-px(s.paddingRight)-px(s.borderRightWidth));
+ const lineHeight=s.lineHeight==='normal'?px(s.fontSize)*1.2:px(s.lineHeight);
+ const top=single?r.top+(r.height-lineHeight)/2:r.top+px(s.borderTopWidth)+px(s.paddingTop);
+ const g=document.createElement('div');g.className='ghost';
+ Object.assign(g.style,{left:`${left}px`,top:`${top}px`,width:`${width}px`,height:single?`${lineHeight}px`:`${Math.max(lineHeight,r.bottom-top-px(s.paddingBottom))}px`,overflow:'hidden',
+  fontFamily:s.fontFamily,fontSize:s.fontSize,fontWeight:s.fontWeight,letterSpacing:s.letterSpacing,lineHeight:`${lineHeight}px`,whiteSpace:single?'pre':'pre-wrap',color:`color-mix(in srgb, ${s.color} 42%, transparent)`});
+ g.textContent=text;surface().appendChild(g);return g;
 }
 /** By the cursor (the focused field) or the thing it would touch; else the bottom corner. */
 function place(){
@@ -189,11 +259,10 @@ function place(){
  const anchor=(fieldOf(deepActive())?.el??hint.el) as Element|undefined,r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
  chip.style.left=`${r?Math.min(Math.max(8,r.left),innerWidth-c.width-12):innerWidth-c.width-20}px`;
  chip.style.top=`${r?Math.min(r.bottom+6,innerHeight-c.height-12):innerHeight-c.height-20}px`;
- const first=hint.plan.steps[0],drop=first.do==='drag'&&first.to?findTarget(targetOf({do:'click',id:first.to})):null;
- [hint.el,drop].filter((at):at is Element=>!!at&&at.isConnected).forEach((at,i)=>{const ring=rings[i],e=at.getBoundingClientRect();if(ring)Object.assign(ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});});
- drawPreview();
+ for(const m of marked)if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
+ drawPreviews();
 }
-function hide(){chip?.remove();for(const r of rings)r.remove();preview?.remove();chip=null;rings=[];preview=null;hint=null;}
+function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;}
 /** A move in words, by what each step touched ("type “…” into Street address", "drag “Write tests” onto “Done”"), so it
  * can be shown to the model later as what this person took or turned down, and labelled when it is the next move. */
 function wordsOf(plan:{steps:PlanStep[]}){
@@ -278,4 +347,4 @@ function confirmEnter(what:string):Promise<boolean>{
  return new Promise(resolve=>{waitEnter=yes=>{waitEnter=null;box.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
-export const predictState=()=>({showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,plan:hint?.plan});
+export const predictState=()=>({showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan});
