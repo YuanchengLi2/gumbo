@@ -19,7 +19,7 @@ const warmed=new Map<string,number>();
 const arounds=new Map<number,{at:number;items:Promise<{title:string;text:string}[]>}>();
 function browserAround(tab:number|undefined):Promise<{title:string;text:string}[]>{
  if(tab===undefined)return Promise.resolve([]);
- const had=arounds.get(tab);if(had&&Date.now()-had.at<8000)return had.items;
+ const had=arounds.get(tab);if(had&&Date.now()-had.at<30_000)return had.items;
  const items=Promise.all([justLeft(tab).catch(()=>null),chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])]).then(([left,tabs])=>{
   const open=tabs.filter(t=>t.id!==tab&&!t.incognito&&t.title).slice(0,15).map(t=>`- ${t.title!.slice(0,80)}`).join('\n');
   return[...(left?[{title:`the tab they just left: ${left.title}`,text:left.text.slice(0,1200)}]:[]),...(open?[{title:'their other open tabs',text:open}]:[])];
@@ -38,13 +38,14 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  // The memory follows the writing: when what they write moved on, its fresh search gets a moment (0.12 s) to come in, so
  // the suggestion is made with the memory for these words, not the last ones.
  if(!recall.memory.length)recall.memory=await fieldReady(key);
- else recall.memory=(await fieldCurrent(key,120)).items;
+ else recall.memory=(await fieldCurrent(key,60)).items;
  // What they copied a few minutes ago, in any tab (held in the worker: no wait).
  recall.copied=(await lately(c.url)).copied.filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
  // The rest of their browser, as Tab for actions and the agent have it: the tab they just left (what they were reading or
  // were told is often what they now write) and the titles of their other open tabs. Kept a few seconds, so typing never
  // waits on it again.
- const around=await browserAround(tab);
+ // Never waited on past a moment: the first time it is read behind this suggestion, for the next.
+ const around=await Promise.race([browserAround(tab),new Promise<[]>(r=>setTimeout(()=>r([]),40))]);
  recall.reading=[...around,...recall.reading];
  const {system,messages,known}=tabRequest(message.context,message.before,message.after,recall);
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:message.context.singleLine,known,final,lastWord,own:message.context.thread?.map(m=>m.text).join('\n')});
@@ -113,7 +114,8 @@ export async function barFor(site:string):Promise<{debounceMs:number;minWords:nu
   const mine=(await recent('suggestions',60)).filter(s=>s.site===site&&s.kind==='text');
   if(mine.length<8)return{debounceMs:120,minWords:1};
   const taken=mine.filter(s=>s.outcome==='accepted'||s.outcome==='partial').length/mine.length;
-  return taken<0.08?{debounceMs:600,minWords:3}:taken<0.2?{debounceMs:300,minWords:2}:{debounceMs:120,minWords:1};
+  // Suggestions they rarely take come less often (after more words), never later: a pause is felt at once.
+  return taken<0.08?{debounceMs:250,minWords:3}:taken<0.2?{debounceMs:150,minWords:2}:{debounceMs:120,minWords:1};
  }catch{return{debounceMs:120,minWords:1};}
 }
 export {suggestionOutcomes};

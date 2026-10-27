@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Home / Chirp</title><link rel="stylesheet" href="style.css">
+<style>
+ .composer{border:1px solid #ddd;border-radius:12px;padding:12px;max-width:560px}
+ .composer [role=textbox]{min-height:60px;outline:none;font-size:18px}
+ .composer .bar{display:flex;gap:6px;align-items:center;margin-top:8px}
+ .composer .bar .post{margin-left:auto}
+ nav a{margin-right:12px}
+</style></head>
+<body>
+<nav><a href="#home">Home</a><a href="#explore">Explore</a><a href="#notifications">Notifications</a><a href="#messages">Messages</a><a href="#profile">Profile</a></nav>
+<main>
+ <h1>Home</h1>
+ <!-- A social composer as such sites build it: an editable box, a toolbar of icons, and Post. -->
+ <div class="composer">
+  <div role="textbox" contenteditable="true" aria-label="Post text" aria-multiline="true" data-placeholder="What's happening?"></div>
+  <div class="bar">
+   <button aria-label="Add photos or video">🖼</button><button aria-label="Add a GIF">GIF</button><button aria-label="Add a poll">📊</button><button aria-label="Add emoji">🙂</button><button aria-label="Schedule post">🗓</button>
+   <button class="post" onclick="document.getElementById('status').textContent='Posted: '+document.querySelector('[role=textbox]').innerText">Post</button>
+  </div>
+ </div>
+ <p id="status"></p>
+ <article><h2>@dana</h2><p>Shipping the new onboarding today. Feedback welcome!</p><button>Reply</button><button>Repost</button><button>Like</button></article>
+ <article><h2>@omar</h2><p>Anyone going to the design meetup on Thursday?</p><button>Reply</button><button>Repost</button><button>Like</button></article>
+</main>
+</body>
+</html>

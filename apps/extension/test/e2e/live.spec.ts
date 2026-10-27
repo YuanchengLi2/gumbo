@@ -264,6 +264,15 @@ test('Tab: the search they were about to run, on Google, from what they copied',
  expect(state?.showing).toBe(true);expect(JSON.stringify(state.plan.steps).toLowerCase()).toContain('ramen');
 });
 
+test('Tab: a post written in a composer gets Post',async({page,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/post.html`);await page.waitForTimeout(1500);
+ await page.locator('[role=textbox]').click();
+ await page.keyboard.type('Just finished my first marathon. Legs are gone but so worth it.',{delay:35});
+ const {state,shownMs}=await guess(signedIn,page,10_000);
+ note(`  Post written in a composer: ${describe(state)}${shownMs!==undefined&&state?.showing?` (shown ${shownMs} ms after the last key)`:''}`);
+ if(state?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(800);await page.keyboard.press('Enter');await page.waitForTimeout(800);note(`    after Alt+Q (and Enter for a final step): ${await page.locator('#status').textContent()}`);}
+});
+
 test('Redesigned Tab on YouTube and GitHub: nothing as pages open, then the next part of what the user starts',async({page,signedIn})=>{
  test.setTimeout(180_000);
  const step=async(what:string,ms=9000)=>{const {state,shownMs}=await guess(signedIn,page,ms);note(`  ${what}: ${describe(state)}${shownMs!==undefined&&state?.showing?` (${shownMs} ms)`:''}`);return state;};
