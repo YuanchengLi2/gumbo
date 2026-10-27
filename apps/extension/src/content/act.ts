@@ -28,11 +28,13 @@ export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:un
 /** Words that make a click or a key final: sending, posting, buying, deleting. These always wait for Enter. */
 const finalWords=/\b(send|submit|post|publish|tweet|reply|delete|remove|discard|pay|purchase|buy|order|place order|checkout|confirm|transfer|sign|merge|deploy|unsubscribe|cancel (subscription|plan)|archive|block|report)\b/i;
 export function irreversible(action:Action,el?:Element|null):boolean{
- if(action.do==='click'&&el){const name=nameOf(el,60);return finalWords.test(name)||(el instanceof HTMLButtonElement&&el.type==='submit'&&!!el.form)||(el instanceof HTMLInputElement&&el.type==='submit');}
- // Enter in a form submits it, unless it is a search (running a search changes nothing).
- if(action.do==='key'){const el=action.target?findTarget(action.target):null;return /(^|\+)enter$/i.test(action.combo)&&!!el?.closest('form')&&!el.closest('[role=search]')&&!(el instanceof HTMLInputElement&&el.type==='search');}
+ if(action.do==='click'&&el){const name=nameOf(el,60),form=(el as HTMLButtonElement).form;return finalWords.test(name)&&!navigates(form)||(el instanceof HTMLButtonElement&&el.type==='submit'&&!!form&&!navigates(form))||(el instanceof HTMLInputElement&&el.type==='submit'&&!navigates(el.form));}
+ // Enter in a form submits it, unless it is a search or a form that only goes to an address (nothing changes).
+ if(action.do==='key'){const el=action.target?findTarget(action.target):null,form=el?.closest('form');return /(^|\+)enter$/i.test(action.combo)&&!!form&&!navigates(form as HTMLFormElement)&&!el!.closest('[role=search]')&&!(el instanceof HTMLInputElement&&el.type==='search');}
  return false;
 }
+/** A form that only goes to an address with what was typed (a search, a filter): it reads, it changes nothing. */
+const navigates=(form:HTMLFormElement|null|undefined)=>!!form&&!!form.getAttribute('action')&&form.method==='get';
 
 export function findTarget(target:Target):Element|null{
  if(target.point){const [x,y]=target.point;return document.elementFromPoint(x,y);}
@@ -96,8 +98,27 @@ export async function perform(action:Action):Promise<Done>{
    return{ok:result.ok,changed:result.ok,detail:result.ok?`Typed into ${nameOf(field.el,60)||'the field'}.`:`Could not type into ${nameOf(field.el,60)||'the field'} (${result.reason}).`,item:describe(field.el)};
   }
   case 'key':{
-   const el=(action.target?findTarget(action.target):null)??document.activeElement??document.body;
-   const changed=await watch(()=>keyPress(el,action.combo));
+   // A key belongs where the cursor is: named on something that is not a field (the box's wrapper, its button) while
+   // the cursor is in a field, it goes to that field.
+   const named=action.target?findTarget(action.target):null,cursor=fieldOf(deepActive())?.el;
+   const el=(named&&(fieldOf(named)||!cursor)?named:cursor??named)??document.activeElement??document.body;
+   const url=location.href,before=(el as HTMLInputElement).value??(el as HTMLElement).innerText;
+   let changed=await watch(()=>keyPress(el,action.combo));
+   // Many pages ignore a simulated Enter. When it went nowhere (after a second and a half the address is the same and the
+   // field still holds the same text, so nothing took it), Enter in a field does what it stands for there: submit the
+   // field's form, as the browser's own Enter does; else press the box's own submitting button.
+   if(/^enter$/i.test(action.combo)&&fieldOf(el)){
+    // Enter took effect when the page went somewhere (a search ran) or the box emptied (a message went); a box whose text
+    // merely changed (an autocomplete filled in) has not been sent.
+    const went=()=>location.href!==url||!!before?.trim()&&!((el as HTMLInputElement).value??(el as HTMLElement).innerText)?.trim();
+    const settle=async()=>{for(let i=0;i<5&&!went();i++)await new Promise(r=>setTimeout(r,100));};
+    await settle();
+    // The box's own submitting button (through its form when it has one, as the browser would); a bare form with no
+    // button at all is submitted as it is. A form's first button is not used blindly: it is often a clear or close.
+    const form=(el as HTMLInputElement).form??el.closest?.('form'),button=submitAfter(el);
+    if(!went()&&button){if(form instanceof HTMLFormElement&&form.contains(button)&&(button as HTMLButtonElement).type==='submit')form.requestSubmit(button as HTMLButtonElement);else pointerClick(button);await settle();changed=changed||went();}
+    if(!went()&&!button&&form instanceof HTMLFormElement&&!form.querySelector('button,input[type=submit]')){form.requestSubmit();await settle();changed=changed||went();}
+   }
    return{ok:true,changed,detail:`Pressed ${action.combo}.`};
   }
   case 'select':{
@@ -147,6 +168,21 @@ const label=(t:Target)=>t.name?`"${t.name}"`:t.text?`"${t.text}"`:t.id??t.path??
 const frames=(n:number)=>new Promise<void>(resolve=>{const step=(k:number)=>k?requestAnimationFrame(()=>step(k-1)):resolve();step(n);});
 
 /** Runs a step and says whether the page reacted within a moment: the DOM, the address, the focus or a value changed. */
+/** The button that submits a box: after it in the nearest container holding one (four levels up at most), a submit
+ * button or one that says it submits (search, send, post, go, find, apply, reply, comment), never one that clears or
+ * closes. */
+const submits=/\b(search|send|submit|post|go|find|apply|reply|comment|save)\b/i,undoes=/\b(clear|close|cancel|reset|delete|remove|dismiss|back)\b/i;
+function submitAfter(field:Element):HTMLElement|null{
+ let n=field.parentElement;
+ for(let i=0;i<4&&n&&n!==document.body;i++,n=n.parentElement){
+  const after=deepQuery('button,[role=button],input[type=submit]',n).find(b=>{
+   const name=nameOf(b,40);
+   return visible(b)&&!b.contains(field)&&!!(field.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING)&&!undoes.test(name)&&(b.tagName==='INPUT'&&(b as HTMLInputElement).type==='submit'||submits.test(name));
+  });
+  if(after)return after as HTMLElement;
+ }
+ return null;
+}
 async function watch(run:()=>void|Promise<unknown>,ms=700,countFocus=true):Promise<boolean>{
  const url=location.href,focus=document.activeElement;let mutated=false;
  const observer=new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element&&r.target.tagName==='GUMBO-LAYER')))mutated=true;});

@@ -9,6 +9,7 @@ import {pageText} from './capture';
 import {surface,layer,raise} from './ui/root';
 import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
+import {startGlow,setLikely,clearLikely,takeNow,pointerAt,glowState} from './glow';
 import {post,listen as portListen,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
@@ -31,7 +32,14 @@ const activity:{kind:string;label:string;text?:string}[]=[];
 const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame()&&!unseenFrame();
 const actionable='a[href],button,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],summary,input[type=submit],input[type=button],input[type=checkbox],input[type=radio],label';
 const dialogs='[role=dialog],[role=alertdialog],dialog,[aria-modal=true]';
-const did=(kind:string,label:string,text?:string)=>{const prev=activity.at(-1);if(prev&&prev.kind===kind&&prev.label===label)activity.pop();activity.push({kind,label:label.slice(0,80),text:text?.slice(-200)});if(activity.length>10)activity.shift();};
+const did=(kind:string,label:string,text?:string)=>{
+ const prev=activity.at(-1);if(prev&&prev.kind===kind&&prev.label===label)activity.pop();activity.push({kind,label:label.slice(0,80),text:text?.slice(-200)});if(activity.length>10)activity.shift();
+ // The tab's trail across pages (session.ts), from the top page: what they have been doing, so Tab knows where they are
+ // heading. Typing on in one field is sent at most every 1.5 s.
+ if(inFrame||(kind==='typed'&&prev?.kind==='typed'&&prev.label===label.slice(0,80)&&Date.now()-lastLogged<1500))return;
+ lastLogged=Date.now();post({type:'session.did',kind,label:label.slice(0,80),text:text?.slice(-200),title:document.title});
+};
+let lastLogged=0;
 /** What a hand touched, in a few words: the card, row, item or control it belongs to. */
 const what=(el?:Element|null)=>{if(!el)return 'something';const at=el.closest(`[draggable=true],[role=listitem],[role=row],li,tr,${actionable}`)??el;return nameOf(at,40)||squash((at as HTMLElement).innerText??'').slice(0,40)||roleOf(at);};
 
@@ -42,8 +50,12 @@ const inFrame=window!==window.top;let touched=!inFrame,opened=false;
 /** The page's first moment, once it is in view: what to do here, and, asked ahead, the first empty field in view. */
 function opening(){
  if(opened||inFrame||!settings||document.visibilityState!=='visible')return;
- opened=true;const first=emptyFieldsAfter()[0];if(first)aheadInto(first);
+ opened=true;const first=emptyFieldsAfter()[0];if(first)aheadInto(first);page(400);
 }
+/** A page moment: the page opened, a click that did not start something here, a scroll that stopped on new things, a
+ * return to the tab. Tab ranks where they will most likely go next on the page (from their trail, habits, memory, tabs
+ * and what is in view), and the page picks among those live as they move and type (glow.ts). */
+function page(ms:number){working=null;soon(ms);}
 /** Where the user is working (the element of their last task moment): Tab's move is chosen from what is around it, never
  * from the whole page, as Cursor's Tab continues the code being written rather than guessing at another file. */
 let working:Element|null=null;
@@ -76,7 +88,11 @@ export function startPredict(){
  void loadSettings().then(s=>{settings=s;opening();});onSettings(s=>{settings=s;if(!active())hide();});
  // A page opened behind another tab has its first moment when it comes into view; coming back to a tab is a moment too
  // (what they did in the tab they left is part of it).
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!inFrame&&!opened)opening();});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){page(250);returned=true;}});
+ startGlow();
+ // A scroll that stopped on new things (half a screen or more since the last guess): what they came to see is in view.
+ let scrolled:number|undefined,guessedAtY=scrollY;
+ window.addEventListener('scroll',()=>{clearTimeout(scrolled);scrolled=window.setTimeout(()=>{if(!running&&!inFrame&&Math.abs(scrollY-guessedAtY)>innerHeight*0.5){guessedAtY=scrollY;page(0);}},450);},{passive:true});
  if(inFrame)for(const type of ['pointerdown','keydown','focusin'])document.addEventListener(type,e=>{if(e.isTrusted)touched=true;},true);
  window.addEventListener('blur',()=>{if(!running&&!waitEnter&&!taking)hide();});
  did('opened',document.title);
@@ -114,8 +130,7 @@ export function startPredict(){
  window.addEventListener('resize',()=>requestAnimationFrame(place));
  // A new route in an app that never reloads, and a dialog opening, are new moments to guess at.
  let href=location.href;
- // A new route is a new page: nothing is offered until they do something there.
- setInterval(()=>{if(location.href!==href){href=location.href;did('went to',document.title||location.pathname);if(!running)hide();}},600);
+ setInterval(()=>{if(location.href!==href){href=location.href;did('went to',document.title||location.pathname);if(!running){hide();clearLikely();page(300);}}},600);
  // A dialog the user just opened (a click a moment ago) is a task moment, in that dialog; one the page opens by itself
  // is not.
  new MutationObserver(records=>{
@@ -149,12 +164,13 @@ function onClick(event:MouseEvent){
  // The click that ends a press on a field: its guess is already on the way (or showing).
  const f=target?null:fieldOf(event.composedPath()[0] as Element),same=!!(f&&pressed&&pressed.el===f.el&&Date.now()-pressed.at<800);
  if(same)return;
- if(!running)hide();
- // Only a click that starts or changes something here is a task moment (it opened a menu, chose a tab or an option,
- // ticked a box), or one on a drawing; a link or a button that takes them elsewhere is not: what comes next is there.
+ if(!running){hide();clearLikely();}
+ // A click that starts or changes something here (opened a menu, chose a tab or an option, ticked a box) is a task
+ // moment, there; any other click is a page moment: where they go next on the page (a link that leaves the page is
+ // followed by the next page's own moment).
  const path=event.composedPath()[0] as Element|undefined;
  const toggle=path?.closest?.('[aria-haspopup],[aria-expanded],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=option],[role=switch],[role=checkbox],[role=radio],summary,label,input[type=checkbox],input[type=radio]');
- if(toggle)task(toggle,150);else if(path instanceof HTMLCanvasElement)task(null,150);
+ if(toggle)task(toggle,150);else if(path instanceof HTMLCanvasElement)task(null,150);else page(200);
 }
 /** Asks once the page has settled: a moment after what the user did, then until nothing has been added, removed, opened
  * or closed for a beat (a menu opening, a route loading), a second and a half at most. quick: what the user did changes
@@ -181,11 +197,17 @@ const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
 let lastMoment='',lastMomentAt=0;
 /** The next guess is for coming back to this tab: asked before the user does anything here (ahead, for thrift.ts). */
 let returned=false;
-const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false,where?:{kind:string;text:string})=>post({type:'predict',id,title:document.title,text:pageText(1500),...(where?{where}:{}),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:back||id.startsWith('a'),
+const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false,where?:{kind:string;text:string})=>post({type:'predict',id,title:document.title,text:pageText(1500),...(where?{where}:{}),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby,near:nearPointer(i.rect)})),activity:moments,focused,ahead:back||id.startsWith('a'),
  // A clue: the user's own hand on this page a moment ago (only then may a move show; see the engine).
  clue:Date.now()-lastInput<20_000,
  // A page drawn as pixels: the engine looks at a picture of the view, and moves may point at spots in it.
  ...(!inFrame&&drawnSurface()?{drawn:true,view:[innerWidth,innerHeight]}:{})});
+/** Whether an element is within reach of their pointer (where they are looking and heading). */
+function nearPointer(rect:[number,number,number,number]){
+ const p=pointerAt();if(!p)return undefined;
+ const dx=Math.max(rect[0]-p[0],0,p[0]-(rect[0]+rect[2])),dy=Math.max(rect[1]-p[1],0,p[1]-(rect[1]+rect[3]));
+ return Math.hypot(dx,dy)<220||undefined;
+}
 /** When the user last clicked, pressed a key or touched this page (their own input, never the page's). */
 let lastInput=0;
 /** Whether the page is mostly drawn as pixels (a document, a sheet, a design, a board, a map): canvases cover a good part
@@ -205,17 +227,20 @@ async function guess(){
  // The same moment as the last guess (nothing done since, the same address and cursor): not asked again. A page that keeps
  // changing by itself (a chat streaming, a feed, popups coming and going) would otherwise ask every second or two, and
  // the move would flip while the user looks at it (seen in the logs: the same page asked about 40 times in a minute).
- const focused=fieldOf(deepActive()),moment=`${location.href}|${activity.length}|${JSON.stringify(activity.slice(-2))}|${focused?nameOf(focused.el,60):''}`;
+ // A task moment looks at where they are working; a page moment at the page, by what is in view.
+ const scope=working&&working.isConnected&&!drawnSurface()?scopeOf(working):null;
+ const focused=fieldOf(deepActive()),moment=`${location.href}|${activity.length}|${JSON.stringify(activity.slice(-2))}|${focused?nameOf(focused.el,60):''}|${scope?'task':`page ${Math.round(scrollY/(innerHeight*0.5))}`}`;
  if(moment===lastMoment&&Date.now()-lastMomentAt<60_000)return;
  lastMoment=moment;lastMomentAt=Date.now();
  if(asking)post({type:'cancel',id:asking});
- const scope=working&&working.isConnected&&!drawnSurface()?scopeOf(working):null;
- const id=`p${++seq}`,model=scope?pageModel(50,scope):pageModel(160),focus=focused;
- asking=id;for(const i of model.items)seen.set(i.id,i);
+ const id=`p${++seq}`,model=scope?pageModel(50,scope):pageModel(120),focus=focused;
+ asking=id;mode=scope?'task':'page';for(const i of model.items)seen.set(i.id,i);
  listen(id);
  const back=returned;returned=false;
  ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined,back,scope?whereOf(scope):undefined);
 }
+/** What the guess on its way is for: continuing a task where they are working, or where they go next on the page. */
+let mode:'task'|'page'='task';
 /** Asked ahead: the pointer resting on a field is the moment before the user clicks into it, so the guess for "the
  * cursor is in that field" is asked then, exactly as it will be asked after the click; the engine keeps its answer, and
  * the click finds it ready. Nothing shows from this by itself. */
@@ -279,7 +304,15 @@ function listen(id:string){
   if(m?.type!=='predict.plan'||m.id!==id||Number(id.slice(1))!==seq)return;
   if(m.final){asking=undefined;finalArrived?.();}
   if(running||typing())return;
-  if(m.plan)show(m.plan,!!m.final,m.source);else if(m.final&&hint&&!hint.final&&!taking)hide();
+  // Where they go next on the page: the ranked guess goes to the quiet line, which follows their pointer (glow.ts). A
+  // page guess that fills or types (a form they have not started) shows as a move, as in a task.
+  if(mode==='page'&&(!m.plan||!['type','select','drag','key'].includes(m.plan.steps[0]?.do))){
+   // A best move without the ranked list is a list of one.
+   const first=m.plan?.steps[0];
+   if(m.final)setLikely(m.plan&&!m.plan.likely?.length&&first?.id&&['click','hover','double_click','right_click'].includes(first.do)?{...m.plan,likely:[{id:first.id,p:m.plan.confidence,label:m.plan.label,do:first.do as 'click'}]}:m.plan);
+   return;
+  }
+  if(m.plan){clearLikely();show(m.plan,!!m.final,m.source);}else if(m.final&&hint&&!hint.final&&!taking)hide();
  });
 }
 
@@ -367,6 +400,8 @@ function onKey(event:KeyboardEvent){
  if(!alive())return;
  if(event.isComposing)return;
  if(waitEnter){if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();waitEnter(event.key==='Enter');}return;}
+ // Alt+Q with no move shown in a task: the page guess, as their pointer and typing stand right now.
+ if(takes(event)&&!hint&&!running&&!ghostShown()){const now=takeNow();if(now){hint={plan:now.plan,el:now.el,final:true,source:'page'};took(event);clearLikely();void go();}return;}
  if(!hint||running)return;
  if(ghostShown()){hide();return;}
  if(takes(event)){took(event);void go();return;}
@@ -433,7 +468,7 @@ async function go(){
   if((!touches(next)||el)&&here)show({label:labelOn(next,el),confidence:current.plan.confidence,steps:[next]},true,'then');
  }
  // What Tab just did is a task moment too, where it did it (a menu it opened, the form it filled).
- task(lastTouched??working,next?60:150,!!next);
+ if(current.source==='page')page(150);else task(lastTouched??working,next?60:150,!!next);
 }
 let lastTouched:Element|null=null;
 /** A next move's line, from what it touches now. */
@@ -449,4 +484,4 @@ function confirmEnter(what:string):Promise<boolean>{
  return new Promise(resolve=>{waitEnter=yes=>{waitEnter=null;box.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
-export const predictState=()=>({showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan});
+export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan});

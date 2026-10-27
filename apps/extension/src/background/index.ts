@@ -16,6 +16,7 @@ import './card';
 import './memory-view';
 import './predict';
 import './drawn-tab';
+import './session';
 import {thrifty} from './thrift';
 import {measureActions} from './actions';
 import {importHistory,importState} from './history';

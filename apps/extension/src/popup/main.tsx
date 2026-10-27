@@ -46,6 +46,7 @@ function Popup(){
     <p>{stats?.accepted??0} taken of {stats?.shown??0} shown{stats?.dismissed?` · ${stats.dismissed} dismissed`:''}{stats?.failures?<span className="bad"> · {stats.failures} failed</span>:''}</p>
     {!!stats?.failures&&<Failures/>}
     {spend?.todayUsd!==undefined&&<p className="muted">Today's AI: ${spend.todayUsd.toFixed(2)}</p>}
+    <Hits/>
     {spend?.thrifty&&<p className="muted">Saving credits: Tab guesses once you act, not ahead of you.</p>}
     <div className="row"><button className="link" disabled={measuring} onClick={()=>{setMeasuring(true);void ask({type:'meter.run'}).then(setMeter).finally(()=>setMeasuring(false));}}>{measuring?'Checking Tab on your writing…':'Check Tab on my writing'}</button></div>
     {meter&&('error' in meter?<p className="muted">{meter.error}</p>:<p className="muted">On your writing: shows {Math.round(meter.showRate*100)}% of the time, right {Math.round(meter.precision*100)}% when it does</p>)}
@@ -85,6 +86,15 @@ function Popup(){
    <footer><span className="muted">{auth.email}</span><button className="link" onClick={()=>void ask({type:'auth.signout'}).then(()=>setAuth({signedIn:false}))}>Sign out</button></footer>
   </>}
  </main>;
+}
+/** How often Tab's guess was where they went next: of their clicks on pages with a guess, the share that hit the one
+ * marked, and the share among its likely moves (counted on this computer). */
+function Hits(){
+ const [hits,setHits]=useState<{n:number;shown:number;hit:number;top:number}>();
+ useEffect(()=>{void chrome.storage.local.get('tab-hits').then(r=>setHits((r['tab-hits'] as any)?.['*']));},[]);
+ if(!hits||hits.n<5)return null;
+ const pct=(a:number,b:number)=>b?Math.round(a/b*100):0;
+ return <p className="muted">Next click guessed: {pct(hits.hit,hits.shown)}% when marked · in its top five {pct(hits.top,hits.n)}% <span>({hits.n} clicks)</span></p>;
 }
 /** What went wrong lately (where, in which editor, what), kept on this computer, to read and to copy into a report. */
 function Failures(){

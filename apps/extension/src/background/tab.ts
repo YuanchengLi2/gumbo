@@ -9,6 +9,7 @@ import type {FieldContext} from '../content/context';
 import {fieldMemory,fieldReady,fieldCurrent,fieldKey,fieldQuery,writingQuery} from './memory-context';
 import {lately} from './lately';
 import {justLeft} from './workspace';
+import {doingText} from './session';
 /** Tab in the engine: a page asks with the field's context and the text around the caret; the answer streams back
  * through the suggestion checks a whole word at a time, and the model is stopped the moment the suggestion is complete
  * (a sentence ended), which saves both time and tokens. Focusing a field warms the model's cache with the part of the
@@ -20,9 +21,10 @@ const arounds=new Map<number,{at:number;items:Promise<{title:string;text:string}
 function browserAround(tab:number|undefined):Promise<{title:string;text:string}[]>{
  if(tab===undefined)return Promise.resolve([]);
  const had=arounds.get(tab);if(had&&Date.now()-had.at<30_000)return had.items;
- const items=Promise.all([justLeft(tab).catch(()=>null),chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])]).then(([left,tabs])=>{
+ const items=Promise.all([justLeft(tab).catch(()=>null),chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[]),doingText(tab,10).catch(()=>'')]).then(([left,tabs,doing])=>{
   const open=tabs.filter(t=>t.id!==tab&&!t.incognito&&t.title).slice(0,15).map(t=>`- ${t.title!.slice(0,80)}`).join('\n');
-  return[...(left?[{title:`the tab they just left: ${left.title}`,text:left.text.slice(0,1200)}]:[]),...(open?[{title:'their other open tabs',text:open}]:[])];
+  const trail=doing.replace(/^<[^>]+>\n|\n<\/[^>]+>$/g,'');
+  return[...(trail?[{title:'what they have been doing in this tab',text:trail}]:[]),...(left?[{title:`the tab they just left: ${left.title}`,text:left.text.slice(0,1200)}]:[]),...(open?[{title:'their other open tabs',text:open}]:[])];
  });
  arounds.set(tab,{at:Date.now(),items});if(arounds.size>30)arounds.delete(arounds.keys().next().value!);
  return items;

@@ -14,7 +14,10 @@ export type PlanStep={do:'click'|'double_click'|'right_click'|'hover'|'drag'|'ty
  /** The next move's element when it is not on the page yet, by what it is. */role?:string;name?:string;
  /** On a page drawn as pixels (a document, a design, a board): a point in the picture of the screen, and a drag's drop
   * point. The engine turns them into the page's own coordinates. */at?:[number,number];toAt?:[number,number]};
-export type Plan={label:string;confidence:number;steps:PlanStep[];then?:PlanStep};
+/** Where they may go next on the page: elements ranked by how likely each is their next move, with a few words for each.
+ * The page picks among them as they move (their pointer, what they are typing), so the one shown follows them. */
+export type Likely={id:string;p:number;label:string;do:'click'|'hover'|'double_click'|'right_click'};
+export type Plan={label:string;confidence:number;steps:PlanStep[];then?:PlanStep;likely?:Likely[]};
 export const MAX_FILLS=8;
 const fills=new Set(['type','select']);
 
@@ -52,10 +55,24 @@ function planFrom(raw:any,ids:Set<string>,known:string):Plan|null{
   if(steps.length&&!(fills.has(step.do)&&fills.has(steps[0].do)))break;
   steps.push(step);if(!fills.has(step.do))break;
  }
- if(!steps.length)return null;
+ const likely=likelyOf(raw?.likely,ids);
+ if(!steps.length)return likely.length?{label:likely[0].label,confidence:likely[0].p,steps:[{do:likely[0].do,id:likely[0].id}],likely}:null;
  const confidence=Math.max(0,Math.min(1,Number(raw.confidence)||0));
  const then=raw?.then&&typeof raw.then==='object'?checked(raw.then,ids,known,true):null;
- return{label:String(raw.label??'').trim().slice(0,60)||labelOf(steps[0]),confidence,steps,...(then?{then}:{})};
+ return{label:String(raw.label??'').trim().slice(0,60)||labelOf(steps[0]),confidence,steps,...(then?{then}:{}),...(likely.length?{likely}:{})};
+}
+/** The ranked list, checked: elements on the page, each once, likelihoods between 0 and 1, five at most. */
+function likelyOf(list:unknown,ids:Set<string>):Likely[]{
+ if(!Array.isArray(list))return[];
+ const out:Likely[]=[],seen=new Set<string>();
+ for(const l of list){
+  if(!l||typeof l!=='object')continue;const {id,p,label,do:verb}=l as any;
+  if(typeof id!=='string'||!ids.has(id)||seen.has(id))continue;seen.add(id);
+  const how=['hover','double_click','right_click'].includes(verb)?verb:'click';
+  out.push({id,p:Math.max(0,Math.min(1,Number(p)||0)),label:String(label??'').trim().slice(0,50)||'Open it',do:how});
+  if(out.length>=5)break;
+ }
+ return out.sort((a,b)=>b.p-a.p);
 }
 /** A step, checked; the next move ("ahead") may name its element (role and name) instead, as it may not exist yet. */
 function checked(s:any,ids:Set<string>,known:string,ahead=false):PlanStep|null{

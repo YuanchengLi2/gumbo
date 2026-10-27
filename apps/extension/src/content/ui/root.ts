@@ -13,11 +13,14 @@ const css=`
 .move{position:fixed;pointer-events:none;max-width:240px;padding:1px 7px 1px 3px;border-radius:6px;font:11.5px/1.55 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;color:#2a2a2a;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.09);box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:5px;align-items:center;white-space:nowrap;animation:in .12s ease-out}
 .move .text{overflow:hidden;text-overflow:ellipsis}
 .move kbd{font:10px Consolas,ui-monospace,monospace;border:1px solid rgba(0,0,0,.14);border-radius:3px;padding:0 3px;color:#666;background:#f6f6f6}
+.glow{position:fixed;pointer-events:none;height:2px;border-radius:2px;background:rgba(0,0,0,.42);box-shadow:0 0 6px rgba(0,0,0,.18);transition:left .12s ease,top .12s ease,width .12s ease;animation:fade .18s ease-out}
+.peek{opacity:.96}
+@keyframes fade{from{opacity:0}to{opacity:1}}
 .tab-ring{position:fixed;pointer-events:none;border:1.5px solid rgba(0,0,0,.32);border-radius:7px;box-shadow:0 0 0 2px rgba(255,255,255,.45);animation:in .12s ease-out}
 .tab-ring.to{border-style:dashed}
 .tab-ring.dot{border-radius:50%;border-width:2px}
 @keyframes in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
-@media (prefers-color-scheme:dark){.move{color:#e6e6e6;background:rgba(35,35,35,.9);border-color:rgba(255,255,255,.12)}.move kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
+@media (prefers-color-scheme:dark){.glow{background:rgba(255,255,255,.55);box-shadow:0 0 6px rgba(255,255,255,.2)}.move{color:#e6e6e6;background:rgba(35,35,35,.9);border-color:rgba(255,255,255,.12)}.move kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
 `;
 export function layer():ShadowRoot{
  if(root&&root.host.isConnected)return root;

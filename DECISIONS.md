@@ -181,6 +181,29 @@
   above Haiku 5.5's, and its speed for Tab is the open question. Taken back minutes later, at the user's request: Haiku
   for the quick calls and notes, DeepSeek for the agent, as before. Terra stays a choice in the popup, and quick calls to
   a model other than Claude still go without thinking or a warm-up.
+- **Tab predicts where they go, on every page (October 27, the user's design):** it has to be proactive, at many more
+  moments, and never intrusive.
+  - **When:** a page opening, any click, a scroll that stopped on new things, coming back to a tab, as well as every task
+    moment. Each guess is made ahead, so the move is ready when they reach for it.
+  - **What it knows:** a log of what they have been doing in the tab across pages (session.ts: pages arrived at, clicks,
+    typing, choices, copies; kept for the browser session), their habits on the site, memory, other tabs, what is in
+    view, and what is near their pointer. Text suggestions read the same log.
+  - **What it gives:** its best move and "likely", the up to five elements they will most likely use next, each with a
+    probability and a few words. The page picks among them live (glow.ts) by where the pointer heads (direction and
+    speed), where they are typing, and what is in view, and switches only when another clearly leads.
+  - **How it shows:** a faint line under the element, only while they move or type, never mid-scroll. Holding Alt shows
+    the likely moves in words; Alt+Q makes the one marked (or, unmarked, the best as the pointer stands now). Inside a
+    task the small tag stays.
+  - **How right it is:** every real click is checked against the line and the likely moves; the popup shows both rates.
+  - **Live, real model:** walking a course site with Alt+Q alone, an email about Homework 3 in another tab, it went
+    Dashboard → Biology 101 (0.45-0.55) → Assignments (0.45-0.5) → Homework 3 (0.55), then offered the worksheet or
+    Start Assignment. YouTube's home ranked the search box first. Posting, a copied address and notes read earlier
+    still fill and finish as before.
+  - **Carrying out Enter, on any site:** a key goes to the field the cursor is in when the named element is not one; a
+    simulated Enter that went nowhere (same address, box not emptied) submits through the box's own submitting button
+    (never a clear or close), or a bare form; a form that only goes to an address (GET with an action: searches,
+    filters) is not a final step. YouTube's search, which ignores simulated keys, now runs.
+  - **Not updated:** the stand-in Tab tests that expect a move tag after a page opens; page guesses now go to the line.
 - **Action Tab redesigned (October 27), as Cursor's Tab continues the code being written:**
   - **When:** only on a task moment, meaning the user typed in a field and paused, focused one, chose, ticked, pasted, opened a
     menu or a dialog with a click, dragged, or took a move. Never a page opening, a route change, a link followed, a

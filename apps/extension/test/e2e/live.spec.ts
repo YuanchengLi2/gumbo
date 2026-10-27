@@ -264,6 +264,30 @@ test('Tab: the search they were about to run, on Google, from what they copied',
  expect(state?.showing).toBe(true);expect(JSON.stringify(state.plan.steps).toLowerCase()).toContain('ramen');
 });
 
+test('Tab predicts where they go: a course site walked with Alt+Q alone, an email about the homework in another tab',async({page,context,signedIn,standin})=>{
+ test.setTimeout(180_000);
+ // The email they just read, in another tab.
+ await page.setContent('<title>Inbox: Biology 101 reminder</title><main><h1>Biology 101: reminder</h1><p id="mail">Reminder: Homework 3 (Cell membranes) for Biology 101 is due this Friday at 11:59pm. Start it early!</p></main>');
+ await page.waitForTimeout(1500);
+ const lms=await context.newPage();await lms.goto(`${standin.url}/pages/lms/courses.html`);await lms.bringToFront();
+ for(let i=0;i<4;i++){
+  // A moment to guess (the page opened), then their hand moving over the page, as when they look for where to go.
+  await lms.waitForTimeout(3500);await lms.mouse.move(400,300,{steps:6});await lms.waitForTimeout(250);
+  const s=(await predict(signedIn,lms).catch(()=>null))?.glow;
+  note(`  ${await lms.title()}: likely ${s?.likely?.join(', ')||'nothing'}; Alt+Q would ${s?.now?`“${s.now}”`:'do nothing'}`);
+  if(!s?.now)break;
+  await lms.keyboard.press('Alt+q');await lms.waitForTimeout(1500);
+ }
+ note(`    ended on: ${await lms.title()}${await lms.locator('#status').textContent().catch(()=>'')?` (${await lms.locator('#status').textContent()})`:''}`);
+});
+
+test('Tab predicts where they go on YouTube, with nothing done yet',async({page,signedIn})=>{
+ try{await page.goto('https://www.youtube.com/',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  YouTube: unreachable');return;}
+ await page.waitForTimeout(5000);await page.mouse.move(600,400,{steps:6});await page.waitForTimeout(300);
+ const s=(await predict(signedIn,page).catch(()=>null))?.glow;
+ note(`  YouTube home: likely ${s?.likely?.join(', ')||'nothing'}; marked ${s?.marked??'nothing'}`);
+});
+
 test('Tab: a post written in a composer gets Post',async({page,signedIn,standin})=>{
  await page.goto(`${standin.url}/pages/post.html`);await page.waitForTimeout(1500);
  await page.locator('[role=textbox]').click();
@@ -283,7 +307,7 @@ test('Redesigned Tab on YouTube and GitHub: nothing as pages open, then the next
  await step('YouTube, clicked into the search box',4000);
  await page.keyboard.type('lofi hip hop radio',{delay:70});
  const yt=await step('YouTube, typed “lofi hip hop radio” and paused');
- if(yt?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(2500);note(`    after Alt+Q: ${page.url().slice(0,90)}`);}
+ if(yt?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(4500);note(`    after Alt+Q: ${page.url().slice(0,90)}`);}
  try{await page.goto('https://github.com/microsoft/vscode/issues',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  GitHub: unreachable');return;}
  await page.waitForTimeout(4000);
  await step('GitHub issues, the page open, nothing done',3000);
