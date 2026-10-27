@@ -23,8 +23,8 @@ test('edits a selection: the diff streams in the card, Enter replaces it, Ctrl+Z
  await page.keyboard.type('more formal');await page.keyboard.press('Enter');
  await expect(frame.locator('ins').first()).toContainText('Could you please');await expect(frame.locator('del').first()).toBeVisible();
  const body=inlineBodies(standin)[0];expect(JSON.stringify(body.messages)).toContain('more formal');expect(JSON.stringify(body.messages)).toContain('<selection>');
- // DeepSeek by default: told not to think, and no warm-up is sent (it caches a prompt's start by itself).
- expect(body).toMatchObject({model:'deepseek-flash',dream_thinking:'off'});expect(standin.bodies.some((b:any)=>b.purpose==='prewarm')).toBe(false);
+ // The cache was warmed as the card opened.
+ expect(standin.bodies.some((b:any)=>b.purpose==='prewarm'&&JSON.stringify(b.messages).includes('hey can u send me the file tmrw'))).toBe(true);
  await page.keyboard.press('Enter');
  await expect(page.locator('#ta')).toHaveValue('Could you please send me the file tomorrow?');
  await expect.poll(()=>page.frames().some(f=>f.url().includes('card.html'))).toBe(false);

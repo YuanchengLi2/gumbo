@@ -178,7 +178,9 @@
   next moves and notes; GPT-6.1 Terra (released that day, made for computer use) runs the agent. Quick calls tell
   DeepSeek not to think, and cache warm-ups go only to Claude. Models nobody picked follow the new defaults. Not yet
   measured live: this computer has only an Anthropic key, and Terra needs the gateway deployed. DeepSeek's list price is
-  above Haiku 5.5's, and its speed for Tab is the open question.
+  above Haiku 5.5's, and its speed for Tab is the open question. Taken back minutes later, at the user's request: Haiku
+  for the quick calls and notes, DeepSeek for the agent, as before. Terra stays a choice in the popup, and quick calls to
+  a model other than Claude still go without thinking or a warm-up.
 - **Saving credits:** on the Free plan, or on any plan with less than a sixth of its credits left, Tab guesses nothing
   ahead of the user: not the first field as a page opens, not a field the pointer rests on, not while they type, not on
   coming back to a tab. It still guesses the moment they act. Tab for text over a drawing (a picture each time) waits

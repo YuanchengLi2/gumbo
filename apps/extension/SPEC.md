@@ -400,14 +400,11 @@ limits down to 16 tokens, and 0 for a pre-warm; a `Server-Timing` header.
 
 Rough heavy personal use: 500 Tab suggestions a day on Haiku with a cached prefix is about $1–2 a month.
 
-As built (October 26), the defaults changed at the user's request:
-- **Tab, Ctrl+K, next moves, notes:** DeepSeek V4.1 Flash (`deepseek-flash`). A quick call sends `dream_thinking:'off'`
-  (DeepSeek otherwise thinks at length), and no cache warm-up is sent: DeepSeek caches a prompt's start by itself, and a
-  call that writes nothing is Claude's alone. It takes pictures, so drawn pages work as before. Note it lists above
-  Haiku 5.5: $0.30 and $1.20 a million tokens at peak (half off-peak), against Haiku's $0.10 and $0.50.
-- **Agent:** GPT-6.1 Terra (`gpt-6.1-terra`, $1 and $5, cached input $0.05), made for computer use. The gateway lists
-  it; it needs that gateway deployed.
-- **Settings saved before:** a model still on an old default follows the new one; a model the user picked stays.
+As built (October 26), the defaults above stand (a switch to DeepSeek and Terra was made and taken back the same night).
+Any model can be picked per surface in the popup, GPT-6.1 Terra (`gpt-6.1-terra`, $1 and $5, cached input $0.05) among
+them once the gateway that lists it is deployed. When a quick call goes to a model other than Claude, it sends
+`dream_thinking:'off'` (DeepSeek otherwise thinks at length), and no cache warm-up is sent (a call that writes nothing is
+Claude's alone).
 
 ---
 

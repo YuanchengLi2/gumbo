@@ -25,7 +25,7 @@ export type Settings={
  realInput?:boolean;
 };
 export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
- models:{tab:'deepseek-flash',inline:'deepseek-flash',action:'deepseek-flash',notes:'deepseek-flash',agent:'gpt-6.1-terra'},modelsVersion:2,facts:{},listen:true,listenOff:[],mic:false};
+ models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},modelsVersion:2,facts:{},listen:true,listenOff:[],mic:false};
 /** The defaults before version 2 (October 26): a model still set to one of them was never picked, so it follows the new
  * default; a model the user chose stays. */
 const firstDefaults:Record<Surface,string>={tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'};
