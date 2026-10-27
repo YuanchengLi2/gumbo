@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {takes,took,TAKE_KEY} from './keys';
+import {takes,took,cycles,TAKE_KEY} from './keys';
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
 import {describe,pageModel,deepQuery,hoverOwner,type Item} from './perceive';
 import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
@@ -10,7 +10,7 @@ import {digestOf,noteAppeared,type Digest} from './digest';
 import {surface,layer,raise} from './ui/root';
 import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
-import {startGlow,setLikely,clearLikely,takeNow,pointerAt,glowState} from './glow';
+import {startGlow,setLikely,clearLikely,takeNow,likelyMoves,pointerAt,glowState} from './glow';
 import {post,listen as portListen,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
@@ -442,7 +442,7 @@ function place(){
  chip.style.left=`${Math.round(left)}px`;chip.style.top=`${Math.round(Math.min(Math.max(8,top),innerHeight-c.height-8))}px`;
  drawPreviews();
 }
-function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;}
+function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;cycle=null;}
 /** A move in words, by what each step touched ("type “…” into Street address", "drag “Write tests” onto “Done”"), so it
  * can be shown to the model later as what this person took or turned down, and labelled when it is the next move. */
 function wordsOf(plan:{steps:PlanStep[]}){
@@ -464,6 +464,17 @@ function onKey(event:KeyboardEvent){
  }
  // Alt+Q with no move shown in a task: the page guess, as their pointer and typing stand right now.
  if(takes(event)&&!hint&&!running&&!ghostShown()){const now=takeNow();if(now){hint={plan:now.plan,el:now.el,final:true,source:'page'};took(event);clearLikely();void go();}return;}
+ // Alt and + (Alt and − back): the next or the previous likely move (after the one shown, or as the page ranks them now), shown in
+ // its place, with its outline; Alt+Q takes the one shown. A text suggestion showing has these keys first.
+ const dir=cycles(event);
+ if(dir&&!running&&!taking&&!ghostShown()){
+  const options=cycle?.plans??movesHere();
+  if(options.length>1){
+   took(event);const at=cycle?(cycle.at+dir+options.length)%options.length:(dir>0?1:options.length-1);
+   show({...options[at],label:`${options[at].label} (${at+1}/${options.length})`},true,'cycle');cycle={plans:options,at};
+  }
+  return;
+ }
  if(!hint||running)return;
  if(ghostShown()){hide();return;}
  if(takes(event)){took(event);void go();return;}
@@ -473,6 +484,14 @@ function onKey(event:KeyboardEvent){
   refused.set(stepKey(hint.plan.steps[0]),Date.now());stopListening?.();if(asking){post({type:'cancel',id:asking});asking=undefined;}
   post({type:'actions.outcome',label:hint.plan.label,outcome:'dismissed'});post({type:'predict.no',label:hint.plan.label,first:hint.plan.steps[0],page:document.title,did:wordsOf(hint.plan)});did('turned down',hint.plan.label);hide();return;}
  if(!['Shift','Control','Alt','AltGraph','Meta','CapsLock'].includes(event.key)){post({type:'actions.outcome',label:hint.plan.label,outcome:'ignored'});hide();}
+}
+/** The moves Alt and + goes through: the one shown and the others the guess ranked likely; with nothing shown, the page's
+ * likely moves as the pointer and typing rank them now. */
+let cycle:{plans:Plan[];at:number}|null=null;
+function movesHere():Plan[]{
+ if(!hint)return likelyMoves().map(m=>m.plan);
+ const first=hint.plan.steps[0]?.id;
+ return[hint.plan,...(hint.plan.likely??[]).filter(l=>l.id!==first&&findTarget(targetOf({do:'click',id:l.id}))).map(l=>({label:l.label,confidence:l.p,steps:[{do:(l.do??'click') as PlanStep['do'],id:l.id}]}))];
 }
 /** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it); a
  * next move not yet on the page when it was guessed, by the role and name the model gave it. */

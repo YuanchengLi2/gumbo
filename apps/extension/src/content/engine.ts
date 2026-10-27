@@ -16,6 +16,7 @@ import {startCapture,pageText} from './capture';
 import {startPredict,predictState} from './predict';
 import {startListen,listenState} from './listen';
 import {startSeen} from './seen';
+import {pressTake} from './keys';
 
 /** Gumbo in one frame (or one of the extension's own pages): tracks the field in focus, runs Tab, Ctrl+K and capture,
  * and answers the engine's requests (the page model, an action, and checks the tests use). */
@@ -81,6 +82,9 @@ function handle(message:any):Promise<unknown>|undefined{
   case 'debug.predict':{const state=predictState();return state.showing||state.waiting?Promise.resolve(state):top?new Promise(r=>setTimeout(()=>r(predictState()),80)):undefined;}
   case 'debug.listen':{const state=listenState();return state.listening||top&&!message.capturing?Promise.resolve(state):undefined;}
   case 'debug.insert':{if(!mine)return;hideGhost();return insert(focused!,message.text);}
+  // Alt+Q as Chrome's command: the frame with the focus presses it (a page frame without the focus stays silent; the top
+  // page answers for a page with no focused frame).
+  case 'take':{if(!document.hasFocus()&&!(top&&message.anyFrame))return;const at=performance.now(),done=pressTake(deepActive());return Promise.resolve({...done,ms:performance.now()-at});}
  }
  return undefined;
 }

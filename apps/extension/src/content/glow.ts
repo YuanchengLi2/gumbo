@@ -53,6 +53,10 @@ export const glowState=()=>({likely:candidates.map(c=>`${c.label} (${c.p.toFixed
 export function clearLikely(){candidates=[];best=null;hideLine();unpeek();}
 /** Where their pointer is (for the engine: elements near it are where they are looking). */
 export const pointerAt=()=>px<0?null:[px,py] as [number,number];
+/** Every likely move, in the order they rank as the pointer and typing stand now (for Alt and + to go through). */
+export function likelyMoves():{plan:Plan;el:Element}[]{
+ return rank().filter(r=>r.s>=FLOOR/2).map(r=>({plan:{label:r.c.label,confidence:r.c.p,steps:[r.c.step]},el:r.c.el}));
+}
 /** The move Alt+Q makes now: the guess as their pointer and typing stand at this moment. */
 export function takeNow():{plan:Plan;el:Element}|null{
  const top=rank()[0];if(!top||top.s<FLOOR)return null;

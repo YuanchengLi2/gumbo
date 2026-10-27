@@ -38,6 +38,22 @@ test('after an answer is typed, Submit (outside the question) is offered at once
  await expect(page.locator('#status')).toHaveText('Correct! On to question 2.');
 });
 
+test('Alt and + goes to the next likely move, outlined in its place',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>{
+  if(!isPredict(b))return{text:''};
+  const text=sent(b),submit=idIn(text,'Submit answer'),skip=idIn(text,'Skip question');
+  return submit&&skip&&/Your answer [^\n]*= “\d+”/.test(text)?{text:JSON.stringify({confidence:0.9,label:'Submit your answer',steps:[{do:'click',id:submit}],likely:[{id:submit,p:0.7,label:'Submit your answer'},{id:skip,p:0.2,label:'Skip this question'}]})}:{text:JSON.stringify({confidence:0,steps:[],likely:[]})};
+ };
+ await page.goto(`${standin.url}/pages/quiz.html`);await page.locator('#answer').click();await page.keyboard.type('56');
+ await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:4000}).toBe('Submit your answer');
+ await page.keyboard.press('Alt+Equal');
+ expect((await tab(signedIn,page)).label).toBe('Skip this question (2/2)');
+ await page.keyboard.press('Alt+Equal');
+ expect((await tab(signedIn,page)).label).toBe('Submit your answer (1/2)');
+ await expect(page.locator('#answer')).toHaveValue('56');
+});
+
 test('clicking quickly from page to page, each page is still asked about, at once',async({page,signedIn,standin})=>{
  void signedIn;
  const asked:{title:string;at:number}[]=[];

@@ -54,5 +54,14 @@ function chipAt(caret:Caret,text:string){
  box.style.left=`${Math.max(4,Math.min(caret.x-10,window.innerWidth-rect.width-8))}px`;box.style.top=`${Math.max(4,top)}px`;
  chip=box;return box;
 }
-export function hideGhost(){ghost?.remove();chip?.remove();ghost=chip=undefined;}
+/** Where a fact in the suggestion came from ("from Calendar: dentist · Oct 20"), small, under the caret's line, so a
+ * wrong fact is easy to see before it is taken. */
+let hint:HTMLDivElement|undefined;
+export function showHint(caret:Caret,text:string){
+ hint?.remove();const el=document.createElement('div');el.className='hint';el.textContent=text;surface().appendChild(el);
+ const r=el.getBoundingClientRect(),below=caret.top+caret.height+3;
+ el.style.left=`${Math.max(4,Math.min(caret.x,window.innerWidth-r.width-8))}px`;el.style.top=`${below+r.height>window.innerHeight-4?caret.top-r.height-3:below}px`;
+ hint=el;
+}
+export function hideGhost(){ghost?.remove();chip?.remove();hint?.remove();ghost=chip=hint=undefined;}
 export const ghostShown=()=>!!(ghost||chip);

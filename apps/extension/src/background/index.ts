@@ -2,13 +2,14 @@
 import {session,signIn,finishSignIn,signOut,refresh,token} from './auth';
 import {endpoints} from '../shared/config';
 import {gatewayGet} from '../shared/gateway';
-import {counts,forget,recent,recentTimings,getMedia} from './db';
+import {counts,forget,recent,recentTimings,getMedia,addTiming} from './db';
 import {stats} from './stats';
 import type {Request} from '../shared/protocol';
 import {connectSurfaces} from './surfaces';
 import {model} from './model';
 import {lock} from './vault';
 import './tab';
+import './quick';
 import {capturePage} from './capture';
 import './budget';
 import './inline';
@@ -94,7 +95,21 @@ async function debugMemory(){
  const by=new Map<string,number[]>();for(const t of timings)by.set(t.surface,[...(by.get(t.surface)??[]),t.ms]);
  const pct=(xs:number[],p:number)=>{const y=[...xs].sort((a,b)=>a-b);return y.length?Math.round(y[Math.floor(p*(y.length-1))]):undefined;};
  const speed=Object.fromEntries([...by].map(([s,xs])=>[s,{n:xs.length,p50:pct(xs,0.5),p90:pct(xs,0.9)}]));
- return{live,projects:projects.map(({centroid,noteInput,...p})=>p),profile:me,contexts:lastContexts(),config:cfg,calibration,speed,counts:count};
+ // What each surface cost today, and how many calls it made.
+ const today=new Date().setHours(0,0,0,0),cost:Record<string,{calls:number;usd:number}>={};
+ for(const t of timings)if(t.at>=today&&t.usd!==undefined){const c=cost[t.surface]??={calls:0,usd:0};c.calls++;c.usd+=t.usd;}
+ return{live,projects:projects.map(({centroid,noteInput,...p})=>p),profile:me,contexts:lastContexts(),config:cfg,calibration,speed,cost,counts:count};
+}
+/** Alt+Q, when Chrome hands it to Gumbo as a command: passed to the frame with the focus in the tab in front, which takes
+ * what Tab shows there exactly as the key would. How long that hop takes is kept (the debug page's "take"): taking a
+ * suggestion must feel as quick as a key the page handles itself. Where no page of Gumbo's can be (the browser's own
+ * pages, a new tab), nothing happens: a move is only ever taken where it was shown. */
+chrome.commands.onCommand.addListener((command,tab)=>{if(command==='take')void take(tab);});
+async function take(tab?:chrome.tabs.Tab){
+ const started=performance.now();
+ const t=tab?.id!==undefined?tab:(await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0];if(t?.id===undefined)return;
+ const done=await chrome.tabs.sendMessage(t.id,{type:'take'}).catch(()=>undefined)??await chrome.tabs.sendMessage(t.id,{type:'take',anyFrame:true},{frameId:0}).catch(()=>undefined);
+ if(done)void addTiming({surface:'take',ms:performance.now()-started,at:Date.now()});
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void refresh();});
 chrome.runtime.onInstalled.addListener(details=>{

@@ -40,7 +40,8 @@ export type Note={id?:number;text:string;url?:string;title?:string;at:number;sou
 export type Failure={id?:number;site:string;editor:string;what:'placement'|'insert'|'action'|'context'|'audio'|'model';detail:string;at:number};
 /** A conversation in the sidebar: what the user and the agent said and did (for the panel), and the model's messages. */
 export type Chat={id:string;title:string;at:number;turns:unknown[];messages:unknown[]};
-export type TimingRecord={id?:number;surface:string;ms:number;gateway?:Record<string,number>;at:number};
+export type TimingRecord={id?:number;surface:string;ms:number;gateway?:Record<string,number>;at:number;
+ /** What the call cost (US dollars), for the cost per day each surface runs up. */usd?:number};
 
 type Value={writing:Writing;suggestions:SuggestionRecord;events:ActionEvent;pages:Page;passages:Passage;media:Media;voices:Voice;notes:Note;failures:Failure;chats:Chat;visits:Visit;projects:Project};
 export type Store=keyof Value|'timings';

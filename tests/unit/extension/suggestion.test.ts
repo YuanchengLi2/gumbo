@@ -1,5 +1,5 @@
 import {it,expect,describe} from 'vitest';
-import {cleanSuggestion,remainder,join,dropEcho,trimOverlap,factsGuard,firstSentence,wholeWords} from '../../../apps/extension/src/shared/suggestion';
+import {cleanSuggestion,remainder,join,dropEcho,trimOverlap,factsGuard,firstSentence,wholeWords,alternativesOf} from '../../../apps/extension/src/shared/suggestion';
 
 const input=(before:string,o:Partial<{after:string;singleLine:boolean;known:string;final:boolean}>={})=>({before,after:o.after??'',singleLine:o.singleLine??false,known:o.known??'',final:o.final??true});
 
@@ -16,10 +16,20 @@ describe('Tab suggestion checks',()=>{
   expect(cleanSuggestion('nks for the help.',input('Tha'))).toBe('nks for the help.');
   expect(join('','  Hello')).toBe('Hello');
  });
- it('stops at one sentence and never puts a newline in a one-line field',()=>{
+ it('goes up to three whole sentences, leaves an unfinished one out, and never puts a newline in a one-line field',()=>{
   expect(firstSentence(' see you then. Also, bring the',{singleLine:false,before:'Great,'})).toBe(' see you then.');
+  expect(firstSentence(' see you then. Bring the slides. I will book the room. Lunch after?',{singleLine:false,before:'Great,'})).toBe(' see you then. Bring the slides. I will book the room.');
+  expect(firstSentence(' go through it this afternoon',{singleLine:false,before:'I will'})).toBe(' go through it this afternoon');
+  expect(firstSentence(' flights to Tokyo. And hotels.',{singleLine:true,before:'cheap'})).toBe(' flights to Tokyo.');
   expect(cleanSuggestion(' flights to Tokyo\nand hotels',input('cheap',{singleLine:true,known:'Tokyo'}))).toBe(' flights to Tokyo');
-  expect(cleanSuggestion('\n\nBest,\nSam',input('Talk soon.',{known:'Sam'}))).toBe('\n\nBest,');
+  // A sign-off with their name is one thing to take.
+  expect(cleanSuggestion('\n\nBest,\nSam',input('Talk soon.',{known:'Sam'}))).toBe('\n\nBest,\nSam');
+  // A blank line ends the suggestion.
+  expect(firstSentence('Sounds good.\n\nAlso',{singleLine:false,before:'Hi Sam,\n'})).toBe('Sounds good.');
+ });
+ it('splits the reply into the best continuation and its alternatives',()=>{
+  expect(alternativesOf(' go through it tonight.\n⟂\n take a look tomorrow.\n⟂\n share it')).toEqual([' go through it tonight.',' take a look tomorrow.',' share it']);
+  expect(alternativesOf(' only one')).toEqual([' only one']);
  });
  it('does not write what already follows the cursor',()=>{
   expect(trimOverlap(' see you tomorrow',' tomorrow.')).toBe(' see you');

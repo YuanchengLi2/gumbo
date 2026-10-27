@@ -19,7 +19,8 @@
   "side_panel": {"default_path": "sidepanel.html"},
   "commands": {
     "listen": {"suggested_key": {"default": "Alt+Shift+L"}, "description": "Listen to this tab (live captions and notes)"},
-    "sidebar": {"suggested_key": {"default": "Alt+G"}, "description": "Open Gumbo's sidebar"}
+    "sidebar": {"suggested_key": {"default": "Alt+G"}, "description": "Open Gumbo's sidebar"},
+    "take": {"suggested_key": {"default": "Alt+Q"}, "description": "Take what Tab offers (a suggestion or a move)"}
   },
   "cross_origin_embedder_policy": {"value": "require-corp"},
   "cross_origin_opener_policy": {"value": "same-origin"},

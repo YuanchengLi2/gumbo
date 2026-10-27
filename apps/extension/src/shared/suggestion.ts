@@ -3,7 +3,8 @@
  * - no preamble, quotes or fences, and no echo of the text before the cursor;
  * - a clean join: the right space (or none) where it meets the user's text, a half-typed word finished, not restarted;
  * - nothing that overlaps the text after the cursor, or repeats text already there;
- * - at most one sentence, and no newline in a single-line field;
+ * - at most three sentences (a short paragraph) in a message, email or document, one in a one-line field, and no
+ *   newline in a single-line field;
  * - the field's own script (no English answer in a Japanese message);
  * - the facts guard: a number, email, link, date or name that appears nowhere the user can see or has written ends the
  *   suggestion just before it, since a wrong fact is the worst suggestion there is.
@@ -70,14 +71,25 @@ export function join(before:string,text:string){
  if(/[.,;:!?)\]”’]/.test(last)&&/^[\p{L}\p{N}(“"]/u.test(text)&&!/^[.,;:!?]/.test(text))return ' '+text;
  return text;
 }
-export function firstSentence(text:string,{singleLine,before}:{singleLine:boolean;before:string}){
- const newline=text.indexOf('\n');
- // A newline right at the start begins a new line or paragraph the user would type; anything after the second is too much.
- if(newline>=0){if(singleLine)text=text.slice(0,newline);else if(newline===0&&!before.endsWith('\n')){const next=text.indexOf('\n',/^\n+/.exec(text)![0].length);if(next>0)text=text.slice(0,next);}else if(newline>0)text=text.slice(0,newline);}
- const end=/[.!?…。！？](?=["”’)\]]?(\s|$))["”’)\]]?/u.exec(text.replace(/^\n+/,''));
- if(end){const offset=text.length-text.replace(/^\n+/,'').length;text=text.slice(0,offset+end.index+end[0].length);}
+/** Where a suggestion ends: in a one-line field, its first sentence on its line; elsewhere up to three sentences, within
+ * the paragraph it is in (a blank line ends it), or two lines when it is a list or a sign-off. */
+export function firstSentence(text:string,{singleLine,before,sentences=singleLine?1:3}:{singleLine:boolean;before:string;sentences?:number}){
+ const lead=/^\n+/.exec(text)?.[0].length??0;
+ if(singleLine){const nl=text.indexOf('\n');if(nl>=0)text=text.slice(0,nl);}
+ else{
+  // A newline right at the start begins a new line or paragraph the user would type; a blank line after words ends it.
+  const blank=text.indexOf('\n\n',lead);if(blank>lead)text=text.slice(0,blank);
+  const lines=text.slice(lead).split('\n');if(lines.length>2&&lead===0&&!before.endsWith('\n'))text=text.slice(0,lead)+lines.slice(0,2).join('\n');
+ }
+ const body=text.slice(lead),ends=[...body.matchAll(/[.!?…。！？](?=["”’)\]]?(\s|$))["”’)\]]?/gu)];
+ // At most so many sentences; and after whole sentences, a sentence left unfinished (the model ran out) is left out.
+ const end=ends.length>=sentences?ends[sentences-1]:ends.at(-1);
+ if(end&&(ends.length>=sentences||/[\p{L}\p{N}]/u.test(body.slice(end.index!+end[0].length))))text=text.slice(0,lead+end.index!+end[0].length);
  return text;
 }
+/** A reply holds the best continuation and, each after a line of ⟂, shorter alternatives that go another way. */
+export const ALTERNATIVE='⟂';
+export function alternativesOf(raw:string):string[]{return raw.split(/\n?[ \t]*⟂[ \t]*\n?/);}
 /** Drops the end of the suggestion that the text after the cursor already says. */
 export function trimOverlap(text:string,after:string){
  const next=after.replace(/^[ \t]+/,'').split('\n')[0];if(!next.trim())return text;

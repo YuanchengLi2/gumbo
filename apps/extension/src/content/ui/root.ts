@@ -15,6 +15,7 @@ const css=`
 .move kbd{font:10px Consolas,ui-monospace,monospace;border:1px solid rgba(0,0,0,.14);border-radius:3px;padding:0 3px;color:#666;background:#f6f6f6}
 .glow{position:fixed;pointer-events:none;height:2px;border-radius:2px;background:rgba(0,0,0,.42);box-shadow:0 0 6px rgba(0,0,0,.18);transition:left .12s ease,top .12s ease,width .12s ease;animation:fade .18s ease-out}
 .peek{opacity:.96}
+.hint{position:fixed;pointer-events:none;max-width:320px;padding:0 6px;border-radius:5px;font:10.5px/1.6 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;color:#555;background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.08);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:fade .18s ease-out}
 @keyframes fade{from{opacity:0}to{opacity:1}}
 .tab-ring{position:fixed;pointer-events:none;border:1.5px solid rgba(0,0,0,.32);border-radius:7px;box-shadow:0 0 0 2px rgba(255,255,255,.45);animation:in .12s ease-out}
 .tab-ring.to{border-style:dashed}

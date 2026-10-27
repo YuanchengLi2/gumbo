@@ -1,5 +1,36 @@
 # Dream decisions
 
+## October 27, 2026 — Gumbo for Chrome's text Tab: longer, in the user's voice, asked ahead, never per keystroke
+
+- **One run, up to three sentences, and alternatives to go through.** The agreement pair is gone: it doubled the cost,
+  and it was what kept suggestions to a few words.
+  - One Haiku run writes as far as it can see clearly (up to three sentences, or the rest of the line in a one-line
+    field), plus up to two shorter alternatives after a ⟂ line.
+  - Typing the way an alternative goes switches to it. Alt and + goes to the next one and Alt and − goes back (the
+    user's keys); the same keys go through Tab's likely moves.
+  - A sentence left unfinished after whole ones is dropped.
+- **Personal, from the central memory.** The prompt starts with `getContext`'s stable part (who they are, how they
+  write here, their usual facts, the project note), then the field. Its fresh part (this session, their memory)
+  replaces the old keyword matches. The prompt asks for the real facts they would type, and the facts guard still
+  cuts anything not seen anywhere. A fact from memory shows where it came from ("from Offsite plan · Oct 27").
+- **Never a request per keystroke.** It asks at a word's end, or inside a word once typing pauses for 120 ms (300 ms
+  after the last request while one is still on its way). A request on its way that the typing extends is kept; if
+  its answer doesn't fit, the pause asks again. Measured: 7–9 requests for a 7-word, 46-keystroke sentence (it was 15
+  under "boundary or 300 ms").
+- **Instant before the model.** `quick.ts` finishes the word being typed and continues their own usual phrase (two
+  words followed the same way at least 3 times, 2 in 3) from their writing on this site, and fills a fact the field
+  asks for. The model's answer replaces it.
+- **Asked ahead.** The moment a suggestion is whole, what comes after it is asked and kept. Taking it, or typing
+  through it, shows the next part at once (from the cache), and an ahead request already on its way counts as the
+  answer.
+- **Alt+Q is also a Chrome command** (`take`). The worker passes it to the frame with the focus, which presses it
+  through the same code. Nothing runs on pages Gumbo can't reach. The hop is timed on every press ("take" on the
+  debug page): 3.9–36 ms on a quiet test run, but up to 1.5 s when the test machine was loaded.
+- **Measured, by part:** every suggestion logs memory assembly, the model's first token and the gateway, render,
+  trigger → visible, and how it was served (kept, instant, model). Every model call logs its cost by purpose. With the
+  stand-in model: memory 5 ms, first token 50 ms, first ghost word 178–308 ms after the last keystroke (more under
+  load).
+
 ## October 27, 2026 — Gumbo for Chrome's Tab moves come at the moment an entry is done, and see the whole page
 
 - **No waiting for the user to stop.** Typing no longer restarts a 1.3 s timer.
