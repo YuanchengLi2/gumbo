@@ -304,6 +304,15 @@ test('what the user turned down is not offered again on that page, and the model
  expect(JSON.stringify(standin.bodies.filter(isPredict).at(-1).messages)).toContain('they_turned_down_here');
 });
 
+test('the Free plan with credits to spare guesses ahead, as every plan does (it is how people try Gumbo)',async({page,signedIn,standin})=>{
+ void signedIn;standin.billing={plan:'free',credits:{left:40,planTotal:50}};
+ standin.script=b=>isPredict(b)?{text:JSON.stringify({confidence:0.9,label:'Continue to payment',steps:[{do:'click',id:idIn(b,'Continue')}]})}:{text:''};
+ await page.goto(`${standin.url}/pages/shipping.html`);
+ await page.locator('#city').hover();
+ // The page as it opened, its first field and the field the pointer rests on: asked before any click.
+ await expect.poll(()=>standin.bodies.filter(isPredict).length,{timeout:8000}).toBeGreaterThanOrEqual(2);
+});
+
 test('a menu that opens on hover by CSS alone: its hidden items are seen with their menu, marked on its trigger, and Tab opens one',async({page,signedIn,standin})=>{
  void signedIn;
  standin.script=b=>isPredict(b)&&/opened|went to/.test(JSON.stringify(b.messages))?{text:JSON.stringify({confidence:0.9,label:'Open Pricing',steps:[{do:'click',id:/(e\d+) link "Pricing" \[in the “Products” menu, shown on hover\]/.exec(b.messages[0].content.map((c:any)=>c.text).join('\n'))?.[1]}]})}:{text:''};
@@ -316,8 +325,8 @@ test('a menu that opens on hover by CSS alone: its hidden items are seen with th
  await expect(page.locator('#status')).toHaveText('Opened Pricing');
 });
 
-test('saving credits (the Free plan): nothing is guessed ahead of the user, and the move comes once they act',async({page,signedIn,standin})=>{
- void signedIn;standin.billing={plan:'free',credits:{left:40,planTotal:50}};
+test('saving the last credits (a sixth left): nothing is guessed ahead of the user, and the move comes once they act',async({page,signedIn,standin})=>{
+ void signedIn;standin.billing={plan:'free',credits:{left:6,planTotal:50}};
  standin.script=b=>isPredict(b)?{text:JSON.stringify({confidence:0.9,label:'Continue to payment',steps:[{do:'click',id:idIn(b,'Continue')}]})}:{text:''};
  await page.goto(`${standin.url}/pages/shipping.html`);
  // The page opening (its first field asked ahead) and the pointer resting on a field: no model is asked for either.

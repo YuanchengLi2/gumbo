@@ -181,6 +181,11 @@
   above Haiku 5.5's, and its speed for Tab is the open question. Taken back minutes later, at the user's request: Haiku
   for the quick calls and notes, DeepSeek for the agent, as before. Terra stays a choice in the popup, and quick calls to
   a model other than Claude still go without thinking or a warm-up.
+- **Free guesses ahead too** (the user: Free is for trying Gumbo, and guessing ahead is what makes it feel instant). Only
+  a plan's last sixth of credits is saved as below.
+- **Open tabs get Gumbo at install and update:** Chrome adds a content script only to pages loaded afterwards, so on a
+  first try every tab already open did nothing until reloaded. The engine now adds it to every open tab; a frame runs it
+  once (a copy left from before an update, cut off from the engine, does not count).
 - **Saving credits:** on the Free plan, or on any plan with less than a sixth of its credits left, Tab guesses nothing
   ahead of the user: not the first field as a page opens, not a field the pointer rests on, not while they type, not on
   coming back to a tab. It still guesses the moment they act. Tab for text over a drawing (a picture each time) waits

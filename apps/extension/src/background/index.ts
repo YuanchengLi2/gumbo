@@ -81,7 +81,14 @@ chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void
 chrome.runtime.onInstalled.addListener(details=>{
  // A first install brings back settings from Chrome sync and opens the welcome page, which signs in and lets you try Tab.
  if(details.reason==='install'){void restoreSettings();void chrome.tabs.create({url:chrome.runtime.getURL('welcome.html')});}
+ // Chrome adds Gumbo only to pages loaded from now on: the tabs already open get it at once, so it works there without a
+ // reload (after an update, their old copy is cut off from the engine).
+ if(details.reason==='install'||details.reason==='update')void intoOpenTabs();
 });
+async function intoOpenTabs(){
+ for(const tab of await chrome.tabs.query({url:['http://*/*','https://*/*']}))
+  if(tab.id!==undefined&&!tab.discarded)await chrome.scripting.executeScript({target:{tabId:tab.id,allFrames:true},files:['content.js']}).catch(()=>{});
+}
 connectSurfaces();
 // For debugging and the end-to-end tests: the engine's parts, from the worker's console.
 (globalThis as any).gumbo={sync:{now:syncNow,state:syncState},agent:agentDebug,importAssistantMemory,listenState,toggleTab,stopListening,writeNotes,nameSpeaker,search:searchMemory,offscreen,stats,capture:capturePage,measureActions,importHistory,db:{recent,recentTimings,counts},call:model,send:(tabId:number,message:unknown,frameId?:number)=>chrome.tabs.sendMessage(tabId,message,frameId===undefined?{}:{frameId})};
