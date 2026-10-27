@@ -83,9 +83,11 @@ async function writing():Promise<string[]>{
  return(await recent('writing',4,Date.now()-HOUR).catch(()=>[])).filter(w=>activeOn(settings,w.site)).map(w=>`- ${ago(w.at)} in ${w.label||w.intent} on ${w.site}: “${cut(squash(w.text),160)}”`);
 }
 
-/** All of it, as one block of a message to the agent. */
-export async function workspace(options:{here?:number;opened?:Set<number>}={}):Promise<string>{
- const [tabs,closed,today,before,wrote]=await Promise.all([openTabs(options),closedTabs(),trail(),lately(),writing()]);
+/** All of it, as one block of a message to the agent; Tab gets the same, a little shorter (compact), as every word of it
+ * is read before each guess. */
+export async function workspace(options:{here?:number;opened?:Set<number>;compact?:boolean}={}):Promise<string>{
+ const c=options.compact;
+ const [tabs,closed,today,before,wrote]=await Promise.all([openTabs({...options,gistsFor:c?5:10}),closedTabs(c?5:10),trail(c?12:25),lately(),writing()]);
  const copied=before.copied.slice().reverse().map(c=>`- ${ago(c.at)}, on “${cut(c.title,60)}”: “${cut(squash(c.text),300)}”`);
  return['<your_browser>',tabs,closed.lines.length?`\nClosed lately:\n${closed.lines.join('\n')}`:'',today.length?`\nToday, newest first:\n${today.join('\n')}`:'',copied.length?`\nThey copied:\n${copied.join('\n')}`:'',wrote.length?`\nThey wrote:\n${wrote.join('\n')}`:'','</your_browser>'].filter(Boolean).join('\n');
 }

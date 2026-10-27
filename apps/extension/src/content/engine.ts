@@ -38,6 +38,8 @@ function handle(message:any):Promise<unknown>|undefined{
   case 'page.model':return top?Promise.resolve(pageModel()):undefined;
   // The agent reading a page: what is on it, and what can be acted on (each with an id actions can use).
   case 'page.read':return top?Promise.resolve({...pageModel(400),text:pageText(60_000),selection:String(getSelection()??'').slice(0,4000)}):undefined;
+  // Tab reading the tab the user just left: only its words, quickly.
+  case 'page.text':return top?Promise.resolve({title:document.title,text:pageText(20_000)}):undefined;
   case 'act':{
    // An action on "where the cursor is" (no target) belongs to the frame that has it: an editor inside a frame types
    // there, and every other frame stays silent.
@@ -60,7 +62,8 @@ function handle(message:any):Promise<unknown>|undefined{
   }
   case 'debug.hide':hideGhost();return Promise.resolve({ok:true});
   case 'debug.tab':return mine?Promise.resolve(tabState()):undefined;
-  case 'debug.predict':return top?Promise.resolve(predictState()):undefined;
+  // Tab's state from the frame showing a move (a frame answers first; the top page a moment later, if none does).
+  case 'debug.predict':{const state=predictState();return state.showing||state.waiting?Promise.resolve(state):top?new Promise(r=>setTimeout(()=>r(predictState()),80)):undefined;}
   case 'debug.listen':{const state=listenState();return state.listening||top&&!message.capturing?Promise.resolve(state):undefined;}
   case 'debug.insert':{if(!mine)return;hideGhost();return insert(focused!,message.text);}
  }

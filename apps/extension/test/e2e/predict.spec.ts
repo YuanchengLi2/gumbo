@@ -150,6 +150,38 @@ test('Tab makes every move a hand makes: drags a card onto a column, sorts a row
  await expect(page.locator('#status')).toHaveText('Row menu');
 });
 
+test('Tab works inside a frame from another site, and knows what the tab the user just left said',async({page,context,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>{
+  if(!isPredict(b))return{text:''};
+  const sent=b.messages[0].content.map((c:any)=>c.text).join('\n');
+  // Only a guess made inside the activity's frame, with the chat's answer in hand, offers the answer.
+  if(!/embedded frame/.test(sent)||!/Cenamos a las ocho/.test(sent))return{text:'{"confidence":0,"steps":[]}'};
+  return{text:JSON.stringify({confidence:0.9,label:'Answer from your chat',steps:[{do:'type',id:idIn(b,'Your answer'),text:'Cenamos a las ocho.'}],then:{do:'click',id:idIn(b,'Check answer')}})};
+ };
+ await page.goto(`${standin.url}/pages/chat.html`);await page.bringToFront();await page.waitForTimeout(600);
+ const lesson=await context.newPage();await lesson.goto(`${standin.url}/pages/lesson.html`);await lesson.bringToFront();
+ const activity=lesson.frameLocator('#activity');
+ await activity.locator('#answer').click();
+ await expect.poll(async()=>(await tab(signedIn,lesson))?.label,{timeout:10_000}).toBe('Answer from your chat');
+ // The frame was asked about by itself, with the page around it named, and the chat it came from in hand.
+ const asked=JSON.stringify(standin.bodies.filter(isPredict).at(-1).messages);
+ expect(asked).toContain('Lesson 4B practice');expect(asked).toContain('the_tab_they_just_left');
+ await lesson.keyboard.press('Tab');
+ await expect(activity.locator('#answer')).toHaveValue('Cenamos a las ocho.');
+ // And the next move, inside the frame too.
+ await expect.poll(async()=>(await tab(signedIn,lesson))?.label,{timeout:1500}).toBe('Click “Check answer”');
+ await lesson.keyboard.press('Tab');
+ await expect(activity.locator('#result')).toHaveText('Checked: Cenamos a las ocho.');
+});
+
+test('a frame the user has not worked in never asks',async({page,signedIn,standin})=>{
+ void signedIn;
+ await page.goto(`${standin.url}/pages/lesson.html`);await page.waitForTimeout(2500);
+ // The page itself asks once as it loads; the activity's frame, untouched, does not.
+ expect(standin.bodies.filter(isPredict).filter(b=>/embedded frame/.test(JSON.stringify(b.messages))).length).toBe(0);
+});
+
 test('what the user drags by hand is what the next guess knows',async({page,signedIn,standin})=>{
  void signedIn;
  await page.goto(`${standin.url}/pages/board.html`);
@@ -195,7 +227,8 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  void signedIn;
  standin.script=b=>{
   if(!isPredict(b))return{text:''};
-  if(!JSON.stringify(b.messages).includes('just_copied'))return{text:'{"confidence":0,"steps":[]}'};
+  // Only once what was copied is in the question (with the rest of their browser).
+  if(!/They copied:[\s\S]*410 Lakeview Drive/.test(b.messages[0].content.map((c:any)=>c.text).join('\n')))return{text:'{"confidence":0,"steps":[]}'};
   return{text:JSON.stringify({confidence:0.9,label:'Use the address you copied',steps:[{do:'type',id:idIn(b,'Street address'),text:'410 Lakeview Drive'}]})};
  };
  await page.goto(`${standin.url}/pages/forms.html`);

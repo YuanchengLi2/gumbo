@@ -10,7 +10,7 @@ import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
 import {post,listen as portListen} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
-import type {Plan,PlanStep} from '../shared/plan';
+import {stepKey,type Plan,type PlanStep} from '../shared/plan';
 /** Tab for actions, on any page: the user's next move, as a code editor's Tab is the next edit. As they work, Gumbo
  * guesses the one thing they are about to do (click this, fill in these fields, choose that, drag this card there, open
  * that menu, go back) and shows it in one small line by the cursor, the thing it would touch lightly outlined. Tab does
@@ -33,9 +33,14 @@ const did=(kind:string,label:string,text?:string)=>{const prev=activity.at(-1);i
 /** What a hand touched, in a few words: the card, row, item or control it belongs to. */
 const what=(el?:Element|null)=>{if(!el)return 'something';const at=el.closest(`[draggable=true],[role=listitem],[role=row],li,tr,${actionable}`)??el;return nameOf(at,40)||squash((at as HTMLElement).innerText??'').slice(0,40)||roleOf(at);};
 
+/** Every frame has Tab: a lesson, a quiz or an editor embedded from another site is guessed about on its own. A frame
+ * guesses only once the user has worked in it (pressed, focused, typed: ads and widgets never ask), and its move hides
+ * when the user goes elsewhere, so one move shows at a time. */
+const inFrame=window!==window.top;let touched=!inFrame;
 export function startPredict(){
- if(window!==window.top)return;
- void loadSettings().then(s=>{settings=s;soon(500);});onSettings(s=>{settings=s;if(!active())hide();});
+ void loadSettings().then(s=>{settings=s;if(!inFrame)soon(500);});onSettings(s=>{settings=s;if(!active())hide();});
+ if(inFrame)for(const type of ['pointerdown','keydown','focusin'])document.addEventListener(type,e=>{if(e.isTrusted)touched=true;},true);
+ window.addEventListener('blur',()=>{if(!running&&!waitEnter&&!taking)hide();});
  did('opened',document.title);
  document.addEventListener('click',onClick,true);
  document.addEventListener('pointerover',onRest,true);
@@ -96,6 +101,7 @@ function onClick(event:MouseEvent){
  * little on the page (the cursor went into a field, they paused typing), so it waits only a beat for the page, however
  * busy the page itself keeps being. */
 function soon(ms:number,quick=false){
+ if(!touched)return;
  clearTimeout(timer);const mine=++wave;
  timer=window.setTimeout(()=>void (quick?settled(60,250):settled()).then(()=>{if(mine===wave)void guess();}),ms);
 }
@@ -152,8 +158,11 @@ function listen(id:string){
 }
 
 const touches=(s:PlanStep)=>!!(s.id||s.name);
+const refused=new Map<string,number>();
 function show(plan:Plan,final:boolean,source?:string){
- const first=plan.steps[0],el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
+ const first=plan.steps[0];
+ if(Date.now()-(refused.get(stepKey(first))??0)<600_000)return;
+ const el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
  // The same move, further along: the line is updated in place, never flashed.
  if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=plan.label;place();return;}
  if(taking)return;
@@ -198,7 +207,11 @@ function onKey(event:KeyboardEvent){
  if(!hint||running)return;
  if(ghostShown()){hide();return;}
  if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){event.preventDefault();event.stopImmediatePropagation();void go();return;}
- if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();post({type:'actions.outcome',label:hint.plan.label,outcome:'dismissed'});post({type:'predict.no',label:hint.plan.label,first:hint.plan.steps[0],page:document.title,did:wordsOf(hint.plan)});did('turned down',hint.plan.label);hide();return;}
+ if(event.key==='Escape'){
+  event.preventDefault();event.stopImmediatePropagation();
+  // Turned down: the guess still on its way is stopped, and this move does not come back on this page for a while.
+  refused.set(stepKey(hint.plan.steps[0]),Date.now());stopListening?.();if(asking){post({type:'cancel',id:asking});asking=undefined;}
+  post({type:'actions.outcome',label:hint.plan.label,outcome:'dismissed'});post({type:'predict.no',label:hint.plan.label,first:hint.plan.steps[0],page:document.title,did:wordsOf(hint.plan)});did('turned down',hint.plan.label);hide();return;}
  if(!['Shift','Control','Alt','Meta','CapsLock'].includes(event.key)){post({type:'actions.outcome',label:hint.plan.label,outcome:'ignored'});hide();}
 }
 /** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it); a

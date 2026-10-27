@@ -254,6 +254,16 @@ async function toPage<T>(tabId:number,message:Record<string,unknown>):Promise<T>
  await new Promise(r=>setTimeout(r,300));
  return chrome.tabs.sendMessage(tabId,message,{frameId:0}) as Promise<T>;
 }
+/** A tab's text as it is now (or what memory kept of it while it is asleep); nothing from a site where Gumbo is off. Tab
+ * reads the tab the user just left this way. */
+export async function readTab(tabId:number):Promise<{title:string;url:string;text:string}|null>{
+ const t=await chrome.tabs.get(tabId).catch(()=>undefined);
+ if(!t?.url||!/^https?:|^file:/.test(t.url)||!activeOn(await loadSettings(),siteOf(t.url)))return null;
+ const page=t.discarded?undefined:await chrome.tabs.sendMessage(tabId,{type:'page.text'},{frameId:0}).catch(()=>undefined) as any;
+ if(page)return{title:String(page.title??t.title??''),url:t.url,text:String(page.text??'')};
+ const kept=await getPage(t.url).catch(()=>undefined);
+ return kept?{title:kept.title,url:t.url,text:kept.text}:null;
+}
 const fence=(text:string)=>text.replace(/<\/?page>/gi,'');
 /** An action in a tab. One with no target (typing or a key where the cursor is) goes to whichever frame has the cursor,
  * an editor inside a frame included; the rest go to the page. */

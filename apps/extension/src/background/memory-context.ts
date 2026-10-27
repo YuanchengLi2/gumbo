@@ -31,13 +31,13 @@ export function fieldQuery(input:{title?:string;label?:string;thread?:{author?:s
 type Field={query:string;items:Remembered[];at:number;searching?:Promise<void>};
 const fields=new Map<string,Field>();
 /** The memory a field has now (instantly), and a fresh search behind it when the question moved on (a new sentence, a
- * new message above): its answer is there for the next suggestion. */
-export function fieldMemory(key:string,query:string,page?:string):Remembered[]{
+ * new message above): its answer is there for the next suggestion. Tab for actions asks for as much as the agent gets. */
+export function fieldMemory(key:string,query:string,page?:string,k=3):Remembered[]{
  let field=fields.get(key);
  if(!field){field={query:'',items:[],at:0};fields.set(key,field);if(fields.size>200)fields.delete(fields.keys().next().value!);}
  if(query!==field.query&&!field.searching){
   const asked=query;field.query=query;
-  field.searching=relevant(asked,{k:3,page}).then(items=>{field!.items=items;field!.at=Date.now();}).finally(()=>{field!.searching=undefined;});
+  field.searching=relevant(asked,{k,page}).then(items=>{field!.items=items;field!.at=Date.now();}).finally(()=>{field!.searching=undefined;});
  }
  return field.items;
 }

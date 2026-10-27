@@ -92,6 +92,21 @@ test('Tab, Tab: after one move, the next is already there',async({page,context,s
  expect(nextMs??9999).toBeLessThan(1500);
 });
 
+test('Studying: an assistant chat in one tab, the course\'s quiz in a frame in the other; nothing copied',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/chat.html`);await page.bringToFront();await page.waitForTimeout(1500);
+ const lesson=await context.newPage();await lesson.goto(`${standin.url}/pages/lesson.html`);await lesson.bringToFront();await lesson.waitForTimeout(1500);
+ const activity=lesson.frameLocator('#activity');
+ await activity.locator('#answer').hover();await lesson.waitForTimeout(2000);await activity.locator('#answer').click();
+ const {state,shownMs}=await guess(signedIn,lesson,12_000);
+ note(`  Studying, quiz in a frame, after reading the answer in the chat tab: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms after the click)`:''}`);
+ expect(state?.showing).toBe(true);
+ await lesson.keyboard.press('Tab');
+ await expect.poll(()=>activity.locator('#answer').inputValue(),{timeout:6000}).not.toBe('');
+ note(`    Tab typed: “${await activity.locator('#answer').inputValue()}”`);
+ const next=await guess(signedIn,lesson,3000);
+ note(`    next: ${describe(next.state)}`);
+});
+
 test('Tab on a board, after the user dragged a card by hand',async({page,signedIn,standin})=>{
  await page.goto(`${standin.url}/pages/board.html`);await page.waitForTimeout(1500);
  await page.locator('#c1').dragTo(page.locator('#done'));

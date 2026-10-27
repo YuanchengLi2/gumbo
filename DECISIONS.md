@@ -106,6 +106,20 @@
     right-clicks are context for the next guess.
   - A background "work it out first" layer for Tab (the agent preparing values before Tab) was started and reverted
     before commit: that is agent territory.
+- **Tab has the agent's memory:**
+  - the same snapshot of the browser (every tab with what the recent ones hold, closed tabs, today's pages and searches,
+    copies, writing), a little shorter and kept for 3 s between guesses;
+  - memory searched as deep as the agent's (five passages);
+  - the words of the tab the user just left, read live (its start and its end, where a chat's newest answer is; 0.35 s
+    at most), which also count as known facts.
+- **Tab works in every frame:** a lesson, quiz or editor embedded from another site is guessed about on its own, with
+  the page around it named. A frame asks only once the user has pressed, focused or typed in it, so ads never cost a
+  call. A move hides when focus leaves its frame.
+- **Live** (the user's case: an assistant chat in one tab, a course's quiz in a cross-site frame in the other, nothing
+  copied): clicking the quiz's box offered the chat's Spanish answer 0.26 s after the click, Tab typed it, and "Check
+  answer" was the next move. All live runs so far: $0.10.
+- **Esc now stops the guess still on its way,** and that move stays away on that page for ten minutes: before, a late
+  answer could bring it straight back.
 
 ## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
 

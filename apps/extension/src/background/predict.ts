@@ -3,8 +3,9 @@ import {model} from './model';
 import {brain,lastStep} from './actions';
 import {fieldMemory,fieldReady} from './memory-context';
 import {getSealed,putSealed} from './db';
-import {lately,latelyText,latelyKnown} from './lately';
-import {tabsBrief} from './workspace';
+import {lately,latelyKnown} from './lately';
+import {workspace} from './workspace';
+import {readTab} from './agent';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {textOf} from '../shared/gateway';
 import {pageKindOf} from '../shared/learn';
@@ -19,10 +20,10 @@ import {planOf,partialPlan,stepKey,type Plan,type PlanStep} from '../shared/plan
  * offered again for a while. Tab is the next move, never a run of them: longer jobs are the agent's. */
 type Item={id:string;role:string;name:string;value?:string;state?:string[];inView:boolean;nearby?:string};
 type Ask={id:string;title:string;items:Item[];text:string;activity:{kind:string;label:string;text?:string}[];focused?:string};
-const SYSTEM=`You are Gumbo's Tab: autocomplete for what a person does in their browser, as a code editor's Tab completes the next edit. You see the page (its address, title, main text, and the elements they can use, each with an id), what they just did here, the pages they came from and what they copied there, what you know about them, what they usually do here, and what they turned down. Predict their next move: the one thing they are about to do. When they press Tab, Gumbo does it; then it offers the move after.
+const SYSTEM=`You are Gumbo's Tab: autocomplete for what a person does in their browser, as a code editor's Tab completes the next edit. You see the page (its address, title, main text, and the elements they can use, each with an id; a frame embedded in a page is a page of its own here), what they just did here, the words of the tab they just left, their whole browser (every open tab, what they closed, today's pages and searches, what they copied and wrote), what memory holds about this, what you know about them, what they usually do here, and what they turned down. Predict their next move: the one thing they are about to do. When they press Tab, Gumbo does it; then it offers the move after.
 A move is one of: click something; double-click; right-click; point at something to open its menu or card (hover); drag something onto something else or by some pixels (a card to a column, a row to a new place, a slider, a file onto an upload area); choose an option; press a key; scroll to something; go back; open a page; or fill in fields: the fields of the form they are in, each with the exact text they would type.
 Also give "then": the move they will most likely make right after this one, shown the moment this one is done. Its element may be one that is not on the page yet (it appears after this move): then name it by role and name instead of an id.
-- Read their intent from everything together. What they copied a moment ago usually goes into the field that asks for it; when it holds several things the form asks for separately (street, city, postcode; first and last name; date and time), each part goes into its own field. A form they started is finished with what they already gave elsewhere. The search they were heading for is typed, and running it is the move after. The move after the one they just took is the obvious next one on this page; what they did a moment ago with one item (dragged a card, checked a row) they often do with the next. What they took from Tab on this site before is what this person wants here; what they turned down is not.
+- Read their intent from everything together. What they were just reading or were told in the tab they left (an answer they asked for, a detail they looked up) is usually what this page is about to need: it goes into the field that asks for it. What they copied a moment ago usually goes into the field that asks for it; when it holds several things the form asks for separately (street, city, postcode; first and last name; date and time), each part goes into its own field. A form they started is finished with what they already gave elsewhere. The search they were heading for is typed, and running it is the move after. The move after the one they just took is the obvious next one on this page; what they did a moment ago with one item (dragged a card, checked a row) they often do with the next. What they took from Tab on this site before is what this person wants here; what they turned down is not.
 - Use only facts you can see here: the page, their profile, their memory, what they did and copied. Never invent a name, number, date, address or message.
 - A move that sends, posts, buys, pays, deletes or submits waits for their OK.
 - Nothing they would not want, nothing they turned down or just undid, nothing already done.
@@ -89,21 +90,27 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
  const ahead=pending.get(key);if(ahead){const plan=await ahead;answer(allowedPlan(plan,down)??instant);return;}
  let done!:(plan:Plan|null)=>void;pending.set(key,new Promise(r=>done=r));
  try{
-  const [before,tabs,habits,taste]=await Promise.all([lately(url),tabsBrief(url,12),habitsText(tab,url),tasteText(siteOf(url))]);
+  // The same memory the agent has: their whole browser (every tab, what was closed, today's trail, what they copied and
+  // wrote), what memory holds about this moment, and the words of the tab they just left.
+  const [before,browser,left,habits,taste]=await Promise.all([lately(url),browserOf(tab),justLeft(tab),habitsText(tab,url),tasteText(siteOf(url))]);
   // Memory for this page: what was found for it is given at once and a newer search runs behind it when the moment
   // moved on (as Tab for text does for a field); only a page's first guess waits for its search, and only a moment: what
   // they just did and copied matter more to the next step than memory does, and every moment of waiting is felt.
   const where=`predict|${placeOf(tab,url)}`;
-  let memory=fieldMemory(where,`${m.title}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`,url);
+  let memory=fieldMemory(where,`${m.title}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`,url,5);
   if(!memory.length)memory=await fieldReady(where,120);
   if(signal.aborted)return;
   const profile=Object.entries(facts).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
   // Elements that share a name are told apart by the words around them.
   const names=new Map<string,number>();for(const i of m.items.slice(0,160))names.set(i.name,(names.get(i.name)??0)+1);
   const listing=m.items.slice(0,160).map(i=>`${i.id} ${i.role} "${i.name}"${(names.get(i.name)??0)>1&&i.nearby?` in “${i.nearby.slice(0,60)}”`:''}${i.value?` = "${i.value}"`:''}${i.state?.length?` [${i.state.join(', ')}]`:''}${i.inView?'':' (off screen)'}`).join('\n');
-  const page=`<page url="${url}" title="${m.title.slice(0,150)}">\n${m.text.slice(0,3500)}\n</page>\n<elements>\n${listing}\n</elements>`;
-  const fresh=[latelyText(before),tabs?`<their_other_open_tabs>\n${tabs}\n</their_other_open_tabs>`:'',`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',profile?`<about_them>\n${profile}\n</about_them>`:'',memory.length?`<their_memory>\n${memory.map(r=>`${r.title} (${r.when}): ${r.text.slice(0,400)}`).join('\n')}\n</their_memory>`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
-  const known=`${m.text}\n${listing}\n${profile}\n${memory.map(r=>r.text).join('\n')}\n${m.activity.map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${latelyKnown(before)}`;
+  // A frame inside a page (a lesson, a quiz, an editor embedded from another site) is guessed about on its own, with the
+  // page around it named.
+  const outer=port.sender?.frameId&&port.sender.tab?`This is an embedded frame (${url}) inside the page “${(port.sender.tab.title??'').slice(0,120)}” (${port.sender.tab.url}).\n`:'';
+  const title=(m.title||port.sender?.tab?.title||'').slice(0,150);
+  const page=`${outer}<page url="${url}" title="${title}">\n${m.text.slice(0,3500)}\n</page>\n<elements>\n${listing}\n</elements>`;
+  const fresh=[left?`<the_tab_they_just_left title="${left.title.slice(0,120)}" url="${left.url}">\n${left.text}\n</the_tab_they_just_left>`:'',browser,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',profile?`<about_them>\n${profile}\n</about_them>`:'',memory.length?`<their_memory>\n${memory.map(r=>`${r.title} (${r.when}): ${r.text.slice(0,400)}`).join('\n')}\n</their_memory>`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
+  const known=`${m.text}\n${listing}\n${profile}\n${memory.map(r=>r.text).join('\n')}\n${m.activity.map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${latelyKnown(before)}\n${left?.text??''}\n${browser}`;
   // The first complete steps are offered while the rest is still being written; the whole plan replaces them.
   let raw='',shown=0;
   const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:page,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],max_tokens:500,purpose:'action'},{signal,onEvent:event=>{
@@ -120,6 +127,26 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
  finally{done(null);pending.delete(key);}
 });
 const pending=new Map<string,Promise<Plan|null>>();
+
+/** Their browser as the agent knows it (workspace.ts), a little shorter, kept a few seconds between guesses. */
+const browsers=new Map<number,{at:number;text:string}>();
+async function browserOf(tab:number){
+ const had=browsers.get(tab);if(had&&Date.now()-had.at<3000)return had.text;
+ const text=await workspace({here:tab,compact:true}).catch(()=>'');
+ browsers.set(tab,{at:Date.now(),text});if(browsers.size>50)browsers.delete(browsers.keys().next().value!);
+ return text;
+}
+/** The tab they were on just before this one (the one looked at most recently, in the last half hour), with its words as
+ * they are now: what they were reading or were told a moment ago (an assistant's answer, an email, a lesson) is often
+ * what this page is about to need. Its start and its end (where a chat's newest answer is); a moment's wait at most. */
+async function justLeft(tab:number):Promise<{title:string;url:string;text:string}|null>{
+ const tabs=(await chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])).filter(t=>t.id!==tab&&!t.incognito&&/^(https?|file):/.test(t.url??'')).sort((a,b)=>(b.lastAccessed??0)-(a.lastAccessed??0));
+ const prev=tabs[0];if(prev?.id===undefined||Date.now()-(prev.lastAccessed??0)>30*60_000)return null;
+ const read=await Promise.race([readTab(prev.id).catch(()=>null),new Promise<null>(r=>setTimeout(()=>r(null),350))]);
+ if(!read?.text)return null;
+ const words=read.text.replace(/\s+/g,' ').trim();
+ return{title:read.title,url:read.url,text:words.length>3200?`${words.slice(0,700)} … ${words.slice(-2500)}`:words};
+}
 
 /** A habit they have nearly every time on this kind of page after this step: offered at once. */
 async function habitPlan(tab:number,url:string,items:Item[]):Promise<Plan|null>{
