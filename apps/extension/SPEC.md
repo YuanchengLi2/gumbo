@@ -88,6 +88,17 @@ when its screen-reader support is on (Ctrl+Alt+Z); Gumbo reads that and types in
 opt-in mode uses the Chrome DevTools Protocol (`Input.insertText` and the accessibility tree); Chrome shows a bar while
 it is on.
 
+As built (October 26), Tab for actions and Ctrl+K see any page drawn as pixels, so they work on more than these editors:
+- **When:** canvases cover more than a fifth of the view.
+- **What the model gets:** a picture of the view with the guess or the question (at most 1280 px wide, one shared within
+  0.7 s, since Chrome allows two a second).
+- **Moves point at spots:** `"at":[x,y]` in the picture's pixels, and `"to_at"` for where a drag ends; they are scaled
+  back to the page. Tab acts there with real pointer events and marks each spot with a dot. Typing that lands in an
+  editor's own input frame is handed to that frame.
+- **Not reused:** a guess about a drawn page is never kept, because the drawing changes while its elements don't.
+- **Real input:** for pages that ignore synthetic events, the popup's "Use real clicks in drawing apps" asks for the
+  `debugger` permission; Tab then clicks and types through `Input.dispatchMouseEvent` and `Input.insertText`.
+
 ---
 
 ## 3. Tab for text
@@ -194,7 +205,8 @@ hands off to it.
   - point at something to open its menu;
   - drag (a card onto a column, a row to a new place, a slider);
   - choose an option, press a key, scroll to something, go back, open a page;
-  - or fill in the fields of the form the user is in.
+  - or fill in the fields of the form the user is in;
+  - on a page drawn as pixels, any of these at a spot in the picture of it (§2.6).
 - **Then:** with each move comes the one most likely after it, shown the moment the move is done. It can name an
   element that only appears after the move (a menu's item). So Tab, Tab, Tab goes as fast as the user does, one visible
   move at a time; the guess that follows replaces it if it sees better.
@@ -210,6 +222,9 @@ hands off to it.
   a fixed wait); a newer guess cancels the older one. The reply streams, and the first complete steps show while the rest
   is being written. A strong habit or the user's own details for a form show at once, before any model answers.
 - **Speed:**
+  - as a page opens (or, opened in a background tab, as it comes into view), the guess for its first empty field is
+    asked at once, and memory warms while the page loads;
+  - coming back to a tab is a new moment, with what was done in the tab just left;
   - when the pointer rests on a field, the guess for it is asked then, so the click finds it ready;
   - a press on a field starts a guess at once, and a finished sentence is answered sooner;
   - a move shows the moment its step is whole.

@@ -101,11 +101,14 @@ function liveKey(){
  if(process.env.ANTHROPIC_API_KEY)return process.env.ANTHROPIC_API_KEY;
  for(const file of ['.secrets/anthropic.env','.env.local']){const path=resolve(root,file);if(!existsSync(path))continue;const m=/^\s*ANTHROPIC_API_KEY\s*=\s*["']?([^"'\r\n]+)/m.exec(readFileSync(path,'utf8'));if(m)return m[1].trim();}
 }
+/** The gateway's code is loaded as a live run starts, not on its first call: that call's timing is the model's, as the
+ * deployed gateway (loaded already) would see it. */
+let gateway=process.env.GUMBO_LIVE?import('../../../supabase/functions/dream-gateway/ai.ts'):undefined;
 async function live(body:any,req:IncomingMessage,res:ServerResponse){
  const key=liveKey(),cap=Number(process.env.GUMBO_LIVE_CAP??4.9);
  if(!process.env.GUMBO_LIVE||!key){res.statusCode=500;return send(res,{error:{type:'live_off',message:'Live runs need GUMBO_LIVE=1 and an Anthropic key.'}});}
  if(liveSpent()>=cap){res.statusCode=402;return send(res,{error:{type:'live_budget',message:`The live budget is used up ($${liveSpent().toFixed(2)} of $${cap}).`}});}
- const {handleAI}=await import('../../../supabase/functions/dream-gateway/ai.ts');
+ const {handleAI}=await (gateway??=import('../../../supabase/functions/dream-gateway/ai.ts'));
  const db={rpc:async()=>({data:randomUUID()}),from:()=>({update:()=>({eq:async()=>({})}),insert:async()=>({}),select:()=>({eq:()=>({maybeSingle:async()=>({data:null})})})})};
  const started=Date.now(),abort=new AbortController();req.on('close',()=>abort.abort());
  const result=await handleAI({...body,requestId:body.requestId??randomUUID()},'gumbo-live-test',{db,key,timeoutMs:120_000});

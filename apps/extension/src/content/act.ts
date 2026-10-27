@@ -1,5 +1,5 @@
 import {deepQuery,elementById,describe,idOf,pageModel,type Item} from './perceive';
-import {nameOf,roleOf,visible,squash} from './dom';
+import {nameOf,roleOf,visible,squash,deepActive} from './dom';
 import {fieldOf} from './fields/field';
 import {insert} from './fields/insert';
 import {snapshot} from './fields/text';
@@ -7,7 +7,8 @@ import {snapshot} from './fields/text';
  * the page model), else by role and accessible name, else by path, else by the text near it. Every action is checked
  * afterwards (something changed: the page, the address, the focus, the element's state or value); one that changed
  * nothing is tried once more another way (a native click, the keyboard), then reported. */
-export type Target={id?:string;role?:string;name?:string;path?:string;nearby?:string;text?:string};
+/** point: a spot in the view (CSS pixels), for pages drawn as pixels, where the thing to touch is not an element. */
+export type Target={id?:string;role?:string;name?:string;path?:string;nearby?:string;text?:string;point?:[number,number]};
 export type Action=
  |{do:'click';target:Target}
  |{do:'double_click';target:Target}
@@ -21,7 +22,8 @@ export type Action=
  |{do:'back'}
  |{do:'wait';for:{selector?:string;text?:string;urlChanges?:boolean;settled?:boolean};timeoutMs?:number}
  |{do:'read';target?:Target};
-export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:unknown;irreversible?:boolean};
+export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:unknown;irreversible?:boolean;
+ /** Typing where a click on a drawing sent the cursor: into a frame, which the engine types into itself. */inFrame?:boolean};
 
 /** Words that make a click or a key final: sending, posting, buying, deleting. These always wait for Enter. */
 const finalWords=/\b(send|submit|post|publish|tweet|reply|delete|remove|discard|pay|purchase|buy|order|place order|checkout|confirm|transfer|sign|merge|deploy|unsubscribe|cancel (subscription|plan)|archive|block|report)\b/i;
@@ -33,6 +35,7 @@ export function irreversible(action:Action,el?:Element|null):boolean{
 }
 
 export function findTarget(target:Target):Element|null{
+ if(target.point){const [x,y]=target.point;return document.elementFromPoint(x,y);}
  if(target.id){const el=elementById(target.id);if(el)return el;}
  const candidates=()=>deepQuery('a,button,input,textarea,select,summary,label,h1,h2,h3,h4,h5,h6,[role],[contenteditable=true],[tabindex],[onclick]').filter(visible);
  if(target.name){
@@ -55,6 +58,8 @@ export async function perform(action:Action):Promise<Done>{
  switch(action.do){
   case 'click':{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
+   // A spot on a drawing: clicked there, as it is (what it changes is pixels, which nothing here can watch).
+   if(action.target.point){const changed=await watch(()=>pointerClick(el,action.target.point),400,false);return{ok:true,changed,detail:`Clicked at ${action.target.point.map(Math.round).join(', ')}.`};}
    el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
    // A click focusing what it clicked is not the page reacting.
    let changed=await watch(()=>pointerClick(el),700,false);
@@ -63,6 +68,14 @@ export async function perform(action:Action):Promise<Done>{
    return{ok:changed,changed,detail:changed?`Clicked ${nameOf(el,60)||roleOf(el)}.`:`Clicked ${nameOf(el,60)}, but nothing changed.`,item:el.isConnected?describe(el):undefined};
   }
   case 'type':{
+   // A spot on a drawing (a text box drawn as pixels): clicked first, then typed where the cursor went, which in many
+   // such apps is a hidden field, sometimes in a frame of its own (the engine then types there).
+   if(action.target?.point){
+    const [x,y]=action.target.point,under=document.elementFromPoint(x,y);
+    if(under){pointerClick(under,action.target.point);await frames(2);}
+    if(!fieldOf(deepActive())&&document.activeElement instanceof HTMLIFrameElement)return{ok:false,inFrame:true,detail:'The cursor went into a frame.'};
+    return perform({do:'type',text:action.text,replace:action.replace});
+   }
    const el=action.target?findTarget(action.target):document.activeElement;
    const field=el?fieldOf(el instanceof HTMLElement&&el.isContentEditable?el:el):null;
    if(!field)return{ok:false,detail:'There is no field to type in there (or it is one Gumbo never types in).'};
@@ -99,16 +112,16 @@ export async function perform(action:Action):Promise<Done>{
   }
   case 'double_click':case 'right_click':case 'hover':{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
-   el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
+   const point=action.target.point;if(!point){el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);}
    const what=action.do==='double_click'?'Double-clicked':action.do==='right_click'?'Right-clicked':'Pointed at';
-   const changed=await watch(()=>action.do==='double_click'?doubleClick(el):action.do==='right_click'?rightClick(el):hover(el),700,false);
+   const changed=await watch(()=>action.do==='double_click'?doubleClick(el,point):action.do==='right_click'?rightClick(el,point):hover(el,point),700,false);
    return{ok:true,changed,detail:`${what} ${nameOf(el,60)||roleOf(el)}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
   }
   case 'drag':{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
-   const to=action.to?findTarget(action.to):null;if(action.to&&!to)return{ok:false,detail:`Nothing on the page matches ${label(action.to)} to drop it on.`};
-   el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
-   const changed=await watch(()=>drag(el,to,action.by),700,false);
+   const toPoint=action.to?.point,to=action.to&&!toPoint?findTarget(action.to):null;if(action.to&&!toPoint&&!to)return{ok:false,detail:`Nothing on the page matches ${label(action.to)} to drop it on.`};
+   const point=action.target.point;if(!point){el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);}
+   const changed=await watch(()=>drag(el,to,action.by,point,toPoint),700,false);
    return{ok:true,changed,detail:`Dragged ${nameOf(el,40)||roleOf(el)}${to?` to ${nameOf(to,40)||roleOf(to)}`:''}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
   }
   case 'scroll':{
@@ -141,9 +154,9 @@ async function watch(run:()=>void|Promise<unknown>,ms=700,countFocus=true):Promi
  return mutated||location.href!==url||(countFocus&&document.activeElement!==focus);
 }
 /** Real pointer events at the element's centre, as a mouse would send them. */
-function pointerClick(el:Element){
- const rect=el.getBoundingClientRect(),x=rect.left+rect.width/2,y=rect.top+rect.height/2;
- const at=document.elementFromPoint(x,y),target=at&&(el.contains(at)||at.contains(el))?at:el;
+function pointerClick(el:Element,point?:[number,number]){
+ const rect=el.getBoundingClientRect(),[x,y]=point??[rect.left+rect.width/2,rect.top+rect.height/2];
+ const at=document.elementFromPoint(x,y),target=point?at??el:at&&(el.contains(at)||at.contains(el))?at:el;
  const base={bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,button:0,view:window};
  target.dispatchEvent(new PointerEvent('pointerover',{...base,pointerId:1,isPrimary:true}));target.dispatchEvent(new MouseEvent('mouseover',base));
  target.dispatchEvent(new PointerEvent('pointerdown',{...base,pointerId:1,isPrimary:true,buttons:1}));target.dispatchEvent(new MouseEvent('mousedown',{...base,buttons:1}));
@@ -158,22 +171,23 @@ function fire(el:Element,type:string,x:number,y:number,extra:Record<string,unkno
  const Kind=type.startsWith('pointer')?PointerEvent:type.startsWith('drag')||type==='drop'?DragEvent:MouseEvent;
  return el.dispatchEvent(new Kind(type,type.startsWith('pointer')?{...init,pointerId:1,isPrimary:true,pointerType:'mouse'}:init));
 }
-function doubleClick(el:Element){pointerClick(el);pointerClick(el);const {x,y}=centre(el);fire(el,'dblclick',x,y,{detail:2,buttons:0});}
-function rightClick(el:Element){
- const {x,y}=centre(el);
+const spot=(el:Element,point?:[number,number])=>point?{x:point[0],y:point[1]}:centre(el);
+function doubleClick(el:Element,point?:[number,number]){pointerClick(el,point);pointerClick(el,point);const {x,y}=spot(el,point);fire(el,'dblclick',x,y,{detail:2,buttons:0});}
+function rightClick(el:Element,point?:[number,number]){
+ const {x,y}=spot(el,point);
  fire(el,'pointerdown',x,y,{button:2,buttons:2});fire(el,'mousedown',x,y,{button:2,buttons:2});
  fire(el,'pointerup',x,y,{button:2,buttons:0});fire(el,'mouseup',x,y,{button:2,buttons:0});
  fire(el,'contextmenu',x,y,{button:2,buttons:0});
 }
 /** A menu or card that opens on hover (by script: a page's own :hover styles answer only to the real pointer). */
-function hover(el:Element){
- const {x,y}=centre(el);
+function hover(el:Element,point?:[number,number]){
+ const {x,y}=spot(el,point);
  for(const type of ['pointerover','pointerenter','mouseover','mouseenter','pointermove','mousemove'])fire(el,type,x,y,{buttons:0,bubbles:!type.endsWith('enter')});
 }
 /** A drag, as a hand makes it: press, move in small steps, release; with the native drag events too when the thing is
  * draggable (lists and boards built on HTML drag and drop), and a slider simply set where the drag would leave it. */
-async function drag(el:Element,to:Element|null,by?:[number,number]){
- const from=centre(el),end=to?centre(to):{x:from.x+(by?.[0]??0),y:from.y+(by?.[1]??0)};
+async function drag(el:Element,to:Element|null,by?:[number,number],fromPoint?:[number,number],toPoint?:[number,number]){
+ const from=spot(el,fromPoint),end=toPoint?{x:toPoint[0],y:toPoint[1]}:to?centre(to):{x:from.x+(by?.[0]??0),y:from.y+(by?.[1]??0)};
  if(el instanceof HTMLInputElement&&el.type==='range'){
   const r=el.getBoundingClientRect(),min=Number(el.min||0),max=Number(el.max||100),step=Number(el.step)||1;
   const value=Math.min(max,Math.max(min,Math.round((min+(end.x-r.left)/Math.max(1,r.width)*(max-min))/step)*step));

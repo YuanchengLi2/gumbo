@@ -11,7 +11,9 @@ import {partialJson} from './partial-json';
 export type PlanStep={do:'click'|'double_click'|'right_click'|'hover'|'drag'|'type'|'select'|'key'|'scroll'|'back'|'open';
  id?:string;text?:string;option?:string;combo?:string;url?:string;
  /** A drag's drop: onto an element, or by so many pixels. */to?:string;by?:[number,number];
- /** The next move's element when it is not on the page yet, by what it is. */role?:string;name?:string};
+ /** The next move's element when it is not on the page yet, by what it is. */role?:string;name?:string;
+ /** On a page drawn as pixels (a document, a design, a board): a point in the picture of the screen, and a drag's drop
+  * point. The engine turns them into the page's own coordinates. */at?:[number,number];toAt?:[number,number]};
 export type Plan={label:string;confidence:number;steps:PlanStep[];then?:PlanStep};
 export const MAX_FILLS=8;
 const fills=new Set(['type','select']);
@@ -60,7 +62,7 @@ function checked(s:any,ids:Set<string>,known:string,ahead=false):PlanStep|null{
  if(!s||typeof s!=='object')return null;
  const id=typeof s.id==='string'&&ids.has(s.id)?s.id:undefined;
  const named=ahead&&!id&&typeof s.name==='string'&&s.name.trim()?{name:s.name.trim().slice(0,80),...(typeof s.role==='string'?{role:s.role.slice(0,30)}:{})}:undefined;
- const on=id?{id}:named;
+ const at=pointOf(s.at),on=id?{id}:named??(at?{at}:undefined);
  switch(s.do){
   case 'click':case 'double_click':case 'right_click':case 'hover':return on?{do:s.do,...on}:null;
   case 'select':return on&&s.option?{do:'select',...on,option:String(s.option).slice(0,200)}:null;
@@ -70,8 +72,8 @@ function checked(s:any,ids:Set<string>,known:string,ahead=false):PlanStep|null{
   case 'open':return typeof s.url==='string'&&/^https?:\/\//.test(s.url)?{do:'open',url:s.url}:null;
   case 'drag':{
    if(!on)return null;
-   const to=typeof s.to==='string'&&ids.has(s.to)?s.to:undefined,by=Array.isArray(s.by)&&s.by.length===2&&s.by.every((n:unknown)=>Number.isFinite(Number(n)))?[Number(s.by[0]),Number(s.by[1])] as [number,number]:undefined;
-   return to||by?{do:'drag',...on,...(to?{to}:{by})}:null;
+   const to=typeof s.to==='string'&&ids.has(s.to)?s.to:undefined,toAt=pointOf(s.to_at??s.toAt),by=Array.isArray(s.by)&&s.by.length===2&&s.by.every((n:unknown)=>Number.isFinite(Number(n)))?[Number(s.by[0]),Number(s.by[1])] as [number,number]:undefined;
+   return to||toAt||by?{do:'drag',...on,...(to?{to}:toAt?{toAt}:{by})}:null;
   }
   case 'type':{
    if(!on||typeof s.text!=='string'||!s.text)return null;
@@ -82,6 +84,11 @@ function checked(s:any,ids:Set<string>,known:string,ahead=false):PlanStep|null{
  }
  return null;
 }
+/** A point in the picture of the screen: two numbers, within any screen's size. */
+function pointOf(p:unknown):[number,number]|undefined{
+ if(!Array.isArray(p)||p.length!==2)return;const [x,y]=p.map(Number);
+ return Number.isFinite(x)&&Number.isFinite(y)&&x>=0&&y>=0&&x<10000&&y<10000?[Math.round(x),Math.round(y)]:undefined;
+}
 export const labelOf=(s:PlanStep)=>s.do==='type'?`Type “${(s.text??'').slice(0,30)}”`:s.do==='select'?`Choose “${s.option}”`:s.do==='open'?`Open ${new URL(s.url!).hostname}`:s.do==='key'?`Press ${s.combo}`:s.do==='drag'?'Drag it':s.do==='back'?'Go back':s.do==='scroll'?'Scroll to it':s.do==='hover'?'Open it':s.do==='double_click'?'Double-click':s.do==='right_click'?'Right-click':`Click${s.name?` “${s.name.slice(0,30)}”`:''}`;
 /** The same suggestion, however it is worded: its first step. */
-export const stepKey=(s:PlanStep|undefined)=>s?`${s.do}:${s.id??s.name??s.url??''}:${(s.text??s.option??s.combo??s.to??'').slice(0,40).toLowerCase()}`:'';
+export const stepKey=(s:PlanStep|undefined)=>s?`${s.do}:${s.id??s.name??s.url??s.at?.map(n=>Math.round(n/40)).join(',')??''}:${(s.text??s.option??s.combo??s.to??'').slice(0,40).toLowerCase()}`:'';

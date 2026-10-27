@@ -177,6 +177,41 @@ test('Tab works inside a frame from another site, and knows what the tab the use
  await expect(activity.locator('#result')).toHaveText('Checked: Cenamos a las ocho.');
 });
 
+test('a page drawn as pixels: Tab sees a picture of it, and its moves point at spots: select, drag to Done, type in a drawn box',async({page,signedIn,standin})=>{
+ void signedIn;let move:((b:any)=>unknown)|undefined;
+ standin.script=b=>isPredict(b)&&move?{text:JSON.stringify(move(b))}:{text:'{"confidence":0,"steps":[]}'};
+ await page.goto(`${standin.url}/pages/sketch.html`);await page.waitForTimeout(1200);
+ // The guess carries a picture of the view, and says how to point at what is in it.
+ const pictured=()=>standin.bodies.filter(isPredict).some(b=>b.messages[0].content.some((c:any)=>c.type==='image')&&/drawn as pixels/.test(JSON.stringify(b.messages)));
+ await expect.poll(pictured,{timeout:8000}).toBe(true);
+ // The view is 1200 wide, so the picture's pixels are the page's.
+ const offer=async(label:string,step:unknown)=>{
+  move=()=>({confidence:0.9,label,steps:[step]});
+  await page.mouse.click(1000,600);
+  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe(label);
+  expect((await tab(signedIn,page)).outlined).toBeGreaterThan(0);
+  move=undefined;await page.keyboard.press('Tab');
+ };
+ await offer('Select Write tests',{do:'click',at:[160,130]});
+ await expect(page.locator('#status')).toHaveText('Selected: Write tests');
+ await offer('Move Write tests to Done',{do:'drag',at:[160,130],to_at:[760,260]});
+ await expect(page.locator('#status')).toHaveText('Moved Write tests to Done');
+ await offer('Rename Fix login bug',{do:'double_click',at:[160,260]});
+ await expect(page.locator('#status')).toHaveText('Editing Fix login bug');
+ await offer('Search for login',{do:'type',at:[440,26],text:'login'});
+ await expect(page.locator('#find')).toHaveValue('login');
+});
+
+test('Ctrl+K on a page drawn as pixels sends a picture of it',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>b.purpose==='inline'?{text:'ANSWER\nTwo notes, and a Done area.'}:{text:''};
+ await page.goto(`${standin.url}/pages/sketch.html`);await page.waitForTimeout(800);
+ await page.mouse.click(1000,600);await page.keyboard.press('Control+k');
+ const frame=await card(page);await page.keyboard.type('what is on this board?');await page.keyboard.press('Enter');
+ await expect(frame.locator('.body')).toContainText('Two notes');
+ expect(standin.bodies.filter(b=>b.purpose==='inline').at(-1).messages[0].content.some((c:any)=>c.type==='image')).toBe(true);
+});
+
 test('a frame the user has not worked in never asks',async({page,signedIn,standin})=>{
  void signedIn;
  await page.goto(`${standin.url}/pages/lesson.html`);await page.waitForTimeout(2500);

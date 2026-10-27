@@ -3,12 +3,12 @@ import {roleOf,nameOf,deepActive,visible,squash} from './dom';
 import {describe,pageModel,deepQuery,type Item} from './perceive';
 import {fieldOf,inPaymentFrame} from './fields/field';
 import {snapshot} from './fields/text';
-import {perform,irreversible,findTarget,type Action,type Target} from './act';
+import {perform,irreversible,findTarget,type Action,type Target,type Done} from './act';
 import {pageText} from './capture';
 import {surface,layer} from './ui/root';
 import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
-import {post,listen as portListen} from './port';
+import {post,listen as portListen,ask as request} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
 /** Tab for actions, on any page: the user's next move, as a code editor's Tab is the next edit. As they work, Gumbo
@@ -36,10 +36,19 @@ const what=(el?:Element|null)=>{if(!el)return 'something';const at=el.closest(`[
 /** Every frame has Tab: a lesson, a quiz or an editor embedded from another site is guessed about on its own. A frame
  * guesses only once the user has worked in it (pressed, focused, typed: ads and widgets never ask), and its move hides
  * when the user goes elsewhere, so one move shows at a time. */
-const inFrame=window!==window.top;let touched=!inFrame;
+const inFrame=window!==window.top;let touched=!inFrame,opened=false;
+/** The page's first moment, once it is in view: what to do here, and, asked ahead, the first empty field in view. */
+function opening(){
+ if(opened||inFrame||!settings||document.visibilityState!=='visible')return;
+ opened=true;const first=emptyFieldsAfter()[0];if(first)aheadInto(first);soon(400);
+}
 export function startPredict(){
  // As the page opens: what to do here, and, asked ahead, the first empty field in view (where a form starts).
- void loadSettings().then(s=>{settings=s;if(!inFrame){soon(500);setTimeout(()=>{const first=emptyFieldsAfter()[0];if(first)aheadInto(first);},800);}});onSettings(s=>{settings=s;if(!active())hide();});
+ // The field first: a click into it in the page's first second finds its guess on the way already.
+ void loadSettings().then(s=>{settings=s;opening();});onSettings(s=>{settings=s;if(!active())hide();});
+ // A page opened behind another tab has its first moment when it comes into view; coming back to a tab is a moment too
+ // (what they did in the tab they left is part of it).
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running)soon(250);});
  if(inFrame)for(const type of ['pointerdown','keydown','focusin'])document.addEventListener(type,e=>{if(e.isTrusted)touched=true;},true);
  window.addEventListener('blur',()=>{if(!running&&!waitEnter&&!taking)hide();});
  did('opened',document.title);
@@ -100,6 +109,8 @@ function onClick(event:MouseEvent){
  if(!event.isTrusted||(chip&&event.composedPath().includes(chip)))return;
  const target=(event.composedPath()[0] as Element|undefined)?.closest?.(actionable);
  if(active()&&target&&!fieldOf(target)){const item=describe(target);if(item.name){did('clicked',item.name);post({type:'capture.event',role:roleOf(target),name:item.name,path:item.path,nearby:item.nearby});}}
+ // A click on a drawing has no element to name: where it was (in the view's pixels) is what the next guess knows.
+ else if(event.composedPath()[0] instanceof HTMLCanvasElement)did('clicked on the drawing',`at ${Math.round(event.clientX)}, ${Math.round(event.clientY)}`);
  // The click that ends a press on a field: its guess is already on the way (or showing).
  const f=target?null:fieldOf(event.composedPath()[0] as Element),same=!!(f&&pressed&&pressed.el===f.el&&Date.now()-pressed.at<800);
  if(same)return;
@@ -126,7 +137,19 @@ function settled(quiet=120,max=1500):Promise<void>{
 let typingFor=1100;
 const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
 
-const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:id.startsWith('a')});
+const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:id.startsWith('a'),
+ // A page drawn as pixels: the engine looks at a picture of the view, and moves may point at spots in it.
+ ...(!inFrame&&drawnSurface()?{drawn:true,view:[innerWidth,innerHeight]}:{})});
+/** Whether the page is mostly drawn as pixels (a document, a sheet, a design, a board, a map): canvases cover a good part
+ * of the view, so its words and shapes are not elements anyone can read. */
+export function drawnSurface(){
+ let covered=0;
+ for(const c of deepQuery('canvas',document,4000)){
+  if(!visible(c))continue;const r=c.getBoundingClientRect();
+  covered+=Math.max(0,Math.min(r.right,innerWidth)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0));
+ }
+ return covered>innerWidth*innerHeight*0.2;
+}
 async function guess(){
  if(!active()||running||taking||typing()||document.visibilityState!=='visible')return;
  if(asking)post({type:'cancel',id:asking});
@@ -204,7 +227,7 @@ function listen(id:string){
  });
 }
 
-const touches=(s:PlanStep)=>!!(s.id||s.name);
+const touches=(s:PlanStep)=>!!(s.id||s.name||s.at);
 const refused=new Map<string,number>();
 function show(plan:Plan,final:boolean,source?:string){
  const first=plan.steps[0];
@@ -218,14 +241,16 @@ function show(plan:Plan,final:boolean,source?:string){
  const key=document.createElement('kbd');key.textContent='Tab';const text=document.createElement('span');text.className='text';text.textContent=plan.label;
  chip.append(key,text);chip.addEventListener('mousedown',e=>{e.preventDefault();void go();});surface().appendChild(chip);
  // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
- marked=plan.steps.flatMap(step=>{
+ marked=plan.steps.flatMap((step):Mark[]=>{
+  // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).
+  if(step.at)return[{el:document.documentElement,to:false,point:step.at},...(step.toAt?[{el:document.documentElement,to:true,point:step.toAt}]:[])];
   const at=touches(step)?findTarget(targetOf(step)):null,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
   return[...(at?[{el:at,to:false,text:step.do==='type'?step.text:undefined}]:[]),...(drop?[{el:drop,to:true}]:[])];
  });
- for(const m of marked)if(visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
+ for(const m of marked)if(m.point||visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.point?' dot':'')+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
  place();
 }
-type Mark={el:Element;to:boolean;text?:string;ring?:HTMLDivElement};
+type Mark={el:Element;to:boolean;text?:string;ring?:HTMLDivElement;point?:[number,number]};
 let marked:Mark[]=[];
 /** The words a move would type, faintly, where they would land: at the caret in the field the cursor is in, at the start
  * of any other empty field it fills. A field that already has text keeps it in view (its outline says it changes). */
@@ -259,7 +284,10 @@ function place(){
  const anchor=(fieldOf(deepActive())?.el??hint.el) as Element|undefined,r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
  chip.style.left=`${r?Math.min(Math.max(8,r.left),innerWidth-c.width-12):innerWidth-c.width-20}px`;
  chip.style.top=`${r?Math.min(r.bottom+6,innerHeight-c.height-12):innerHeight-c.height-20}px`;
- for(const m of marked)if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
+ for(const m of marked){
+  if(m.ring&&m.point)Object.assign(m.ring.style,{left:`${m.point[0]-9}px`,top:`${m.point[1]-9}px`,width:'18px',height:'18px'});
+  else if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
+ }
  drawPreviews();
 }
 function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;}
@@ -285,14 +313,14 @@ function onKey(event:KeyboardEvent){
 }
 /** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it); a
  * next move not yet on the page when it was guessed, by the role and name the model gave it. */
-const targetOf=(s:PlanStep):Target=>{const i=s.id?seen.get(s.id):undefined;return s.id?{id:s.id,...(i?{role:i.role,name:i.name,nearby:i.nearby,path:i.path}:{})}:{role:s.role,name:s.name};};
+const targetOf=(s:PlanStep):Target=>{if(s.at)return{point:s.at};const i=s.id?seen.get(s.id):undefined;return s.id?{id:s.id,...(i?{role:i.role,name:i.name,nearby:i.nearby,path:i.path}:{})}:{role:s.role,name:s.name};};
 function toAction(s:PlanStep):Action{
  const target=targetOf(s);
  switch(s.do){
   case 'type':return{do:'type',target,text:s.text!};
   case 'select':return{do:'select',target,option:s.option!};
   case 'key':return{do:'key',combo:s.combo!,...(touches(s)?{target}:{})};
-  case 'drag':return{do:'drag',target,...(s.to?{to:targetOf({do:'click',id:s.to})}:{by:s.by})};
+  case 'drag':return{do:'drag',target,...(s.toAt?{to:{point:s.toAt}}:s.to?{to:targetOf({do:'click',id:s.to})}:{by:s.by})};
   case 'scroll':return{do:'scroll',to:target};
   case 'back':return{do:'back'};
   case 'double_click':case 'right_click':case 'hover':return{do:s.do,target};
@@ -317,7 +345,10 @@ async function go(){
    // The page changed under it (the thing is gone): nothing is done, and the next guess looks again.
    if(touches(step)&&!el){ok=false;break;}
    if(irreversible(action,el)){const yes=await confirmEnter(`${nameOf(el!,40)||'this'}`);if(!yes){ok=false;break;}}
-   const result=await perform(action);
+   // On a drawing, with real clicks turned on, the move goes as real input; else as simulated pointer events.
+   let result=step.at&&settings?.realInput?await request<Done>({type:'input.real',step},'input.done',8000)??{ok:false,detail:'Real input did not answer.'}:await perform(action);
+   // Typing where a click on a drawing sent the cursor, in a frame (a document's hidden input): the engine types there.
+   if(result.inFrame&&step.do==='type')result=await request<Done>({type:'tab.typeFocused',text:step.text},'tab.typed',5000)??{ok:false,detail:'Nothing took the typing.'};
    if(!result.ok){ok=false;post({type:'failure',site:location.hostname,editor:'page',what:'action',detail:`Tab: ${result.detail}`});break;}
    // A click Tab made for them is one of their steps too: habits learn from it.
    if(step.do==='click'&&el){const item=describe(el);if(item.name)post({type:'capture.event',role:roleOf(el),name:item.name,path:item.path,nearby:item.nearby});}

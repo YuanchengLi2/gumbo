@@ -4,6 +4,7 @@ import {add} from './db';
 import {invalidate,recallFor} from './recall';
 import {relevant,heardJustNow,asksAboutNow,type Remembered} from './memory-context';
 import {workspace,justLeft,justLeftText} from './workspace';
+import {viewPicture} from './predict';
 import {offscreen} from './offscreen';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {INLINE_SYSTEM,PREDICT_SYSTEM,inlineStable,inlineFresh} from '../shared/prompts';
@@ -14,7 +15,8 @@ import {actionOf,type Action} from './inline-action';
  * names a mode on its first line (edit, answer, act) and the rest streams back. An edit is only the new text; an answer
  * may cite memory, whose items go back with it as links; an action comes as one JSON object, turned here into a link to
  * open (a prefilled calendar event, a search) or a note to keep. Nothing on the page changes until the user keeps it. */
-type Ask={id:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;instruction:string;previous?:string};
+type Ask={id:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;instruction:string;previous?:string;
+ /** The page is drawn as pixels (a document, a design): a picture of the view goes with the question. */drawn?:boolean;view?:[number,number]};
 const warmed=new Map<string,number>();
 const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -88,12 +90,14 @@ on('inline',async(message:Ask,{send,signal,url,port})=>{
  // Memory is always part of it: all of it searched with the instruction, the selection and where it is (the page, the
  // field, the words just before), what is being heard first when the question is about what was just said, and the
  // user's own writing so an edit sounds like them.
- const [recall,found,heard,context]=await Promise.all([
+ const [recall,found,heard,context,shot]=await Promise.all([
   recallFor({site:message.site,intent:message.intent??'other',before:message.before}),
   memoryFor(message),
   asksAboutNow(message.instruction)?heardJustNow():Promise.resolve(undefined),
   cardContext(message,port.sender?.tab?.id),
+  message.drawn&&!port.sender?.frameId?viewPicture(port.sender?.tab,message.view):Promise.resolve(null),
  ]);
+ const picture=shot?[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:'This page is drawn as pixels: what it shows (its text, its design) is in this picture of their view.'}]:[];
  const memory=[...(heard?[heard]:[]),...found].map((m,i)=>({n:i+1,title:m.title,url:m.url,when:m.when,text:m.text}));
  const stable=withContext(inlineStable({...message,facts:settings.facts,style:recall.style}),context);
  const fresh=inlineFresh({instruction:message.instruction,now:new Date(),timeZone:timeZone(),memory,previous:message.previous});
@@ -108,7 +112,7 @@ on('inline',async(message:Ask,{send,signal,url,port})=>{
   return null;
  };
  try{
-  await model({model:settings.models.inline,system:INLINE_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],max_tokens:room,purpose:'inline'},{signal,onEvent:event=>{
+  await model({model:settings.models.inline,system:INLINE_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},...picture,{type:'text',text:fresh}]}],max_tokens:room,purpose:'inline'},{signal,onEvent:event=>{
    if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
    raw+=event.data.delta.text;const body=parse(false);
    if(body!==null&&mode!=='act'&&body!==sent){sent=body;send({type:'inline.text',id:message.id,mode,text:shape(body,message),final:false});}

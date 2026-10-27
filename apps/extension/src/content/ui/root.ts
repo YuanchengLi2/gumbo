@@ -12,6 +12,7 @@ const css=`
 .chip .progress{color:#777}
 .tab-ring{position:fixed;pointer-events:none;border:1.5px solid rgba(0,0,0,.55);border-radius:7px;box-shadow:0 0 0 3px rgba(255,255,255,.7);animation:in .12s ease-out}
 .tab-ring.to{border-style:dashed}
+.tab-ring.dot{border-radius:50%;border-width:2px}
 @keyframes in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
 @media (prefers-color-scheme:dark){.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
 `;

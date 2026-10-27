@@ -10,6 +10,7 @@ import {hideGhost} from './ui/ghost';
 import {deepActive} from './dom';
 import {post,listen} from './port';
 import {pageText} from './capture';
+import {drawnSurface} from './predict';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {htmlToMarkdown,markdownToHtml,plainOf,hasFormatting} from '../shared/richtext';
 /** Ctrl+K in a page. Pressed in a field (with or without a selection) or over selected text, it saves exactly what was
@@ -138,7 +139,9 @@ function onMessage(message:any){
 function ask(o:Open,instruction:string,previous?:string){
  if(o.request)post({type:'cancel',id:o.request});
  o.request=`k${++seq}`;o.text='';o.final=false;o.action=undefined;
- post({type:'inline',id:o.request,...stableOf(o),instruction,previous});
+ // A page drawn as pixels (a document, a design): the engine looks at a picture of the view as well.
+ const drawn=window===window.top&&!o.field&&drawnSurface();
+ post({type:'inline',id:o.request,...stableOf(o),instruction,previous,...(drawn?{drawn:true,view:[innerWidth,innerHeight]}:{})});
 }
 /** Something to do in the page: the agent does it in this tab, its steps shown in the card. */
 function doInPage(o:Open,task:string){

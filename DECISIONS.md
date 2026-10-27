@@ -137,6 +137,25 @@
   - **Ctrl+K reads, not rewrites:** text selected on a page, with "explain" or "simplify", is answered, not rewritten.
   - **Moves are marked on the page:** every element a move touches is outlined (a drag's drop dashed), and the words it
     would type show faintly in each empty field it fills.
+- **Pages drawn as pixels, and the first second:**
+  - **Tab and Ctrl+K see drawn pages:** a board, a whiteboard, a design tool, a map or a document drawn on a canvas has
+    no elements to read. When canvases cover more than a fifth of the view, a picture of the view goes with the guess
+    (`chrome.tabs.captureVisibleTab`, at most 1280 px wide, one shared within 0.7 s). A move can point at a spot
+    (`"at":[x,y]`, and `"to_at"` for where a drag ends). Tab clicks, double-clicks, right-clicks, drags and types there
+    with real pointer events, and its spots show as dots. Typing that lands in an editor's own input frame is handed to
+    that frame. A guess about a drawn page is never reused, since the drawing changes while the elements don't.
+  - **Real input, opt-in:** a page that ignores synthetic events can get real ones through `chrome.debugger`
+    (`Input.dispatchMouseEvent`, `Input.insertText`). It is a link in the popup that asks for the optional permission,
+    and Chrome shows its bar while it is attached.
+  - **Live on a drawn board:** after the user picked a note by hand, Tab offered "Drag Write tests into Done" with
+    points from the picture, and Tab moved it. On Excalidraw's empty canvas it offered nothing, which is right.
+    Excalidraw keeps Ctrl+K for itself when nothing is selected, as any site's own Ctrl+K is kept.
+  - **The first second:** the first empty field's guess is asked the moment the page is ready (it waited 0.8 s). A page
+    opened in a background tab is guessed when it comes into view, and coming back to a tab is a moment too. Memory
+    warms as a page starts loading. A guess made before a copy is not reused after it. Live: a click 0.5 s after the
+    page opened showed its move 0.8 to 1.0 s later, usually (1.1 to 1.3 s after the page opened: about 0.3 s for memory,
+    0.6 s for the model's first word, 0.2 s for the first whole step). Before, the test harness loaded the gateway's
+    code on the first call, which made first guesses look 1 to 1.5 s slower than they are.
 
 ## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
 

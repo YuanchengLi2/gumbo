@@ -5,6 +5,7 @@ import {fieldMemory,fieldCurrent} from './memory-context';
 import {getSealed,putSealed} from './db';
 import {lately,latelyKnown} from './lately';
 import {workspace,justLeft,justLeftText} from './workspace';
+import {offscreen} from './offscreen';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {textOf} from '../shared/gateway';
 import {pageKindOf} from '../shared/learn';
@@ -19,9 +20,11 @@ import {planOf,partialPlan,stepKey,type Plan,type PlanStep} from '../shared/plan
  * offered again for a while. Tab is the next move, never a run of them: longer jobs are the agent's. */
 type Item={id:string;role:string;name:string;value?:string;state?:string[];inView:boolean;nearby?:string};
 type Ask={id:string;title:string;items:Item[];text:string;activity:{kind:string;label:string;text?:string}[];focused?:string;
- /** Asked ahead of the moment (the pointer resting on a field, typing about to stop): nobody is waiting yet. */ahead?:boolean};
+ /** Asked ahead of the moment (the pointer resting on a field, typing about to stop): nobody is waiting yet. */ahead?:boolean;
+ /** The page is drawn as pixels; the size of their view, in the page's pixels. */drawn?:boolean;view?:[number,number]};
 const SYSTEM=`You are Gumbo's Tab: autocomplete for what a person does in their browser, as a code editor's Tab completes the next edit. You see the page (its address, title, main text, and the elements they can use, each with an id; a frame embedded in a page is a page of its own here), what they just did here, the words of the tab they just left, their whole browser (every open tab, what they closed, today's pages and searches, what they copied and wrote), what memory holds about this, what you know about them, what they usually do here, and what they turned down. Predict their next move: the one thing they are about to do. When they press Tab, Gumbo does it; then it offers the move after.
 A move is one of: click something; double-click; right-click; point at something to open its menu or card (hover); drag something onto something else or by some pixels (a card to a column, a row to a new place, a slider, a file onto an upload area); choose an option; press a key; scroll to something; go back; open a page; or fill in fields: the fields of the form they are in, each with the exact text they would type.
+On a page drawn as pixels (a document, a sheet, a design, a board, a map) you also get a picture of what they see, and a move may point at a spot in it instead of an element: {"do":"click","at":[x,y]} (so too double_click, right_click, hover; type with "at" clicks there first, then types), {"do":"drag","at":[x,y],"to_at":[x,y]}.
 Also give "then": the move they will most likely make right after this one, shown the moment this one is done. Its element may be one that is not on the page yet (it appears after this move): then name it by role and name instead of an id.
 - Read their intent from everything together. What they were just reading or were told in the tab they left (an answer they asked for, a detail they looked up) is usually what this page is about to need: it goes into the field that asks for it. What they copied a moment ago usually goes into the field that asks for it; when it holds several things the form asks for separately (street, city, postcode; first and last name; date and time), each part goes into its own field. A form they started is finished with what they already gave elsewhere. The search they were heading for is typed, and running it is the move after. The move after the one they just took is the obvious next one on this page; what they did a moment ago with one item (dragged a card, checked a row) they often do with the next. What they took from Tab on this site before is what this person wants here; what they turned down is not.
 - Use only facts you can see here: the page, their profile, their memory, what they did and copied. Never invent a name, number, date, address or message.
@@ -83,16 +86,18 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
  if(details)answer(details,false,'instant');
  const habit=allowedPlan(await habitPlan(tab,url,m.items).catch(()=>null),down),instant=habit??details;
  if(habit)answer(habit,false,'instant');
- const bar=await barOf(siteOf(url));
- const key=`${url}|${m.items.slice(0,60).map(i=>`${i.id}:${i.name}:${i.value??''}`).join(',')}|${JSON.stringify(m.activity.at(-1)??'')}`.slice(0,4000);
- const cached=decided.get(key);if(cached&&Date.now()-cached.at<90_000){answer(allowedPlan(cached.plan,down)??instant);return;}
+ const [bar,before]=await Promise.all([barOf(siteOf(url)),lately(url)]);
+ // What they copied last is part of the moment: a guess made before a copy is not the one after it.
+ const key=`${before.copied.at(-1)?.at??''}|${url}|${m.items.slice(0,60).map(i=>`${i.id}:${i.name}:${i.value??''}`).join(',')}|${JSON.stringify(m.activity.at(-1)??'')}`.slice(0,4000);
+ // A page drawn as pixels changes without its elements changing: what was guessed there is never reused.
+ const cached=m.drawn?undefined:decided.get(key);if(cached&&Date.now()-cached.at<90_000){answer(allowedPlan(cached.plan,down)??instant);return;}
  // The same moment already being guessed (asked ahead, while the pointer rested on the field): its answer is this one's.
  const ahead=pending.get(key);if(ahead){const plan=await ahead;answer(allowedPlan(plan,down)??instant);return;}
  let done!:(plan:Plan|null)=>void;pending.set(key,new Promise(r=>done=r));
  try{
   // The same memory the agent has: their whole browser (every tab, what was closed, today's trail, what they copied and
   // wrote), what memory holds about this moment, and the words of the tab they just left.
-  const [before,browser,left,habits,taste]=await Promise.all([lately(url),browserOf(tab),justLeft(tab),habitsText(tab,url),tasteText(siteOf(url))]);
+  const [browser,left,habits,taste,shot]=await Promise.all([browserOf(tab),justLeft(tab),habitsText(tab,url),tasteText(siteOf(url)),m.drawn&&!port.sender?.frameId?viewPicture(port.sender?.tab,m.view):null]);
   // Memory for this page: what was found for it is given at once and a newer search runs behind it when the moment
   // moved on (as Tab for text does for a field); only a page's first guess waits for its search, and only a moment: what
   // they just did and copied matter more to the next step than memory does, and every moment of waiting is felt.
@@ -100,7 +105,7 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   let memory=fieldMemory(where,`${m.title}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`,url,5);
   // The search for this moment gets a moment (more when asked ahead: nobody is waiting yet); an answer made while it was
   // still running is not kept for the next guess, which will have it.
-  const now=await fieldCurrent(where,m.ahead?700:150);memory=now.items;const memoryLate=now.searching;
+  const now=await fieldCurrent(where,m.ahead?300:150);memory=now.items;const memoryLate=now.searching;
   if(signal.aborted)return;
   const profile=Object.entries(facts).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
   // Elements that share a name are told apart by the words around them.
@@ -113,22 +118,91 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   const page=`${outer}<page url="${url}" title="${title}">\n${m.text.slice(0,3500)}\n</page>\n<elements>\n${listing}\n</elements>`;
   const fresh=[justLeftText(left),browser,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',profile?`<about_them>\n${profile}\n</about_them>`:'',memory.length?`<their_memory>\n${memory.map(r=>`${r.title} (${r.when}): ${r.text.slice(0,400)}`).join('\n')}\n</their_memory>`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
   const known=`${m.text}\n${listing}\n${profile}\n${memory.map(r=>r.text).join('\n')}\n${m.activity.map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${latelyKnown(before)}\n${left?.text??''}\n${browser}`;
+  // On a page drawn as pixels, the picture of what they see goes with it, and its points come back in the page's terms.
+  const picture=shot?[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:`This page is drawn as pixels: its words and shapes are in this picture of what they see (${shot.w}×${shot.h}), not in the element list. To act on something in it, point at it: "at":[x,y] in this picture's pixels (and "to_at" for where a drag ends).`}]:[];
+  const inView=(plan:Plan|null)=>plan&&shot&&m.view?onView(plan,m.view[0]/shot.w,m.view[1]/shot.h):plan;
   // The first complete steps are offered while the rest is still being written; the whole plan replaces them.
   let raw='',shown=0;
-  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:page,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],max_tokens:500,purpose:'action'},{signal,onEvent:event=>{
+  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:page,cache_control:{type:'ephemeral'}},...picture,{type:'text',text:fresh}]}],max_tokens:500,purpose:'action'},{signal,onEvent:event=>{
    if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
    raw+=event.data.delta.text;
-   const early=allowedPlan(partialPlan(raw,ids,known),down);
+   const early=inView(allowedPlan(partialPlan(raw,ids,known),down));
    if(early&&early.confidence>=bar&&early.steps.length>shown){shown=early.steps.length;answer(early,false,'stream');}
   }});
-  const plan=allowedPlan(planOf(textOf(message)||raw,ids,known),down),sure=plan&&plan.confidence>=bar?plan:null;
-  if(!memoryLate){decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);}
+  const plan=inView(allowedPlan(planOf(textOf(message)||raw,ids,known),down)),sure=plan&&plan.confidence>=bar?plan:null;
+  if(!memoryLate&&!m.drawn){decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);}
   done(sure);answer(sure??instant);
  }catch{if(!signal.aborted)answer(instant);}
  // However it ended (answered, stopped, failed), whoever waits on it hears: no answer is null.
  finally{done(null);pending.delete(key);}
 });
 const pending=new Map<string,Promise<Plan|null>>();
+/** A page starting to load in the tab they are looking at (or a tab they switch to) is a guess about to be asked: memory
+ * (its index, its model) gets ready meanwhile, so the page's first guess has it without waiting. */
+let memoryWarmed=0;
+function warmMemory(){if(Date.now()-memoryWarmed<20_000)return;memoryWarmed=Date.now();void offscreen({type:'index.warm'}).catch(()=>{});}
+chrome.tabs.onUpdated.addListener((_id,change,tab)=>{if(change.status==='loading'&&tab.active&&!tab.incognito&&/^https?:/.test(tab.url??''))warmMemory();});
+chrome.tabs.onActivated.addListener(()=>warmMemory());
+
+/** A picture of what they see (the visible tab), for a page drawn as pixels: as wide as their view, 1280 pixels at most,
+ * so a point in it maps back to the page by one scale. Chrome takes at most two a second: guesses a moment apart share
+ * one, and none is sent when it cannot be taken. */
+const pictures=new Map<number,{at:number;shot:Promise<{data:string;w:number;h:number}|null>}>();
+export function viewPicture(tab:chrome.tabs.Tab|undefined,view?:[number,number]){
+ if(tab?.id===undefined||tab.windowId===undefined||!view)return Promise.resolve(null);
+ const had=pictures.get(tab.id);if(had&&Date.now()-had.at<700)return had.shot;
+ const shot=(async()=>{
+  const url=await chrome.tabs.captureVisibleTab(tab.windowId,{format:'jpeg',quality:70}).catch(()=>null);if(!url)return null;
+  const bitmap=await createImageBitmap(await (await fetch(url)).blob());
+  const w=Math.min(1280,Math.round(view[0])),h=Math.round(bitmap.height*w/bitmap.width);
+  const canvas=new OffscreenCanvas(w,h);canvas.getContext('2d')!.drawImage(bitmap,0,0,w,h);bitmap.close();
+  const bytes=new Uint8Array(await (await canvas.convertToBlob({type:'image/jpeg',quality:0.65})).arrayBuffer());
+  let text='';for(let i=0;i<bytes.length;i+=0x8000)text+=String.fromCharCode(...bytes.subarray(i,i+0x8000));
+  return{data:btoa(text),w,h};
+ })().catch(()=>null);
+ pictures.set(tab.id,{at:Date.now(),shot});if(pictures.size>20)pictures.delete(pictures.keys().next().value!);
+ return shot;
+}
+/** A plan's points, from the picture's pixels to the page's. */
+function onView(plan:Plan,sx:number,sy:number):Plan{
+ const map=(p?:[number,number])=>p?[Math.round(p[0]*sx),Math.round(p[1]*sy)] as [number,number]:undefined;
+ const step=(s:PlanStep):PlanStep=>s.at||s.toAt?{...s,...(s.at?{at:map(s.at)}:{}),...(s.toAt?{toAt:map(s.toAt)}:{})}:s;
+ return{...plan,steps:plan.steps.map(step),...(plan.then?{then:step(plan.then)}:{})};
+}
+/** A move on a drawing as real input (the user turned it on): Chrome's debugging interface sends the clicks, drags and
+ * keys as the mouse and keyboard would, for apps that ignore simulated ones. Chrome shows its bar while it is attached:
+ * only for the moment of the move. */
+on('input.real',async(m:{step:PlanStep},{send,port})=>{
+ const tabId=port.sender?.tab?.id,reply=(ok:boolean,detail:string)=>send({type:'input.done',ok,changed:ok,detail});
+ const settings=await loadSettings();
+ if(tabId===undefined||!m.step.at||!settings.realInput||!chrome.debugger||!await chrome.permissions.contains({permissions:['debugger']})){reply(false,'Real clicks are not turned on.');return;}
+ const target={tabId},[x,y]=m.step.at;
+ const mouse=(type:string,px:number,py:number,extra:Record<string,unknown>={})=>chrome.debugger.sendCommand(target,'Input.dispatchMouseEvent',{type,x:px,y:py,button:'left',clickCount:1,...extra});
+ try{
+  await chrome.debugger.attach(target,'1.3');
+  const s=m.step;
+  if(s.do==='hover')await mouse('mouseMoved',x,y,{button:'none'});
+  else if(s.do==='drag'){
+   const [ex,ey]=s.toAt??[x+(s.by?.[0]??0),y+(s.by?.[1]??0)];
+   await mouse('mousePressed',x,y);
+   for(let i=1;i<=12;i++)await mouse('mouseMoved',x+(ex-x)*i/12,y+(ey-y)*i/12,{buttons:1});
+   await mouse('mouseReleased',ex,ey);
+  }else{
+   const button=s.do==='right_click'?'right':'left';
+   await mouse('mousePressed',x,y,{button});await mouse('mouseReleased',x,y,{button});
+   if(s.do==='double_click'){await mouse('mousePressed',x,y,{clickCount:2});await mouse('mouseReleased',x,y,{clickCount:2});}
+   if(s.do==='type'&&s.text){await new Promise(r=>setTimeout(r,80));await chrome.debugger.sendCommand(target,'Input.insertText',{text:s.text});}
+  }
+  reply(true,`Did it at ${x}, ${y} with real input.`);
+ }catch(error){reply(false,`Real input did not work: ${(error as Error).message}`);}
+ finally{await chrome.debugger.detach(target).catch(()=>{});}
+});
+/** Typing where a click on a drawing sent the cursor: into whichever frame has it (a document's hidden input). */
+on('tab.typeFocused',async(m:{text:string},{send,port})=>{
+ const tab=port.sender?.tab?.id;
+ const done=tab===undefined?undefined:await chrome.tabs.sendMessage(tab,{type:'act',action:{do:'type',text:m.text},focused:true}).catch(()=>undefined);
+ send({type:'tab.typed',...(done??{ok:false,detail:'Nothing took the typing.'})});
+});
 
 /** Their browser as the agent knows it (workspace.ts), a little shorter, kept a few seconds between guesses. */
 const browsers=new Map<number,{at:number;text:string}>();

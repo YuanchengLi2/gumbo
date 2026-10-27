@@ -38,7 +38,7 @@ async function guess(w:Worker,p:Page,ms=15_000):Promise<{state:any;shownMs?:numb
  await expect.poll(async()=>{const s=await predict(w,p).catch(()=>null);if(s?.showing&&shownMs===undefined)shownMs=Date.now()-started;return !!(s?.showing&&s.final);},{timeout:ms,intervals:[150]}).toBe(true).catch(()=>{});
  return{state:await predict(w,p).catch(()=>null),shownMs};
 }
-const describe=(s:any)=>s?.showing?`“${s.label}” → ${(s.plan?.steps??[]).map((x:any)=>x.do==='type'?`type “${x.text}”`:x.do==='select'?`choose “${x.option}”`:x.do==='key'?`press ${x.combo}`:x.do==='open'?`open ${x.url}`:x.do==='drag'?`drag${x.to?` onto ${x.to}`:` by ${x.by}`}`:x.do.replace('_','-')).join(', ')}${s.plan?.then?` · then ${s.plan.then.do}${s.plan.then.name?` “${s.plan.then.name}”`:s.plan.then.combo?` ${s.plan.then.combo}`:''}`:''}`:'nothing offered';
+const describe=(s:any)=>s?.showing?`“${s.label}” → ${(s.plan?.steps??[]).map((x:any)=>x.do==='type'?`type “${x.text}”`:x.do==='select'?`choose “${x.option}”`:x.do==='key'?`press ${x.combo}`:x.do==='open'?`open ${x.url}`:x.do==='drag'?`drag${x.at?` from ${x.at}`:''}${x.to?` onto ${x.to}`:x.toAt?` to ${x.toAt}`:` by ${x.by}`}`:`${x.do.replace('_','-')}${x.at?` at ${x.at}`:''}`).join(', ')}${s.plan?.then?` · then ${s.plan.then.do}${s.plan.then.name?` “${s.plan.then.name}”`:s.plan.then.combo?` ${s.plan.then.combo}`:''}`:''}`:'nothing offered';
 async function card(page:Page):Promise<Frame>{
  await expect.poll(()=>page.frames().some(f=>f.url().includes('card.html')),{timeout:5000}).toBe(true);
  const frame=page.frames().find(f=>f.url().includes('card.html'))!;await frame.locator('#instruction').waitFor();return frame;
@@ -135,6 +135,40 @@ test('Memory: a page read earlier (its tab since closed) is what Tab and Ctrl+K 
  const answer=((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').trim();
  note(`  Ctrl+K “when does my flight leave?” (first words ${firstMs??'?'} ms after Ctrl+K): ${answer.slice(0,200)}`);
  expect(answer).toMatch(/November 12|Nov(ember)? 12/i);
+});
+
+test('Tab, first second: a field clicked half a second after the page opens',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);
+ await copy(page,'#hotel','3-7-1-2 Nishishinjuku, Shinjuku City, Tokyo');
+ const shop=await context.newPage();await shop.goto(`${standin.url}/pages/shipping.html`);await shop.bringToFront();
+ await shop.waitForTimeout(500);await shop.locator('#street').click();
+ const {state,shownMs}=await guess(signedIn,shop);
+ note(`  Click 0.5 s after the page opened: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''}`);
+ expect(state?.showing).toBe(true);
+});
+
+test('A page drawn as pixels: Tab reads the picture and points at the drawn search box with what was copied',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);await copy(page,'#food','best ramen in Shinjuku');
+ const board=await context.newPage();await board.goto(`${standin.url}/pages/sketch.html`);await board.bringToFront();await board.waitForTimeout(2500);
+ await board.mouse.click(1000,600);
+ const {state,shownMs}=await guess(signedIn,board,12_000);
+ note(`  Drawn board, after copying “best ramen in Shinjuku”: ${describe(state)}${state?.plan?.steps?.[0]?.at?` at ${state.plan.steps[0].at}`:''}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
+ if(state?.showing){await board.keyboard.press('Tab');await board.waitForTimeout(1200);note(`    after Tab: search box “${await board.locator('#find').inputValue()}”, status “${await board.locator('#status').textContent()}”`);}
+ // Then: the user picks a note by hand; what comes next?
+ await board.mouse.click(160,130);
+ const after=await guess(signedIn,board,12_000);
+ note(`    after selecting “Write tests” by hand: ${describe(after.state)}${after.state?.plan?.steps?.[0]?.at?` at ${after.state.plan.steps[0].at}${after.state.plan.steps[0].toAt?` → ${after.state.plan.steps[0].toAt}`:''}`:''}`);
+ if(after.state?.showing){await board.keyboard.press('Tab');await board.waitForTimeout(1200);note(`    after Tab: status “${await board.locator('#status').textContent()}”`);}
+});
+
+test('A real drawing app (Excalidraw): what Tab and Ctrl+K make of it',async({page,signedIn})=>{
+ try{await page.goto('https://excalidraw.com/',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  Excalidraw: unreachable');return;}
+ await page.waitForTimeout(5000);await page.mouse.click(700,450);
+ const {state}=await guess(signedIn,page,10_000);
+ note(`  Excalidraw (blank canvas): ${describe(state)}`);
+ await page.keyboard.press('Escape');await page.keyboard.press('Control+k');
+ const frame=await card(page).catch(()=>null);
+ if(frame){await page.keyboard.type('what can I do here?');await page.keyboard.press('Enter');await page.waitForTimeout(6000);note(`  Ctrl+K on Excalidraw: ${((await frame.locator('.body').textContent())??'').replace(/\s+/g,' ').slice(0,180)}`);}
 });
 
 test('Tab on a board, after the user dragged a card by hand',async({page,signedIn,standin})=>{

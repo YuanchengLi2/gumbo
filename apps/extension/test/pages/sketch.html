@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sketch board</title>
+<style>
+ body{margin:0;font-family:system-ui,sans-serif}
+ #board{display:block}
+ /* The search box's real input sits over the drawn one, invisible, as drawing apps take typing. */
+ #find{position:absolute;left:300px;top:12px;width:280px;height:28px;opacity:0.01;border:0;padding:0;font-size:16px}
+ #status{position:fixed;right:8px;bottom:4px;margin:0;font-size:12px}
+</style></head>
+<body>
+<canvas id="board" width="1200" height="640"></canvas>
+<input id="find" aria-label="Search the board" autocomplete="off">
+<p id="status"></p>
+<script>
+ // Everything here is drawn: the notes, the Done area, the search box. Nothing but the canvas is an element to read.
+ const cv=document.getElementById('board'),g=cv.getContext('2d'),find=document.getElementById('find');
+ const notes=[{text:'Write tests',x:80,y:90},{text:'Fix login bug',x:80,y:220}],done={x:620,y:70,w:300,h:420};
+ let selected=null,dragging=null,offset=[0,0],editing=null;
+ const status=t=>document.getElementById('status').textContent=t;
+ const hit=(x,y)=>notes.slice().reverse().find(n=>x>=n.x&&x<=n.x+170&&y>=n.y&&y<=n.y+80);
+ function draw(){
+  g.clearRect(0,0,cv.width,cv.height);g.font='16px system-ui';
+  g.strokeStyle='#888';g.strokeRect(300,12,280,28);g.fillStyle='#999';g.fillText(find.value?'':'Search the board',308,32);g.fillStyle='#111';g.fillText(find.value,308,32);
+  g.setLineDash([6,4]);g.strokeRect(done.x,done.y,done.w,done.h);g.setLineDash([]);g.fillStyle='#333';g.font='bold 18px system-ui';g.fillText('Done',done.x+12,done.y+28);
+  g.font='16px system-ui';
+  for(const n of notes){g.fillStyle=n===selected?'#ffe58a':'#fff6b0';g.fillRect(n.x,n.y,170,80);g.strokeStyle=n===selected?'#c80':'#bbb';g.strokeRect(n.x,n.y,170,80);g.fillStyle='#222';g.fillText(n.text,n.x+12,n.y+44);}
+ }
+ cv.addEventListener('pointerdown',e=>{
+  const x=e.offsetX,y=e.offsetY;
+  if(x>=300&&x<=580&&y>=12&&y<=40){find.focus();return;}
+  const n=hit(x,y);selected=n??null;if(n){dragging=n;offset=[x-n.x,y-n.y];status('Selected: '+n.text);}draw();
+ });
+ cv.addEventListener('pointermove',e=>{if(!dragging||!e.buttons)return;dragging.x=e.offsetX-offset[0];dragging.y=e.offsetY-offset[1];draw();});
+ cv.addEventListener('pointerup',e=>{
+  if(dragging){const n=dragging;dragging=null;const cx=n.x+85,cy=n.y+40;if(cx>=done.x&&cx<=done.x+done.w&&cy>=done.y&&cy<=done.y+done.h)status('Moved '+n.text+' to Done');}
+ });
+ cv.addEventListener('dblclick',e=>{const n=hit(e.offsetX,e.offsetY);if(n){editing=n;status('Editing '+n.text);}});
+ find.addEventListener('input',draw);
+ find.addEventListener('keydown',e=>{if(e.key==='Enter')status('Searching: '+find.value);});
+ draw();
+</script>
+</body>
+</html>

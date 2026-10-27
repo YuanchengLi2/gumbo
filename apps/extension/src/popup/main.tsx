@@ -48,6 +48,11 @@ function Popup(){
     {spend?.todayUsd!==undefined&&<p className="muted">Today's AI: ${spend.todayUsd.toFixed(2)}</p>}
     <div className="row"><button className="link" disabled={measuring} onClick={()=>{setMeasuring(true);void ask({type:'meter.run'}).then(setMeter).finally(()=>setMeasuring(false));}}>{measuring?'Checking Tab on your writing…':'Check Tab on my writing'}</button></div>
     {meter&&('error' in meter?<p className="muted">{meter.error}</p>:<p className="muted">On your writing: shows {Math.round(meter.showRate*100)}% of the time, right {Math.round(meter.precision*100)}% when it does</p>)}
+    {/* Drawing apps (Docs, Figma, boards) that ignore simulated clicks get real ones; Chrome asks once, and shows a bar while Tab acts. */}
+    <div className="row"><button className="link" title="For documents, designs and boards drawn as pixels. Chrome shows a bar for a moment each time." onClick={()=>{
+     if(settings.realInput){void saveSettings({realInput:false});return;}
+     void chrome.permissions.request({permissions:['debugger']}).then(granted=>{if(granted)void saveSettings({realInput:true});});
+    }}>{settings.realInput?'Stop using real clicks in drawing apps':'Use real clicks in drawing apps'}</button></div>
    </section>
    <section>
     <h2>Listening</h2>

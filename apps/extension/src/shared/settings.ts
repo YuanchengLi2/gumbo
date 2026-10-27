@@ -18,6 +18,9 @@ export type Settings={
  listenOff:string[];
  /** Whether the user's microphone joins during a call (once Chrome allowed it). */
  mic:boolean;
+ /** Tab's moves on pages drawn as pixels go as real clicks and keys (through Chrome's debugging interface, which shows
+  * a bar while it acts), for apps that ignore the simulated ones. Off until the user turns it on. */
+ realInput?:boolean;
 };
 export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
  models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},facts:{},listen:true,listenOff:[],mic:false};
