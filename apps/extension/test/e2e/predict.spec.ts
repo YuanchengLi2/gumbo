@@ -62,7 +62,7 @@ test('Tab does what would help next, text and clicks together: the reply is writ
  await page.goto(`${standin.url}/pages/forms.html`);await page.locator('#msg').click();
  await page.keyboard.type('Yes, see you there.',{delay:10});
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Send the reply');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect.poll(async()=>(await tab(signedIn,page))?.waiting).toBe(true);
  expect(await page.locator('#status').textContent()).toBe('');
  await page.keyboard.press('Enter');
@@ -78,11 +78,11 @@ test('Tab, Tab: the search is typed, and the next move (running it) is there the
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Search for the offsite');
  // One move: the typing (the Enter after it is the next move).
  expect((await tab(signedIn,page)).steps).toBe(1);
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#q')).toHaveValue('offsite');
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:1000}).toBe('Press Enter');
  expect((await tab(signedIn,page)).source).toBe('then');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#status')).toHaveText('Searched: offsite');
 });
 
@@ -93,7 +93,7 @@ test('Tab fills a form with the user’s own details at once, before any model a
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:2500}).toBe('Fill in your details');
  // Every field it fills is outlined, and what goes in each shows faintly in it.
  const shown=await tab(signedIn,page);expect(shown.outlined).toBe(3);expect(shown.previews).toEqual(['Dana','Lee','dana@example.com']);
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#first')).toHaveValue('Dana');await expect(page.locator('#last')).toHaveValue('Lee');
  await expect(page.locator('#email')).toHaveValue('dana@example.com');
 });
@@ -115,9 +115,9 @@ test('Tab, Tab: a menu opens, and its item, not on the page until then, is the n
  };
  await page.goto(`${standin.url}/pages/toolbar.html`);
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Open the font menu');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:1500}).toBe('Click “Roboto”');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#font')).toHaveText('Font: Roboto');
  expect(standin.bodies.some(b=>b.purpose==='browser')).toBe(false);
 });
@@ -130,7 +130,7 @@ test('Tab makes every move a hand makes: drags a card onto a column, sorts a row
   move=b=>({confidence:0.9,label,steps:[next(b)]});
   await page.locator('h1').click();
   await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe(label);
-  move=undefined;await page.keyboard.press('Tab');
+  move=undefined;await page.keyboard.press('Alt+q');
  };
  const id=(b:any,name:string)=>new RegExp(`(e\\d+) \\w+ "${name}"`).exec(b.messages[0].content.map((c:any)=>c.text).join('\n'))?.[1];
  // Native drag and drop: the drop is outlined too.
@@ -169,11 +169,11 @@ test('Tab works inside a frame from another site, and knows what the tab the use
  // The frame was asked about by itself, with the page around it named, and the chat it came from in hand.
  const asked=JSON.stringify(standin.bodies.filter(isPredict).at(-1).messages);
  expect(asked).toContain('Lesson 4B practice');expect(asked).toContain('the_tab_they_just_left');
- await lesson.keyboard.press('Tab');
+ await lesson.keyboard.press('Alt+q');
  await expect(activity.locator('#answer')).toHaveValue('Cenamos a las ocho.');
  // And the next move, inside the frame too.
  await expect.poll(async()=>(await tab(signedIn,lesson))?.label,{timeout:1500}).toBe('Click “Check answer”');
- await lesson.keyboard.press('Tab');
+ await lesson.keyboard.press('Alt+q');
  await expect(activity.locator('#result')).toHaveText('Checked: Cenamos a las ocho.');
 });
 
@@ -190,7 +190,7 @@ test('a page drawn as pixels: Tab sees a picture of it, and its moves point at s
   await page.mouse.click(1000,600);
   await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe(label);
   expect((await tab(signedIn,page)).outlined).toBeGreaterThan(0);
-  move=undefined;await page.keyboard.press('Tab');
+  move=undefined;await page.keyboard.press('Alt+q');
  };
  await offer('Select Write tests',{do:'click',at:[160,130]});
  await expect(page.locator('#status')).toHaveText('Selected: Write tests');
@@ -246,7 +246,7 @@ test('Tab for text in a drawn document: the words come from a picture with the c
  await expect.poll(()=>tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown),{timeout:8000}).toBe(' before the summer');
  const asked=standin.bodies.filter(b=>b.purpose==='tab').at(-1);
  expect(asked.messages[0].content[0].type).toBe('image');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#status')).toContainText('pasted: Launch plan Our launch soon before the summer happen');
  expect(await tell(worker,page,{type:'debug.drawn'}).then((s:any)=>s?.shown)).toBeUndefined();
  // Another key instead of Tab puts the words away.
@@ -285,7 +285,7 @@ test('a move shows as soon as its first field has arrived, and grows as the rest
  const early=await tab(signedIn,page);expect(early.final).toBe(false);expect(early.steps).toBe(1);
  await expect.poll(async()=>(await tab(signedIn,page))?.final,{timeout:6000}).toBe(true);
  expect((await tab(signedIn,page)).steps).toBe(2);
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#first')).toHaveValue('Dana');await expect(page.locator('#company')).toHaveValue('Team portal');
 });
 
@@ -321,7 +321,7 @@ test('a menu that opens on hover by CSS alone: its hidden items are seen with th
  await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Open Pricing');
  // A ring shows, on what opens the menu (the item itself is hidden, and would have none).
  expect((await tab(signedIn,page)).outlined).toBe(1);
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#status')).toHaveText('Opened Pricing');
 });
 
@@ -356,6 +356,6 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  await expect.poll(async()=>(await tab(signedIn,second))?.label,{timeout:8000}).toBe('Use the address you copied');
  // What it would type shows faintly in the field the cursor is in, where it would land.
  expect((await tab(signedIn,second)).preview).toBe('410 Lakeview Drive');
- await second.keyboard.press('Tab');
+ await second.keyboard.press('Alt+q');
  await expect(second.locator('#street')).toHaveValue('410 Lakeview Drive');
 });

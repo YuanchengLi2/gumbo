@@ -8,6 +8,7 @@ import {cleanSuggestion,lastWordOf,agreed} from '../shared/suggestion';
 import type {FieldContext} from '../content/context';
 import {fieldMemory,fieldReady,fieldKey,fieldQuery,writingQuery} from './memory-context';
 import {lately} from './lately';
+import {justLeft} from './workspace';
 /** Tab in the engine: a page asks with the field's context and the text around the caret; the answer streams back
  * through the suggestion checks a whole word at a time, and the model is stopped the moment the suggestion is complete
  * (a sentence ended), which saves both time and tokens. Focusing a field warms the model's cache with the part of the
@@ -15,7 +16,18 @@ import {lately} from './lately';
 type Ask={id:string;context:FieldContext;before:string;after:string;text:string};
 const warmed=new Map<string,number>();
 
-on('tab',async(message:Ask,{send,signal,url})=>{
+const arounds=new Map<number,{at:number;items:Promise<{title:string;text:string}[]>}>();
+function browserAround(tab:number|undefined):Promise<{title:string;text:string}[]>{
+ if(tab===undefined)return Promise.resolve([]);
+ const had=arounds.get(tab);if(had&&Date.now()-had.at<8000)return had.items;
+ const items=Promise.all([justLeft(tab).catch(()=>null),chrome.tabs.query({}).catch(()=>[] as chrome.tabs.Tab[])]).then(([left,tabs])=>{
+  const open=tabs.filter(t=>t.id!==tab&&!t.incognito&&t.title).slice(0,15).map(t=>`- ${t.title!.slice(0,80)}`).join('\n');
+  return[...(left?[{title:`the tab they just left: ${left.title}`,text:left.text.slice(0,1200)}]:[]),...(open?[{title:'their other open tabs',text:open}]:[])];
+ });
+ arounds.set(tab,{at:Date.now(),items});if(arounds.size>30)arounds.delete(arounds.keys().next().value!);
+ return items;
+}
+on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const settings=await loadSettings(),site=siteOf(url)||message.context.site;
  if(!activeOn(settings,site)){send({type:'tab.text',id:message.id,text:'',final:true});return;}
  const recall=await recallFor({site,intent:message.context.intent,before:message.before,thread:message.context.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text});
@@ -26,6 +38,11 @@ on('tab',async(message:Ask,{send,signal,url})=>{
  if(!recall.memory.length)recall.memory=await fieldReady(key);
  // What they copied a few minutes ago, in any tab (held in the worker: no wait).
  recall.copied=(await lately(c.url)).copied.filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
+ // The rest of their browser, as Tab for actions and the agent have it: the tab they just left (what they were reading or
+ // were told is often what they now write) and the titles of their other open tabs. Kept a few seconds, so typing never
+ // waits on it again.
+ const around=await browserAround(tab);
+ recall.reading=[...around,...recall.reading];
  const {system,messages,known}=tabRequest(message.context,message.before,message.after,recall);
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:message.context.singleLine,known,final,lastWord});
  // Two predictions run at once, and only the words both begin with are shown: where they part, the writer's next words

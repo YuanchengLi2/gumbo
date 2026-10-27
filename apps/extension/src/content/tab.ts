@@ -1,4 +1,5 @@
 /// <reference types="chrome" />
+import {takes,took} from './keys';
 import {fieldOf,hiddenBox,type Field} from './fields/field';
 import {snapshot} from './fields/text';
 import {caretOf} from './fields/caret';
@@ -7,7 +8,7 @@ import {readContext,type FieldContext} from './context';
 import {showGhost,hideGhost,ghostShown} from './ui/ghost';
 import {layer} from './ui/root';
 import {deepActive,pathOf} from './dom';
-import {post,listen,ask} from './port';
+import {post,listen,ask,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {remainder} from '../shared/suggestion';
 /** Tab in a page. After a pause in typing (120 ms, longer on sites where suggestions are often ignored) it asks the engine
@@ -39,6 +40,7 @@ export function startTab(){
 const fieldIsFocused=(field:Field)=>{const a=deepActive();return !!a&&(a===field.el||field.el.contains(a));};
 
 function onFocus(){
+ if(!alive())return;
  if(!active())return;const field=fieldOf(deepActive());if(!field||hiddenBox(field))return;
  const key=keyOf(field);if(Date.now()-(warmed.get(key)??0)<60_000)return;warmed.set(key,Date.now());
  // Wake the engine and warm the model's cache for this field while the user starts typing.
@@ -47,6 +49,7 @@ function onFocus(){
 }
 
 function onInput(event:Event){
+ if(!alive())return;
  if(!active()||composing)return;
  // A drawn editor's hidden typing box holds none of their words: there is nothing to continue from.
  const field=fieldOf(deepActive());if(!field||hiddenBox(field)){clear();return;}
@@ -103,10 +106,11 @@ function render(){
 }
 
 function onKey(event:KeyboardEvent){
+ if(!alive())return;
  if(!live||!live.text||!ghostShown()||event.isComposing)return;
  const field=live.field,snap=snapshot(field),rest=snap?remainder(live.base,live.text,snap.before):null;if(!rest)return;
- if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){
-  event.preventDefault();event.stopImmediatePropagation();void accept(field,rest,true);
+ if(takes(event)){
+  took(event);void accept(field,rest,true);
  }else if(event.key==='ArrowRight'&&(event.ctrlKey||event.metaKey)&&!event.shiftKey&&!editorOwnsTab(field)){
   event.preventDefault();event.stopImmediatePropagation();
   const word=/^\s*[^\s]+/.exec(rest)?.[0]??rest;void accept(field,word,word.length>=rest.length);

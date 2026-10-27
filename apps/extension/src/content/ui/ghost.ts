@@ -1,4 +1,5 @@
-import {surface} from './root';
+import {TAKE_KEY} from '../keys';
+import {surface,raise} from './root';
 import type {Caret} from '../fields/caret';
 /** Ghost text: the suggestion drawn exactly where typing it would put it. It starts at the caret in the field's own
  * font and size and wraps at the same edges as the field's text (the first line indented to the caret), so accepting
@@ -9,7 +10,7 @@ let ghost:HTMLDivElement|undefined,chip:HTMLDivElement|undefined;
 
 export type Shown={mode:'inline'|'chip';rect:DOMRect};
 export function showGhost(caret:Caret,text:string,{atLineEnd,singleLine,ownWrapping=false}:{atLineEnd:boolean;singleLine:boolean;ownWrapping?:boolean}):Shown{
- hideGhost();
+ hideGhost();raise();
  // Editors that wrap lines by their own rule (Monaco and its kind) get a one-line ghost, and the chip when it would wrap.
  if(ownWrapping&&atLineEnd&&!text.includes('\n')){
   const el=inline(caret,text,true),rect=el.getBoundingClientRect(),words=el.firstElementChild!.getBoundingClientRect();
@@ -46,7 +47,7 @@ export function ghostAt(caret:Caret,text:string,singleLine:boolean){
 function chipAt(caret:Caret,text:string){
  const box=document.createElement('div');box.className='chip';box.setAttribute('role','status');
  const words=document.createElement('span');words.className='text';words.textContent=text.trim();
- const key=document.createElement('kbd');key.textContent='Tab';
+ const key=document.createElement('kbd');key.textContent=TAKE_KEY;
  box.append(words,key);surface().appendChild(box);
  const rect=box.getBoundingClientRect(),below=caret.top+caret.height+6;
  const top=below+rect.height>window.innerHeight-4?caret.top-rect.height-6:below;

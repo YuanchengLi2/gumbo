@@ -71,7 +71,7 @@ for(const site of sites){
     await page.mouse.click(5,5).catch(()=>{});await field.click().catch(()=>{});
     const shown=await expect.poll(async()=>(await tell(signedIn,page,{type:'debug.predict'}))?.label,{timeout:10_000}).toBe('Type the check').then(()=>true,()=>false);
     if(shown){
-     await page.keyboard.press('Tab');
+     await page.keyboard.press('Alt+q');
      await expect.poll(async()=>String((await tell(signedIn,page,{type:'debug.field'}))?.text??''),{timeout:6000}).toContain('gumbo tab').catch(()=>fail('Tab running its guess'));
      typed+=', Tab guessed and typed';
     }else typed+=', no Tab guess (the cursor field was not named)';

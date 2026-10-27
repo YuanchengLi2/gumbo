@@ -19,7 +19,7 @@ test('suggests after a pause, Tab accepts it into the field, Ctrl+Z takes it bac
  const asked=standin.bodies.filter(b=>b.purpose==='tab');expect(asked.length%2).toBe(0);
  expect(JSON.stringify(asked.at(-1).messages)).toBe(JSON.stringify(asked.at(-2).messages));
  const prompt=JSON.stringify(body.messages);expect(prompt).toContain('Thanks for⟨cursor⟩');expect(prompt).toContain('What the field is for');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#ta')).toHaveValue('Thanks for the notes from our call.');
  // Focus stayed in the field: Tab was Gumbo's, not the page's.
  expect(await page.evaluate(()=>document.activeElement?.id)).toBe('ta');

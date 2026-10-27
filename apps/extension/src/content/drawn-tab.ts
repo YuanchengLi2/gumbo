@@ -1,10 +1,11 @@
 /// <reference types="chrome" />
+import {takes,took} from './keys';
 import {fieldOf,hiddenBox,type Field} from './fields/field';
 import {insert} from './fields/insert';
 import {deepActive} from './dom';
-import {post,ask as request} from './port';
+import {post,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
-import {layer} from './ui/root';
+import {layer,raise} from './ui/root';
 import {showGhost,hideGhost} from './ui/ghost';
 /** Tab for text in a drawn editor (Google Docs, Slides, a design tool's text): the user types into a hidden box that holds
  * none of their words, so at a pause the engine reads a picture of the view with the caret marked, and the words it
@@ -27,10 +28,11 @@ export function startDrawnTab(){
 const hiddenField=()=>{const f=fieldOf(deepActive());return f&&hiddenBox(f)?f:null;};
 
 function onKey(event:KeyboardEvent){
+ if(!alive())return;
  if(!event.isTrusted||event.isComposing||!active())return;
  const field=hiddenField();if(!field)return;
- if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey&&shown?.el===field.el){
-  event.preventDefault();event.stopImmediatePropagation();
+ if(takes(event)&&shown?.el===field.el){
+  took(event);
   const text=shown.text;drop();typed=(typed+text).slice(-300);void insert(field,text);return;
  }
  drop();
@@ -72,7 +74,7 @@ function caretInPage(field:Field):[number,number,number]|null{
  * are not set in it as ghost text). */
 let words:string|undefined;
 export function showDrawnWords(text:string,[x,top,height]:[number,number,number]){
- layer();words=text;
+ layer();raise();words=text;
  showGhost({x,top,height,left:x,right:innerWidth-12,bottom:top+height,font:{family:'system-ui',size:'14px',weight:'400',style:'normal',letterSpacing:'normal',wordSpacing:'normal',lineHeight:'normal',textTransform:'none',color:'#000',tabSize:'4'},direction:'ltr',scale:1,background:'transparent',whiteSpace:'pre-wrap'},text,{atLineEnd:false,singleLine:true});
 }
 export function hideDrawnWords(){if(words===undefined)return;words=undefined;hideGhost();}

@@ -96,7 +96,12 @@ export async function toggleTab(tab:chrome.tabs.Tab){
  await badge(tab.id,true);toTop(tab.id,{session,title,started:true});
  return{listening:true,session};
 }
-chrome.commands.onCommand.addListener((command,tab)=>{if(command==='listen'&&tab)void toggleTab(tab).catch(error=>console.warn('Listening:',error));});
+chrome.commands.onCommand.addListener((command,tab)=>{
+ if(command==='listen'&&tab)void toggleTab(tab).catch(error=>console.warn('Listening:',error));
+ // The sidebar's key (Alt+G, changed at chrome://extensions/shortcuts): opened at once, while the key still counts as the
+ // user's own gesture.
+ if(command==='sidebar'&&tab?.windowId!==undefined)void chrome.sidePanel.open({windowId:tab.windowId}).catch(error=>console.warn('Sidebar:',error));
+});
 
 /** What is heard now, with its lines so far (for the side panel and the popup). */
 export async function listenState(tabId?:number){

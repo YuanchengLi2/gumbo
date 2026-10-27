@@ -56,7 +56,7 @@ test('Tab: an address copied in another tab goes into the shipping form',async({
  note(`  Copied address → shipping form: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''}${state?.preview?` · previewed “${state.preview}”`:''}`);
  expect(state?.showing).toBe(true);
  expect(JSON.stringify(state.plan.steps)).toContain('Nishishinjuku');
- await shop.keyboard.press('Tab');
+ await shop.keyboard.press('Alt+q');
  await expect.poll(()=>shop.locator('#street').inputValue(),{timeout:8000}).toContain('Nishishinjuku');
  await expect.poll(()=>shop.locator('#city').inputValue(),{timeout:5000}).not.toBe('').catch(()=>{});
  note(`    Tab filled: street “${await shop.locator('#street').inputValue()}”, city “${await shop.locator('#city').inputValue()}”`);
@@ -84,7 +84,7 @@ test('Tab, Tab: after one move, the next is already there',async({page,context,s
  const first=await guess(signedIn,shop);
  note(`  Tab, Tab — first: ${describe(first.state)}${first.state?.plan?.then?` · then: ${JSON.stringify(first.state.plan.then)}`:''}`);
  expect(first.state?.showing).toBe(true);
- const pressed=Date.now();await shop.keyboard.press('Tab');
+ const pressed=Date.now();await shop.keyboard.press('Alt+q');
  let nextMs:number|undefined;
  await expect.poll(async()=>{const s=await predict(signedIn,shop);if(s?.showing&&nextMs===undefined&&JSON.stringify(s.plan?.steps)!==JSON.stringify(first.state.plan.steps))nextMs=Date.now()-pressed;return nextMs!==undefined;},{timeout:8000,intervals:[50]}).toBe(true).catch(()=>{});
  const next=await predict(signedIn,shop);
@@ -100,7 +100,7 @@ test('Studying: an assistant chat in one tab, the course\'s quiz in a frame in t
  const {state,shownMs}=await guess(signedIn,lesson,12_000);
  note(`  Studying, quiz in a frame, after reading the answer in the chat tab: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms after the click)`:''}`);
  expect(state?.showing).toBe(true);
- await lesson.keyboard.press('Tab');
+ await lesson.keyboard.press('Alt+q');
  await expect.poll(()=>activity.locator('#answer').inputValue(),{timeout:6000}).not.toBe('');
  note(`    Tab typed: “${await activity.locator('#answer').inputValue()}”`);
  const next=await guess(signedIn,lesson,3000);
@@ -153,12 +153,12 @@ test('A page drawn as pixels: Tab reads the picture and points at the drawn sear
  await board.mouse.click(1000,600);
  const {state,shownMs}=await guess(signedIn,board,12_000);
  note(`  Drawn board, after copying “best ramen in Shinjuku”: ${describe(state)}${state?.plan?.steps?.[0]?.at?` at ${state.plan.steps[0].at}`:''}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
- if(state?.showing){await board.keyboard.press('Tab');await board.waitForTimeout(1200);note(`    after Tab: search box “${await board.locator('#find').inputValue()}”, status “${await board.locator('#status').textContent()}”`);}
+ if(state?.showing){await board.keyboard.press('Alt+q');await board.waitForTimeout(1200);note(`    after Tab: search box “${await board.locator('#find').inputValue()}”, status “${await board.locator('#status').textContent()}”`);}
  // Then: the user picks a note by hand; what comes next?
  await board.mouse.click(160,130);
  const after=await guess(signedIn,board,12_000);
  note(`    after selecting “Write tests” by hand: ${describe(after.state)}${after.state?.plan?.steps?.[0]?.at?` at ${after.state.plan.steps[0].at}${after.state.plan.steps[0].toAt?` → ${after.state.plan.steps[0].toAt}`:''}`:''}`);
- if(after.state?.showing){await board.keyboard.press('Tab');await board.waitForTimeout(1200);note(`    after Tab: status “${await board.locator('#status').textContent()}”`);}
+ if(after.state?.showing){await board.keyboard.press('Alt+q');await board.waitForTimeout(1200);note(`    after Tab: status “${await board.locator('#status').textContent()}”`);}
 });
 
 test('A real drawing app (Excalidraw): what Tab and Ctrl+K make of it',async({page,signedIn})=>{
@@ -217,7 +217,7 @@ test('Tab for text in a document drawn as pixels (as Google Docs draws its text)
  const s=await tell(signedIn,page,{type:'debug.drawn'}).catch(()=>null);
  note(`  Drawn document, “First, we will open the beta to”: ${s?.shown?`offered “${s.shown}” (${shownMs} ms after the last key, 650 of them the pause)`:'nothing offered'}`);
  seen(standin,'drawn-tab','tab');
- if(s?.shown){await page.keyboard.press('Tab');await page.waitForTimeout(400);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
+ if(s?.shown){await page.keyboard.press('Alt+q');await page.waitForTimeout(400);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
 });
 
 test('Figma, a public prototype: what Tab and Ctrl+K make of it',async({page,signedIn})=>{
@@ -237,7 +237,7 @@ test('Tab on a board, after the user dragged a card by hand',async({page,signedI
  await expect(page.locator('#status')).toHaveText('Moved Write tests to Done');
  const {state,shownMs}=await guess(signedIn,page,12_000);
  note(`  Board, after dragging “Write tests” to Done by hand: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
- if(state?.showing){await page.keyboard.press('Tab');await page.waitForTimeout(1200);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
+ if(state?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(1200);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
 });
 
 test('Tab: a reply that is written gets sent, the send waiting for Enter',async({page,signedIn,standin})=>{
@@ -247,7 +247,7 @@ test('Tab: a reply that is written gets sent, the send waiting for Enter',async(
  const {state,shownMs}=await guess(signedIn,page);
  note(`  Reply written → ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the pause)`:''}`);
  expect(state?.showing).toBe(true);
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect.poll(async()=>(await predict(signedIn,page))?.waiting,{timeout:8000}).toBe(true);
  expect(await page.locator('#status').textContent()).toBe('');
  await page.keyboard.press('Enter');

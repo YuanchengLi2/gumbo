@@ -15,7 +15,7 @@ import {actionOf,type Action} from './inline-action';
  * names a mode on its first line (edit, answer, act) and the rest streams back. An edit is only the new text; an answer
  * may cite memory, whose items go back with it as links; an action comes as one JSON object, turned here into a link to
  * open (a prefilled calendar event, a search) or a note to keep. Nothing on the page changes until the user keeps it. */
-type Ask={id:string;session?:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;instruction:string;previous?:string;
+type Ask={id:string;session?:string;site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;page?:string;inField:boolean;instruction:string;previous?:string;
  /** The page is drawn as pixels (a document, a design): a picture of the view goes with the question. */drawn?:boolean;view?:[number,number]};
 const warmed=new Map<string,number>();
 const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -32,7 +32,7 @@ function browserOf(tab:number|undefined):Promise<string>{
  const text=workspace({here:tab,compact:true}).catch(()=>'');browsers.set(tab,{at:Date.now(),text});if(browsers.size>50)browsers.delete(browsers.keys().next().value!);
  return text;
 }
-const contextOf=(m:Omit<Ask,'id'|'instruction'>)=>`${m.selection.slice(0,300)}\n${m.title}\n${m.label??''}\n${m.before.slice(-200)}`;
+const contextOf=(m:Omit<Ask,'id'|'instruction'>)=>`${m.selection.slice(0,300)}\n${m.title}\n${m.label??''}\n${m.before.slice(-200)||(m.page??"").slice(0,300)}`;
 const keyOf=(m:Omit<Ask,'id'|'instruction'>)=>`${m.site}|${contextOf(m).slice(0,400)}`;
 async function memoryFor(m:Ask):Promise<Remembered[]>{
  const search=relevant(`${m.instruction}\n${contextOf(m)}`,{k:5}).catch(()=>[] as Remembered[]);

@@ -5,10 +5,10 @@ import {snapshot,textMap,rangeOf,selectionIn} from './fields/text';
 import {caretOf} from './fields/caret';
 import {insert,select} from './fields/insert';
 import {readContext} from './context';
-import {layer,surface} from './ui/root';
+import {layer,surface,raise} from './ui/root';
 import {hideGhost} from './ui/ghost';
 import {deepActive} from './dom';
-import {post,listen,ask as request} from './port';
+import {post,listen,ask as request,alive} from './port';
 import {pageText} from './capture';
 import {drawnSurface} from './predict';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
@@ -21,7 +21,7 @@ import {htmlToMarkdown,markdownToHtml,plainOf,hasFormatting} from '../shared/ric
  * (from the selection at once, then from the page, the conversation and memory). Something to do in the page runs there,
  * step by step, with its steps in the card and Enter to allow a final one. Ctrl+K stays the site's own on sites the user
  * chose (Alt+K opens Gumbo there), and is left alone when there is no field and no selection. */
-type Open={session:string;frame:HTMLIFrameElement;field:Field|null;start:number;end:number;original:string;rich:boolean;pageRange?:Range;context:{site:string;title:string;intent?:string;label?:string;before:string;after:string};request?:string;mode?:'edit'|'answer'|'act';text:string;final:boolean;action?:any;html?:string;
+type Open={session:string;frame:HTMLIFrameElement;field:Field|null;start:number;end:number;original:string;rich:boolean;pageRange?:Range;context:{site:string;title:string;intent?:string;label?:string;before:string;after:string;page:string};request?:string;mode?:'edit'|'answer'|'act';text:string;final:boolean;action?:any;html?:string;
  /** Something being done in the page: the agent's conversation, the final step waiting for Enter, whether it ended. */doing?:{chat?:string;confirm?:string;done?:boolean};
  /** Keys pressed before the card could take them (it is still loading): they go to the card, never to the page. */early:string[];ready:boolean;
  /** Opened over a drawing (Google Docs, a design): what had the focus (the editor's typing box, or the frame it is in), and
@@ -42,18 +42,22 @@ export function startInline(){
 /** Typing straight after Ctrl+K: the card takes a moment to load, and what is typed meanwhile is held and handed to it,
  * so no key is lost and none reaches the page (where it would replace the selection). */
 function onEarlyKey(event:KeyboardEvent){
+ if(!alive())return;
  if(!open||open.ready||!event.isTrusted||event.isComposing||event.ctrlKey||event.metaKey||event.altKey)return;
  if(event.key.length!==1&&!['Enter','Escape','Backspace','Tab','ArrowDown','ArrowUp'].includes(event.key))return;
- event.preventDefault();event.stopImmediatePropagation();open.early.push(event.key);
+ event.preventDefault();event.stopImmediatePropagation();
+ open.early.push(event.key);
 }
 /** While Ctrl+K does something in the page the focus may be in the page (the agent typed there): Enter and Esc still
  * answer the card's question, and Esc stops. */
 function onDoingKey(event:KeyboardEvent){
+ if(!alive())return;
  const d=open?.doing;if(!d||!open||document.activeElement===open.frame)return;
  if(event.key==='Enter'&&d.confirm){event.preventDefault();event.stopImmediatePropagation();answer(open,true);}
  else if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();if(d.confirm)answer(open,false);else if(d.done)close(false);else stopDoing(open);}
 }
 function onKey(event:KeyboardEvent){
+ if(!alive())return;
  if(!settings||!activeOn(settings,location.hostname)||event.isComposing)return;
  const alt=settings.altK.includes(site());
  const pressed=alt?event.altKey&&!event.ctrlKey&&!event.metaKey&&event.code==='KeyK':(event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&event.code==='KeyK';
@@ -85,7 +89,7 @@ export function openOverDrawing(editable:boolean){
 }
 function begin(field:Field|null,drawing?:Open['drawing']){
  hideGhost();
- const session=crypto.randomUUID();let start=0,end=0,original='',rich=false,anchor:DOMRect|undefined,pageRange:Range|undefined,before='',after='';
+ const session=crypto.randomUUID();let start=0,end=0,original='',rich=false,anchor:DOMRect|undefined,pageRange:Range|undefined,before='',after='',page='';
  if(field){
   const snap=snapshot(field,1500,1500);if(!snap)return;
   start=snap.start;end=snap.end;original=snap.selected;before=snap.before;after=snap.after;
@@ -95,9 +99,11 @@ function begin(field:Field|null,drawing?:Open['drawing']){
   if(!anchor||!anchor.height){layer();const caret=caretOf(field);anchor=caret?new DOMRect(caret.x,caret.top,1,caret.height):field.el.getBoundingClientRect();}
  }else{
   const selection=getSelection();
-  if(selection&&selection.rangeCount&&selection.toString().trim()){pageRange=selection.getRangeAt(0).cloneRange();original=selection.toString().trim();anchor=pageRange.getBoundingClientRect();}
-  // The whole page: the card opens at the top, and the page's text goes with the request.
-  else{anchor=(drawing||drawnSurface())&&drawnAnchor()||new DOMRect(innerWidth/2-280,64,560,0);before=pageText(6000);}
+  // Text selected on the page: the words around it (its passage) go with it, and the page's own text.
+  if(selection&&selection.rangeCount&&selection.toString().trim()){pageRange=selection.getRangeAt(0).cloneRange();original=selection.toString().trim();anchor=pageRange.getBoundingClientRect();[before,after]=around(pageRange,original);}
+  // The whole page: the card opens at the top (or by the caret, on a drawing).
+  else anchor=(drawing||drawnSurface())&&drawnAnchor()||new DOMRect(innerWidth/2-280,64,560,0);
+  page=pageText(6000);
  }
  // Over a drawing the picture is taken now, while what they selected is highlighted as they see it: it fades once the
  // card has the focus.
@@ -107,8 +113,8 @@ function begin(field:Field|null,drawing?:Open['drawing']){
  frame.src=chrome.runtime.getURL('card.html')+'#s='+session;frame.allow='clipboard-write';frame.setAttribute('allowtransparency','true');
  const width=Math.min(560,innerWidth-16),left=Math.max(8,Math.min(anchor.left-10,innerWidth-width-8)),below=anchor.bottom+4,above=anchor.top-4;
  Object.assign(frame.style,{position:'fixed',left:`${left}px`,top:`${below+150>innerHeight&&above>150?Math.max(8,above-150):below}px`,width:`${width}px`,height:'72px',border:'0',background:'transparent',colorScheme:'normal',pointerEvents:'auto',zIndex:'2147483647'});
- layer();surface().appendChild(frame);
- open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after},text:'',final:false,early:[],ready:false,drawing};
+ layer();raise();surface().appendChild(frame);
+ open={session,frame,field,start,end,original,rich,pageRange,context:{site:site(),title:document.title,intent:context?.intent,label:context?.label,before,after,page},text:'',final:false,early:[],ready:false,drawing};
  post({type:'card.open',session});
  // A card that never comes up (the extension was updated under the page, the worker could not answer) must not keep
  // the keys: the page gets them and its selection back.
@@ -116,7 +122,15 @@ function begin(field:Field|null,drawing?:Open['drawing']){
  post({type:'inline.prewarm',...stableOf(open)});
  post({type:'inline.predict',session,...stableOf(open),thread:context?.thread?.slice(-2).map(m=>`${m.author?`${m.author}: `:''}${m.text.slice(0,500)}`).join('\n')});
 }
-const stableOf=(o:Open)=>({site:o.context.site,title:o.context.title,intent:o.context.intent,label:o.context.label,selection:o.original,before:o.context.before,after:o.context.after,inField:!!o.field});
+/** The words around text selected on a page: its passage (the nearest block holding a good deal of text), before the
+ * selection and after it. */
+function around(range:Range,selected:string):[string,string]{
+ let block:Node|null=range.commonAncestorContainer;
+ while(block&&(!(block instanceof HTMLElement)||(block.innerText??'').length<1500)&&block.parentNode&&block!==document.body)block=block.parentNode;
+ const text=block instanceof HTMLElement?block.innerText??'':'',at=text.indexOf(selected.slice(0,200));
+ return at<0?['','']:[text.slice(Math.max(0,at-2500),at),text.slice(at+selected.length,at+selected.length+2000)];
+}
+const stableOf=(o:Open)=>({site:o.context.site,title:o.context.title,intent:o.context.intent,label:o.context.label,selection:o.original,before:o.context.before,after:o.context.after,page:o.context.page||undefined,inField:!!o.field});
 const view=(o:Open,v:Record<string,unknown>)=>post({type:'card.to',session:o.session,payload:{type:'view',...v}});
 
 function onMessage(message:any){

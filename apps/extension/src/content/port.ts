@@ -10,6 +10,9 @@ function connect():chrome.runtime.Port|undefined{
   return port;
  }catch{return undefined;} // The extension was reloaded: this old content script is no longer connected to anything.
 }
+/** Whether this copy of Gumbo is still the extension's: after an update or a reload, a copy left in an open page is cut
+ * off (its runtime has no id) and must let every key and click pass, so the new copy gets them. */
+export const alive=()=>{try{return !!chrome.runtime?.id;}catch{return false;}};
 export function post(message:Record<string,unknown>){try{connect()?.postMessage(message);}catch{port=undefined;try{connect()?.postMessage(message);}catch{}}}
 export function listen(listener:(message:any)=>void){listeners.add(listener);return()=>listeners.delete(listener);}
 /** A request that waits for one answer of a type (with the same id). */

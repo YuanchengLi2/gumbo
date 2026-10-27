@@ -14,7 +14,7 @@ test('offers the usual next step, and Tab takes it',async({page,signedIn,standin
  await habit(page,url,'Edge Functions','Logs',6);
  await page.goto(url);await page.getByRole('button',{name:'Edge Functions'}).click();
  await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toContain('Logs');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect(page.locator('#view')).toHaveAttribute('data-view','logs');
  const meter=await signedIn.evaluate(()=>(globalThis as any).gumbo.measureActions());
  expect(meter.shown).toBeGreaterThan(3);expect(meter.precision).toBeGreaterThan(0.8);
@@ -25,7 +25,7 @@ test('a final step waits for Enter',async({page,signedIn,standin})=>{
  await habit(page,url,'Settings','Delete project',6);
  await page.goto(url);await page.getByRole('button',{name:'Settings'}).click();
  await expect.poll(async()=>(await chip(signedIn,page))?.label,{timeout:6000}).toContain('Delete project');
- await page.keyboard.press('Tab');
+ await page.keyboard.press('Alt+q');
  await expect.poll(async()=>(await chip(signedIn,page))?.waiting).toBe(true);
  await expect(page.locator('#view')).not.toHaveAttribute('data-view','deleted');
  await page.keyboard.press('Enter');

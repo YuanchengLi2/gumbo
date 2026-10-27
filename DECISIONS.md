@@ -181,6 +181,21 @@
   above Haiku 5.5's, and its speed for Tab is the open question. Taken back minutes later, at the user's request: Haiku
   for the quick calls and notes, DeepSeek for the agent, as before. Terra stays a choice in the popup, and quick calls to
   a model other than Claude still go without thinking or a warm-up.
+- **After the user's first real use (October 27), from their account's call log and what they saw:**
+  - **Tab asked about the same page every 1-2 s for a minute** (about 40 calls with the same prompt size), so the move
+    flipped while they looked. A guess is now asked only when the moment changes (what they did, the address, the
+    cursor), and a move shows only on a clue: their own click, key or drag in the last 20 s, or something copied in
+    the last 3 minutes. Pages that change by themselves, or just opened, show nothing. The bar is 0.7 (sites 0.6 to
+    0.9), the model is told generic moves (sign in, a menu, pricing) are not clues, and memory gets 0.35 s.
+  - **Ctrl+K saw only the end of the page** (the last 1,500 characters, mostly the footer) and nothing around a selected
+    passage. It now gets the page's text from the top and the words around a selection.
+  - **Text suggestions** now know the tab just left and the other open tabs, as Tab for actions and the agent do.
+  - **The key that takes a suggestion or a move is Alt+Q** (the user's choice): Tab is the page's own again.
+  - **The move's hint is a small one-line tag beside its target** that never takes a click; outlines are fainter.
+  - **Modal dialogs:** Gumbo's layer goes inside the open modal (else into the top layer), so hints and the card show
+    and work there.
+  - **A copy left in a page after an update** steps aside (its keys and clicks pass to the new one); Alt+G opens the
+    sidebar.
 - **Free guesses ahead too** (the user: Free is for trying Gumbo, and guessing ahead is what makes it feel instant). Only
   a plan's last sixth of credits is saved as below.
 - **Open tabs get Gumbo at install and update:** Chrome adds a content script only to pages loaded afterwards, so on a

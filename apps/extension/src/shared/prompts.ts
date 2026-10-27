@@ -73,7 +73,7 @@ export function stableContext(context:Omit<FieldContext,'url'|'title'>&{url?:str
 export function freshContext(before:string,after:string,recall:Pick<Recall,'reading'|'heard'>&{memory?:Recall['memory'];copied?:Recall['copied']}){
  const remembered=(recall.memory??[]).slice(0,3).map(m=>`From "${clip(m.title,80)}" (${m.when}):\n${clip(m.text,450)}`).join('\n\n');
  const seen=new Set((recall.memory??[]).map(m=>m.title));
- const reading=recall.reading.filter(r=>!seen.has(r.title)).slice(0,2).map(r=>`From "${clip(r.title,80)}":\n${clip(r.text,500)}`).join('\n\n');
+ const reading=recall.reading.filter(r=>!seen.has(r.title)).slice(0,4).map(r=>`From "${clip(r.title,80)}":\n${clip(r.text,800)}`).join('\n\n');
  const heard=recall.heard.slice(0,2).map(h=>`From "${clip(h.title,80)}"${h.speaker?` (${h.speaker})`:''}:\n${clip(h.text,500)}`).join('\n\n');
  const word=lastWordOf(before);
  const start=word?`Begin with "${word}", the word the cursor is in or right after.`:'The cursor follows a space or a new line: begin with the next word.';
@@ -112,12 +112,14 @@ Only what fits what you see: specific to this page and selection, never generic.
 
 /** Ctrl+K: the part that is the same from opening the card to pressing Enter (the page, the field, the selection and the
  * text around it) comes first, so it is cached while the instruction is typed. */
-export function inlineStable(input:{site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;inField:boolean;facts:Recall['facts'];style?:Recall['style']}){
- const field=[`Site: ${input.site}`,input.title?`Page title: ${clip(input.title,140)}`:'',input.inField?`Field: ${input.intent??'text'}${input.label?` (${input.label})`:''}`:input.selection?'Selected on the page (not in a field)':'The whole page (nothing selected): its text is given as the text before'].filter(Boolean).join('\n');
+/** The page's own words go with every Ctrl+K made outside a field, from the top (title, headings, main text): the end of
+ * a page is mostly its footer. A selection on a page also brings the words around it. */
+export function inlineStable(input:{site:string;title:string;intent?:string;label?:string;selection:string;before:string;after:string;page?:string;inField:boolean;facts:Recall['facts'];style?:Recall['style']}){
+ const field=[`Site: ${input.site}`,input.title?`Page title: ${clip(input.title,140)}`:'',input.inField?`Field: ${input.intent??'text'}${input.label?` (${input.label})`:''}`:input.selection?'Selected on the page (not in a field)':'The whole page (nothing selected): its text is given below'].filter(Boolean).join('\n');
  const facts=Object.entries(input.facts).filter(([,v])=>v).map(([k,v])=>`${k}: ${v}`).join('\n');
  // Their own writing in this kind of field, so an edit or a draft sounds like them.
  const style=(input.style??[]).slice(0,2).map(s=>`[${s.site}, ${s.intent}]\n${clip(s.text,400)}`).join('\n---\n');
- return section('where',field)+section('about_the_person',facts)+section('examples_of_their_own_writing',style)+section('text_before_the_selection',input.before.slice(-1500))+(input.selection?section('selection',input.selection):'<selection>\n(nothing selected: the cursor is between the text before and after)\n</selection>\n')+section('text_after_the_selection',input.after.slice(0,1500));
+ return section('where',field)+section('about_the_person',facts)+section('examples_of_their_own_writing',style)+section('page_text',input.page&&clip(input.page,6000))+section('text_before_the_selection',input.before.slice(-2500))+(input.selection?section('selection',input.selection):'<selection>\n(nothing selected: the cursor is between the text before and after)\n</selection>\n')+section('text_after_the_selection',input.after.slice(0,2000));
 }
 export function inlineFresh(input:{instruction:string;now:Date;timeZone:string;memory:{n:number;title:string;url?:string;when?:string;text:string}[];previous?:string;lately?:string}){
  const memory=input.memory.map(m=>`[${m.n}] ${clip(m.title,90)}${m.when?` (${m.when})`:''}\n${clip(m.text,600)}`).join('\n\n');

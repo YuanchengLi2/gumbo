@@ -53,14 +53,13 @@ function Popup(){
     <div className="row"><button className="link" title="For documents, designs and boards drawn as pixels. Chrome shows a bar for a moment each time." onClick={()=>{
      if(settings.realInput){void saveSettings({realInput:false});return;}
      void chrome.permissions.request({permissions:['debugger']}).then(granted=>{if(granted)void saveSettings({realInput:true});});
-    }}>{settings.realInput?'Stop using real clicks in drawing apps':'Use real clicks in drawing apps'}</button></div>
-   </section>
+    }}>{settings.realInput?'Stop using real clicks in drawing apps':'Use real clicks in drawing apps'}</button></div>   </section>
    <section>
     <h2>Listening</h2>
     <p className="muted">{!settings.listen?'Off: videos and calls are not heard':!site||blocked?'Never on this page':!listensOn(settings,site)?`Not on ${site}`:heard?'Hearing this tab now':'Videos, talks and calls you play are heard and remembered, on this computer'}</p>
     <div className="row">
      {tabId!==undefined&&site&&!blocked&&<button className="link" onClick={()=>void ask<{listening:boolean;session?:string}>({type:'listen.toggle',tabId}).then(r=>setHeard(r?.listening?r.session:undefined))}>{heard?'Stop listening':'Listen to this tab'}</button>}
-     <button className="link" onClick={()=>{void chrome.sidePanel.open({windowId:chrome.windows.WINDOW_ID_CURRENT}).catch(()=>{});window.close();}}>Captions and notes</button>
+     <button className="link" onClick={()=>{void chrome.sidePanel.open({windowId:chrome.windows.WINDOW_ID_CURRENT}).catch(()=>{});window.close();}}>Open sidebar <kbd>Alt+G</kbd></button>
     </div>
     <div className="row">
      <button className="link" onClick={()=>void saveSettings({listen:!settings.listen})}>{settings.listen?'Stop hearing videos and calls':'Hear videos and calls'}</button>

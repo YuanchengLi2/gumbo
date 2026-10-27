@@ -1,14 +1,15 @@
 /// <reference types="chrome" />
+import {takes,took,TAKE_KEY} from './keys';
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
 import {describe,pageModel,deepQuery,hoverOwner,type Item} from './perceive';
 import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {perform,irreversible,findTarget,type Action,type Target,type Done} from './act';
 import {pageText} from './capture';
-import {surface,layer} from './ui/root';
+import {surface,layer,raise} from './ui/root';
 import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
-import {post,listen as portListen,ask as request} from './port';
+import {post,listen as portListen,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
 /** Tab for actions, on any page: the user's next move, as a code editor's Tab is the next edit. As they work, Gumbo
@@ -80,6 +81,7 @@ export function startPredict(){
   if(Date.now()-lastAhead>1500&&lastAhead)aheadOfPause();else if(!lastAhead)lastAhead=Date.now();
  },true);
  watchHands();
+ for(const type of ['pointerdown','keydown'])window.addEventListener(type,e=>{if(e.isTrusted)lastInput=Date.now();},true);
  window.addEventListener('keydown',onKey,true);
  window.addEventListener('scroll',()=>requestAnimationFrame(place),{capture:true,passive:true});
  window.addEventListener('resize',()=>requestAnimationFrame(place));
@@ -107,6 +109,7 @@ function watchHands(){
  document.addEventListener('contextmenu',e=>{if(e.isTrusted){did('right-clicked',what(e.composedPath()[0] as Element));soon(120);}},true);
 }
 function onClick(event:MouseEvent){
+ if(!alive())return;
  if(!event.isTrusted||(chip&&event.composedPath().includes(chip)))return;
  const target=(event.composedPath()[0] as Element|undefined)?.closest?.(actionable);
  if(active()&&target&&!fieldOf(target)){const item=describe(target);if(item.name){did('clicked',item.name);post({type:'capture.event',role:roleOf(target),name:item.name,path:item.path,nearby:item.nearby});}}
@@ -139,11 +142,16 @@ function settled(quiet=120,max=1500):Promise<void>{
 let typingFor=1100;
 const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
 
+let lastMoment='',lastMomentAt=0;
 /** The next guess is for coming back to this tab: asked before the user does anything here (ahead, for thrift.ts). */
 let returned=false;
 const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false)=>post({type:'predict',id,title:document.title,text:pageText(3500),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby})),activity:moments,focused,ahead:back||id.startsWith('a'),
+ // A clue: the user's own hand on this page a moment ago (only then may a move show; see the engine).
+ clue:Date.now()-lastInput<20_000,
  // A page drawn as pixels: the engine looks at a picture of the view, and moves may point at spots in it.
  ...(!inFrame&&drawnSurface()?{drawn:true,view:[innerWidth,innerHeight]}:{})});
+/** When the user last clicked, pressed a key or touched this page (their own input, never the page's). */
+let lastInput=0;
 /** Whether the page is mostly drawn as pixels (a document, a sheet, a design, a board, a map): canvases cover a good part
  * of the view, so its words and shapes are not elements anyone can read. */
 export function drawnSurface(){
@@ -156,10 +164,16 @@ export function drawnSurface(){
 }
 async function guess(){
  if(!active()||running||taking||typing()||document.visibilityState!=='visible')return;
- if(asking)post({type:'cancel',id:asking});
  // A move asked ahead while they typed shows the moment they stop; this guess, with every word, follows it.
  const ready=aheadForPause();if(ready&&!hint)show(ready,false,'ahead');
- const id=`p${++seq}`,model=pageModel(160),focus=fieldOf(deepActive());
+ // The same moment as the last guess (nothing done since, the same address and cursor): not asked again. A page that keeps
+ // changing by itself (a chat streaming, a feed, popups coming and going) would otherwise ask every second or two, and
+ // the move would flip while the user looks at it (seen in the logs: the same page asked about 40 times in a minute).
+ const focused=fieldOf(deepActive()),moment=`${location.href}|${activity.length}|${JSON.stringify(activity.slice(-2))}|${focused?nameOf(focused.el,60):''}`;
+ if(moment===lastMoment&&Date.now()-lastMomentAt<60_000)return;
+ lastMoment=moment;lastMomentAt=Date.now();
+ if(asking)post({type:'cancel',id:asking});
+ const id=`p${++seq}`,model=pageModel(160),focus=focused;
  asking=id;for(const i of model.items)seen.set(i.id,i);
  listen(id);
  const back=returned;returned=false;
@@ -241,10 +255,11 @@ function show(plan:Plan,final:boolean,source?:string){
  // The same move, further along: the line is updated in place, never flashed.
  if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=plan.label;place();return;}
  if(taking)return;
- hide();hint={plan,el,final,source};layer();
- chip=document.createElement('div');chip.className='chip';chip.setAttribute('role','status');
- const key=document.createElement('kbd');key.textContent='Tab';const text=document.createElement('span');text.className='text';text.textContent=plan.label;
- chip.append(key,text);chip.addEventListener('mousedown',e=>{e.preventDefault();void go();});surface().appendChild(chip);
+ hide();hint={plan,el,final,source};layer();raise();
+ // A small tag beside what the move touches, one line, that never takes a click: the page stays usable under it.
+ chip=document.createElement('div');chip.className='move';chip.setAttribute('role','status');chip.title=plan.label;
+ const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=plan.label;
+ chip.append(key,text);surface().appendChild(chip);
  // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
  marked=plan.steps.flatMap((step):Mark[]=>{
   // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).
@@ -287,13 +302,20 @@ function ghostIn(el:Element,text:string,single:boolean){
 /** By the cursor (the focused field) or the thing it would touch; else the bottom corner. */
 function place(){
  if(!chip||!hint)return;
- const anchor=(fieldOf(deepActive())?.el??hint.el) as Element|undefined,r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
- chip.style.left=`${r?Math.min(Math.max(8,r.left),innerWidth-c.width-12):innerWidth-c.width-20}px`;
- chip.style.top=`${r?Math.min(r.bottom+6,innerHeight-c.height-12):innerHeight-c.height-20}px`;
  for(const m of marked){
   if(m.ring&&m.point)Object.assign(m.ring.style,{left:`${m.point[0]-9}px`,top:`${m.point[1]-9}px`,width:'18px',height:'18px'});
   else if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
  }
+ // Beside what the move touches first (its outline; else the field the cursor is in): to its right, centred on it; where
+ // there is no room, just above its right end; with nothing to touch, in the bottom right corner.
+ const anchor=(marked.find(m=>m.ring)?.ring??fieldOf(deepActive())?.el) as Element|undefined;
+ const r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
+ let left=innerWidth-c.width-16,top=innerHeight-c.height-16;
+ if(r){
+  if(r.right+8+c.width<=innerWidth-8){left=r.right+8;top=r.top+(r.height-c.height)/2;}
+  else{left=Math.max(8,r.right-c.width);top=r.top-c.height-6;if(top<8)top=r.bottom+6;}
+ }
+ chip.style.left=`${Math.round(left)}px`;chip.style.top=`${Math.round(Math.min(Math.max(8,top),innerHeight-c.height-8))}px`;
  drawPreviews();
 }
 function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;}
@@ -305,17 +327,18 @@ function wordsOf(plan:{steps:PlanStep[]}){
 }
 
 function onKey(event:KeyboardEvent){
+ if(!alive())return;
  if(event.isComposing)return;
  if(waitEnter){if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();waitEnter(event.key==='Enter');}return;}
  if(!hint||running)return;
  if(ghostShown()){hide();return;}
- if(event.key==='Tab'&&!event.shiftKey&&!event.ctrlKey&&!event.altKey&&!event.metaKey){event.preventDefault();event.stopImmediatePropagation();void go();return;}
+ if(takes(event)){took(event);void go();return;}
  if(event.key==='Escape'){
   event.preventDefault();event.stopImmediatePropagation();
   // Turned down: the guess still on its way is stopped, and this move does not come back on this page for a while.
   refused.set(stepKey(hint.plan.steps[0]),Date.now());stopListening?.();if(asking){post({type:'cancel',id:asking});asking=undefined;}
   post({type:'actions.outcome',label:hint.plan.label,outcome:'dismissed'});post({type:'predict.no',label:hint.plan.label,first:hint.plan.steps[0],page:document.title,did:wordsOf(hint.plan)});did('turned down',hint.plan.label);hide();return;}
- if(!['Shift','Control','Alt','Meta','CapsLock'].includes(event.key)){post({type:'actions.outcome',label:hint.plan.label,outcome:'ignored'});hide();}
+ if(!['Shift','Control','Alt','AltGraph','Meta','CapsLock'].includes(event.key)){post({type:'actions.outcome',label:hint.plan.label,outcome:'ignored'});hide();}
 }
 /** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it); a
  * next move not yet on the page when it was guessed, by the role and name the model gave it. */
