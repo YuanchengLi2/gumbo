@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Practice quiz: multiplication</title><link rel="stylesheet" href="style.css">
+<style>main{padding-bottom:900px}.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px;background:#f4f4f4;border-top:1px solid #ddd;display:flex;gap:10px;justify-content:flex-end}</style></head>
+<body>
+<header><a href="#">Course home</a> <a href="#">Grades</a> <a href="#">Help</a></header>
+<main>
+ <h1>Practice quiz</h1>
+ <p>Question 1 of 5</p>
+ <form id="quiz" action="#" method="post" onsubmit="return false">
+  <fieldset><legend>What is 7 × 8?</legend><label for="answer">Your answer</label> <input id="answer" name="answer" autocomplete="off"></fieldset>
+ </form>
+ <p id="status" role="status" aria-live="polite"></p>
+</main>
+<!-- The quiz's own buttons live in a bar at the bottom of the window, outside the question. -->
+<div class="bar"><button type="button" id="skip">Skip question</button><button type="submit" form="quiz" id="submit">Submit answer</button></div>
+<script>
+const answer=document.getElementById('answer'),status=document.getElementById('status');
+let saved;answer.addEventListener('input',()=>{clearTimeout(saved);saved=setTimeout(()=>{status.textContent=answer.value?'Answer saved. Submit when ready.':'';},150);});
+document.getElementById('quiz').addEventListener('submit',()=>{status.textContent=answer.value.trim()==='56'?'Correct! On to question 2.':'Not quite. Try again.';document.getElementById('submitted').hidden=false;});
+</script>
+<p id="submitted" hidden>Submitted</p>
+</body></html>

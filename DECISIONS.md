@@ -1,5 +1,28 @@
 # Dream decisions
 
+## October 27, 2026 — Gumbo for Chrome's Tab moves come at the moment an entry is done, and see the whole page
+
+- **No waiting for the user to stop.** Typing no longer restarts a 1.3 s timer.
+  - The next step is asked once, quietly, as typing starts in a field, and again when the page says something.
+  - It shows at a completeness moment: a 250 ms beat, Enter, leaving the field, the page answering, or a value whose
+    shape is complete (an email, a number, a date, a finished sentence). Never mid-word.
+  - An answer that lands while they type is kept for the next beat.
+  - Page moments settle in 100–600 ms, where it was up to 1.5 s.
+  - Measured with the stand-in model: Submit shown 238–311 ms after the last keystroke.
+- **The page's own feedback is a moment.** Text appearing in an alert, status or live region, a dialog, or near where
+  they work, within 10 s of their input, is noted ("the page said …"), and the move is asked again.
+- **Tab sees the whole page** (the user's request), not only the region around the cursor.
+  - It gets the region in full, plus a digest: the outline, every form with its values (never sensitive fields), what
+    the page is saying, and the rest of the page's elements, its main actions marked.
+  - The engine picks up to 70 of those for the moment: main actions, what is in view, empty fields, and what shares
+    words with the session, the project and memory. Repeats are kept to two, and footer chrome is dropped.
+  - A Submit in a sticky bar outside the question is found.
+- **The model judges the next step from what the page shows** and never grades an answer itself. Its memory now comes
+  from `getContext` (a few ms), so the 350 ms memory wait and the tab-just-left read are gone.
+- **Final steps take a second press.** Send, submit, post, pay and delete are armed by the first Alt+Q, and run on a
+  second (or Enter). Esc, any other key, or 6 s disarms them. A text suggestion showing always comes first; dismissing
+  it reveals the move kept behind it.
+
 ## October 27, 2026 — Gumbo for Chrome has one central memory: visits, projects, a profile, and getContext
 
 - **Every navigation is a visit, kept for good.** `chrome.webNavigation` (a new permission, with the same "read your

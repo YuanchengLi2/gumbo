@@ -6,6 +6,7 @@ import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {perform,irreversible,findTarget,type Action,type Target,type Done} from './act';
 import {pageText} from './capture';
+import {digestOf,noteAppeared,type Digest} from './digest';
 import {surface,layer,raise} from './ui/root';
 import {ghostShown,ghostAt} from './ui/ghost';
 import {caretOf} from './fields/caret';
@@ -111,19 +112,26 @@ export function startPredict(){
  document.addEventListener('focusout',()=>{if(previews.length)setTimeout(()=>{if(hint)drawPreviews();},0);},true);
  document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text,{role:'combobox',name:nameOf(t,60)},t.selectedOptions[0]?.text);task(t,150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60),undefined,{role:t.type,name:nameOf(t,60)},t.checked?'on':'off');task(t,150);}else if(t instanceof HTMLInputElement&&t.type==='range'){did('set',nameOf(t,60),t.value,{role:'slider',name:nameOf(t,60)},t.value);task(t,150);}},true);
  document.addEventListener('paste',e=>{const f=fieldOf(deepActive());if(f&&e.isTrusted&&!running){did('pasted into',nameOf(f.el,60)||'a field',e.clipboardData?.getData('text/plain')?.slice(0,200));task(f.el,250,true);}},true);
- // A finished sentence is a likely end of what they meant to write (the send, the search comes next): asked sooner.
- // Only the user's own typing in a text field is typing: a slider moved, a box checked, or what Tab itself typed is not.
+ // Typing: nothing is asked per keystroke. The next step is asked once, quietly, as typing starts in a field (and again
+ // when what the page shows changes), and shows at a moment the entry looks complete: a beat with no typing (a quarter
+ // of a second), Enter, leaving the field, the page answering, or a value complete by its shape (an email, a number, a
+ // date, a finished sentence). Never mid-word. Only the user's own typing in a text field is typing: a slider moved, a
+ // box checked, or what Tab itself typed is not.
  document.addEventListener('input',e=>{
   if(running)return;
   const f=fieldOf(deepActive()),t=e.composedPath()[0];
   if(!f||!(t instanceof Node)||!(f.el===t||f.el.contains(t)))return;
   lastKey=Date.now();hide();
-  const s=snapshot(f),ended=/[.!?…]["”')]?\s*$/.test(s?.before??'');typingFor=ended?250:1100;
-  did('typed',nameOf(f.el,60)||'a field',s?.before);task(f.el,ended?300:1300,true);
-  // Asked ahead of the pause: the moment a sentence ends, and every second and a half while the typing goes on.
-  clearTimeout(typedTimer);typedTimer=window.setTimeout(aheadOfPause,ended?0:450);
-  if(Date.now()-lastAhead>1500&&lastAhead)aheadOfPause();else if(!lastAhead)lastAhead=Date.now();
+  const s=snapshot(f);
+  did('typed',nameOf(f.el,60)||'a field',s?.before);
+  if(typingIn!==f.el){typingIn=f.el;aheadOfPause();}
+  // A value complete by its shape needs no beat: the keyboard is no longer mid-word.
+  if(looksComplete(f.el,s?.text??'')){lastKey=0;task(f.el,0,true);}else task(f.el,BEAT,true);
  },true);
+ // Enter in a field, or leaving one with something in it: the entry is done.
+ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.isTrusted&&!waitEnter){const f=fieldOf(deepActive());if(f){lastKey=0;task(f.el,60,true);}}},true);
+ document.addEventListener('focusout',e=>{const f=fieldOf(e.target as Element);if(f&&e.isTrusted&&!running&&(snapshot(f)?.text.trim()??'')){typingIn=undefined;lastKey=0;task(f.el,80,true);}},true);
+ watchFeedback();
  watchHands();
  for(const type of ['pointerdown','keydown'])window.addEventListener(type,e=>{if(e.isTrusted)lastInput=Date.now();},true);
  window.addEventListener('keydown',onKey,true);
@@ -138,6 +146,41 @@ export function startPredict(){
   if(Date.now()-lastInput>1500)return;
   for(const r of records)for(const n of r.addedNodes)if(n instanceof Element&&(n.matches(dialogs)||n.parentElement===document.body&&n.querySelector(dialogs))){const d=n.matches(dialogs)?n:n.querySelector(dialogs)!;did('opened a dialog',nameOf(d,60)||'a dialog');task(d,120);return;}
  }).observe(document.body??document.documentElement,{childList:true,subtree:true});
+}
+/** The beat after the last keystroke at which an entry counts as finished for now (shared/memory-config.ts action.beatMs). */
+const BEAT=250;
+let typingIn:Element|undefined;
+/** A value whose shape says it is whole: an email, a number, a date, a time, a finished sentence. */
+function looksComplete(el:Element,text:string){
+ const v=text.trim();if(!v)return false;
+ const type=el instanceof HTMLInputElement?el.type:'';
+ return type==='email'&&/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v)||/^-?\d+([.,]\d+)?$/.test(v)&&type==='number'||/^\d{4}-\d{2}-\d{2}$|^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$|^\d{1,2}:\d{2}( ?[ap]m)?$/i.test(v)||/[.!?…]["”')]?$/.test(v);
+}
+/** The page answering what the user just did: text that appears in an alert, status or live region, a banner or toast,
+ * a dialog, or near where they are working (a quiz's "Correct!", a form's "Email is taken"), a moment after they acted.
+ * It is a moment: what to do next often depends on what the page said. */
+function watchFeedback(){
+ let last=0;
+ new MutationObserver(records=>{
+  if(Date.now()-lastInput>10_000||running||Date.now()-last<300)return;
+  const scope=working?.isConnected?scopeOf(working):null,below=working?.isConnected?working.getBoundingClientRect():null;
+  let n=0;
+  for(const r of records){
+   const nodes=r.type==='characterData'?[r.target]:[...r.addedNodes];
+   for(const node of nodes){
+    if(++n>30)return;
+    const el=node instanceof Element?node:node.parentElement;if(!el||el.closest('gumbo-layer')||fieldOf(el))continue;
+    const text=squash((node instanceof Element?(node as HTMLElement).innerText:node.textContent)??'');if(text.length<2||text.length>600)continue;
+    const announced=!!el.closest('[role=alert],[role=status],[aria-live]:not([aria-live=off]),[role=dialog],dialog');
+    const r2=el.getBoundingClientRect(),near=!!scope?.contains(el)||!!below&&r2.top>=below.top-40&&r2.top<below.bottom+320&&Math.abs(r2.left-below.left)<600;
+    if(!announced&&!near||!visible(el))continue;
+    last=Date.now();noteAppeared(text);did('the page said',text.slice(0,120));
+    // Asked again quietly while they type; shown at once when they are not typing.
+    if(typing())aheadOfPause();else task(working??el,60,true);
+    return;
+   }
+  }
+ }).observe(document.body??document.documentElement,{childList:true,subtree:true,characterData:true});
 }
 /** The moves a hand makes that are not clicks: a drag (the browser's own drag and drop, or a press, a move and a release
  * somewhere else that did not select text), a double-click, a right-click. They are what the next move often repeats. */
@@ -181,7 +224,7 @@ function soon(ms:number,quick=false){
  if(!touched)return;
  // A newer moment (the user did something) is not the return to the tab.
  clearTimeout(timer);const mine=++wave;returned=false;
- timer=window.setTimeout(()=>void (quick?settled(60,250):settled()).then(()=>{if(mine===wave)void guess();}),ms);
+ timer=window.setTimeout(()=>void (quick?settled(40,150):settled(100,600)).then(()=>{if(mine===wave)void guess();}),ms);
 }
 function settled(quiet=120,max=1500):Promise<void>{
  return new Promise(resolve=>{
@@ -191,14 +234,20 @@ function settled(quiet=120,max=1500):Promise<void>{
   function done(){clearTimeout(t);clearTimeout(cap);watch.disconnect();resolve();}
  });
 }
-/** Mid-word, or a text suggestion showing: the keyboard is the user's. */
-let typingFor=1100;
-const typing=()=>Date.now()-lastKey<typingFor||ghostShown();
+/** Mid-word, or a text suggestion showing: the keyboard is the user's (a text suggestion always comes before a move). */
+const typing=()=>Date.now()-lastKey<BEAT||ghostShown();
 
 let lastMoment='',lastMomentAt=0;
 /** The next guess is for coming back to this tab: asked before the user does anything here (ahead, for thrift.ts). */
 let returned=false;
-const ask=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false,where?:{kind:string;text:string})=>post({type:'predict',id,title:document.title,text:pageText(1500),...(where?{where}:{}),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby,near:nearPointer(i.rect)})),activity:moments,focused,ahead:back||id.startsWith('a'),
+/** Asks the engine: the page's words, the elements where they are working (or the page's, at a page moment), and the
+ * whole page in brief (digest.ts), so a move can be anything on the page and never only what is near the cursor. */
+function ask(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused?:string,back=false,where?:{kind:string;text:string},region?:Element|null){
+ const digest=inFrame&&!region?undefined:digestOf(region,new Set(model.items.map(i=>i.id)));
+ for(const r of digest?.rest??[])if(!seen.has(r.id))seen.set(r.id,{...r,rect:[0,0,0,0],path:''});
+ send(id,model,moments,focused,back,where,digest);
+}
+const send=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity,focused:string|undefined,back:boolean,where:{kind:string;text:string}|undefined,digest:Digest|undefined)=>post({type:'predict',id,title:document.title,text:pageText(1500),...(where?{where}:{}),...(digest?{digest}:{}),items:model.items.map(i=>({id:i.id,role:i.role,name:i.name,value:i.value,state:i.state,inView:i.inView,nearby:i.nearby,near:nearPointer(i.rect)})),activity:moments,focused,ahead:back||id.startsWith('a'),
  // A clue: the user's own hand on this page a moment ago (only then may a move show; see the engine).
  clue:Date.now()-lastInput<20_000,
  // A page drawn as pixels: the engine looks at a picture of the view, and moves may point at spots in it.
@@ -238,7 +287,7 @@ async function guess(){
  asking=id;mode=scope?'task':'page';for(const i of model.items)seen.set(i.id,i);
  listen(id);
  const back=returned;returned=false;
- ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined,back,scope?whereOf(scope):undefined);
+ ask(id,model,activity,focus?nameOf(focus.el,60)||'a field':undefined,back,scope?whereOf(scope):undefined,scope);
 }
 /** What the guess on its way is for: continuing a task where they are working, or where they go next on the page. */
 let mode:'task'|'page'='task';
@@ -263,27 +312,29 @@ function aheadInto(el:Element){
  // The moments as they will be once the focus is there (did() keeps one entry for a repeat).
  const moments=last?.kind==='focused'&&last.label===name.slice(0,80)?activity:[...activity,{kind:'focused',label:name.slice(0,80)}].slice(-10);
  const scope=scopeOf(el),model=pageModel(50,scope);for(const i of model.items)seen.set(i.id,i);
- ask(`a${++ahead}`,model,moments,name,false,whereOf(scope));
+ ask(`a${++ahead}`,model,moments,name,false,whereOf(scope),scope);
 }
 /** Asked ahead for the moment typing stops (a sentence ended, a pause began): the same question the pause will ask, so
  * the send, the search or the next field is ready when they look up. */
 function aheadOfPause(){
  const f=fieldOf(deepActive());
- if(!f||!active()||running||taking||ghostShown()||document.visibilityState!=='visible'||(snapshot(f)?.text.trim().length??0)<8)return;
+ if(!f||!active()||running||taking||ghostShown()||document.visibilityState!=='visible')return;
  lastAhead=Date.now();
  const scope=scopeOf(f.el),id=`a${++ahead}`,model=pageModel(50,scope);for(const i of model.items)seen.set(i.id,i);
  // Its answer is kept: when they stop, a move that does not hang on the exact words (the send, the search, the next
  // field) shows at once, while the guess for the final words is made.
- const stop=portListen(m=>{if(m?.type!=='predict.plan'||m.id!==id||!m.final)return;stop();if(m.plan)typedAhead={el:f.el,plan:m.plan,at:Date.now()};});
+ const stop=portListen(m=>{if(m?.type!=='predict.plan'||m.id!==id||!m.final)return;stop();if(m.plan)typedAhead={el:f.el,plan:m.plan,at:Date.now()};
+  // Asked while they typed and answered after they stopped: it shows now, as the beat's own guess would.
+  if(m.plan&&!typing()&&!hint&&!running&&fieldOf(deepActive())?.el===f.el){const ready=aheadForPause();if(ready)show(ready,true,'ahead');}});
  setTimeout(stop,8000);
- ask(id,model,activity,nameOf(f.el,60)||'a field',false,whereOf(scope));
+ ask(id,model,activity,nameOf(f.el,60)||'a field',false,whereOf(scope),scope);
 }
 let typedAhead:{el:Element;plan:Plan;at:number}|undefined,lastAhead=0;
 /** The move asked ahead while they typed, if it still holds now that they stopped: for this field, a few seconds old,
  * and typing nothing into it (what they wrote since would change that). */
 function aheadForPause():Plan|undefined{
  const a=typedAhead,f=fieldOf(deepActive());
- if(!a||!f||a.el!==f.el||Date.now()-a.at>5000)return;
+ if(!a||!f||a.el!==f.el||Date.now()-a.at>15_000)return;
  const intoHere=a.plan.steps.some(s=>s.do==='type'&&s.id&&(()=>{const el=findTarget(targetOf(s));return !!el&&(el===f.el||f.el.contains(el));})());
  return intoHere?undefined:a.plan;
 }
@@ -304,7 +355,9 @@ function listen(id:string){
  stopListening=portListen(m=>{
   if(m?.type!=='predict.plan'||m.id!==id||Number(id.slice(1))!==seq)return;
   if(m.final){asking=undefined;finalArrived?.();}
-  if(running||typing())return;
+  if(running)return;
+  // An answer that lands while they type (or while a text suggestion shows) is kept, and shown at the next beat.
+  if(typing()){const f=fieldOf(deepActive());if(m.final&&m.plan&&f)typedAhead={el:f.el,plan:m.plan,at:Date.now()};return;}
   // Where they go next on the page: the ranked guess goes to the quiet line, which follows their pointer (glow.ts). A
   // page guess that fills or types (a form they have not started) shows as a move, as in a task.
   if(mode==='page'&&(!m.plan||!['type','select','drag','key'].includes(m.plan.steps[0]?.do))){
@@ -400,7 +453,15 @@ function wordsOf(plan:{steps:PlanStep[]}){
 function onKey(event:KeyboardEvent){
  if(!alive())return;
  if(event.isComposing)return;
- if(waitEnter){if(event.key==='Enter'||event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();waitEnter(event.key==='Enter');}return;}
+ // A text suggestion turned down: the move kept behind it shows after the beat.
+ if(event.key==='Escape'&&ghostShown()&&!waitEnter){const f=fieldOf(deepActive());if(f)setTimeout(()=>task(f.el,BEAT,true),0);}
+ // A final step armed by the first press: a second press (or Enter) does it; Esc, or anything else, lets it go.
+ if(waitEnter){
+  if(takes(event)||event.key==='Enter'){if(takes(event))took(event);else{event.preventDefault();event.stopImmediatePropagation();}waitEnter(true);}
+  else if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();waitEnter(false);}
+  else if(!['Shift','Control','Alt','AltGraph','Meta','CapsLock'].includes(event.key))waitEnter(false);
+  return;
+ }
  // Alt+Q with no move shown in a task: the page guess, as their pointer and typing stand right now.
  if(takes(event)&&!hint&&!running&&!ghostShown()){const now=takeNow();if(now){hint={plan:now.plan,el:now.el,final:true,source:'page'};took(event);clearLikely();void go();}return;}
  if(!hint||running)return;
@@ -446,7 +507,7 @@ async function go(){
    const action=toAction(step),el=touches(step)?findTarget(targetOf(step)):null;if(el)lastTouched=el;
    // The page changed under it (the thing is gone): nothing is done, and the next guess looks again.
    if(touches(step)&&!el){ok=false;break;}
-   if(irreversible(action,el)){const yes=await confirmEnter(`${nameOf(el!,40)||'this'}`);if(!yes){ok=false;break;}}
+   if(irreversible(action,el)){const yes=await confirmEnter(nameOf(el!,40)||current.plan.label,el);if(!yes){ok=false;break;}}
    // On a drawing, with real clicks turned on, the move goes as real input; else as simulated pointer events.
    let result=step.at&&settings?.realInput?await request<Done>({type:'input.real',step},'input.done',8000)??{ok:false,detail:'Real input did not answer.'}:await perform(action);
    // Typing where a click on a drawing sent the cursor, in a frame (a document's hidden input): the engine types there.
@@ -477,12 +538,14 @@ function labelOn(s:PlanStep,el:Element|null){
  const name=el?nameOf(el,40):s.name,on=name?` “${name}”`:'';
  return s.do==='type'?`Type “${(s.text??'').slice(0,30)}”`:s.do==='select'?`Choose “${s.option}”`:s.do==='key'?`Press ${s.combo}`:s.do==='open'?`Open ${(()=>{try{return new URL(s.url!).hostname;}catch{return 'the page';}})()}`:s.do==='back'?'Go back':s.do==='drag'?`Drag${on}`:s.do==='scroll'?`Scroll to${on}`:s.do==='hover'?`Open${on}`:s.do==='double_click'?`Double-click${on}`:s.do==='right_click'?`Right-click${on}`:`Click${on}`;
 }
-function confirmEnter(what:string):Promise<boolean>{
+/** A final step (send, submit, post, pay, delete) takes a second press: the first one arms it, and the chip says so by
+ * the thing it would press. A wrong guess, a confusing page or a stray key never sends anything. */
+function confirmEnter(what:string,at?:Element|null):Promise<boolean>{
  layer();const box=document.createElement('div');box.className='chip';
- const key=document.createElement('kbd');key.textContent='Enter';const text=document.createElement('span');text.className='text';text.textContent=`to ${what.toLowerCase()} (Esc: not now)`;
+ const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=`${what}? Press again (or Enter) · Esc: not now`;
  box.append(key,text);surface().appendChild(box);
- const r=deepActive()?.getBoundingClientRect();box.style.left=`${Math.max(8,Math.min(r?.left??innerWidth-260,innerWidth-280))}px`;box.style.top=`${Math.min((r?.bottom??innerHeight-60)+6,innerHeight-44)}px`;
- return new Promise(resolve=>{waitEnter=yes=>{waitEnter=null;box.remove();resolve(yes);};});
+ const r=(at?.isConnected?at:deepActive())?.getBoundingClientRect();box.style.left=`${Math.max(8,Math.min(r?.left??innerWidth-260,innerWidth-300))}px`;box.style.top=`${Math.min((r?.bottom??innerHeight-60)+6,innerHeight-44)}px`;
+ return new Promise(resolve=>{const t=setTimeout(()=>waitEnter?.(false),6000);waitEnter=yes=>{clearTimeout(t);waitEnter=null;box.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
-export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan});
+export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan,chipRect:chip?(r=>[r.left,r.top,r.width,r.height])(chip.getBoundingClientRect()):undefined});

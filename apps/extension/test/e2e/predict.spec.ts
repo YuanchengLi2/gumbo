@@ -343,7 +343,7 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  standin.script=b=>{
   if(!isPredict(b))return{text:''};
   // Only once what was copied is in the question (with the rest of their browser).
-  if(!/They copied:[\s\S]*410 Lakeview Drive/.test(b.messages[0].content.map((c:any)=>c.text).join('\n')))return{text:'{"confidence":0,"steps":[]}'};
+  if(!/copied[\s\S]*410 Lakeview Drive/.test(b.messages[0].content.map((c:any)=>c.text).join('\n')))return{text:'{"confidence":0,"steps":[]}'};
   return{text:JSON.stringify({confidence:0.9,label:'Use the address you copied',steps:[{do:'type',id:idIn(b,'Street address'),text:'410 Lakeview Drive'}]})};
  };
  await page.goto(`${standin.url}/pages/forms.html`);
