@@ -108,7 +108,9 @@ chrome.commands.onCommand.addListener((command,tab)=>{if(command==='take')void t
 async function take(tab?:chrome.tabs.Tab){
  const started=performance.now();
  const t=tab?.id!==undefined?tab:(await chrome.tabs.query({active:true,lastFocusedWindow:true}))[0];if(t?.id===undefined)return;
- const done=await chrome.tabs.sendMessage(t.id,{type:'take'}).catch(()=>undefined)??await chrome.tabs.sendMessage(t.id,{type:'take',anyFrame:true},{frameId:0}).catch(()=>undefined);
+ // Only a page with the keyboard focus takes it: Alt+Q pressed in Chrome's own UI, or with the page not focused, does
+ // nothing (a move is taken only where the user is looking at it).
+ const done=await chrome.tabs.sendMessage(t.id,{type:'take'}).catch(()=>undefined);
  if(done)void addTiming({surface:'take',ms:performance.now()-started,at:Date.now()});
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='refresh-session')void refresh();});

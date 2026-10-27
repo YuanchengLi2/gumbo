@@ -84,7 +84,7 @@ function handle(message:any):Promise<unknown>|undefined{
   case 'debug.insert':{if(!mine)return;hideGhost();return insert(focused!,message.text);}
   // Alt+Q as Chrome's command: the frame with the focus presses it (a page frame without the focus stays silent; the top
   // page answers for a page with no focused frame).
-  case 'take':{if(!document.hasFocus()&&!(top&&message.anyFrame))return;const at=performance.now(),done=pressTake(deepActive());return Promise.resolve({...done,ms:performance.now()-at});}
+  case 'take':{if(!document.hasFocus()||document.visibilityState!=='visible')return;const at=performance.now(),done=pressTake(deepActive());return Promise.resolve({...done,ms:performance.now()-at});}
  }
  return undefined;
 }

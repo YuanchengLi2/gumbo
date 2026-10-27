@@ -8,9 +8,9 @@ import {perform,irreversible,findTarget,type Action,type Target,type Done} from 
 import {pageText} from './capture';
 import {digestOf,noteAppeared,type Digest} from './digest';
 import {surface,layer,raise} from './ui/root';
-import {ghostShown,ghostAt} from './ui/ghost';
+import {ghostShown,ghostAt,onGhostShown} from './ui/ghost';
 import {caretOf} from './fields/caret';
-import {startGlow,setLikely,clearLikely,takeNow,likelyMoves,pointerAt,glowState} from './glow';
+import {startGlow,setLikely,clearLikely,takeNow,likelyMoves,pointerAt,pointerMoving,glowState} from './glow';
 import {post,listen as portListen,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
@@ -92,6 +92,8 @@ export function startPredict(){
  // (what they did in the tab they left is part of it).
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){page(250);returned=true;}});
  startGlow();void undoArrival();
+ // A text suggestion showing comes first: a move's chip steps aside (it is kept, and comes back at the next beat).
+ onGhostShown(()=>{if(hint&&!running&&!waitEnter&&!taking){const f=fieldOf(deepActive());if(f)typedAhead={el:f.el,plan:hint.plan,at:Date.now()};hide();}});
  // A scroll that stopped on new things (half a screen or more since the last guess): what they came to see is in view.
  let scrolled:number|undefined,guessedAtY=scrollY;
  window.addEventListener('scroll',()=>{clearTimeout(scrolled);scrolled=window.setTimeout(()=>{if(!running&&!inFrame&&Math.abs(scrollY-guessedAtY)>innerHeight*0.5){guessedAtY=scrollY;page(0);}},450);},{passive:true});
@@ -148,7 +150,7 @@ export function startPredict(){
  }).observe(document.body??document.documentElement,{childList:true,subtree:true});
 }
 /** How sure a page guess must be to show as a chip rather than the quiet line. */
-const SURE=0.5;
+const SURE=0.4;
 /** The beat after the last keystroke at which an entry counts as finished for now (shared/memory-config.ts action.beatMs). */
 const BEAT=250;
 let typingIn:Element|undefined;
@@ -256,7 +258,7 @@ const send=(id:string,model:ReturnType<typeof pageModel>,moments:typeof activity
  ...(!inFrame&&drawnSurface()?{drawn:true,view:[innerWidth,innerHeight]}:{})});
 /** Whether an element is within reach of their pointer (where they are looking and heading). */
 function nearPointer(rect:[number,number,number,number]){
- const p=pointerAt();if(!p)return undefined;
+ const p=pointerAt();if(!p||!pointerMoving())return undefined;
  const dx=Math.max(rect[0]-p[0],0,p[0]-(rect[0]+rect[2])),dy=Math.max(rect[1]-p[1],0,p[1]-(rect[1]+rect[3]));
  return Math.hypot(dx,dy)<220||undefined;
 }
@@ -368,16 +370,22 @@ function listen(id:string){
    if(m.final)setLikely(m.plan&&!m.plan.likely?.length&&first?.id&&['click','hover','double_click','right_click'].includes(first.do)?{...m.plan,likely:[{id:first.id,p:m.plan.confidence,label:m.plan.label,do:first.do as 'click'}]}:m.plan);
    // A guess Tab is sure of is said plainly: its chip by the thing it would press, outlined, ready for Alt+Q. Less sure
    // ones stay the quiet line that follows the pointer.
-   if(m.final&&m.plan&&m.plan.confidence>=SURE&&!hint&&!running)show(m.plan,true,'page');
+   if(m.final&&m.plan&&!hint&&!running){
+    if(m.plan.steps.length&&m.plan.confidence>=SURE)show(m.plan,true,'page');
+    // No move sure enough, but one place clearly leads where they will likely go (twice the next, a quarter at least):
+    // it is offered plainly too, since on arriving at a page that is the most useful thing to see.
+    else{const [a,b]=m.plan.likely??[];if(a&&a.p>=0.25&&a.p>=2*(b?.p??0))show({label:a.label,confidence:a.p,steps:[{do:(a.do??'click') as PlanStep['do'],id:a.id}],likely:m.plan.likely},true,'page');}
+   }
    return;
   }
-  if(m.plan){clearLikely();show(m.plan,!!m.final,m.source);}else if(m.final&&hint&&!hint.final&&!taking)hide();
+  if(m.plan?.steps.length){clearLikely();show(m.plan,!!m.final,m.source);}else if(m.plan?.likely?.length)setLikely(m.plan);else if(m.final&&hint&&!hint.final&&!taking)hide();
  });
 }
 
 const touches=(s:PlanStep)=>!!(s.id||s.name||s.at);
 const refused=new Map<string,number>();
 function show(plan:Plan,final:boolean,source?:string){
+ if(ghostShown())return;
  const first=plan.steps[0];
  if(Date.now()-(refused.get(stepKey(first))??0)<600_000)return;
  const el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
@@ -443,6 +451,10 @@ function place(){
  if(r){
   if(r.right+8+c.width<=innerWidth-8){left=r.right+8;top=r.top+(r.height-c.height)/2;}
   else{left=Math.max(8,r.right-c.width);top=r.top-c.height-6;if(top<8)top=r.bottom+6;}
+  // Never over the page's own controls (a Join or Search button right beside the field): above the target then, or below.
+  const target=(marked.find(m=>m.ring)?.el??fieldOf(deepActive())?.el) as Element|undefined;
+  const covers=(x:number,y:number)=>[[x+4,y+c.height/2],[x+c.width/2,y+c.height/2],[x+c.width-4,y+c.height/2]].some(([px,py])=>{const under=document.elementFromPoint(px,py)?.closest('button,a[href],input,select,textarea,[role=button],[role=link],[contenteditable=true]');return !!under&&!!target&&under!==target&&!target.contains(under)&&!under.contains(target);});
+  if(covers(left,top)){const above=r.top-c.height-6;left=Math.max(8,Math.min(r.left,innerWidth-c.width-8));top=above>=8&&!covers(left,above)?above:r.bottom+6;}
  }
  chip.style.left=`${Math.round(left)}px`;chip.style.top=`${Math.round(Math.min(Math.max(8,top),innerHeight-c.height-8))}px`;
  drawPreviews();

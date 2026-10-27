@@ -27,8 +27,16 @@ export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:un
 
 /** Words that make a click or a key final: sending, posting, buying, deleting. These always wait for Enter. */
 const finalWords=/\b(send|submit|post|publish|tweet|reply|delete|remove|discard|pay|purchase|buy|order|place order|checkout|confirm|transfer|sign|merge|deploy|unsubscribe|cancel (subscription|plan)|archive|block|report)\b/i;
+/** Words that make a button a step on the way, not the end of anything. */
+const stepWords=/^\s*(add|add another|next|continue|back|previous|search|find|filter|apply filter|show|more|load more|upload|attach|choose|select|browse|edit|preview|expand|open|start|begin|cancel|close|skip|check( answer)?|go)\b/i;
 export function irreversible(action:Action,el?:Element|null):boolean{
- if(action.do==='click'&&el){const name=nameOf(el,60),form=(el as HTMLButtonElement).form;return finalWords.test(name)&&!navigates(form)||(el instanceof HTMLButtonElement&&el.type==='submit'&&!!form&&!navigates(form))||(el instanceof HTMLInputElement&&el.type==='submit'&&!navigates(el.form));}
+ // A button is final by what it says (send, pay, delete…), or when it submits a form and says nothing that makes it a
+ // step on the way (add, next, upload, search…). Many sites leave every button in a form a submit button by default:
+ // "Add another file" is not a send.
+ if(action.do==='click'&&el){
+  const name=nameOf(el,60),form=(el as HTMLButtonElement).form,submits=(el instanceof HTMLButtonElement||el instanceof HTMLInputElement)&&el.type==='submit'&&!!form&&!navigates(form);
+  return finalWords.test(name)&&!navigates(form)||submits&&!stepWords.test(name);
+ }
  // Enter in a form submits it, unless it is a search or a form that only goes to an address (nothing changes).
  if(action.do==='key'){const el=action.target?findTarget(action.target):null,form=el?.closest('form');return /(^|\+)enter$/i.test(action.combo)&&!!form&&!navigates(form as HTMLFormElement)&&!el!.closest('[role=search]')&&!(el instanceof HTMLInputElement&&el.type==='search');}
  return false;

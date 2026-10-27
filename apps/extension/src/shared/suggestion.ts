@@ -23,7 +23,8 @@ const nonAnswer=/^\s*[(\[]?\s*(nothing|empty|no (completion|suggestion|continuat
 
 const preamble=/^\s*(?:(?:sure|okay|ok|here(?:'s| is)(?: the)?(?: completion| continuation| text)?|completion|continuation|answer|output)\s*[:,-]\s*)+/i;
 export function cleanSuggestion(raw:string,input:SuggestionInput):string{
- let text=raw.replace(/\r\n/g,'\n').replace(/⟨cursor⟩|<cursor>|\[cursor\]/gi,'');
+ // An escaped line break written out ("\n" as two characters) is a line break.
+ let text=raw.replace(/\r\n/g,'\n').replace(/\\n/g,'\n').replace(/⟨cursor⟩|<cursor>|\[cursor\]/gi,'');
  const unwrapped=text.replace(/^```[a-z]*\n?|```\s*$/g,''),stripped=unwrapped.replace(preamble,'');
  // A preamble means the answer starts afresh: after a whole word it needs its space.
  text=stripped!==unwrapped&&/[\p{L}\p{N}]$/u.test(input.before)&&/^[\p{L}\p{N}]/u.test(stripped)?' '+stripped:stripped;
@@ -89,7 +90,10 @@ export function firstSentence(text:string,{singleLine,before,sentences=singleLin
 }
 /** A reply holds the best continuation and, each after a line of ⟂, shorter alternatives that go another way. */
 export const ALTERNATIVE='⟂';
-export function alternativesOf(raw:string):string[]{return raw.split(/\n?[ \t]*⟂[ \t]*\n?/);}
+export function alternativesOf(raw:string):string[]{
+ // A model that copies an escaped line break ("\n" as two characters) around the separator, or writes one, means none.
+ return raw.split(/(?:\\n|\n)?[ \t]*⟂[ \t]*(?:\\n|\n)?/).map(a=>a.replace(/\\n$/,''));
+}
 /** Drops the end of the suggestion that the text after the cursor already says. */
 export function trimOverlap(text:string,after:string){
  const next=after.replace(/^[ \t]+/,'').split('\n')[0];if(!next.trim())return text;
@@ -125,6 +129,7 @@ function factTokens(text:string):{token:string;index:number}[]{
  for(const m of text.matchAll(/(?<=[\p{L}\p{N},;:)]\s+)\p{Lu}[\p{L}'-]+/gu))if(!/^I('|$)/.test(m[0]))out.push({token:m[0],index:m.index!});
  return out.sort((a,b)=>a.index-b.index);
 }
+const leadIn=/\s*\b(no\.?|nos?\.|number|#|at|on|in|the|a|an|to|for|of|by|from|with|and|or|is|are|was|were|be|about|around|until|by|via|named|called)\s*[#:]?$/i;
 export function factsGuard(text:string,known:string,before=''){
  // The end of the text before the cursor is read with the suggestion, so a name right at its start counts as mid-sentence.
  const lead=before.slice(-40),haystack=known.toLowerCase();
@@ -133,8 +138,11 @@ export function factsGuard(text:string,known:string,before=''){
   const bare=token.toLowerCase().trim().replace(/[.,;:!?)]+$/,'');
   if(bare.length<2&&!/\d/.test(bare))continue;
   if(haystack.includes(bare))continue;
-  // Cut at the start of the word holding the unknown fact.
-  return text.slice(0,index).replace(/\S+$/,'').replace(/\s+$/,'');
+  // Cut at the start of the word holding the unknown fact, and the words that only lead into it ("on", "at the", "no.",
+  // "#"): a suggestion ends where a sentence could pause, never on a word waiting for what was cut.
+  let cut=text.slice(0,index).replace(/\S+$/,'').replace(/\s+$/,'');
+  for(let i=0;i<4&&leadIn.test(cut);i++)cut=cut.replace(leadIn,'');
+  return cut;
  }
  return text;
 }

@@ -160,7 +160,9 @@ function render(){
  layer();const caret=caretOf(field);
  if(!caret){post({type:'failure',site:location.hostname,editor:field.editor,what:'placement',detail:'no caret position'});return;}
  const drawing=performance.now();
- showGhost(caret,rest,{atLineEnd:!snap.after||snap.after.startsWith('\n'),singleLine:field.singleLine,ownWrapping:field.kind==='context'});
+ // A search box is one line however the page built it (a textarea, an editable div): its ghost too.
+ const oneLine=field.singleLine||live.context.intent==='search';
+ showGhost(caret,oneLine?rest.split('\n')[0]:rest,{atLineEnd:!snap.after||snap.after.startsWith('\n'),singleLine:oneLine,ownWrapping:field.kind==='context'});
  // Which of the ways to go on this is (once they go through them), and where a fact in it came from.
  const of=live.options&&live.options.length>1?`${live.options.indexOf(live.text)+1} of ${live.options.length} · Alt++ next`:'';
  const from=live.source?`from ${live.source.title} · ${live.source.when}`:'';

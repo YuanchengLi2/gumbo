@@ -141,7 +141,11 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // slower surfaces give it longer.
  if(!quick&&(search.searching||search.wanted)&&!search.found.length)await Promise.race([settled(),new Promise(r=>setTimeout(r,1500))]);
  const [usefulMap,visitMap,session,about,project]=await Promise.all([usefulness(),projectsOfVisits(),sessionCandidates(req,here),aboutThem(req,site),workingOn(tab)]);
- const past:Candidate[]=search.found.filter(f=>!samePage(f.url,req.url)).map(f=>({id:f.id,layer:'past' as const,kind:f.kind,title:f.title,url:f.url,text:f.text,at:f.at,site:f.site,cos:f.cos,bm25:f.bm25,project:f.project??(f.visit!==undefined?visitMap.get(f.visit):undefined),seenMs:Math.max(f.seenMs??0,seenNow.get(f.id)??0),useful:usefulMap.get(f.id)}));
+ // Only what is really about the moment: close in meaning, or a strong word match (bge-small scores a paraphrase from
+ // about 0.5, and unrelated text often near 0.4).
+ const bestBm25=Math.max(0,...search.found.map(f=>f.bm25??0));
+ const bearsOn=(f:Found)=>(f.cos??0)>=cfg.rank.minCos||bestBm25>0&&(f.bm25??0)/bestBm25>=cfg.rank.minBm25&&(f.bm25??0)>=2;
+ const past:Candidate[]=search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)).map(f=>({id:f.id,layer:'past' as const,kind:f.kind,title:f.title,url:f.url,text:f.text,at:f.at,site:f.site,cos:f.cos,bm25:f.bm25,project:f.project??(f.visit!==undefined?visitMap.get(f.visit):undefined),seenMs:Math.max(f.seenMs??0,seenNow.get(f.id)??0),useful:usefulMap.get(f.id)}));
  const moment={now:Date.now(),project:here?.project,site,words:wordsOf(req.query).slice(0,40)};
  const chars=req.budget*4,stableText=[about.length?`<about_them>\n${about.join('\n')}\n</about_them>`:'',project?`<what_they_are_working_on name="${project.name.replace(/"/g,'')}">\n${project.text}\n</what_they_are_working_on>`:''].filter(Boolean).join('\n');
  let ranked=rank([...session,...past],moment,cfg.rank,Math.max(400,chars-stableText.length-(req.withPage?1600:0)));

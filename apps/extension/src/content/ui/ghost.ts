@@ -9,8 +9,11 @@ import type {Caret} from '../fields/caret';
 let ghost:HTMLDivElement|undefined,chip:HTMLDivElement|undefined;
 
 export type Shown={mode:'inline'|'chip';rect:DOMRect};
+/** Told when a text suggestion shows: a move's chip steps aside for it (the words come first). */
+const shownListeners:(()=>void)[]=[];
+export const onGhostShown=(listener:()=>void)=>{shownListeners.push(listener);};
 export function showGhost(caret:Caret,text:string,{atLineEnd,singleLine,ownWrapping=false}:{atLineEnd:boolean;singleLine:boolean;ownWrapping?:boolean}):Shown{
- hideGhost();raise();
+ hideGhost();raise();for(const l of shownListeners)l();
  // Editors that wrap lines by their own rule (Monaco and its kind) get a one-line ghost, and the chip when it would wrap.
  if(ownWrapping&&atLineEnd&&!text.includes('\n')){
   const el=inline(caret,text,true),rect=el.getBoundingClientRect(),words=el.firstElementChild!.getBoundingClientRect();

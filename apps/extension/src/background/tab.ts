@@ -20,16 +20,24 @@ import {config} from './memory/config';
  * first word) and what it cost. chain: asked for what comes after a suggestion not yet taken (the page keeps it ready). */
 type Ask={id:string;context:FieldContext;before:string;after:string;text:string;chain?:boolean};
 const warmed=new Map<string,number>();
+/** A memory item as the user would name it (the bundle words items for the model: "they wrote in …"). */
+function shownAs(item:Bundle['items'][number]){
+ const site=(()=>{try{return new URL(item.url??'').hostname.replace(/^www\./,'');}catch{return '';}})();
+ return item.kind==='wrote'||item.kind==='writing'?`what you wrote${site?` on ${site}`:''}`:item.kind==='copy'?'what you copied':item.title;
+}
 /** Where a fact in a suggestion came from: the first memory item that holds a fact the page and the field do not. */
 function sourceOf(text:string,bundle:Bundle,seen:string){
- const facts=text.match(/[\w.+-]+@[\w-]+\.[\w.-]+|https?:\/\/\S+|\d[\d,.:/-]*\s?(?:am|pm)?|(?<=\S\s+)\p{Lu}[\p{L}'-]{2,}/giu)??[];
+ // Facts only: an email, a link, a number or time, a capitalised name inside a sentence (never any word: a plain word in
+ // a memory item is not where a suggestion came from).
+ const facts=text.match(/[\w.+-]+@[\w-]+\.[\w.-]+|https?:\/\/\S+|\d[\d,.:/-]*\s?(?:[AaPp][Mm])?|(?<=[\p{Ll}\p{N},;:]\s+)\p{Lu}[\p{L}'-]{2,}/gu)??[];
  const here=seen.toLowerCase();
- for(const f of facts){const bare=f.toLowerCase().replace(/[.,;:!?)]+$/,'').trim();if(bare.length<2||here.includes(bare))continue;const item=bundle.items.find(i=>`${i.title} ${i.text}`.toLowerCase().includes(bare));if(item)return{title:item.title.slice(0,60),when:item.when,id:item.id};}
+ for(const f of facts){const bare=f.toLowerCase().replace(/[.,;:!?)]+$/,'').trim();if(bare.length<2||here.includes(bare))continue;const item=bundle.items.find(i=>`${i.title} ${i.text}`.toLowerCase().includes(bare));if(item)return{title:shownAs(item).slice(0,60),when:item.when,id:item.id};}
 }
 on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const started=performance.now(),settings=await loadSettings(),site=siteOf(url)||message.context.site;
  if(!activeOn(settings,site)){send({type:'tab.text',id:message.id,text:'',final:true});return;}
- const c=message.context,cfg=(await config()).text;
+ // A search box is one line, whatever the page made it of (Google's is a textarea).
+ const c={...message.context,singleLine:message.context.singleLine||message.context.intent==='search'},cfg=(await config()).text;
  // The memory every surface has, for this field and what is being written now (its search kept per field and refreshed
  // behind it as the writing moves on); the user's own writing in this kind of field, for their voice.
  const [recall,bundle,before]=await Promise.all([

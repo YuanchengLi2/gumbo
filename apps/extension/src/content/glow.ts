@@ -53,6 +53,9 @@ export const glowState=()=>({likely:candidates.map(c=>`${c.label} (${c.p.toFixed
 export function clearLikely(){candidates=[];best=null;hideLine();unpeek();}
 /** Where their pointer is (for the engine: elements near it are where they are looking). */
 export const pointerAt=()=>px<0?null:[px,py] as [number,number];
+/** Whether the pointer is being moved now: only then does where it is say where they are heading (a pointer left resting
+ * after a click says nothing). */
+export const pointerMoving=()=>Date.now()-lastMove<1500;
 /** Every likely move, in the order they rank as the pointer and typing stand now (for Alt and + to go through). */
 export function likelyMoves():{plan:Plan;el:Element}[]{
  return rank().filter(r=>r.s>=FLOOR/2).map(r=>({plan:{label:r.c.label,confidence:r.c.p,steps:[r.c.step]},el:r.c.el}));
@@ -100,7 +103,10 @@ function hideLine(){line?.remove();line=null;}
 /** Alt held: the likely moves, each in a few words beside it; the one Alt+Q makes first. */
 function peek(){
  if(!candidates.length||peeking)return;peeking=true;layer();raise();
- const ranked=rank().filter(r=>r.s>0).slice(0,3);
+ // Only what is on screen gets a label (one for something off screen would sit at the edge, over the page); and the
+ // labels go by themselves, in case the Alt key's release never comes (the window lost the focus as it was held).
+ const onScreen=(el:Element)=>{const r=el.getBoundingClientRect();return r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth;};
+ const ranked=rank().filter(r=>r.s>0&&onScreen(r.c.el)).slice(0,3);setTimeout(unpeek,4000);
  ranked.forEach((r,i)=>{
   const tag=document.createElement('div');tag.className='move peek';
   if(i===0){const k=document.createElement('kbd');k.textContent=TAKE_KEY;tag.append(k);}
