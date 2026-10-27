@@ -1,5 +1,25 @@
 # Dream decisions
 
+## October 27, 2026 — Gumbo for Chrome's Tab moves: sequences, Undo, cycling, and a chip you notice
+
+- **Sequences.** The learner counts each step after the two steps before it (A → B → C) as well as after the last one,
+  so the same last step leads where the path through it usually goes. It falls back to the last step, then to anything
+  on that kind of page.
+- **Undo.** For six seconds after a move, an Undo chip shows. Ctrl+Z (taken only while the chip shows) or a click puts
+  back:
+  - what Tab typed into fields;
+  - choices and boxes;
+  - toggles, tabs and radios, by choosing the one chosen before;
+  - the scroll position;
+  - a link or address Tab followed: the next page offers Undo, which goes back in the tab.
+  Moves whose effect is the site's (a plain button, a send) have no Undo; final steps still take the second press.
+- **Cycling.** Alt and + shows the next likely move in place, with its outline and "(2/3)". Alt and − goes back. The
+  same keys go through the text alternatives.
+- **Noticeable when sure.** A page guess of 0.5 or more shows as a high-contrast chip by its target, with a stronger
+  outline. Less sure guesses stay the quiet line.
+- **Calibrated confidence.** The model now writes its evidence first ("why"), then confidence on a stated scale: 0.8
+  or more only when what they did, the page or a habit points straight at it. A guess is never called sure.
+
 ## October 27, 2026 — Gumbo for Chrome's text Tab: longer, in the user's voice, asked ahead, never per keystroke
 
 - **One run, up to three sentences, and alternatives to go through.** The agreement pair is gone: it doubled the cost,

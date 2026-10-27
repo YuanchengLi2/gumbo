@@ -10,18 +10,20 @@ const css=`
 .chip .text{overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical}
 .chip kbd,.card kbd{font:11px Consolas,ui-monospace,monospace;border:1px solid rgba(0,0,0,.14);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:#555;background:#fafafa;white-space:nowrap}
 .chip .progress{color:#777}
-.move{position:fixed;pointer-events:none;max-width:240px;padding:1px 7px 1px 3px;border-radius:6px;font:11.5px/1.55 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;color:#2a2a2a;background:rgba(255,255,255,.9);border:1px solid rgba(0,0,0,.09);box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:5px;align-items:center;white-space:nowrap;animation:in .12s ease-out}
+.move{position:fixed;pointer-events:none;max-width:280px;padding:3px 9px 3px 4px;border-radius:7px;font:500 12px/1.5 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;color:#fff;background:rgba(17,17,17,.94);border:1px solid rgba(255,255,255,.08);box-shadow:0 4px 16px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.18);display:flex;gap:6px;align-items:center;white-space:nowrap;animation:pop .22s cubic-bezier(.2,.9,.3,1.2)}
 .move .text{overflow:hidden;text-overflow:ellipsis}
-.move kbd{font:10px Consolas,ui-monospace,monospace;border:1px solid rgba(0,0,0,.14);border-radius:3px;padding:0 3px;color:#666;background:#f6f6f6}
+.move kbd{font:10.5px Consolas,ui-monospace,monospace;border:1px solid rgba(255,255,255,.25);border-radius:4px;padding:0 4px;color:#fff;background:rgba(255,255,255,.12)}
+@keyframes pop{from{opacity:0;transform:translateY(3px) scale(.96)}to{opacity:1;transform:none}}
 .glow{position:fixed;pointer-events:none;height:2px;border-radius:2px;background:rgba(0,0,0,.42);box-shadow:0 0 6px rgba(0,0,0,.18);transition:left .12s ease,top .12s ease,width .12s ease;animation:fade .18s ease-out}
 .peek{opacity:.96}
 .hint{position:fixed;pointer-events:none;max-width:320px;padding:0 6px;border-radius:5px;font:10.5px/1.6 "Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,sans-serif;color:#555;background:rgba(255,255,255,.92);border:1px solid rgba(0,0,0,.08);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:fade .18s ease-out}
 @keyframes fade{from{opacity:0}to{opacity:1}}
-.tab-ring{position:fixed;pointer-events:none;border:1.5px solid rgba(0,0,0,.32);border-radius:7px;box-shadow:0 0 0 2px rgba(255,255,255,.45);animation:in .12s ease-out}
+.tab-ring{position:fixed;pointer-events:none;border:2px solid rgba(17,17,17,.7);border-radius:7px;box-shadow:0 0 0 3px rgba(255,255,255,.6),0 0 14px rgba(0,0,0,.18);animation:ring .5s ease-out}
+@keyframes ring{0%{opacity:0;box-shadow:0 0 0 0 rgba(17,17,17,.35)}40%{opacity:1;box-shadow:0 0 0 7px rgba(17,17,17,0)}100%{box-shadow:0 0 0 3px rgba(255,255,255,.6),0 0 14px rgba(0,0,0,.18)}}
 .tab-ring.to{border-style:dashed}
 .tab-ring.dot{border-radius:50%;border-width:2px}
 @keyframes in{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:none}}
-@media (prefers-color-scheme:dark){.glow{background:rgba(255,255,255,.55);box-shadow:0 0 6px rgba(255,255,255,.2)}.move{color:#e6e6e6;background:rgba(35,35,35,.9);border-color:rgba(255,255,255,.12)}.move kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
+@media (prefers-color-scheme:dark){.glow{background:rgba(255,255,255,.55);box-shadow:0 0 6px rgba(255,255,255,.2)}.move{color:#111;background:rgba(250,250,250,.96);border-color:rgba(0,0,0,.1)}.move kbd{color:#333;background:rgba(0,0,0,.06);border-color:rgba(0,0,0,.2)}.tab-ring{border-color:rgba(250,250,250,.8);box-shadow:0 0 0 3px rgba(0,0,0,.5)}.chip{color:#eee;background:#232323;border-color:rgba(255,255,255,.12)}.chip kbd,.card kbd{color:#bbb;background:#2c2c2c;border-color:rgba(255,255,255,.18)}}
 `;
 export function layer():ShadowRoot{
  if(root&&root.host.isConnected)return root;

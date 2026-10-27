@@ -4,6 +4,7 @@
  * the Anthropic key from .secrets/anthropic.env, so it measures the model before a deploy. It SPENDS MONEY (a cent or so
  * a run on Haiku); --budget stops it.
  *   npx tsx apps/extension/scripts/tab-meter.ts [--n=60] [--model=claude-haiku-5-5] [--budget=0.25] [--show=wrong|all]
+ *   npx tsx apps/extension/scripts/tab-meter.ts --memory   (does Tab use the fact memory holds? 8 moments, under a cent)
  */
 import {readFileSync,existsSync} from 'node:fs';
 import {resolve} from 'node:path';
@@ -11,7 +12,8 @@ import {randomUUID} from 'node:crypto';
 import {handleAI} from '../../../supabase/functions/dream-gateway/ai';
 import {readMessageStream} from '../../../supabase/functions/_shared/stream';
 import {tabRequest,emptyRecall} from '../src/shared/prompts';
-import {cleanSuggestion,lastWordOf,agreed} from '../src/shared/suggestion';
+import {cleanSuggestion,lastWordOf,agreed,alternativesOf} from '../src/shared/suggestion';
+import {memoryMoments} from '../test/fixtures/memory-moments';
 import {momentsFrom,score,summarize,type Moment,type Score} from '../src/shared/meter';
 import {writing} from '../test/fixtures/writing';
 
@@ -36,14 +38,38 @@ async function predict(moment:Moment){
  // The writer's other writing in the same kind of field stands in for their memory.
  const recall={...emptyRecall(),style:writing.filter(w=>w!==sample&&w.intent===sample.intent).slice(0,3).map(w=>({site:w.site,intent:w.intent,text:w.text}))};
  const {system,messages,known}=tabRequest(context,moment.before,moment.after,recall);
+ return complete(messages,system,known,moment.before,moment.after,!!sample.singleLine);
+}
+/** One run, as the extension asks it (memory/config.ts text: 30 tokens in a one-line field, 120 and room for the
+ * alternatives elsewhere), and the best continuation through the same checks. */
+async function complete(messages:any,system:string,known:string,before:string,after:string,singleLine:boolean){
  const started=performance.now();let firstMs:number|undefined,raw='';
- const result=await handleAI({model,system,messages,max_tokens:sample.singleLine?24:48,purpose:'tab',stream:true,requestId:randomUUID()},'meter',{db,key,timeoutMs:30_000});
+ const result=await handleAI({model,system,messages,max_tokens:singleLine?30:160,purpose:'tab',stream:true,requestId:randomUUID()},'meter',{db,key,timeoutMs:30_000});
  if(!result.stream)throw new Error(JSON.stringify(result.body).slice(0,300));
  const message=await readMessageStream(new Response(result.stream),event=>{if(event.data?.delta?.type==='text_delta'){raw+=event.data.delta.text;if(firstMs===undefined&&/\S/.test(raw))firstMs=performance.now()-started;}}).catch(()=>null);
  const usage=message?.usage??{},price=prices[model]??[1,5];
  spent+=((usage.input_tokens??0)*price[0]+(usage.cache_read_input_tokens??0)*price[0]*.1+(usage.cache_creation_input_tokens??0)*price[0]*1.25+(usage.output_tokens??0)*price[1])/1e6;
- const suggestion=cleanSuggestion(raw,{before:moment.before,after:moment.after,singleLine:!!sample.singleLine,known,final:true,lastWord:lastWordOf(moment.before)});
+ const suggestion=cleanSuggestion(alternativesOf(raw)[0]??'',{before,after,singleLine,known,final:true,lastWord:lastWordOf(before)});
  return{suggestion,raw,firstMs,cached:usage.cache_read_input_tokens??0};
+}
+/** --memory: moments whose right words need a fact only memory holds (test/fixtures/memory-moments.ts), given as
+ * getContext gives it (their memory in the fresh part, who they are in the stable part): is the fact used? The facts
+ * guard keeps anything not given out, so a fact can only be one of these. */
+if(process.argv.includes('--memory')){
+ let used=0,shown=0,firstMs:number[]=[];
+ for(const m of memoryMoments){
+  const context:any={site:m.site,url:`https://${m.site}/`,title:m.title??'',language:'en',editor:'contenteditable',singleLine:!!m.singleLine,intent:m.intent,label:m.label,thread:m.thread};
+  const fresh=`<their_memory>\n${m.memory.map((x,i)=>`[${i+1}] ${x.title} (${x.when})\n${x.text}`).join('\n\n')}\n</their_memory>`;
+  const stable=m.about?`<about_them>\n${m.about}\n</about_them>`:'';
+  const {system,messages,known}=tabRequest(context,m.before,'',emptyRecall(),{stable,fresh,known:m.memory.map(x=>`${x.title} ${x.text}`).join('\n')});
+  const r=await complete(messages,system,known,m.before,'',!!m.singleLine).catch(error=>({suggestion:'',raw:String(error),firstMs:undefined}));
+  const hit=m.expect.some(e=>r.suggestion.toLowerCase().includes(e.toLowerCase()));
+  if(r.suggestion)shown++;if(hit)used++;if(r.firstMs)firstMs.push(r.firstMs);
+  console.log(`${hit?'used ':r.suggestion?'miss ':'none '} …${JSON.stringify(m.before.slice(-40))} → ${JSON.stringify(r.suggestion)}`);
+ }
+ firstMs.sort((a,b)=>a-b);
+ console.log(`\n${model} with memory: the fact used in ${used}/${memoryMoments.length} · something shown in ${shown}/${memoryMoments.length} · first word median ${firstMs[Math.floor(firstMs.length/2)]?.toFixed(0)} ms · spent $${spent.toFixed(4)}`);
+ process.exit(0);
 }
 
 /** With --judge: a suggestion worded differently from what was written is asked about: would the writer have gladly

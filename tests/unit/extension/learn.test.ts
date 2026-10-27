@@ -5,6 +5,22 @@ const day=86_400_000,base=new Date('2026-10-05T09:00:00').getTime();
 const click=(pageKind:string,name:string,at:number):Step=>({kind:'click',pageKind,key:clickKey('button',name),label:name,target:{role:'button',name},at});
 const visit=(url:string,at:number):Step=>({kind:'navigate',pageKind:pageKindOf(url),key:'nav:'+pageKindOf(url),label:url,url,at});
 
+describe('sequences',()=>{
+ it('the two steps before decide where the same last step leads',()=>{
+  const l=new Learner(),page='app.example.com/board';
+  for(let i=0;i<6;i++){
+   const t=base+i*day;
+   const a=click(page,'Bugs',t),b=click(page,'Filter',t+1000),c=click(page,'Assigned to me',t+2000);
+   l.observe(undefined,a);l.observe(a,b);l.observe(b,c,a);
+   const a2=click(page,'Releases',t+5000),b2=click(page,'Filter',t+6000),d=click(page,'This week',t+7000);
+   l.observe(undefined,a2);l.observe(a2,b2);l.observe(b2,d,a2);
+  }
+  const filter=click(page,'Filter',base+7*day);
+  expect(l.candidates({pageKind:page,prev:filter,prev2:click(page,'Bugs',base+7*day-1000),now:base+7*day})[0].step.label).toBe('Assigned to me');
+  expect(l.candidates({pageKind:page,prev:filter,prev2:click(page,'Releases',base+7*day-1000),now:base+7*day})[0].step.label).toBe('This week');
+ });
+});
+
 describe('learning the next step',()=>{
  it('names a kind of page the same for every item',()=>{
   expect(pageKindOf('https://supabase.com/dashboard/project/qewguvfkkwvdoqptiljd/logs/edge-functions')).toBe('supabase.com/dashboard/project/*/logs/edge-functions');

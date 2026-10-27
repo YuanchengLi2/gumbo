@@ -37,17 +37,22 @@ export class Learner{
   const s=this.stat(map,step.key),when=new Date(step.at),fade=s.last?Math.pow(0.5,Math.max(0,step.at-s.last)/HALF_LIFE):1;
   s.count=s.count*fade+1;s.hours[when.getHours()]++;s.days[when.getDay()]++;s.last=Math.max(s.last,step.at);
  }
- /** Learns that `step` came after `prev` (on the page kind `step` was taken from). */
- observe(prev:Step|undefined,step:Step){
+ /** Learns that `step` came after `prev` (on the page kind `step` was taken from), and after the two steps before it
+  * (prev2, then prev): a sequence (A → B → C) says more than its last step alone. */
+ observe(prev:Step|undefined,step:Step,prev2?:Step){
   const page=step.kind==='click'?step.pageKind:prev?.pageKind??'start';
+  if(prev&&prev2)this.bump(`${page}|${prev2.key}>${prev.key}`,step);
   this.bump(`${page}|${prev?.key??'start'}`,step);
   // A looser context (any previous step on that kind of page), for when the exact one has not been seen.
   this.bump(`${page}|*`,step);
   this.steps.set(step.key,step);
  }
- candidates(context:{pageKind:string;prev?:Step;now?:number},limit=5):Candidate[]{
+ /** The steps likely next: after the same two steps first (the sequence), then the same last step, then anything on
+  * this kind of page (each less sure than the one before). */
+ candidates(context:{pageKind:string;prev?:Step;prev2?:Step;now?:number},limit=5):Candidate[]{
   const now=context.now??Date.now(),when=new Date(now),out=new Map<string,Candidate>();
-  for(const [contextKey,loose] of [[`${context.pageKind}|${context.prev?.key??'start'}`,false],[`${context.pageKind}|*`,true]] as const){
+  const contexts:[string,boolean][]=[...(context.prev&&context.prev2?[[`${context.pageKind}|${context.prev2.key}>${context.prev.key}`,false] as [string,boolean]]:[]),[`${context.pageKind}|${context.prev?.key??'start'}`,false],[`${context.pageKind}|*`,true]];
+  for(const [contextKey,loose] of contexts){
    const map=this.next.get(contextKey);if(!map)continue;
    let total=0;const weighted:[string,number,Stat][]=[];
    for(const [key,s] of map){const fade=Math.pow(0.5,Math.max(0,now-s.last)/HALF_LIFE),hour=(s.hours[when.getHours()]+s.hours[(when.getHours()+23)%24]+s.hours[(when.getHours()+1)%24])/Math.max(1,s.hours.reduce((a,b)=>a+b,0));const w=s.count*fade*(0.6+0.8*hour);weighted.push([key,w,s]);total+=w;}

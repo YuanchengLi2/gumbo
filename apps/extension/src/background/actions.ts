@@ -20,9 +20,13 @@ async function allowed(url:string){const settings=await loadSettings();return /^
 const previous=(tab:number,now:number)=>{const step=last.get(tab);return step&&now-step.at<30*60_000?step:undefined;};
 /** The tab's last step (for the predictor's habits). */
 export const lastStep=(tab:number)=>previous(tab,Date.now());
+/** The step before the tab's last one (for sequences: A → B → C). */
+const before=new Map<number,Step>();
+export const stepBefore=(tab:number)=>{const step=before.get(tab);return step&&Date.now()-step.at<30*60_000?step:undefined;};
 
 export async function observe(tab:number,step:Step){
- const l=await brain();l.observe(previous(tab,step.at),step);last.set(tab,step);save();
+ const l=await brain(),prev=previous(tab,step.at),prev2=prev?stepBefore(tab):undefined;
+ l.observe(prev,step,prev2);if(prev)before.set(tab,prev);last.set(tab,step);save();
  void recordEvent(tab,{site:siteOf(step.url??''),pageKind:step.pageKind,url:step.url??'',kind:step.kind==='click'?'click':'navigate',role:step.target?.role??'',name:step.target?.name??step.label,path:step.target?.path,nearby:step.target?.nearby,title:step.title,at:step.at});
 }
 /** The steps a page reports, in its words (content/predict.ts did()), as kinds of event. Typing is an event the first
@@ -52,7 +56,17 @@ chrome.tabs.onRemoved.addListener(tab=>last.delete(tab));
 
 /** Runs a step the page cannot run itself: opening a page in this tab. */
 on('actions.open',async(message:{url:string},{port,send})=>{const tab=port.sender?.tab?.id;if(tab!==undefined&&/^https?:/.test(message.url))await chrome.tabs.update(tab,{url:message.url});send({type:'actions.opened'});});
-on('actions.outcome',async(message:{label:string;outcome:'accepted'|'dismissed'|'ignored'},{url})=>{
+/** A Tab move that leaves the page (a link, an address, back): the next page offers Undo for a few seconds, which goes
+ * back in the tab. */
+const leaving=new Map<number,{label:string;from:string;at:number}>();
+on('undo.note',(m:{label:string},{port,url})=>{const tab=port.sender?.tab?.id;if(tab!==undefined&&!port.sender?.frameId)leaving.set(tab,{label:m.label.slice(0,60),from:url,at:Date.now()});});
+on('undo.pending',(_m:unknown,{port,send,url})=>{
+ const tab=port.sender?.tab?.id,l=tab!==undefined?leaving.get(tab):undefined;
+ const fresh=!!l&&Date.now()-l.at<8000&&l.from!==url&&!port.sender?.frameId;if(fresh)leaving.delete(tab!);
+ send({type:'undo.pending',label:fresh?l!.label:undefined});
+});
+on('undo.back',async(_m:unknown,{port})=>{const tab=port.sender?.tab?.id;if(tab!==undefined)await chrome.tabs.goBack(tab).catch(()=>{});});
+on('actions.outcome',async(message:{label:string;outcome:'accepted'|'dismissed'|'ignored'|'undone'},{url})=>{
  try{await add('suggestions',{site:siteOf(url),intent:'action',kind:'action',text:message.label,accepted:message.outcome==='accepted'?1:0,outcome:message.outcome,at:Date.now()});}catch{}
 });
 

@@ -48,6 +48,11 @@ function Debug(){
   <table><thead><tr><th>What</th><th className="num">Times (7 days)</th><th className="num">Typical</th><th className="num">9 in 10 within</th></tr></thead><tbody>
    {Object.entries(data.speed??{}).sort().map(([s,v]:any)=><tr key={s}><td>{s}</td><td className="num">{v.n}</td><td className="num">{ms(v.p50)}</td><td className="num">{ms(v.p90)}</td></tr>)}
   </tbody></table>
+  <h2>Cost today</h2>
+  {Object.keys(data.cost??{}).length?<table><thead><tr><th>What</th><th className="num">Calls</th><th className="num">Cost</th></tr></thead><tbody>
+   {Object.entries(data.cost).sort((a:any,b:any)=>b[1].usd-a[1].usd).map(([s,v]:any)=><tr key={s}><td>{s.replace(/^cost-/,'')}</td><td className="num">{v.calls}</td><td className="num">${v.usd.toFixed(4)}</td></tr>)}
+   <tr><td><b>All</b></td><td className="num">{Object.values(data.cost).reduce((n:number,v:any)=>n+v.calls,0)}</td><td className="num"><b>${Object.values(data.cost).reduce((n:number,v:any)=>n+v.usd,0).toFixed(4)}</b></td></tr>
+  </tbody></table>:<p className="muted small">No model calls yet today.</p>}
   <h2>Tuning</h2>
   {data.calibration?<>
    <p className="small">Project threshold {data.calibration.threshold}, learned {new Date(data.calibration.at).toLocaleDateString()} from {data.calibration.pairs.chain} pages reached one from the other (dark) and {data.calibration.pairs.random} unrelated pairs (light), by similarity 0 to 1:</p>

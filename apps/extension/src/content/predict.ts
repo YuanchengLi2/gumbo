@@ -91,7 +91,7 @@ export function startPredict(){
  // A page opened behind another tab has its first moment when it comes into view; coming back to a tab is a moment too
  // (what they did in the tab they left is part of it).
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){page(250);returned=true;}});
- startGlow();
+ startGlow();void undoArrival();
  // A scroll that stopped on new things (half a screen or more since the last guess): what they came to see is in view.
  let scrolled:number|undefined,guessedAtY=scrollY;
  window.addEventListener('scroll',()=>{clearTimeout(scrolled);scrolled=window.setTimeout(()=>{if(!running&&!inFrame&&Math.abs(scrollY-guessedAtY)>innerHeight*0.5){guessedAtY=scrollY;page(0);}},450);},{passive:true});
@@ -147,6 +147,8 @@ export function startPredict(){
   for(const r of records)for(const n of r.addedNodes)if(n instanceof Element&&(n.matches(dialogs)||n.parentElement===document.body&&n.querySelector(dialogs))){const d=n.matches(dialogs)?n:n.querySelector(dialogs)!;did('opened a dialog',nameOf(d,60)||'a dialog');task(d,120);return;}
  }).observe(document.body??document.documentElement,{childList:true,subtree:true});
 }
+/** How sure a page guess must be to show as a chip rather than the quiet line. */
+const SURE=0.5;
 /** The beat after the last keystroke at which an entry counts as finished for now (shared/memory-config.ts action.beatMs). */
 const BEAT=250;
 let typingIn:Element|undefined;
@@ -364,6 +366,9 @@ function listen(id:string){
    // A best move without the ranked list is a list of one.
    const first=m.plan?.steps[0];
    if(m.final)setLikely(m.plan&&!m.plan.likely?.length&&first?.id&&['click','hover','double_click','right_click'].includes(first.do)?{...m.plan,likely:[{id:first.id,p:m.plan.confidence,label:m.plan.label,do:first.do as 'click'}]}:m.plan);
+   // A guess Tab is sure of is said plainly: its chip by the thing it would press, outlined, ready for Alt+Q. Less sure
+   // ones stay the quiet line that follows the pointer.
+   if(m.final&&m.plan&&m.plan.confidence>=SURE&&!hint&&!running)show(m.plan,true,'page');
    return;
   }
   if(m.plan){clearLikely();show(m.plan,!!m.final,m.source);}else if(m.final&&hint&&!hint.final&&!taking)hide();
@@ -381,7 +386,7 @@ function show(plan:Plan,final:boolean,source?:string){
  if(taking)return;
  hide();hint={plan,el,final,source};layer();raise();
  // A small tag beside what the move touches, one line, that never takes a click: the page stays usable under it.
- chip=document.createElement('div');chip.className='move';chip.setAttribute('role','status');chip.title=plan.label;
+ chip=document.createElement('div');chip.className='move';chip.setAttribute('role','status');chip.title=plan.why?`${plan.label}: ${plan.why}`:plan.label;
  const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=plan.label;
  chip.append(key,text);surface().appendChild(chip);
  // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
@@ -520,13 +525,16 @@ async function go(){
  }
  const current=hint;if(!current)return;
  hide();running=true;let ok=true;
+ // How to take each step back, kept as it is done: Undo (Ctrl+Z, a few seconds) takes them back in reverse.
+ const undo:(()=>void)[]=[];let undoable=true;
  try{
   for(const step of current.plan.steps){
-   if(step.do==='open'){post({type:'actions.open',url:step.url});break;}
+   if(step.do==='open'){post({type:'undo.note',label:current.plan.label});post({type:'actions.open',url:step.url});break;}
    const action=toAction(step),el=touches(step)?findTarget(targetOf(step)):null;if(el)lastTouched=el;
    // The page changed under it (the thing is gone): nothing is done, and the next guess looks again.
    if(touches(step)&&!el){ok=false;break;}
-   if(irreversible(action,el)){const yes=await confirmEnter(nameOf(el!,40)||current.plan.label,el);if(!yes){ok=false;break;}}
+   if(irreversible(action,el)){undoable=false;const yes=await confirmEnter(nameOf(el!,40)||current.plan.label,el);if(!yes){ok=false;break;}}
+   const back=inverseOf(step,el);if(back==='navigates')post({type:'undo.note',label:current.plan.label});else if(back)undo.push(back);else undoable=false;
    // On a drawing, with real clicks turned on, the move goes as real input; else as simulated pointer events.
    let result=step.at&&settings?.realInput?await request<Done>({type:'input.real',step},'input.done',8000)??{ok:false,detail:'Real input did not answer.'}:await perform(action);
    // Typing where a click on a drawing sent the cursor, in a frame (a document's hidden input): the engine types there.
@@ -537,6 +545,7 @@ async function go(){
    if(current.plan.steps.length>1)await settled(40,300);
   }
  }finally{running=false;}
+ if(ok&&undoable&&undo.length)offerUndo(current.plan.label,undo);
  did('took',wordsOf(current.plan));
  post({type:'actions.outcome',label:current.plan.label,outcome:ok?'accepted':'ignored'});if(ok)post({type:'predict.yes',page:document.title,did:wordsOf(current.plan)});
  const next=current.plan.then;
@@ -552,6 +561,55 @@ async function go(){
  if(current.source==='page')page(150);else task(lastTouched??working,next?60:150,!!next);
 }
 let lastTouched:Element|null=null;
+/** How a step is taken back, read before it is done: a field's text put back, a choice or a box as it was, a toggle
+ * pressed again, the scroll where it was. A step that leaves the page (a link, an address) is taken back by going back
+ * (the engine remembers it for the next page). undefined: it cannot be (a plain button: what it did is the site's). */
+function inverseOf(step:PlanStep,el:Element|null):(()=>void)|'navigates'|undefined{
+ if(step.do==='back')return 'navigates';
+ if(step.do==='scroll'){const y=scrollY,x=scrollX;return()=>scrollTo(x,y);}
+ if(!el)return;
+ if(step.do==='type'){
+  if(el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement){const old=el.value,proto=el instanceof HTMLInputElement?HTMLInputElement.prototype:HTMLTextAreaElement.prototype;return()=>{Object.getOwnPropertyDescriptor(proto,'value')!.set!.call(el,old);el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContent'}));el.dispatchEvent(new Event('change',{bubbles:true}));};}
+  if((el as HTMLElement).isContentEditable)return()=>{(el as HTMLElement).focus();document.execCommand('undo');};
+  return;
+ }
+ if(step.do==='select'&&el instanceof HTMLSelectElement){const old=el.value;return()=>{el.value=old;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};}
+ if(step.do==='click'){
+  const link=el.closest('a[href]') as HTMLAnchorElement|null;
+  if(link&&!link.target&&!link.href.startsWith('javascript:')&&new URL(link.href,location.href).href.split('#')[0]!==location.href.split('#')[0])return 'navigates';
+  const toggle=el.closest('input[type=checkbox],input[type=radio],[role=checkbox],[role=switch],[role=tab],[aria-pressed],[aria-expanded],summary,details > summary');
+  if(toggle){
+   const state=(t:Element)=>t instanceof HTMLInputElement?String(t.checked):`${t.getAttribute('aria-checked')}|${t.getAttribute('aria-pressed')}|${t.getAttribute('aria-expanded')}|${t.getAttribute('aria-selected')}|${(t.closest('details') as HTMLDetailsElement|null)?.open}`;
+   // A radio or a tab is taken back by choosing the one chosen before.
+   if(toggle instanceof HTMLInputElement&&toggle.type==='radio'){const was=toggle.form?.querySelector<HTMLInputElement>(`input[type=radio][name="${CSS.escape(toggle.name)}"]:checked`)??document.querySelector<HTMLInputElement>(`input[type=radio][name="${CSS.escape(toggle.name)}"]:checked`);return was&&was!==toggle?()=>was.click():undefined;}
+   if(toggle.getAttribute('role')==='tab'){const was=toggle.closest('[role=tablist]')?.querySelector<HTMLElement>('[role=tab][aria-selected=true]');return was&&was!==toggle?()=>was.click():undefined;}
+   const before=state(toggle);return()=>{if(state(toggle)!==before)(toggle as HTMLElement).click();};
+  }
+ }
+}
+/** Undo, for a few seconds after a move: a small chip by what it touched, Ctrl+Z (only while it shows) or a click. */
+let undoChip:HTMLDivElement|null=null,undoKey:((e:KeyboardEvent)=>void)|null=null;
+function offerUndo(label:string,undo:(()=>void)[],at?:Element|null){
+ clearUndo();layer();
+ const box=document.createElement('div');box.className='chip';box.style.pointerEvents='auto';
+ const key=document.createElement('kbd');key.textContent='Ctrl+Z';const text=document.createElement('span');text.className='text';text.textContent=`Undo “${label}”`;
+ box.append(text,key);surface().appendChild(box);undoChip=box;
+ const r=(at??lastTouched)?.isConnected?(at??lastTouched)!.getBoundingClientRect():null;
+ box.style.left=`${Math.max(8,Math.min(r?r.left:innerWidth-280,innerWidth-300))}px`;box.style.top=`${r?Math.min(r.bottom+6,innerHeight-44):innerHeight-60}px`;
+ const run=()=>{clearUndo();for(const back of undo.slice().reverse())try{back();}catch{}post({type:'actions.outcome',label,outcome:'undone'});post({type:'predict.no',label,page:document.title,did:`undid: ${label}`});did('undid',label);};
+ box.addEventListener('click',run);
+ undoKey=e=>{if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&e.key.toLowerCase()==='z'){e.preventDefault();e.stopImmediatePropagation();run();}};
+ window.addEventListener('keydown',undoKey,true);
+ const t=setTimeout(clearUndo,6000);box.dataset.timer=String(t);
+}
+function clearUndo(){undoChip?.remove();undoChip=null;if(undoKey)window.removeEventListener('keydown',undoKey,true);undoKey=null;}
+/** A move that left the last page (a link Tab followed, an address it opened): on this one, Undo goes back. */
+async function undoArrival(){
+ if(inFrame)return;
+ const pending=await request<{label?:string}>({type:'undo.pending'},'undo.pending',3000);
+ if(!pending?.label)return;
+ offerUndo(pending.label,[()=>post({type:'undo.back'})],null);
+}
 /** A next move's line, from what it touches now. */
 function labelOn(s:PlanStep,el:Element|null){
  const name=el?nameOf(el,40):s.name,on=name?` “${name}”`:'';

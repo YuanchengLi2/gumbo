@@ -17,7 +17,8 @@ export type PlanStep={do:'click'|'double_click'|'right_click'|'hover'|'drag'|'ty
 /** Where they may go next on the page: elements ranked by how likely each is their next move, with a few words for each.
  * The page picks among them as they move (their pointer, what they are typing), so the one shown follows them. */
 export type Likely={id:string;p:number;label:string;do:'click'|'hover'|'double_click'|'right_click'};
-export type Plan={label:string;confidence:number;steps:PlanStep[];then?:PlanStep;likely?:Likely[]};
+export type Plan={label:string;confidence:number;steps:PlanStep[];then?:PlanStep;likely?:Likely[];
+ /** Why the model thinks so, in a few words (shown when the chip is pointed at). */why?:string};
 export const MAX_FILLS=8;
 const fills=new Set(['type','select']);
 
@@ -59,7 +60,7 @@ function planFrom(raw:any,ids:Set<string>,known:string):Plan|null{
  if(!steps.length)return likely.length?{label:likely[0].label,confidence:likely[0].p,steps:[{do:likely[0].do,id:likely[0].id}],likely}:null;
  const confidence=Math.max(0,Math.min(1,Number(raw.confidence)||0));
  const then=raw?.then&&typeof raw.then==='object'?checked(raw.then,ids,known,true):null;
- return{label:String(raw.label??'').trim().slice(0,60)||labelOf(steps[0]),confidence,steps,...(then?{then}:{}),...(likely.length?{likely}:{})};
+ return{label:String(raw.label??'').trim().slice(0,60)||labelOf(steps[0]),confidence,steps,...(then?{then}:{}),...(likely.length?{likely}:{}),...(typeof raw.why==='string'&&raw.why.trim()?{why:raw.why.trim().slice(0,120)}:{})};
 }
 /** The ranked list, checked: elements on the page, each once, likelihoods between 0 and 1, five at most. */
 function likelyOf(list:unknown,ids:Set<string>):Likely[]{
