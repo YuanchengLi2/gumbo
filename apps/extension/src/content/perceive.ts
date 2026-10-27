@@ -5,7 +5,9 @@ import {roleOf,nameOf,pathOf,visible,squash,cut,parentOf} from './dom';
 export type Item={id:string;role:string;name:string;value?:string;state?:string[];rect:[number,number,number,number];path:string;nearby?:string;inView:boolean};
 export type PageModel={url:string;title:string;items:Item[];headings:string[];focused?:string};
 
-const interactive='a[href],button,input:not([type=hidden]),textarea,select,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=checkbox],[role=radio],[role=switch],[role=option],[role=combobox],[role=textbox],[role=searchbox],[role=treeitem],[contenteditable=true],[contenteditable=""],[onclick],[tabindex]:not([tabindex="-1"])';
+// What a hand can act on: controls, things to drag (natively, or marked as sortable by the libraries that do it with the
+// mouse), and headings (renamed by double-click, opened by click in many apps).
+const interactive='a[href],button,input:not([type=hidden]),textarea,select,summary,[role=button],[role=link],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=checkbox],[role=radio],[role=switch],[role=option],[role=combobox],[role=textbox],[role=searchbox],[role=treeitem],[role=slider],[contenteditable=true],[contenteditable=""],[onclick],[tabindex]:not([tabindex="-1"]),[draggable=true],[aria-roledescription],h1,h2,h3';
 const ids=new WeakMap<Element,string>(),byId=new Map<string,WeakRef<Element>>();let next=1;
 export function idOf(el:Element){let id=ids.get(el);if(!id){id='e'+next++;ids.set(el,id);byId.set(id,new WeakRef(el));}return id;}
 export function elementById(id:string):Element|null{const el=byId.get(id)?.deref();return el&&el.isConnected?el:null;}
@@ -35,7 +37,16 @@ export function nearbyText(el:Element):string|undefined{
 export function pageModel(limit=250):PageModel{
  // What is on screen first, then the rest in page order; only the ones kept are described (the words around each cost a
  // layout read, and a big app has thousands of controls).
- const found=deepQuery(interactive).filter(el=>visible(el)).map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
+ const els=deepQuery(interactive).filter(el=>visible(el));
+ // Where things can be dropped: when the page has things to drag, the lists or columns that hold them, and the ones
+ // beside those (a board's other columns).
+ const zones=new Set<Element>(),have=new Set(els);
+ for(const d of els.filter(el=>el.matches('[draggable=true],[aria-roledescription]')).slice(0,60)){
+  const holder=d.parentElement;if(!holder||holder===document.body)continue;zones.add(holder);
+  for(const sibling of holder.parentElement?.children??[])if(sibling!==holder&&sibling.children.length<300&&visible(sibling))zones.add(sibling);
+ }
+ for(const z of zones)if(!have.has(z))els.push(z);
+ const found=els.map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
  const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>describe(f.el));
  const focused=document.activeElement&&document.activeElement!==document.body?idOf(document.activeElement):undefined;
  return{url:location.href,title:document.title,items,headings:[...document.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,20),focused};

@@ -186,21 +186,36 @@ moving through a form.
   progress in the chip; anything irreversible (send, submit, post, delete, pay) shows the action and waits for **Enter**.
 - **Learning:** an accepted chip strengthens its pattern; an ignored one weakens it and raises that site's threshold.
 
-As built (October 26), Tab for actions is one general predictor with no code for any particular site, and no plan to
-read first: Tab just does it.
-- **Guess:** a fast model reads the page's text and every element on it, each with an id. It also sees what the user just
-  did here, the pages before this one and what they copied there, their other open tabs, their profile, memory about
-  this, their habits here and what they turned down. It proposes up to eight steps (type, choose, click, key, open),
-  as far ahead as it is sure.
+As built (October 26), Tab for actions is the user's **next move**, as Cursor's Tab is the next edit. It is one general
+predictor with no code for any particular site, and no plan to read first. Longer jobs belong to the agent: Tab never
+hands off to it.
+- **A move** is one thing a hand does in a browser:
+  - click, double-click or right-click;
+  - point at something to open its menu;
+  - drag (a card onto a column, a row to a new place, a slider);
+  - choose an option, press a key, scroll to something, go back, open a page;
+  - or fill in the fields of the form the user is in.
+- **Then:** with each move comes the one most likely after it, shown the moment the move is done. It can name an
+  element that only appears after the move (a menu's item). So Tab, Tab, Tab goes as fast as the user does, one visible
+  move at a time; the guess that follows replaces it if it sees better.
+- **Guess:** a fast model reads the page's text and every element on it, each with an id. When the page has things to
+  drag, that includes where they can be dropped. It also sees:
+  - what the user just did here (clicks, choices, typing, drags, double- and right-clicks), the pages before this one
+    and what they copied there, their other open tabs;
+  - their profile, memory about this, their habits here, what they took and turned down from Tab on this site.
 - **Checks:** every step must name an element on the page, and typed text may hold no fact that is not visible
   somewhere. Each site has its own bar (0.5 to 0.85, 0.6 to start): it rises as guesses are turned down and falls as
   they are taken.
 - **Timing:** it guesses the moment the page settles after a click, a choice, a new route or a dialog opening (not after
   a fixed wait); a newer guess cancels the older one. The reply streams, and the first complete steps show while the rest
   is being written. A strong habit or the user's own details for a form show at once, before any model answers.
-- **Running it:** Tab runs every step, waiting for the page to settle between steps and finding an element again by
-  its role, name and surroundings if the page re-rendered it. A final step waits for Enter. When the job needs more
-  than is on the page (`"more": true`) or a step is stuck, the agent carries on in the same line.
+- **Speed:**
+  - when the pointer rests on a field, the guess for it is asked then, so the click finds it ready;
+  - a press on a field starts a guess at once, and a finished sentence is answered sooner;
+  - a move shows the moment its step is whole.
+- **Running it:** Tab does the move, finding its element again by its role, name and surroundings if the page
+  re-rendered it. Drags send the native drag events, or a press, moves and a release; a slider is set where the drag
+  leaves it. A move that sends, buys or deletes waits for Enter.
 - **Esc:** dismisses it; that guess isn't offered again on that page for ten minutes, and the model is told.
 
 ---

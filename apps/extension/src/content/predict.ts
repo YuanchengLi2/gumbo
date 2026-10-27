@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {roleOf,nameOf,deepActive,visible} from './dom';
+import {roleOf,nameOf,deepActive,visible,squash} from './dom';
 import {describe,pageModel,type Item} from './perceive';
 import {fieldOf,inPaymentFrame} from './fields/field';
 import {snapshot} from './fields/text';
@@ -11,14 +11,17 @@ import {caretOf} from './fields/caret';
 import {post,listen as portListen} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import type {Plan,PlanStep} from '../shared/plan';
-/** Tab for actions, on any page: as the user works, Gumbo guesses what would help next (fill in a form, choose the usual
- * option, click through, reply, run the search) and shows it in one small line by the cursor, the thing it would touch
- * lightly outlined. Tab does it, all of it, at once. A step that sends, buys or deletes waits for Enter; Esc dismisses.
- * It steps aside while a text suggestion shows, while the user is mid-word, and where Gumbo is off. Each click on the
- * page is reported (its role and name, never what was typed), so habits are learned.
- * It asks the moment the page has settled after what the user did (a click, a choice, a new route, a dialog opening),
- * not after a fixed wait, and the older question is cancelled; the guess shows as soon as its first steps have arrived. */
-let pressed:{el:Element;at:number}|undefined,preview:HTMLDivElement|null=null,settings:Settings|undefined,hint:{plan:Plan;el?:Element;final:boolean;source?:string}|null=null,chip:HTMLDivElement|null=null,ring:HTMLDivElement|null=null;
+/** Tab for actions, on any page: the user's next move, as a code editor's Tab is the next edit. As they work, Gumbo
+ * guesses the one thing they are about to do (click this, fill in these fields, choose that, drag this card there, open
+ * that menu, go back) and shows it in one small line by the cursor, the thing it would touch lightly outlined. Tab does
+ * it; the move after it is already known and shows the moment this one is done, so Tab, Tab, Tab goes as fast as they
+ * do, one visible move at a time (longer jobs are the agent's). A move that sends, buys or deletes waits for Enter; Esc
+ * dismisses. It steps aside while a text suggestion shows, while the user is mid-word, and where Gumbo is off. What the
+ * user does by hand (clicks, choices, typing, drags, double- and right-clicks) is the context of the next guess, and each
+ * click is reported (its role and name, never what was typed) so habits are learned.
+ * It asks the moment the page has settled after what the user did, not after a fixed wait, and the older question is
+ * cancelled; a field the pointer rests on is asked about before the click. */
+let pressed:{el:Element;at:number}|undefined,preview:HTMLDivElement|null=null,settings:Settings|undefined,hint:{plan:Plan;el?:Element;final:boolean;source?:string}|null=null,chip:HTMLDivElement|null=null,rings:HTMLDivElement[]=[];
 let timer:number|undefined,wave=0,seq=0,asking:string|undefined,lastKey=0,running=false,taking=false,waitEnter:((yes:boolean)=>void)|null=null,finalArrived:(()=>void)|null=null;
 /** The elements the current guess was made from, so a step finds its element again if the page re-rendered it. */
 let seen=new Map<string,Item>();
@@ -27,6 +30,8 @@ const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFra
 const actionable='a[href],button,[role=button],[role=link],[role=tab],[role=menuitem],[role=option],[role=checkbox],[role=switch],summary,input[type=submit],input[type=button],input[type=checkbox],input[type=radio],label';
 const dialogs='[role=dialog],[role=alertdialog],dialog,[aria-modal=true]';
 const did=(kind:string,label:string,text?:string)=>{const prev=activity.at(-1);if(prev&&prev.kind===kind&&prev.label===label)activity.pop();activity.push({kind,label:label.slice(0,80),text:text?.slice(-200)});if(activity.length>10)activity.shift();};
+/** What a hand touched, in a few words: the card, row, item or control it belongs to. */
+const what=(el?:Element|null)=>{if(!el)return 'something';const at=el.closest(`[draggable=true],[role=listitem],[role=row],li,tr,${actionable}`)??el;return nameOf(at,40)||squash((at as HTMLElement).innerText??'').slice(0,40)||roleOf(at);};
 
 export function startPredict(){
  if(window!==window.top)return;
@@ -39,9 +44,18 @@ export function startPredict(){
  document.addEventListener('focusin',()=>{const f=fieldOf(deepActive());if(hint)drawPreview();if(f){did('focused',nameOf(f.el,60)||'a field');if(!(pressed&&pressed.el===f.el&&Date.now()-pressed.at<500))soon(120,true);}},true);
  // The faint text belongs to the field the cursor is in: it goes when the cursor leaves.
  document.addEventListener('focusout',()=>{if(preview)setTimeout(()=>{if(hint)drawPreview();},0);},true);
- document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text);soon(150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60));soon(150);}},true);
+ document.addEventListener('change',e=>{const t=e.target;if(t instanceof HTMLSelectElement){did('chose',nameOf(t,60),t.selectedOptions[0]?.text);soon(150);}else if(t instanceof HTMLInputElement&&/checkbox|radio/.test(t.type)){did(t.checked?'checked':'unchecked',nameOf(t,60));soon(150);}else if(t instanceof HTMLInputElement&&t.type==='range'){did('set',nameOf(t,60),t.value);soon(150);}},true);
  // A finished sentence is a likely end of what they meant to write (the send, the search comes next): asked sooner.
- document.addEventListener('input',()=>{lastKey=Date.now();if(!running)hide();const f=fieldOf(deepActive());let ended=false;if(f){const s=snapshot(f);ended=/[.!?…]["”')]?\s*$/.test(s?.before??'');typingFor=ended?400:1100;did('typed',nameOf(f.el,60)||'a field',s?.before);}soon(ended?450:1300,true);},true);
+ // Only the user's own typing in a text field is typing: a slider moved, a box checked, or what Tab itself typed is not.
+ document.addEventListener('input',e=>{
+  if(running)return;
+  const f=fieldOf(deepActive()),t=e.composedPath()[0];
+  if(!f||!(t instanceof Node)||!(f.el===t||f.el.contains(t)))return;
+  lastKey=Date.now();hide();
+  const s=snapshot(f),ended=/[.!?…]["”')]?\s*$/.test(s?.before??'');typingFor=ended?400:1100;
+  did('typed',nameOf(f.el,60)||'a field',s?.before);soon(ended?450:1300,true);
+ },true);
+ watchHands();
  window.addEventListener('keydown',onKey,true);
  window.addEventListener('scroll',()=>requestAnimationFrame(place),{capture:true,passive:true});
  window.addEventListener('resize',()=>requestAnimationFrame(place));
@@ -51,6 +65,22 @@ export function startPredict(){
  new MutationObserver(records=>{
   for(const r of records)for(const n of r.addedNodes)if(n instanceof Element&&(n.matches(dialogs)||n.parentElement===document.body&&n.querySelector(dialogs))){did('saw a dialog',nameOf(n.matches(dialogs)?n:n.querySelector(dialogs)!,60)||'a dialog');soon(120);return;}
  }).observe(document.body??document.documentElement,{childList:true,subtree:true});
+}
+/** The moves a hand makes that are not clicks: a drag (the browser's own drag and drop, or a press, a move and a release
+ * somewhere else that did not select text), a double-click, a right-click. They are what the next move often repeats. */
+function watchHands(){
+ let dragged:Element|undefined,down:{el:Element;x:number;y:number;at:number}|undefined;
+ document.addEventListener('dragstart',e=>{if(e.isTrusted)dragged=e.composedPath()[0] as Element;},true);
+ document.addEventListener('drop',e=>{if(!e.isTrusted)return;did('dragged',`${what(dragged)} onto ${what(e.composedPath()[0] as Element)}`);dragged=undefined;down=undefined;soon(150);},true);
+ document.addEventListener('pointerdown',e=>{if(e.isTrusted&&e.button===0)down={el:e.composedPath()[0] as Element,x:e.clientX,y:e.clientY,at:Date.now()};},true);
+ document.addEventListener('pointerup',e=>{
+  const d=down;down=undefined;if(!e.isTrusted||!d||dragged)return;
+  const dx=e.clientX-d.x,dy=e.clientY-d.y;if(Math.hypot(dx,dy)<30||Date.now()-d.at>8000||getSelection()?.toString().trim())return;
+  const onto=document.elementFromPoint(e.clientX,e.clientY);
+  did('dragged',`${what(d.el)}${onto&&!d.el.contains(onto)?` onto ${what(onto)}`:''} (by ${Math.round(dx)}, ${Math.round(dy)} px)`);soon(150);
+ },true);
+ document.addEventListener('dblclick',e=>{if(e.isTrusted){did('double-clicked',what(e.composedPath()[0] as Element));soon(150);}},true);
+ document.addEventListener('contextmenu',e=>{if(e.isTrusted){did('right-clicked',what(e.composedPath()[0] as Element));soon(120);}},true);
 }
 function onClick(event:MouseEvent){
  if(!event.isTrusted||(chip&&event.composedPath().includes(chip)))return;
@@ -62,9 +92,9 @@ function onClick(event:MouseEvent){
  if(!running)hide();soon(150);
 }
 /** Asks once the page has settled: a moment after what the user did, then until nothing has been added, removed, opened
- * or closed for a beat (a menu opening, a route loading), a second and a half at most. */
-/** quick: what the user did changes little on the page (the cursor went into a field, they paused typing), so it waits
- * only a beat for the page, however busy the page itself keeps being. */
+ * or closed for a beat (a menu opening, a route loading), a second and a half at most. quick: what the user did changes
+ * little on the page (the cursor went into a field, they paused typing), so it waits only a beat for the page, however
+ * busy the page itself keeps being. */
 function soon(ms:number,quick=false){
  clearTimeout(timer);const mine=++wave;
  timer=window.setTimeout(()=>void (quick?settled(60,250):settled()).then(()=>{if(mine===wave)void guess();}),ms);
@@ -111,8 +141,8 @@ function onRest(event:PointerEvent){
 let stopListening:(()=>void)|undefined;
 function listen(id:string){
  stopListening?.();
- // The instant guess (a habit, the user's own details) may come first, then the first steps as they stream; the whole
- // plan replaces them.
+ // The instant guess (a habit, the user's own details) may come first, then the move as it streams; the whole reply
+ // replaces them.
  stopListening=portListen(m=>{
   if(m?.type!=='predict.plan'||m.id!==id||Number(id.slice(1))!==seq)return;
   if(m.final){asking=undefined;finalArrived?.();}
@@ -121,16 +151,19 @@ function listen(id:string){
  });
 }
 
+const touches=(s:PlanStep)=>!!(s.id||s.name);
 function show(plan:Plan,final:boolean,source?:string){
- const first=plan.steps[0],el=first.id?findTarget(targetOf(first))??undefined:undefined;
- // The same guess, further along: the line is updated in place, never flashed.
+ const first=plan.steps[0],el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
+ // The same move, further along: the line is updated in place, never flashed.
  if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=plan.label;place();return;}
  if(taking)return;
  hide();hint={plan,el,final,source};layer();
  chip=document.createElement('div');chip.className='chip';chip.setAttribute('role','status');
  const key=document.createElement('kbd');key.textContent='Tab';const text=document.createElement('span');text.className='text';text.textContent=plan.label;
  chip.append(key,text);chip.addEventListener('mousedown',e=>{e.preventDefault();void go();});surface().appendChild(chip);
- if(el&&visible(el)){ring=document.createElement('div');ring.className='tab-ring';surface().appendChild(ring);}
+ // What it touches is outlined; a drag's drop, dashed.
+ const drop=first.do==='drag'&&first.to?findTarget(targetOf({do:'click',id:first.to})):null;
+ for(const [at,kind] of [[el,''],[drop,' to']] as [Element|null|undefined,string][])if(at&&visible(at)){const ring=document.createElement('div');ring.className='tab-ring'+kind;surface().appendChild(ring);rings.push(ring);}
  place();
 }
 /** Text its first step would type into the field the cursor is in (an empty one), shown faintly where it would land. */
@@ -147,15 +180,16 @@ function place(){
  const anchor=(fieldOf(deepActive())?.el??hint.el) as Element|undefined,r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
  chip.style.left=`${r?Math.min(Math.max(8,r.left),innerWidth-c.width-12):innerWidth-c.width-20}px`;
  chip.style.top=`${r?Math.min(r.bottom+6,innerHeight-c.height-12):innerHeight-c.height-20}px`;
- if(ring&&hint.el?.isConnected){const e=hint.el.getBoundingClientRect();Object.assign(ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
+ const first=hint.plan.steps[0],drop=first.do==='drag'&&first.to?findTarget(targetOf({do:'click',id:first.to})):null;
+ [hint.el,drop].filter((at):at is Element=>!!at&&at.isConnected).forEach((at,i)=>{const ring=rings[i],e=at.getBoundingClientRect();if(ring)Object.assign(ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});});
  drawPreview();
 }
-function hide(){chip?.remove();ring?.remove();preview?.remove();chip=null;ring=null;preview=null;hint=null;}
-/** A guess in words, by what each step touched ("type “…” into Street address; click “Continue”"), so it can be shown to
- * the model later as what this person took or turned down. */
-function wordsOf(plan:Plan){
- const what=(s:PlanStep)=>{const i=s.id?seen.get(s.id):undefined;return i?.name?`“${i.name.slice(0,50)}”`:i?.role??'it';};
- return plan.steps.map(s=>s.do==='type'?`type “${(s.text??'').slice(0,80)}” into ${what(s)}`:s.do==='select'?`choose “${s.option}” in ${what(s)}`:s.do==='key'?`press ${s.combo} in ${what(s)}`:s.do==='open'?`open ${s.url}`:`click ${what(s)}`).join('; ')+(plan.more?' (and carry on)':'');
+function hide(){chip?.remove();for(const r of rings)r.remove();preview?.remove();chip=null;rings=[];preview=null;hint=null;}
+/** A move in words, by what each step touched ("type “…” into Street address", "drag “Write tests” onto “Done”"), so it
+ * can be shown to the model later as what this person took or turned down, and labelled when it is the next move. */
+function wordsOf(plan:{steps:PlanStep[]}){
+ const at=(s:PlanStep,id?:string)=>{const i=id?seen.get(id):undefined;const name=i?.name??(id===s.id?s.name:undefined);return name?`“${name.slice(0,50)}”`:i?.role??s.role??'it';};
+ return plan.steps.map(s=>s.do==='type'?`type “${(s.text??'').slice(0,80)}” into ${at(s,s.id)}`:s.do==='select'?`choose “${s.option}” in ${at(s,s.id)}`:s.do==='key'?`press ${s.combo}`:s.do==='open'?`open ${s.url}`:s.do==='back'?'go back':s.do==='drag'?`drag ${at(s,s.id)}${s.to?` onto ${at(s,s.to)}`:''}`:s.do==='scroll'?`scroll to ${at(s,s.id)}`:s.do==='hover'?`point at ${at(s,s.id)}`:`${s.do==='double_click'?'double-click':s.do==='right_click'?'right-click':'click'} ${at(s,s.id)}`).join('; ');
 }
 
 function onKey(event:KeyboardEvent){
@@ -167,11 +201,25 @@ function onKey(event:KeyboardEvent){
  if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();post({type:'actions.outcome',label:hint.plan.label,outcome:'dismissed'});post({type:'predict.no',label:hint.plan.label,first:hint.plan.steps[0],page:document.title,did:wordsOf(hint.plan)});did('turned down',hint.plan.label);hide();return;}
  if(!['Shift','Control','Alt','Meta','CapsLock'].includes(event.key)){post({type:'actions.outcome',label:hint.plan.label,outcome:'ignored'});hide();}
 }
-/** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it). */
-const targetOf=(s:PlanStep):Target=>{const i=s.id?seen.get(s.id):undefined;return{id:s.id,...(i?{role:i.role,name:i.name,nearby:i.nearby,path:i.path}:{})};};
-const toAction=(s:PlanStep):Action=>s.do==='type'?{do:'type',target:targetOf(s),text:s.text!}:s.do==='select'?{do:'select',target:targetOf(s),option:s.option!}:s.do==='key'?{do:'key',combo:s.combo!,target:targetOf(s)}:{do:'click',target:targetOf(s)};
-/** Does it: every step, checked as it goes; one that sends, buys or deletes waits for Enter. A guess still streaming is
- * finished first (a moment at most); one that came at once (a habit, their own details) is whole already. */
+/** A step's element: by its id, or, if the page re-rendered it, by what it was (its role, name, the words around it); a
+ * next move not yet on the page when it was guessed, by the role and name the model gave it. */
+const targetOf=(s:PlanStep):Target=>{const i=s.id?seen.get(s.id):undefined;return s.id?{id:s.id,...(i?{role:i.role,name:i.name,nearby:i.nearby,path:i.path}:{})}:{role:s.role,name:s.name};};
+function toAction(s:PlanStep):Action{
+ const target=targetOf(s);
+ switch(s.do){
+  case 'type':return{do:'type',target,text:s.text!};
+  case 'select':return{do:'select',target,option:s.option!};
+  case 'key':return{do:'key',combo:s.combo!,...(touches(s)?{target}:{})};
+  case 'drag':return{do:'drag',target,...(s.to?{to:targetOf({do:'click',id:s.to})}:{by:s.by})};
+  case 'scroll':return{do:'scroll',to:target};
+  case 'back':return{do:'back'};
+  case 'double_click':case 'right_click':case 'hover':return{do:s.do,target};
+  default:return{do:'click',target};
+ }
+}
+/** Does the move: each step checked as it goes; one that sends, buys or deletes waits for Enter. A move still streaming
+ * is finished first (a moment at most); one that came at once (a habit, their own details) is whole already. Then the
+ * next move, already guessed, shows at once; the fresh guess that follows replaces it if it sees better. */
 async function go(){
  if(!hint||taking)return;
  if(hint.source==='stream'&&!hint.final&&asking){
@@ -179,53 +227,35 @@ async function go(){
   await new Promise<void>(r=>{finalArrived=r;setTimeout(r,2000);});finalArrived=null;taking=false;
  }
  const current=hint;if(!current)return;
- hide();running=true;let ok=true,stuck=false;const done:string[]=[];
+ hide();running=true;let ok=true;
  try{
   for(const step of current.plan.steps){
    if(step.do==='open'){post({type:'actions.open',url:step.url});break;}
-   const action=toAction(step),el=step.id?findTarget(targetOf(step)):null;
-   // The page changed under it (the thing is gone): the agent works it out from what is there now.
-   if(step.id&&!el){stuck=true;break;}
-   if(irreversible(action,el)){
-    const yes=await confirmEnter(`${nameOf(el!,40)||'this'}`);if(!yes){ok=false;break;}
-   }
+   const action=toAction(step),el=touches(step)?findTarget(targetOf(step)):null;
+   // The page changed under it (the thing is gone): nothing is done, and the next guess looks again.
+   if(touches(step)&&!el){ok=false;break;}
+   if(irreversible(action,el)){const yes=await confirmEnter(`${nameOf(el!,40)||'this'}`);if(!yes){ok=false;break;}}
    const result=await perform(action);
-   if(!result.ok){stuck=true;post({type:'failure',site:location.hostname,editor:'page',what:'action',detail:`Tab: ${result.detail}`});break;}
-   done.push(result.detail);
+   if(!result.ok){ok=false;post({type:'failure',site:location.hostname,editor:'page',what:'action',detail:`Tab: ${result.detail}`});break;}
    // A click Tab made for them is one of their steps too: habits learn from it.
    if(step.do==='click'&&el){const item=describe(el);if(item.name)post({type:'capture.event',role:roleOf(el),name:item.name,path:item.path,nearby:item.nearby});}
-   // The next step's element may only appear once this one has taken effect (a menu, a dialog, the next field).
-   await settled(120,900);
+   if(current.plan.steps.length>1)await settled(40,300);
   }
-  // What it was doing needs more than was on the page: the agent carries on from here, in the same loop it always uses.
-  if(ok&&(current.plan.more||stuck))await carryOn(current.plan.label,done);
  }finally{running=false;}
- did('accepted',current.plan.label);
+ did('took',wordsOf(current.plan));
  post({type:'actions.outcome',label:current.plan.label,outcome:ok?'accepted':'ignored'});if(ok)post({type:'predict.yes',page:document.title,did:wordsOf(current.plan)});
- soon(150);
+ const next=current.plan.then;
+ if(ok&&next){
+  await settled(60,500);
+  const el=touches(next)?findTarget(targetOf(next)):null;
+  if(!touches(next)||el)show({label:labelOn(next,el),confidence:current.plan.confidence,steps:[next]},true,'then');
+ }
+ soon(next?60:150,!!next);
 }
-/** The agent finishing what Tab started, its progress in Tab's small line; a final step waits for Enter, Esc stops. */
-function carryOn(task:string,did:string[]):Promise<void>{
- const id=`c${++seq}`;layer();
- const box=document.createElement('div');box.className='chip';const text=document.createElement('span');text.className='text';box.append(text);surface().appendChild(box);
- const r=deepActive()?.getBoundingClientRect();box.style.left=`${Math.max(8,Math.min(r?.left??innerWidth-300,innerWidth-320))}px`;box.style.top=`${Math.min((r?.bottom??innerHeight-60)+6,innerHeight-44)}px`;
- text.textContent=`${task}…`;
- return new Promise(resolve=>{
-  let chat:string|undefined,confirm:string|undefined;
-  const finish=()=>{stop();window.removeEventListener('keydown',key,true);box.remove();resolve();};
-  const key=(e:KeyboardEvent)=>{
-   if(e.key==='Enter'&&confirm&&chat){e.preventDefault();e.stopImmediatePropagation();post({type:'agent.confirm',chat,id:confirm,yes:true});confirm=undefined;}
-   else if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();if(confirm&&chat){post({type:'agent.confirm',chat,id:confirm,yes:false});confirm=undefined;}else{if(chat)post({type:'agent.stop',chat});finish();}}
-  };
-  window.addEventListener('keydown',key,true);
-  const stop=portListen(m=>{
-   if(m?.type!=='tab.progress'||m.id!==id)return;chat=m.chat;confirm=m.confirm?.id;
-   const last=m.steps?.at(-1);
-   text.textContent=m.confirm?`Enter: ${m.confirm.text} (Esc: no)`:m.done?(m.said||task):last?`${task} · ${last.text}`:`${task}…`;
-   if(m.done)setTimeout(finish,m.status==='failed'?3000:1400);
-  });
-  post({type:'tab.continue',id,task,did});
- });
+/** A next move's line, from what it touches now. */
+function labelOn(s:PlanStep,el:Element|null){
+ const name=el?nameOf(el,40):s.name,on=name?` “${name}”`:'';
+ return s.do==='type'?`Type “${(s.text??'').slice(0,30)}”`:s.do==='select'?`Choose “${s.option}”`:s.do==='key'?`Press ${s.combo}`:s.do==='open'?`Open ${(()=>{try{return new URL(s.url!).hostname;}catch{return 'the page';}})()}`:s.do==='back'?'Go back':s.do==='drag'?`Drag${on}`:s.do==='scroll'?`Scroll to${on}`:s.do==='hover'?`Open${on}`:s.do==='double_click'?`Double-click${on}`:s.do==='right_click'?`Right-click${on}`:`Click${on}`;
 }
 function confirmEnter(what:string):Promise<boolean>{
  layer();const box=document.createElement('div');box.className='chip';
@@ -235,4 +265,4 @@ function confirmEnter(what:string):Promise<boolean>{
  return new Promise(resolve=>{waitEnter=yes=>{waitEnter=null;box.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
-export const predictState=()=>({showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,preview:preview?.textContent??undefined,plan:hint?.plan});
+export const predictState=()=>({showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,plan:hint?.plan});

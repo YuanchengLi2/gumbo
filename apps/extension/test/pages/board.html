@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sprint board</title><link rel="stylesheet" href="style.css">
+<style>
+ .cols{display:flex;gap:16px}.col{flex:1;min-height:140px;border:1px solid #ccc;border-radius:8px;padding:8px}
+ .card{padding:8px;margin:6px 0;border:1px solid #999;border-radius:6px;background:#fff;cursor:grab}
+ #rows li{padding:8px;margin:4px 0;border:1px solid #bbb;list-style:none;background:#fafafa;user-select:none}
+ #menu,#ctx{display:none;border:1px solid #999;padding:6px;position:absolute;background:#fff}
+ #menu.open,#ctx.open{display:block}
+</style></head>
+<body>
+<main>
+ <h1>Sprint board</h1>
+ <!-- Native drag and drop (HTML draggable). -->
+ <div class="cols">
+  <section class="col" id="todo" aria-label="To do"><h2>To do</h2>
+   <div class="card" draggable="true" id="c1">Write tests</div>
+   <div class="card" draggable="true" id="c2">Fix login bug</div>
+  </section>
+  <section class="col" id="done" aria-label="Done"><h2>Done</h2></section>
+ </div>
+ <!-- A list sorted by pressing, moving and releasing (mouse events, no native drag). -->
+ <h2>Priorities</h2>
+ <ul id="rows"><li id="r1" aria-roledescription="sortable item">Alpha</li><li id="r2" aria-roledescription="sortable item">Beta</li><li id="r3" aria-roledescription="sortable item">Gamma</li></ul>
+ <label for="volume">Volume</label><input id="volume" type="range" min="0" max="100" value="20">
+ <!-- A menu that opens when pointed at (by script). -->
+ <div id="more" tabindex="0" role="button" aria-haspopup="menu">More</div>
+ <div id="menu" role="menu"><div role="menuitem" id="export" tabindex="0">Export</div></div>
+ <!-- A name that is edited by double-clicking it. -->
+ <h2 id="title">Sprint 12</h2>
+ <!-- A row with its own menu on right-click. -->
+ <div id="row" role="row" tabindex="0">Release notes</div>
+ <div id="ctx" role="menu"><div role="menuitem" id="dup" tabindex="0">Duplicate</div></div>
+ <p id="status"></p>
+</main>
+<script>
+ const status=t=>document.getElementById('status').textContent=t;
+ let dragging=null;
+ document.querySelectorAll('.card').forEach(c=>c.addEventListener('dragstart',e=>{dragging=c;e.dataTransfer.setData('text/plain',c.id);}));
+ document.querySelectorAll('.col').forEach(col=>{col.addEventListener('dragover',e=>e.preventDefault());col.addEventListener('drop',e=>{e.preventDefault();const id=e.dataTransfer.getData('text/plain')||dragging?.id;const card=document.getElementById(id);if(card){col.appendChild(card);status(`Moved ${card.textContent} to ${col.getAttribute('aria-label')}`);}});});
+ // Sorting by mouse: press on a row, move, release over another row: it goes before that row.
+ let held=null;
+ document.getElementById('rows').addEventListener('mousedown',e=>{held=e.target.closest('li');});
+ document.addEventListener('mouseup',e=>{if(!held)return;const over=document.elementFromPoint(e.clientX,e.clientY)?.closest('#rows li');if(over&&over!==held){over.parentNode.insertBefore(held,over);status(`Order: ${[...document.querySelectorAll('#rows li')].map(l=>l.textContent).join(', ')}`);}held=null;});
+ document.getElementById('volume').addEventListener('input',e=>status(`Volume ${e.target.value}`));
+ const more=document.getElementById('more'),menu=document.getElementById('menu');
+ more.addEventListener('mouseenter',()=>menu.classList.add('open'));
+ document.getElementById('export').addEventListener('click',()=>status('Exported'));
+ document.getElementById('title').addEventListener('dblclick',e=>{e.target.contentEditable='true';e.target.focus();status('Renaming');});
+ document.getElementById('row').addEventListener('contextmenu',e=>{e.preventDefault();document.getElementById('ctx').classList.add('open');status('Row menu');});
+ document.getElementById('dup').addEventListener('click',()=>status('Duplicated'));
+</script>
+</body>
+</html>

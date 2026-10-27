@@ -112,22 +112,6 @@ on('inline.page',async(m:{session:string;task:string;selection?:string},{send,po
  watch(id,forward,port);
  void runAll(l,{text:m.selection?`${m.task}\n\n(What they selected on the page: "${m.selection.slice(0,1500)}")`:m.task,tabId});
 });
-/** Tab carrying on: the steps it knew are done, and what it was doing needs more than was on the page (a menu that
- * opened, a page that came next). The agent finishes it in this tab, its progress in Tab's small line, and a final step
- * still waits for Enter. */
-on('tab.continue',async(m:{id:string;task:string;did:string[]},{send,port})=>{
- const tabId=port.sender?.tab?.id,id=crypto.randomUUID();
- const l:Live={chat:{id,title:m.task.slice(0,60),at:Date.now(),turns:[],messages:[]},queue:[],confirms:new Map(),tabId};
- live.set(id,l);
- const forward:Send=message=>{
-  const turn=(message.type==='agent.turn'?message.turn:l.chat.turns.at(-1)) as Turn|undefined;if(!turn)return;
-  if(message.type==='agent.turn'||message.type==='agent.done')send({type:'tab.progress',id:m.id,chat:id,...cardView(turn),done:message.type==='agent.done'});
- };
- watch(id,forward,port);
- void runAll(l,{text:`${m.task}
-
-(Already done here: ${m.did.join('; ')||'nothing yet'}. Finish it on this page; do only what this needs, nothing more.)`,tabId});
-});
 /** A turn as Ctrl+K's card shows it: each step in words with how it stands, a question waiting for Enter, the outcome. */
 function cardView(turn:Turn){
  const steps=turn.parts.filter((p):p is Extract<Part,{kind:'tool'}>=>p.kind==='tool').map(p=>{const [verb,target]=stepWords(p);return{text:`${verb}${target?` “${target}”`:''}`,status:p.status};});

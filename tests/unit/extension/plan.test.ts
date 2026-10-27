@@ -6,13 +6,26 @@ const ids=new Set(['e1','e2','e3']);
 const known='Dana Lee dana@example.com Offsite at 410 Lakeview Drive on Friday';
 
 describe('what Tab may do on a page',()=>{
- it('keeps steps on elements that are on the page, text included',()=>{
-  const plan=planOf(JSON.stringify({label:'Fill in and send',confidence:0.8,steps:[{do:'type',id:'e1',text:'See you Friday at 410 Lakeview Drive'},{do:'click',id:'e2'}],more:true}),ids,known);
-  expect(plan).toMatchObject({label:'Fill in and send',confidence:0.8,more:true});
-  expect(plan!.steps).toEqual([{do:'type',id:'e1',text:'See you Friday at 410 Lakeview Drive'},{do:'click',id:'e2'}]);
+ it('is one move: a single action, or the fields of a form filled; the move after it comes as "then"',()=>{
+  const plan=planOf(JSON.stringify({label:'Fill in the reply',confidence:0.8,steps:[{do:'type',id:'e1',text:'See you Friday'},{do:'type',id:'e3',text:'Dana Lee'},{do:'click',id:'e2'}],then:{do:'click',id:'e2'}}),ids,known);
+  expect(plan).toMatchObject({label:'Fill in the reply',confidence:0.8,then:{do:'click',id:'e2'}});
+  // The click after the fields is the next move, not part of this one.
+  expect(plan!.steps).toEqual([{do:'type',id:'e1',text:'See you Friday'},{do:'type',id:'e3',text:'Dana Lee'}]);
+  expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'click',id:'e1'},{do:'click',id:'e2'}]}),ids,known)!.steps).toEqual([{do:'click',id:'e1'}]);
+ });
+ it('knows every move a hand makes, and a next move may name what is not on the page yet',()=>{
+  const one=(step:unknown)=>planOf(JSON.stringify({confidence:0.9,steps:[step]}),ids,known)?.steps[0];
+  expect(one({do:'drag',id:'e1',to:'e2'})).toEqual({do:'drag',id:'e1',to:'e2'});
+  expect(one({do:'drag',id:'e1',by:[120,-4]})).toEqual({do:'drag',id:'e1',by:[120,-4]});
+  expect(one({do:'drag',id:'e1'})).toBeUndefined();expect(one({do:'drag',id:'e1',to:'e9'})).toBeUndefined();
+  for(const kind of ['double_click','right_click','hover','scroll'])expect(one({do:kind,id:'e3'})).toEqual({do:kind,id:'e3'});
+  expect(one({do:'back'})).toEqual({do:'back'});
+  // Only the next move may name its element; a move now must be on the page.
+  expect(one({do:'click',role:'button',name:'Next'})).toBeUndefined();
+  expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'click',id:'e1'}],then:{do:'click',role:'button',name:'Next'}}),ids,known)!.then).toEqual({do:'click',name:'Next',role:'button'});
  });
  it('stops at the first step on something that is not there, or that types a fact nobody gave',()=>{
-  expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'click',id:'e1'},{do:'click',id:'e9'},{do:'click',id:'e2'}]}),ids,known)!.steps).toHaveLength(1);
+  expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'type',id:'e1',text:'Dana'},{do:'type',id:'e9',text:'Lee'},{do:'type',id:'e2',text:'Lee'}]}),ids,known)!.steps).toHaveLength(1);
   expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'type',id:'e1',text:'call me at 555-0199'}]}),ids,known)).toBeNull();
   expect(planOf(JSON.stringify({confidence:0.9,steps:[{do:'type',id:'e1',text:'Mail sam@other.example'}]}),ids,known)).toBeNull();
  });
@@ -41,13 +54,13 @@ describe('what Ctrl+K offers as it opens',()=>{
  });
 });
 
-it('a plan still being written offers only its complete steps, and only once it has said how sure it is',()=>{
- const ids=new Set(['e1','e2']),known='offsite';
- const full=JSON.stringify({confidence:0.9,label:'Search',steps:[{do:'type',id:'e1',text:'offsite'},{do:'key',id:'e1',combo:'Enter'}]});
+it('a move still being written offers only its complete steps, and only once it has said how sure it is',()=>{
+ const ids=new Set(['e1','e2']),known='offsite Dana';
+ const full=JSON.stringify({confidence:0.9,label:'Fill it in',steps:[{do:'type',id:'e1',text:'offsite'},{do:'type',id:'e2',text:'Dana'}],then:{do:'key',id:'e1',combo:'Enter'}});
  expect(partialPlan(full.slice(0,full.indexOf('"steps"')),ids,known)).toBeNull();
  expect(partialPlan(full.slice(0,full.indexOf('{"do":"type"')+20),ids,known)).toBeNull();
- const early=partialPlan(full.slice(0,full.indexOf('{"do":"key"')+8),ids,known)!;
- expect(early.steps).toEqual([{do:'type',id:'e1',text:'offsite'}]);expect(early.confidence).toBe(0.9);expect(early.more).toBeUndefined();
+ const early=partialPlan(full.slice(0,full.indexOf('{"do":"type","id":"e2"')+8),ids,known)!;
+ expect(early.steps).toEqual([{do:'type',id:'e1',text:'offsite'}]);expect(early.confidence).toBe(0.9);expect(early.then).toBeUndefined();
  expect(stepKey(early.steps[0])).toBe('type:e1:offsite');
  // A one-step plan shows the moment its step closes, before the reply ends; a brace inside typed text is not a close.
  const one=JSON.stringify({confidence:0.8,label:'Send',steps:[{do:'click',id:'e2'}],more:false});

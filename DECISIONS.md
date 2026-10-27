@@ -94,6 +94,18 @@
 - **The agent's prompt was wrong:** with Haiku it typed the reply, then asked in words whether to send. The prompt now
   says the tool itself asks (the Allow card), so it clicks Send when told to.
 - **The gateway** was deployed (version 78) with the agent's no-text lane and the old answer formats.
+- **Later the same day the user set Tab's scope:** short bits, not chains. Tab is the next move: where you will click,
+  what you will fill in, what you will drag. The agent does chains.
+  - The plan of up to eight steps and the hand-off to the agent ("more") are gone. Each move is one action, or the
+    fields of one form.
+  - Each move comes with "then", the likely next move, shown the moment this one is done. Tab, Tab, Tab is one visible
+    move at a time; live, the next move showed 210 ms after Tab.
+  - Moves now cover what a hand does: double-click, right-click, hover, drag (to an element or by an offset, with native
+    drag events or mouse ones, sliders set), scroll to something, and back.
+  - The page model lists things to drag and where they can be dropped, and the user's own drags, double-clicks and
+    right-clicks are context for the next guess.
+  - A background "work it out first" layer for Tab (the agent preparing values before Tab) was started and reverted
+    before commit: that is agent territory.
 
 ## October 25, 2026 — Gumbo for Chrome's sidebar agent, and connectors last
 

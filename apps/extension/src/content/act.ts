@@ -10,10 +10,15 @@ import {snapshot} from './fields/text';
 export type Target={id?:string;role?:string;name?:string;path?:string;nearby?:string;text?:string};
 export type Action=
  |{do:'click';target:Target}
+ |{do:'double_click';target:Target}
+ |{do:'right_click';target:Target}
+ |{do:'hover';target:Target}
+ |{do:'drag';target:Target;to?:Target;by?:[number,number]}
  |{do:'type';target?:Target;text:string;replace?:boolean}
  |{do:'key';combo:string;target?:Target}
  |{do:'select';target:Target;option:string}
- |{do:'scroll';target?:Target;by:number}
+ |{do:'scroll';target?:Target;by?:number;to?:Target}
+ |{do:'back'}
  |{do:'wait';for:{selector?:string;text?:string;urlChanges?:boolean;settled?:boolean};timeoutMs?:number}
  |{do:'read';target?:Target};
 export type Done={ok:boolean;detail:string;changed?:boolean;item?:Item;value?:unknown;irreversible?:boolean};
@@ -92,11 +97,28 @@ export async function perform(action:Action):Promise<Done>{
    await perform({do:'click',target:action.target});await frames(3);
    return perform({do:'click',target:{name:action.option,role:'option'}});
   }
-  case 'scroll':{
-   const el=action.target?findTarget(action.target):null;
-   if(el)el.scrollBy({top:action.by,behavior:'instant' as ScrollBehavior});else window.scrollBy({top:action.by,behavior:'instant' as ScrollBehavior});
-   return{ok:true,detail:`Scrolled ${action.by>0?'down':'up'}.`};
+  case 'double_click':case 'right_click':case 'hover':{
+   const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
+   el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
+   const what=action.do==='double_click'?'Double-clicked':action.do==='right_click'?'Right-clicked':'Pointed at';
+   const changed=await watch(()=>action.do==='double_click'?doubleClick(el):action.do==='right_click'?rightClick(el):hover(el),700,false);
+   return{ok:true,changed,detail:`${what} ${nameOf(el,60)||roleOf(el)}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
   }
+  case 'drag':{
+   const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
+   const to=action.to?findTarget(action.to):null;if(action.to&&!to)return{ok:false,detail:`Nothing on the page matches ${label(action.to)} to drop it on.`};
+   el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
+   const changed=await watch(()=>drag(el,to,action.by),700,false);
+   return{ok:true,changed,detail:`Dragged ${nameOf(el,40)||roleOf(el)}${to?` to ${nameOf(to,40)||roleOf(to)}`:''}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
+  }
+  case 'scroll':{
+   const to=action.to?findTarget(action.to):null;
+   if(to){to.scrollIntoView({block:'center',behavior:'instant' as ScrollBehavior});return{ok:true,detail:`Scrolled to ${nameOf(to,40)||roleOf(to)}.`,item:describe(to)};}
+   const el=action.target?findTarget(action.target):null,by=action.by??innerHeight*0.8;
+   if(el)el.scrollBy({top:by,behavior:'instant' as ScrollBehavior});else window.scrollBy({top:by,behavior:'instant' as ScrollBehavior});
+   return{ok:true,detail:`Scrolled ${by>0?'down':'up'}.`};
+  }
+  case 'back':{const url=location.href;history.back();const moved=await watch(()=>{},1500,false)||location.href!==url;return{ok:true,changed:moved,detail:'Went back.'};}
   case 'wait':return waitFor(action.for,action.timeoutMs??8000);
   case 'read':{
    if(!action.target)return{ok:true,detail:'Read the page.',value:pageModel()};
@@ -109,11 +131,11 @@ const label=(t:Target)=>t.name?`"${t.name}"`:t.text?`"${t.text}"`:t.id??t.path??
 const frames=(n:number)=>new Promise<void>(resolve=>{const step=(k:number)=>k?requestAnimationFrame(()=>step(k-1)):resolve();step(n);});
 
 /** Runs a step and says whether the page reacted within a moment: the DOM, the address, the focus or a value changed. */
-async function watch(run:()=>void,ms=700,countFocus=true):Promise<boolean>{
+async function watch(run:()=>void|Promise<unknown>,ms=700,countFocus=true):Promise<boolean>{
  const url=location.href,focus=document.activeElement;let mutated=false;
  const observer=new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element&&r.target.tagName==='GUMBO-LAYER')))mutated=true;});
  observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
- try{run();}catch{}
+ try{await run();}catch{}
  const until=Date.now()+ms;while(Date.now()<until&&!mutated&&location.href===url){await new Promise(r=>setTimeout(r,50));}
  observer.disconnect();
  return mutated||location.href!==url||(countFocus&&document.activeElement!==focus);
@@ -128,6 +150,51 @@ function pointerClick(el:Element){
  if(el instanceof HTMLElement)el.focus({preventScroll:true});
  target.dispatchEvent(new PointerEvent('pointerup',{...base,pointerId:1,isPrimary:true}));target.dispatchEvent(new MouseEvent('mouseup',base));
  target.dispatchEvent(new MouseEvent('click',base));
+}
+const centre=(el:Element)=>{const r=el.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};};
+/** Mouse and pointer events of one kind at a point, on what is under it (or the element itself). */
+function fire(el:Element,type:string,x:number,y:number,extra:Record<string,unknown>={}){
+ const init={bubbles:true,cancelable:true,composed:true,clientX:x,clientY:y,screenX:x,screenY:y,button:0,buttons:/up$|click$|^drop$|dragend/.test(type)?0:1,view:window,...extra};
+ const Kind=type.startsWith('pointer')?PointerEvent:type.startsWith('drag')||type==='drop'?DragEvent:MouseEvent;
+ return el.dispatchEvent(new Kind(type,type.startsWith('pointer')?{...init,pointerId:1,isPrimary:true,pointerType:'mouse'}:init));
+}
+function doubleClick(el:Element){pointerClick(el);pointerClick(el);const {x,y}=centre(el);fire(el,'dblclick',x,y,{detail:2,buttons:0});}
+function rightClick(el:Element){
+ const {x,y}=centre(el);
+ fire(el,'pointerdown',x,y,{button:2,buttons:2});fire(el,'mousedown',x,y,{button:2,buttons:2});
+ fire(el,'pointerup',x,y,{button:2,buttons:0});fire(el,'mouseup',x,y,{button:2,buttons:0});
+ fire(el,'contextmenu',x,y,{button:2,buttons:0});
+}
+/** A menu or card that opens on hover (by script: a page's own :hover styles answer only to the real pointer). */
+function hover(el:Element){
+ const {x,y}=centre(el);
+ for(const type of ['pointerover','pointerenter','mouseover','mouseenter','pointermove','mousemove'])fire(el,type,x,y,{buttons:0,bubbles:!type.endsWith('enter')});
+}
+/** A drag, as a hand makes it: press, move in small steps, release; with the native drag events too when the thing is
+ * draggable (lists and boards built on HTML drag and drop), and a slider simply set where the drag would leave it. */
+async function drag(el:Element,to:Element|null,by?:[number,number]){
+ const from=centre(el),end=to?centre(to):{x:from.x+(by?.[0]??0),y:from.y+(by?.[1]??0)};
+ if(el instanceof HTMLInputElement&&el.type==='range'){
+  const r=el.getBoundingClientRect(),min=Number(el.min||0),max=Number(el.max||100),step=Number(el.step)||1;
+  const value=Math.min(max,Math.max(min,Math.round((min+(end.x-r.left)/Math.max(1,r.width)*(max-min))/step)*step));
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(el,String(value));
+  el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));return;
+ }
+ const at=(x:number,y:number)=>{const hit=document.elementFromPoint(x,y);return hit&&!hit.closest('gumbo-layer')?hit:document.body;};
+ const native=el.closest('[draggable=true]'),data=new DataTransfer();
+ fire(el,'pointerover',from.x,from.y,{buttons:0});fire(el,'pointerdown',from.x,from.y);fire(el,'mousedown',from.x,from.y);
+ await frames(1);
+ if(native)fire(native,'dragstart',from.x,from.y,{dataTransfer:data});
+ let over:Element=el;
+ for(let i=1;i<=14;i++){
+  const x=from.x+(end.x-from.x)*i/14,y=from.y+(end.y-from.y)*i/14,under=at(x,y);
+  fire(under,'pointermove',x,y);fire(under,'mousemove',x,y);
+  if(native){if(under!==over)fire(under,'dragenter',x,y,{dataTransfer:data});fire(under,'dragover',x,y,{dataTransfer:data});if(native)fire(native,'drag',x,y,{dataTransfer:data});}
+  over=under;await frames(1);
+ }
+ const target=at(end.x,end.y);
+ if(native){fire(target,'drop',end.x,end.y,{dataTransfer:data});fire(native,'dragend',end.x,end.y,{dataTransfer:data});}
+ fire(target,'pointerup',end.x,end.y);fire(target,'mouseup',end.x,end.y);
 }
 const keyCodes:Record<string,string>={enter:'Enter',escape:'Escape',esc:'Escape',tab:'Tab',space:' ',backspace:'Backspace',delete:'Delete',arrowdown:'ArrowDown',arrowup:'ArrowUp',arrowleft:'ArrowLeft',arrowright:'ArrowRight',home:'Home',end:'End',pagedown:'PageDown',pageup:'PageUp'};
 export function keyPress(el:Element,combo:string){

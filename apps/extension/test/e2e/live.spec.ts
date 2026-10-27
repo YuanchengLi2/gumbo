@@ -38,7 +38,7 @@ async function guess(w:Worker,p:Page,ms=15_000):Promise<{state:any;shownMs?:numb
  await expect.poll(async()=>{const s=await predict(w,p).catch(()=>null);if(s?.showing&&shownMs===undefined)shownMs=Date.now()-started;return !!(s?.showing&&s.final);},{timeout:ms,intervals:[150]}).toBe(true).catch(()=>{});
  return{state:await predict(w,p).catch(()=>null),shownMs};
 }
-const describe=(s:any)=>s?.showing?`“${s.label}” → ${(s.plan?.steps??[]).map((x:any)=>x.do==='type'?`type “${x.text}”`:x.do==='select'?`choose “${x.option}”`:x.do==='key'?`press ${x.combo}`:x.do==='open'?`open ${x.url}`:'click').join(', ')}${s.plan?.more?' (then the agent)':''}`:'nothing offered';
+const describe=(s:any)=>s?.showing?`“${s.label}” → ${(s.plan?.steps??[]).map((x:any)=>x.do==='type'?`type “${x.text}”`:x.do==='select'?`choose “${x.option}”`:x.do==='key'?`press ${x.combo}`:x.do==='open'?`open ${x.url}`:x.do==='drag'?`drag${x.to?` onto ${x.to}`:` by ${x.by}`}`:x.do.replace('_','-')).join(', ')}${s.plan?.then?` · then ${s.plan.then.do}${s.plan.then.name?` “${s.plan.then.name}”`:s.plan.then.combo?` ${s.plan.then.combo}`:''}`:''}`:'nothing offered';
 async function card(page:Page):Promise<Frame>{
  await expect.poll(()=>page.frames().some(f=>f.url().includes('card.html')),{timeout:5000}).toBe(true);
  const frame=page.frames().find(f=>f.url().includes('card.html'))!;await frame.locator('#instruction').waitFor();return frame;
@@ -74,6 +74,31 @@ test('Tab, asked ahead: the pointer rests on the field, and the click finds the 
  note(`  Asked ahead, then clicked: ${describe(state)}${shownMs!==undefined?` (shown ${shownMs} ms after the click)`:''}`);
  expect(state?.showing).toBe(true);
  expect(shownMs??9999).toBeLessThan(600);
+});
+
+test('Tab, Tab: after one move, the next is already there',async({page,context,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/notes.html`);
+ await copy(page,'#hotel','3-7-1-2 Nishishinjuku, Shinjuku City, Tokyo');
+ const shop=await context.newPage();await shop.goto(`${standin.url}/pages/shipping.html`);await shop.bringToFront();
+ await shop.waitForTimeout(2000);await shop.locator('#street').hover();await shop.waitForTimeout(2500);await shop.locator('#street').click();
+ const first=await guess(signedIn,shop);
+ note(`  Tab, Tab — first: ${describe(first.state)}${first.state?.plan?.then?` · then: ${JSON.stringify(first.state.plan.then)}`:''}`);
+ expect(first.state?.showing).toBe(true);
+ const pressed=Date.now();await shop.keyboard.press('Tab');
+ let nextMs:number|undefined;
+ await expect.poll(async()=>{const s=await predict(signedIn,shop);if(s?.showing&&nextMs===undefined&&JSON.stringify(s.plan?.steps)!==JSON.stringify(first.state.plan.steps))nextMs=Date.now()-pressed;return nextMs!==undefined;},{timeout:8000,intervals:[50]}).toBe(true).catch(()=>{});
+ const next=await predict(signedIn,shop);
+ note(`    then, ${nextMs!==undefined?`${nextMs} ms after Tab`:'nothing'}: ${describe(next)}${next?.source?` (${next.source})`:''}`);
+ expect(nextMs??9999).toBeLessThan(1500);
+});
+
+test('Tab on a board, after the user dragged a card by hand',async({page,signedIn,standin})=>{
+ await page.goto(`${standin.url}/pages/board.html`);await page.waitForTimeout(1500);
+ await page.locator('#c1').dragTo(page.locator('#done'));
+ await expect(page.locator('#status')).toHaveText('Moved Write tests to Done');
+ const {state,shownMs}=await guess(signedIn,page,12_000);
+ note(`  Board, after dragging “Write tests” to Done by hand: ${describe(state)}${shownMs!==undefined?` (${shownMs} ms)`:''}`);
+ if(state?.showing){await page.keyboard.press('Tab');await page.waitForTimeout(1200);note(`    after Tab: ${await page.locator('#status').textContent()}`);}
 });
 
 test('Tab: a reply that is written gets sent, the send waiting for Enter',async({page,signedIn,standin})=>{

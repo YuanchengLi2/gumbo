@@ -43,7 +43,7 @@ for(const site of sites){
   // The predictor's stand-in types into the field the cursor is in, by the id the page's listing gave it.
   standin.script=b=>{
    if(b.purpose==='inline')return{text:'ANSWER\nThis page is about what its title says.'};
-   if(!/autocomplete for actions/.test(JSON.stringify(b.system)))return{text:''};
+   if(!/You are Gumbo's Tab/.test(JSON.stringify(b.system)))return{text:''};
    const sent=b.messages[0].content.map((c:any)=>c.text).join('\n'),cursor=/Their cursor is in (.+)\./.exec(sent)?.[1];
    const id=cursor&&new RegExp(`(e\\d+) \\w+ "${cursor.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}"`).exec(sent)?.[1];
    return{text:id?JSON.stringify({confidence:0.9,label:'Type the check',steps:[{do:'type',id,text:'gumbo tab'}]}):'{"confidence":0,"steps":[]}'};
