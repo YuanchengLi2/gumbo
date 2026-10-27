@@ -181,6 +181,24 @@
   above Haiku 5.5's, and its speed for Tab is the open question. Taken back minutes later, at the user's request: Haiku
   for the quick calls and notes, DeepSeek for the agent, as before. Terra stays a choice in the popup, and quick calls to
   a model other than Claude still go without thinking or a warm-up.
+- **Action Tab redesigned (October 27), as Cursor's Tab continues the code being written:**
+  - **When:** only on a task moment, meaning the user typed in a field and paused, focused one, chose, ticked, pasted, opened a
+    menu or a dialog with a click, dragged, or took a move. Never a page opening, a route change, a link followed, a
+    scroll, a return to the tab, or a dialog the page opened by itself.
+  - **Where:** the move is chosen only from what is around that moment (what a toggle opened; else the dialog, menu,
+    form, search box or toolbar it is in; else the smallest box holding a few controls), up to 50 elements, with that
+    place's own words, and the page in brief. Memory is searched with that place's words. A box with no button is
+    finished with Enter. The move after stays in the same place or in what the move opened.
+  - **How sure:** only a move the model is really sure of (0.75) shows.
+  - **Live, real model:** YouTube and GitHub showed nothing as pages opened or on a click into search; a typed search
+    got its result or "Run the issue search", which Alt+Q ran; a written reply got Send; a check-in form filled from
+    notes read earlier in 0.1 s; a copied address filled a form.
+  - **Text suggestions:** memory is searched again every two words and each suggestion waits up to 0.12 s for that
+    search. A suggestion whose word runs (three at a time) are half or more already in what they wrote here or in the
+    messages above is dropped (it had echoed the prompt being typed), and the model is told never to repeat or rephrase
+    and to say nothing when the writing is complete.
+  - **Docs and Canva:** with real input turned on (the popup), taken words and kept Ctrl+K edits go in as real typing
+    through Chrome's debugging interface; without it, through the hidden box as before. Not yet tried on a real Doc.
 - **After the user's first real use (October 27), from their account's call log and what they saw:**
   - **Tab asked about the same page every 1-2 s for a minute** (about 40 calls with the same prompt size), so the move
     flipped while they looked. A guess is now asked only when the moment changes (what they did, the address, the

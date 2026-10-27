@@ -33,8 +33,10 @@ function onKey(event:KeyboardEvent){
  const field=hiddenField();if(!field)return;
  if(takes(event)&&shown?.el===field.el){
   took(event);
-  const text=shown.text;drop();typed=(typed+text).slice(-300);void insert(field,text);return;
+  const text=shown.text;drop();typed=(typed+text).slice(-300);void typeInto(field,text);return;
  }
+ // A modifier pressed alone (the Alt of Alt+Q on its way) changes nothing yet.
+ if(['Alt','AltGraph','Control','Shift','Meta'].includes(event.key))return;
  drop();
  if(event.ctrlKey||event.metaKey||event.altKey||(event.key.length!==1&&event.key!=='Backspace'&&event.key!=='Enter')){if(event.key.startsWith('Arrow')||event.key==='Home'||event.key==='End')typed='';return;}
  typed=(event.key==='Backspace'?typed.slice(0,-1):typed+(event.key==='Enter'?'\n':event.key)).slice(-300);
@@ -42,6 +44,12 @@ function onKey(event:KeyboardEvent){
  timer=window.setTimeout(()=>void suggest(field),/[.!?]/.test(event.key)?300:650);
 }
 
+/** The words go in as real typing when the user turned it on (editors such as Docs and Canva may ignore anything else),
+ * else through the box as a paste or typed text. */
+export async function typeInto(field:Field|null,text:string){
+ if(settings?.realInput){const real=await request<{ok:boolean}>({type:'input.insert',text},'input.inserted',6000);if(real?.ok)return true;}
+ return field?(await insert(field,text)).ok:false;
+}
 async function suggest(field:Field){
  if(hiddenField()?.el!==field.el)return;
  const caret=caretInPage(field);if(!caret)return;

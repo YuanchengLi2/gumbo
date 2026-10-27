@@ -6,7 +6,7 @@ import {loadSettings,activeOn,siteOf} from '../shared/settings';
 import {tabRequest,stableContext,TAB_SYSTEM} from '../shared/prompts';
 import {cleanSuggestion,lastWordOf,agreed} from '../shared/suggestion';
 import type {FieldContext} from '../content/context';
-import {fieldMemory,fieldReady,fieldKey,fieldQuery,writingQuery} from './memory-context';
+import {fieldMemory,fieldReady,fieldCurrent,fieldKey,fieldQuery,writingQuery} from './memory-context';
 import {lately} from './lately';
 import {justLeft} from './workspace';
 /** Tab in the engine: a page asks with the field's context and the text around the caret; the answer streams back
@@ -35,7 +35,10 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  // behind it. Only the first suggestion in a field may wait, briefly, for the search its focus started.
  const c=message.context,key=fieldKey(site,c.intent,c.label,c.thread);
  recall.memory=fieldMemory(key,fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),c.url);
+ // The memory follows the writing: when what they write moved on, its fresh search gets a moment (0.12 s) to come in, so
+ // the suggestion is made with the memory for these words, not the last ones.
  if(!recall.memory.length)recall.memory=await fieldReady(key);
+ else recall.memory=(await fieldCurrent(key,120)).items;
  // What they copied a few minutes ago, in any tab (held in the worker: no wait).
  recall.copied=(await lately(c.url)).copied.filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
  // The rest of their browser, as Tab for actions and the agent have it: the tab they just left (what they were reading or
@@ -44,7 +47,7 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const around=await browserAround(tab);
  recall.reading=[...around,...recall.reading];
  const {system,messages,known}=tabRequest(message.context,message.before,message.after,recall);
- const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:message.context.singleLine,known,final,lastWord});
+ const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:message.context.singleLine,known,final,lastWord,own:message.context.thread?.map(m=>m.text).join('\n')});
  // Two predictions run at once, and only the words both begin with are shown: where they part, the writer's next words
  // are not clear, and showing nothing there is better than a guess. They stop as soon as they part or a sentence ends.
  const runs=[{raw:'',done:false,failed:false},{raw:'',done:false,failed:false}],stop=new AbortController(),started=performance.now();let shown='';

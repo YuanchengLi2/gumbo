@@ -51,10 +51,11 @@ export const fieldKey=(site:string,intent:string,label:string,thread?:{text:stri
 /** The last finished sentence of what is being written (memory is searched again only when it changes). */
 export function lastSentence(before:string){const done=before.match(/[^.!?\n]{8,}[.!?\n]/g);return done?.at(-1)?.trim()??'';}
 /** What is being written, as a question to memory: the last finished sentence and the one under way, the latter in
- * steps of four words, so memory follows the writing without a search on every keystroke. */
+ * steps of two words, so memory follows the writing closely without a search on every keystroke (a search is local and
+ * takes a few tens of milliseconds). */
 export function writingQuery(before:string){
  const words=(before.split(/[.!?\n]/).at(-1)??'').trim().split(/\s+/).filter(Boolean);
- return[lastSentence(before),words.slice(0,Math.floor(words.length/4)*4).join(' ')].filter(Boolean).join(' ');
+ return[lastSentence(before),words.slice(0,Math.floor(words.length/2)*2).join(' ')].filter(Boolean).join(' ');
 }
 
 /** What is being heard, or was in the last quarter hour: its last lines, newest last. */

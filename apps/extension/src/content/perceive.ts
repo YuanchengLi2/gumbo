@@ -34,10 +34,11 @@ export function nearbyText(el:Element):string|undefined{
  for(let i=0;i<4&&node;i++,node=node.parentElement){const text=squash((node as HTMLElement).innerText??'');if(text.length>(nameOf(el).length+8))return cut(text,90);}
  return undefined;
 }
-export function pageModel(limit=250):PageModel{
+/** within: only what is inside this element (where the user is working: a form, a dialog, a menu). */
+export function pageModel(limit=250,within:ParentNode=document):PageModel{
  // What is on screen first, then the rest in page order; only the ones kept are described (the words around each cost a
  // layout read, and a big app has thousands of controls).
- const els=deepQuery(interactive).filter(el=>visible(el));
+ const els=deepQuery(interactive,within).filter(el=>visible(el));
  // Where things can be dropped: when the page has things to drag, the lists or columns that hold them, and the ones
  // beside those (a board's other columns).
  const zones=new Set<Element>(),have=new Set(els);
@@ -50,7 +51,7 @@ export function pageModel(limit=250):PageModel{
  const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>describe(f.el));
  // Menus that open on hover by CSS alone (no event a page script sends opens them): their items are in the page, hidden,
  // and listed with the menu they are in, so a move can go straight to one.
- for(const {el,owner} of hoverMenuItems(Math.max(0,Math.min(40,limit-items.length)))){
+ for(const {el,owner} of hoverMenuItems(Math.max(0,Math.min(40,limit-items.length))).filter(h=>within===document||(within as Element).contains(h.el))){
   const item=describe(el),trigger=describe(owner);
   items.push({...item,rect:trigger.rect,inView:trigger.inView,state:[...(item.state??[]),`in the “${cut(trigger.name,40)}” menu, shown on hover`]});
  }

@@ -9,6 +9,7 @@
  *   suggestion just before it, since a wrong fact is the worst suggestion there is.
  * While a suggestion streams, only whole words are shown, so the ghost never flickers through half a word. */
 export type SuggestionInput={before:string;after:string;singleLine:boolean;
+ /** What they wrote above this field (their earlier messages in the conversation), which a suggestion never repeats. */own?:string;
  /** Everything the suggestion may take facts from: the page, the conversation, the user's writing, memory, facts. */
  known:string;final:boolean;
  /** The word the caret is in (or just after), which the model was asked to repeat before continuing: repeating it lets
@@ -43,7 +44,7 @@ export function cleanSuggestion(raw:string,input:SuggestionInput):string{
  text=trimOverlap(text,input.after);
  if(!sameScript(input.before+input.after,text))return '';
  text=factsGuard(text,input.known+'\n'+input.before+'\n'+input.after,input.before);
- if(repeats(input.before,text))return '';
+ if(repeats(input.before,text,input.own))return '';
  if(!input.final)text=wholeWords(text);
  text=text.replace(/[ \t]+$/,'');
  return /[\p{L}\p{N}]/u.test(text)?text:'';
@@ -125,10 +126,17 @@ export function factsGuard(text:string,known:string,before=''){
  }
  return text;
 }
-/** A suggestion that says again what the last lines already say. */
-export function repeats(before:string,text:string){
- const t=text.trim().toLowerCase();if(t.length<14)return false;
- return before.slice(-400).toLowerCase().includes(t);
+/** A suggestion that says again what they already wrote: its words, in runs of three, mostly found in their text (or in
+ * their messages above), even reordered or lightly changed. A continuation brings new words; an echo brings theirs. */
+export function repeats(before:string,text:string,own=''){
+ const t=text.trim().toLowerCase();if(!t)return false;
+ const theirs=`${before.slice(-2000)}\n${own.slice(-3000)}`.toLowerCase();
+ if(t.length>=14&&theirs.includes(t))return true;
+ const words=(s:string)=>s.replace(/[^\p{L}\p{N}\s']/gu,' ').split(/\s+/).filter(Boolean);
+ const mine=words(t);if(mine.length<4)return false;
+ const seen=new Set<string>(),w=words(theirs);for(let i=0;i+2<w.length;i++)seen.add(`${w[i]} ${w[i+1]} ${w[i+2]}`);
+ let hit=0,all=0;for(let i=0;i+2<mine.length;i++){all++;if(seen.has(`${mine[i]} ${mine[i+1]} ${mine[i+2]}`))hit++;}
+ return all>0&&hit/all>=0.5;
 }
 /** Two independent predictions agree only as far as the writer's next words are clear: the words both begin with are
  * shown, the rest (where they part) is left out. Words compare without case or punctuation; the text kept is the first

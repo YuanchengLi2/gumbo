@@ -53,7 +53,7 @@ function Popup(){
     <div className="row"><button className="link" title="For documents, designs and boards drawn as pixels. Chrome shows a bar for a moment each time." onClick={()=>{
      if(settings.realInput){void saveSettings({realInput:false});return;}
      void chrome.permissions.request({permissions:['debugger']}).then(granted=>{if(granted)void saveSettings({realInput:true});});
-    }}>{settings.realInput?'Stop using real clicks in drawing apps':'Use real clicks in drawing apps'}</button></div>   </section>
+    }}>{settings.realInput?'Stop real typing and clicks in Docs, Canva and drawing apps':'Use real typing and clicks in Docs, Canva and drawing apps'}</button></div>   </section>
    <section>
     <h2>Listening</h2>
     <p className="muted">{!settings.listen?'Off: videos and calls are not heard':!site||blocked?'Never on this page':!listensOn(settings,site)?`Not on ${site}`:heard?'Hearing this tab now':'Videos, talks and calls you play are heard and remembered, on this computer'}</p>

@@ -264,6 +264,27 @@ test('Tab: the search they were about to run, on Google, from what they copied',
  expect(state?.showing).toBe(true);expect(JSON.stringify(state.plan.steps).toLowerCase()).toContain('ramen');
 });
 
+test('Redesigned Tab on YouTube and GitHub: nothing as pages open, then the next part of what the user starts',async({page,signedIn})=>{
+ test.setTimeout(180_000);
+ const step=async(what:string,ms=9000)=>{const {state,shownMs}=await guess(signedIn,page,ms);note(`  ${what}: ${describe(state)}${shownMs!==undefined&&state?.showing?` (${shownMs} ms)`:''}`);return state;};
+ try{await page.goto('https://www.youtube.com/',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  YouTube: unreachable');return;}
+ await page.waitForTimeout(4000);
+ await step('YouTube, the page open, nothing done',3000);
+ await page.locator('input[name=search_query]').first().click({timeout:8000}).catch(()=>{});
+ await step('YouTube, clicked into the search box',4000);
+ await page.keyboard.type('lofi hip hop radio',{delay:70});
+ const yt=await step('YouTube, typed “lofi hip hop radio” and paused');
+ if(yt?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(2500);note(`    after Alt+Q: ${page.url().slice(0,90)}`);}
+ try{await page.goto('https://github.com/microsoft/vscode/issues',{waitUntil:'domcontentloaded',timeout:30_000});}catch{note('  GitHub: unreachable');return;}
+ await page.waitForTimeout(4000);
+ await step('GitHub issues, the page open, nothing done',3000);
+ const box=page.locator('input[aria-label*="Search" i], input#repository-input, input[placeholder*="Search" i]').first();
+ await box.click({timeout:8000}).catch(()=>note('    (no search box found)'));
+ await page.keyboard.press('Control+a');await page.keyboard.type('is:open label:bug terminal',{delay:60});
+ const gh=await step('GitHub issues, typed a filter and paused');
+ if(gh?.showing){await page.keyboard.press('Alt+q');await page.waitForTimeout(2500);note(`    after Alt+Q: ${page.url().slice(0,110)}`);}
+});
+
 test('Tab on real pages with nothing copied: what it offers (or rightly nothing)',async({page,signedIn})=>{
  for(const [name,url] of [['Wikipedia: Tea','https://en.wikipedia.org/wiki/Tea'],['GitHub: vscode','https://github.com/microsoft/vscode'],['Hacker News','https://news.ycombinator.com/'],['MDN: JavaScript','https://developer.mozilla.org/en-US/docs/Web/JavaScript']]){
   try{await page.goto(url,{waitUntil:'domcontentloaded',timeout:30_000});}catch{note(`  ${name}: unreachable`);continue;}
