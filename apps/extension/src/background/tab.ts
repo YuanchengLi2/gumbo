@@ -81,7 +81,7 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
   const full=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),done=(full.split('⟂')[0]??'').includes('∎');
   const [best='',...more]=alternativesOf(full.replace(/∎/g,''));
   const text=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==text).slice(0,Math.max(0,cfg.alternatives-1));
-  const source=text?sourceOf(text,bundle,`${message.before}\n${message.after}\n${c.label}\n${c.page??''}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
+  const source=text?sourceOf(text,bundle,`${message.before}\n${message.after}\n${c.label}\n${(c.around??[]).join('\n')}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
   const split={context:Math.round(contextMs),firstToken:firstMs===undefined?undefined:Math.round(firstMs),gateway:timing?.provider,total:Math.round(performance.now()-started)};
   void addTiming({surface:message.chain?'tab-chain':'tab-model',ms:split.total,gateway:timing,at:Date.now()});
   send({type:'tab.text',id:message.id,text,alternatives,final:true,done,source,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});

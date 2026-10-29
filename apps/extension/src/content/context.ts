@@ -1,11 +1,13 @@
 import type {Field,Editor} from './fields/field';
 import {sensitive} from './fields/field';
 import {nameOf,squash,cut,roleOf,visible} from './dom';
+import {surroundingsOf} from './surroundings';
 /** What a field is for and what surrounds it, read the same way on every site:
  * - intent, from the field's label, the form around it and the words on the button that sends it;
  * - the conversation above it: the nearest list of repeated blocks of the same shape (a message, a comment, a tweet);
  * - the document it is in: headings, for a long editor;
- * - the page: its title and main text, for a reply to an article or a post. */
+ * - the text around it on the page, closest first (surroundings.ts): the question above it, its column in a table, the
+ *   headings it is under, what follows it and what else is in view. */
 export type Intent='email'|'chat'|'prompt'|'search'|'comment'|'post'|'document'|'form'|'code'|'other';
 export type Message={author?:string;text:string};
 export type FieldContext={
@@ -15,7 +17,9 @@ export type FieldContext={
  label:string;action?:string;
  /** Other fields of the same form (never sensitive ones) with what is in them. */
  form?:{label:string;value:string}[];
- thread?:Message[];headings?:string[];page?:string;
+ thread?:Message[];headings?:string[];
+ /** The text around the field on the page, closest first, one line each (surroundings.ts). */
+ around?:string[];
 };
 
 const aiHosts=/(^|\.)(claude\.ai|chatgpt\.com|chat\.openai\.com|gemini\.google\.com|perplexity\.ai|copilot\.microsoft\.com|poe\.com|chat\.deepseek\.com|grok\.com|meta\.ai|chat\.mistral\.ai)$/;
@@ -30,8 +34,8 @@ export function readContext(field:Field):FieldContext{
  const intent=intentOf(field,label,action,form,site);
  const thread=['email','chat','comment','post','other','prompt'].includes(intent)?threadAbove(field.el):undefined;
  const headings=intent==='document'?headingsOf(field.el):undefined;
- const page=['comment','post','other','document','email'].includes(intent)&&!thread?.length?mainText(doc):undefined;
- const value={site,language:(field.el.closest('[lang]')?.getAttribute('lang')||doc.documentElement.lang||'').slice(0,12),editor:field.editor,singleLine:field.singleLine,intent,label,action,form,thread,headings,page};
+ const around=surroundingsOf(field.el,{label,search:intent==='search',thread});
+ const value={site,language:(field.el.closest('[lang]')?.getAttribute('lang')||doc.documentElement.lang||'').slice(0,12),editor:field.editor,singleLine:field.singleLine,intent,label,action,form,thread,headings,around};
  cache.set(field.el,{at:now,value});
  return{...value,...base};
 }
@@ -122,10 +126,4 @@ function headingsOf(el:HTMLElement){
  const scope=el.querySelectorAll('h1,h2,h3').length?el:el.ownerDocument.querySelector('main,article,[role=main]')??el.ownerDocument.body;
  const out=[...scope.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,10);
  return out.length?out:undefined;
-}
-/** The page's main text: its main, article or the block with the most paragraph text. */
-export function mainText(doc:Document,max=1500):string|undefined{
- let root:Element|null=doc.querySelector('article,main,[role=main]');
- if(!root){let bestLength=0;for(const block of doc.querySelectorAll('div,section')){const length=[...block.querySelectorAll(':scope > p')].reduce((n,p)=>n+(p.textContent?.length??0),0);if(length>bestLength){bestLength=length;root=block;}}}
- const text=squash((root as HTMLElement|null)?.innerText??'');return text?cut(text,max):undefined;
 }
