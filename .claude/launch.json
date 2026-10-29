@@ -32,6 +32,19 @@
         "dashboard"
       ],
       "port": 4317
+    },
+    {
+      "name": "web-5181",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@dream/web",
+        "dev",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181
     }
   ]
 }

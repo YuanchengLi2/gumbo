@@ -5,7 +5,10 @@
  * time of day. */
 export type Style={tone?:string;length?:string;greetings:string[];signOffs:string[];phrases:string[];words?:number;samples?:number};
 export type Fact={text:string;kind:string;count:number;last:number};
-export type Profile={who?:string;work:string[];people:string[];places:string[];tools:string[];style:Record<string,Style>;facts:Fact[];routines:string[];updatedAt:number;cursor:number};
+export type Profile={who?:string;work:string[];people:string[];places:string[];tools:string[];style:Record<string,Style>;facts:Fact[];routines:string[];updatedAt:number;cursor:number;
+ /** The version of the rules the profile was last checked against (PROFILE_RULES): an older one is checked again. */rules?:number};
+/** Raised when the profile's rules change: Oct 27, what someone reads stopped being taken for who they are. */
+export const PROFILE_RULES=3;
 export const emptyProfile=():Profile=>({work:[],people:[],places:[],tools:[],style:{},facts:[],routines:[],updatedAt:0,cursor:0});
 export type Op={op:'set'|'add'|'remove';path:string;value?:string};
 const lists=['work','people','places','tools','routines'] as const;

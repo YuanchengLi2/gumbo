@@ -19,6 +19,11 @@ function Debug(){
  return <main>
   <header><Bowl/><h1>Gumbo memory</h1><span className="muted small">on this computer only</span></header>
   <p className="muted small">{Object.entries(data.counts??{}).map(([k,v])=>`${v} ${k}`).join(' · ')}</p>
+  <h2>Tab's last suggestions</h2>
+  <table><thead><tr><th>When</th><th>Site</th><th>Kind</th><th>What it offered</th><th>What happened</th><th className="num">Shown after</th></tr></thead><tbody>
+   {(data.suggestions??[]).map((s:any)=><tr key={s.id??s.at}><td className="small">{new Date(s.at).toLocaleTimeString()}</td><td className="small">{s.site}</td><td className="small">{s.kind} {s.intent}</td><td>{s.text}</td><td className="small">{s.outcome}{s.accepted?` (${s.accepted} chars)`:''}</td><td className="num">{ms(s.latencyMs)}</td></tr>)}
+  </tbody></table>
+  {(data.failures??[]).length?<><h2>What went wrong lately</h2><table><tbody>{data.failures.map((f:any)=><tr key={f.id??f.at}><td className="small">{new Date(f.at).toLocaleTimeString()}</td><td className="small">{f.site} {f.what}</td><td>{f.detail}</td></tr>)}</tbody></table></>:null}
   <h2>This session</h2>
   <div className="tabs">{tabs.map(t=><div className="tab" key={t.tab}>
    <h3>Tab {t.tab}</h3>

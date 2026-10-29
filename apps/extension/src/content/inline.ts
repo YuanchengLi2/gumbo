@@ -212,7 +212,7 @@ async function keepInDrawing(o:Open){
  o.frame.remove();(o.drawing?.back as HTMLElement|null)?.focus?.({preventScroll:true});
  const text=o.rich?plainOf(o.text):o.text;
  // As real typing when the user turned it on (Docs and Canva may ignore anything else), else through the box.
- const real=settings?.realInput?await request<{ok:boolean}>({type:'input.insert',text},'input.inserted',6000):null;
+ const real=settings?.realInput?await request<{ok:boolean;detail?:string}>({type:'input.insert',text},'input.inserted',6000):null;
  const done=real?.ok?real:await request<{ok:boolean;detail?:string}>({type:'tab.typeFocused',text},'tab.typed',5000);
  if(!done?.ok){post({type:'failure',site:location.hostname,editor:'drawing',what:'insert',detail:`Ctrl+K: ${done?.detail??'no answer'}`});try{await navigator.clipboard.writeText(text);}catch{}}
  finish(o);

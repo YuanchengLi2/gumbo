@@ -40,7 +40,8 @@ export function startSeen(){
   for(const el of inView){if(!el.isConnected){inView.delete(el);continue;}const d=dwell.get(el)??{ms:0,sent:0};d.ms+=1000;dwell.set(el,d);}
  },1000);
  setInterval(()=>idle(flush),5000);
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flush();else nowSoon();});
+ // Leaving the tab: what it shows now is what the next tab may need (a chat's answer, a lesson), so it goes at once.
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){sendNow(true);flush();}else nowSoon();});
  window.addEventListener('pagehide',flush);
 }
 /** Picks up the blocks of text not watched yet (a page that renders late, a feed that grew). */
@@ -71,9 +72,12 @@ function nowSoon(){
  nowTimer=window.setTimeout(()=>{nowTimer=undefined;idle(sendNow,500);},Math.max(0,1000-(Date.now()-lastSent)));
 }
 const above=(a:Element,b:Element)=>a.compareDocumentPosition(b)&Node.DOCUMENT_POSITION_FOLLOWING?-1:1;
-function sendNow(){
- if(!active()||document.visibilityState!=='visible')return;
- const words=[...inView].filter(el=>el.isConnected).sort(above).map(el=>squash((el as HTMLElement).innerText??'')).join('\n').slice(0,3000);
+function sendNow(leaving=false){
+ if(!active()||window!==window.top||!leaving&&document.visibilityState!=='visible')return;
+ let words=[...inView].filter(el=>el.isConnected).sort(above).map(el=>squash((el as HTMLElement).innerText??'')).join('\n').slice(0,3000);
+ // A page whose words are not in paragraphs (a chat's messages, an app's cards are plain boxes): what is in view, read
+ // from its text directly.
+ if(words.length<300)words=inViewText(3000)||words;
  const field=fieldOf(deepActive());let focus:{label:string;intent:string;typed?:string}|undefined;
  if(field){const context=readContext(field),snap=snapshot(field,300,0);focus={label:context.label,intent:context.intent,typed:snap?.before||undefined};}
  // A selection inside a field Gumbo may not touch (a password) is not read.
@@ -82,6 +86,18 @@ function sendNow(){
  const now={title:document.title,visible:words,focus,selection,scroll:[Math.round(scrollY),document.documentElement.scrollHeight],kind:categoryOf(location.href,document.title,signs)};
  const json=JSON.stringify(now);if(json===lastNow)return;
  lastNow=json;lastSent=Date.now();post({type:'now',...now});
+}
+/** The text in view, in page order, whatever holds it (never fields, menus or Gumbo's own layer); at most 2,000 pieces. */
+function inViewText(max:number){
+ if(!document.body)return '';
+ const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.textContent?.trim()&&!n.parentElement?.closest(`${SKIP},script,style,noscript,button,select,option,[aria-hidden=true]`)?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT});
+ const out:string[]=[];let size=0,seen=0,last:Element|null=null;
+ for(let n=walker.nextNode();n&&seen<2000&&size<max;n=walker.nextNode(),seen++){
+  const el=n.parentElement!;
+  if(el!==last){const r=el.getBoundingClientRect();if(r.bottom<0||r.top>innerHeight||r.width===0)continue;last=el;}
+  const t=squash(n.textContent!);out.push(t);size+=t.length+1;
+ }
+ return out.join(' ').slice(0,max);
 }
 /** A few signs of what kind of page this is, read without laying the page out. */
 function signsOf():Partial<PageSigns>{

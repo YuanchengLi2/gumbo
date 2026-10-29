@@ -1,16 +1,18 @@
 /// <reference types="chrome" />
-import {takes,took,cycles,TAKE_KEY} from './keys';
+import {takes,took,cycles,offers,mayTake,TAKE_KEY} from './keys';
+import {onTextDone,moveShown} from './bus';
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
-import {describe,pageModel,deepQuery,hoverOwner,type Item} from './perceive';
+import {describe,pageModel,deepQuery,hoverOwner,elementById,type Item} from './perceive';
 import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
 import {snapshot} from './fields/text';
+import {readContext} from './context';
 import {perform,irreversible,findTarget,type Action,type Target,type Done} from './act';
 import {pageText} from './capture';
 import {digestOf,noteAppeared,type Digest} from './digest';
 import {surface,layer,raise} from './ui/root';
 import {ghostShown,ghostAt,onGhostShown} from './ui/ghost';
 import {caretOf} from './fields/caret';
-import {startGlow,setLikely,clearLikely,takeNow,likelyMoves,pointerAt,pointerMoving,glowState} from './glow';
+import {startGlow,clearLikely,takeNow,likelyMoves,pointerAt,pointerMoving,glowState} from './glow';
 import {post,listen as portListen,ask as request,alive} from './port';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {stepKey,type Plan,type PlanStep} from '../shared/plan';
@@ -52,11 +54,10 @@ const inFrame=window!==window.top;let touched=!inFrame,opened=false;
 /** The page's first moment, once it is in view: what to do here, and, asked ahead, the first empty field in view. */
 function opening(){
  if(opened||inFrame||!settings||document.visibilityState!=='visible')return;
- opened=true;const first=emptyFieldsAfter()[0];if(first)aheadInto(first);page(400);
+ opened=true;const first=emptyFieldsAfter()[0];if(first)aheadInto(first);page(150);
 }
 /** A page moment: the page opened, a click that did not start something here, a scroll that stopped on new things, a
- * return to the tab. Tab ranks where they will most likely go next on the page (from their trail, habits, memory, tabs
- * and what is in view), and the page picks among those live as they move and type (glow.ts). */
+ * return to the tab. Tab offers a move here only when one is obvious and in view (getting somewhere is the agent's). */
 function page(ms:number){working=null;soon(ms);}
 /** Where the user is working (the element of their last task moment): Tab's move is chosen from what is around it, never
  * from the whole page, as Cursor's Tab continues the code being written rather than guessing at another file. */
@@ -90,7 +91,7 @@ export function startPredict(){
  void loadSettings().then(s=>{settings=s;opening();});onSettings(s=>{settings=s;if(!active())hide();});
  // A page opened behind another tab has its first moment when it comes into view; coming back to a tab is a moment too
  // (what they did in the tab they left is part of it).
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){page(250);returned=true;}});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'||inFrame)return;if(!opened)opening();else if(!running){page(100);returned=true;}});
  startGlow();void undoArrival();
  // A text suggestion showing comes first: a move's chip steps aside (it is kept, and comes back at the next beat).
  onGhostShown(()=>{if(hint&&!running&&!waitEnter&&!taking){const f=fieldOf(deepActive());if(f)typedAhead={el:f.el,plan:hint.plan,at:Date.now()};hide();}});
@@ -127,9 +128,18 @@ export function startPredict(){
   const s=snapshot(f);
   did('typed',nameOf(f.el,60)||'a field',s?.before);
   if(typingIn!==f.el){typingIn=f.el;aheadOfPause();}
+  // Writing (a message, a post, a document): a move may still come at a pause, wherever the model is sure of one (attach
+  // the file, tag the person, pick the label); only the step that sends what they write waits for the text model to say
+  // the text is done (heldForText, onTextDone below). A sentence ending is not the end of a message.
+  finished.delete(f.el);
+  // While writing, a move is asked at a real pause (0.7 s), not between words: every quarter second sent a burst of
+  // guesses that cancelled each other and slowed the text suggestions.
+  if(writing(f)){task(f.el,700,true);return;}
   // A value complete by its shape needs no beat: the keyboard is no longer mid-word.
   if(looksComplete(f.el,s?.text??'')){lastKey=0;task(f.el,0,true);}else task(f.el,BEAT,true);
  },true);
+ // The text is done (tab.ts): what was written is whole, so the next step is a move (Send, Post, Next), shown now.
+ onTextDone(el=>{if(running||!active())return;finished.add(el);lastKey=0;typingIn=undefined;const ready=aheadForPause();if(ready&&!hint)show(ready,true,'ahead');task(el,0,true);});
  // Enter in a field, or leaving one with something in it: the entry is done.
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.isTrusted&&!waitEnter){const f=fieldOf(deepActive());if(f){lastKey=0;task(f.el,60,true);}}},true);
  document.addEventListener('focusout',e=>{const f=fieldOf(e.target as Element);if(f&&e.isTrusted&&!running&&(snapshot(f)?.text.trim()??'')){typingIn=undefined;lastKey=0;task(f.el,80,true);}},true);
@@ -137,20 +147,19 @@ export function startPredict(){
  watchHands();
  for(const type of ['pointerdown','keydown'])window.addEventListener(type,e=>{if(e.isTrusted)lastInput=Date.now();},true);
  window.addEventListener('keydown',onKey,true);
+ offers('move',()=>!!waitEnter||!!chip&&!!hint&&!running&&!ghostShown());
  window.addEventListener('scroll',()=>requestAnimationFrame(place),{capture:true,passive:true});
  window.addEventListener('resize',()=>requestAnimationFrame(place));
  // A new route in an app that never reloads, and a dialog opening, are new moments to guess at.
  let href=location.href;
- setInterval(()=>{if(location.href!==href){href=location.href;did('went to',document.title||location.pathname);if(!running){hide();clearLikely();page(300);}}},600);
+ setInterval(()=>{if(location.href!==href){href=location.href;did('went to',document.title||location.pathname);if(!running){hide();clearLikely();page(150);}}},250);
  // A dialog the user just opened (a click a moment ago) is a task moment, in that dialog; one the page opens by itself
  // is not.
  new MutationObserver(records=>{
   if(Date.now()-lastInput>1500)return;
-  for(const r of records)for(const n of r.addedNodes)if(n instanceof Element&&(n.matches(dialogs)||n.parentElement===document.body&&n.querySelector(dialogs))){const d=n.matches(dialogs)?n:n.querySelector(dialogs)!;did('opened a dialog',nameOf(d,60)||'a dialog');task(d,120);return;}
+  for(const r of records)for(const n of r.addedNodes)if(n instanceof Element&&(n.matches(dialogs)||n.parentElement===document.body&&n.querySelector(dialogs))){const d=n.matches(dialogs)?n:n.querySelector(dialogs)!;did('opened a dialog',nameOf(d,60)||'a dialog');task(d,60);return;}
  }).observe(document.body??document.documentElement,{childList:true,subtree:true});
 }
-/** How sure a page guess must be to show as a chip rather than the quiet line. */
-const SURE=0.4;
 /** The beat after the last keystroke at which an entry counts as finished for now (shared/memory-config.ts action.beatMs). */
 const BEAT=250;
 let typingIn:Element|undefined;
@@ -218,7 +227,7 @@ function onClick(event:MouseEvent){
  // followed by the next page's own moment).
  const path=event.composedPath()[0] as Element|undefined;
  const toggle=path?.closest?.('[aria-haspopup],[aria-expanded],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=menuitemradio],[role=option],[role=switch],[role=checkbox],[role=radio],summary,label,input[type=checkbox],input[type=radio]');
- if(toggle)task(toggle,150);else if(path instanceof HTMLCanvasElement)task(null,150);else page(200);
+ if(toggle)task(toggle,80);else if(path instanceof HTMLCanvasElement)task(null,150);else page(100);
 }
 /** Asks once the page has settled: a moment after what the user did, then until nothing has been added, removed, opened
  * or closed for a beat (a menu opening, a route loading), a second and a half at most. quick: what the user did changes
@@ -228,7 +237,7 @@ function soon(ms:number,quick=false){
  if(!touched)return;
  // A newer moment (the user did something) is not the return to the tab.
  clearTimeout(timer);const mine=++wave;returned=false;
- timer=window.setTimeout(()=>void (quick?settled(40,150):settled(100,600)).then(()=>{if(mine===wave)void guess();}),ms);
+ timer=window.setTimeout(()=>void (quick?settled(40,150):settled(80,350)).then(()=>{if(mine===wave)void guess();}),ms);
 }
 function settled(quiet=120,max=1500):Promise<void>{
  return new Promise(resolve=>{
@@ -284,7 +293,8 @@ async function guess(){
  // A task moment looks at where they are working; a page moment at the page, by what is in view.
  const scope=working&&working.isConnected&&!drawnSurface()?scopeOf(working):null;
  const focused=fieldOf(deepActive()),moment=`${location.href}|${activity.length}|${JSON.stringify(activity.slice(-2))}|${focused?nameOf(focused.el,60):''}|${scope?'task':`page ${Math.round(scrollY/(innerHeight*0.5))}`}`;
- if(moment===lastMoment&&Date.now()-lastMomentAt<60_000)return;
+ // The same moment: the move it had is shown again if a click or a key put it away without turning it down.
+ if(moment===lastMoment&&Date.now()-lastMomentAt<60_000){reshowLast();return;}
  lastMoment=moment;lastMomentAt=Date.now();
  if(asking)post({type:'cancel',id:asking});
  const id=`p${++seq}`,model=scope?pageModel(50,scope):pageModel(120),focus=focused;
@@ -362,41 +372,82 @@ function listen(id:string){
   if(running)return;
   // An answer that lands while they type (or while a text suggestion shows) is kept, and shown at the next beat.
   if(typing()){const f=fieldOf(deepActive());if(m.final&&m.plan&&f)typedAhead={el:f.el,plan:m.plan,at:Date.now()};return;}
-  // Where they go next on the page: the ranked guess goes to the quiet line, which follows their pointer (glow.ts). A
-  // page guess that fills or types (a form they have not started) shows as a move, as in a task.
-  if(mode==='page'&&(!m.plan||!['type','select','drag','key'].includes(m.plan.steps[0]?.do))){
-   // A best move without the ranked list is a list of one.
-   const first=m.plan?.steps[0];
-   if(m.final)setLikely(m.plan&&!m.plan.likely?.length&&first?.id&&['click','hover','double_click','right_click'].includes(first.do)?{...m.plan,likely:[{id:first.id,p:m.plan.confidence,label:m.plan.label,do:first.do as 'click'}]}:m.plan);
-   // A guess Tab is sure of is said plainly: its chip by the thing it would press, outlined, ready for Alt+Q. Less sure
-   // ones stay the quiet line that follows the pointer.
-   if(m.final&&m.plan&&!hint&&!running){
-    if(m.plan.steps.length&&m.plan.confidence>=SURE)show(m.plan,true,'page');
-    // No move sure enough, but one place clearly leads where they will likely go (twice the next, a quarter at least):
-    // it is offered plainly too, since on arriving at a page that is the most useful thing to see.
-    else{const [a,b]=m.plan.likely??[];if(a&&a.p>=0.25&&a.p>=2*(b?.p??0))show({label:a.label,confidence:a.p,steps:[{do:(a.do??'click') as PlanStep['do'],id:a.id}],likely:m.plan.likely},true,'page');}
-   }
-   return;
-  }
-  if(m.plan?.steps.length){clearLikely();show(m.plan,!!m.final,m.source);}else if(m.plan?.likely?.length)setLikely(m.plan);else if(m.final&&hint&&!hint.final&&!taking)hide();
+  // The engine sends only a move it is sure of, on something in view: it is said plainly, its chip by the thing it would
+  // press, outlined, ready for Alt+Q, as soon as its first step has streamed in.
+  // The send for a message not finished yet is kept for the moment it is (onTextDone shows it).
+  if(m.plan?.steps.length&&heldForText(m.plan)){const f=fieldOf(deepActive());if(m.final&&f)typedAhead={el:f.el,plan:m.plan,at:Date.now()};return;}
+  if(m.plan?.steps.length)show(m.plan,!!m.final,mode==='page'?'page':m.source);else if(m.final&&hint&&!hint.final&&!taking)hide();
+  // A new guess that found nothing does not take away the move they just saw.
+  if(m.final&&!m.plan?.steps.length)reshowLast();
  });
 }
 
+/** A field someone writes a message in (an email, a chat, an AI's prompt box, a comment, a post, a document), one line or
+ * many: its send waits for the text to be done. A search box or a form's field is not. */
+const intents=new WeakMap<Element,string>();
+const writing=(f:NonNullable<ReturnType<typeof fieldOf>>)=>{if(!f.singleLine)return true;let i=intents.get(f.el);if(!i){i=readContext(f).intent;intents.set(f.el,i);}return ['email','chat','prompt','comment','post','document'].includes(i);};
+/** The writing fields whose text the text model said is done (bus.ts), until they type in them again. */
+const finished=new WeakSet<Element>();
+/** A step that sends what is being written (Send, Post, Reply, Submit, Enter in the box) waits while the text is not done:
+ * it is kept and shown the moment it is. Any other move shows when the model is sure of it. */
+function heldForText(plan:Plan){
+ const f=fieldOf(deepActive());if(!f||finished.has(f.el)||!snapshot(f)?.text.trim()||!writing(f))return false;
+ const s=plan.steps[0];if(!s)return false;
+ if(s.do==='key')return /enter/i.test(s.combo??'');
+ if(s.do!=='click')return false;
+ const el=findTarget(targetOf(s));return !!el&&irreversible(toAction(s),el);
+}
 const touches=(s:PlanStep)=>!!(s.id||s.name||s.at);
+/** What the chip says: the model's words when they name the element it outlines, else that element's own name on the page
+ * ("Click “Post comment”"). The words and the outline then always mean the same thing, whatever the model called it. */
+/** The move goes where the model's words say. Its words name what it means ("Send the message", "Open Assignments"); the
+ * id it picked can be a neighbour. When the chosen element's name is not in its words but another element's on the page
+ * is, the move is aimed at that one, so the outline, the label and what Tab presses are all the thing it meant. */
+function aimed(plan:Plan):Plan{
+ const first=plan.steps[0];if(!first?.id||first.do==='type'||first.at)return plan;
+ const said=plan.label.toLowerCase(),wordsOf=(name:string)=>squash(name).toLowerCase().split(' ').filter(w=>w.length>2);
+ const fit=(name:string)=>{const w=wordsOf(name);return w.length?w.filter(x=>said.includes(x)).length/w.length:0;};
+ const chosen=findTarget(targetOf(first));if(chosen&&fit(nameOf(chosen,60))>=0.5)return plan;
+ let best:{id:string;score:number}|undefined;
+ for(const [id,item] of seen){
+  const el=elementById(id);if(!el||!visible(el))continue;
+  const score=fit(item.name)+(item.inView?0.01:0);if(score>=0.6&&(!best||score>best.score))best={id,score};
+ }
+ return best?{...plan,steps:[{...first,id:best.id},...plan.steps.slice(1)]}:plan;
+}
+function labelFor(plan:Plan,el?:Element){
+ const first=plan.steps[0];if(!first||!el||plan.steps.length>1&&plan.steps.every(s=>s.do==='type'))return plan.label;
+ const name=squash(nameOf(el,60)).toLowerCase();if(!name)return plan.label;
+ const words=name.split(' ').filter(w=>w.length>2),said=plan.label.toLowerCase();
+ return words.length&&words.some(w=>said.includes(w))?plan.label:labelOn(first,el);
+}
 const refused=new Map<string,number>();
+/** The last move shown in full, so a click that put it away does not lose it. */
+let lastPlan:{plan:Plan;href:string;at:number}|undefined;
+/** The move they saw a moment ago comes back when nothing newer replaced it (a click elsewhere, a new guess that found
+ * nothing): for a minute and a half, on the same page, while its target is still there and it was not turned down. */
+function reshowLast(){
+ const was=lastPlan;if(hint||running||taking||ghostShown()||!was||was.href!==location.href||Date.now()-was.at>90_000)return;
+ const first=was.plan.steps[0];if(!first||Date.now()-(refused.get(stepKey(first))??0)<600_000||heldForText(was.plan))return;
+ const el=touches(first)?findTarget(targetOf(first)):null;if(touches(first)&&!(el&&visible(el)))return;
+ show(was.plan,true,'again');
+}
 function show(plan:Plan,final:boolean,source?:string){
  if(ghostShown())return;
+ plan=aimed(plan);
  const first=plan.steps[0];
  if(Date.now()-(refused.get(stepKey(first))??0)<600_000)return;
  const el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
  // The same move, further along: the line is updated in place, never flashed.
- if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=plan.label;place();return;}
+ if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=labelFor(plan,el);place();return;}
  if(taking)return;
- hide();hint={plan,el,final,source};layer();raise();
+ // Where the move on screen was: the new one glides there from it instead of popping up somewhere else.
+ const from=chip&&rings[0]?{chip:chip.getBoundingClientRect(),ring:rings[0].getBoundingClientRect()}:undefined;
+ hide();hint={plan,el,final,source};layer();raise();if(final)lastPlan={plan,href:location.href,at:Date.now()};
  // A small tag beside what the move touches, one line, that never takes a click: the page stays usable under it.
  chip=document.createElement('div');chip.className='move';chip.setAttribute('role','status');chip.title=plan.why?`${plan.label}: ${plan.why}`:plan.label;
- const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=plan.label;
- chip.append(key,text);surface().appendChild(chip);
+ const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=labelFor(plan,el);
+ chip.append(key,text);surface().appendChild(chip);moveShown(true);
  // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
  marked=plan.steps.flatMap((step):Mark[]=>{
   // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).
@@ -406,7 +457,44 @@ function show(plan:Plan,final:boolean,source?:string){
   return[...(at?[{el:at,to:false,text:step.do==='type'?step.text:undefined}]:[]),...(drop?[{el:drop,to:true}]:[])];
  });
  for(const m of marked)if(m.point||visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.point?' dot':'')+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
- place();
+ place();follow();if(from)glide(from);
+}
+/** The outline and its label move and resize from where the last move was to the new target, in a fifth of a second
+ * (following the element as the page scrolls stays immediate). */
+function glide(from:{chip:DOMRect;ring:DOMRect}){
+ const ring=rings[0],box=chip;if(!box||!ring)return;
+ const to={chip:[box.style.left,box.style.top],ring:[ring.style.left,ring.style.top,ring.style.width,ring.style.height]};
+ const ease="cubic-bezier(.2,.8,.2,1)",t=["left","top","width","height"].map(p=>p+" .22s "+ease).join(",");
+ for(const el of [box,ring]){el.style.transition="none";el.style.animation="none";}
+ Object.assign(box.style,{left:from.chip.left+"px",top:from.chip.top+"px"});
+ Object.assign(ring.style,{left:from.ring.left+"px",top:from.ring.top+"px",width:from.ring.width+"px",height:from.ring.height+"px"});
+ void ring.offsetWidth;
+ box.style.transition=t;ring.style.transition=t;
+ Object.assign(box.style,{left:to.chip[0],top:to.chip[1]});Object.assign(ring.style,{left:to.ring[0],top:to.ring[1],width:to.ring[2],height:to.ring[3]});
+ setTimeout(()=>{box.style.transition="";ring.style.transition="";},260);
+}
+/** The outline stays on what it marks while the move shows: the page moves under it (a dropdown opens, content loads in,
+ * it scrolls, a framework draws the element again), so every frame its place is checked, and redrawn when it changed.
+ * An element the page replaced is found again by its step; one that is gone or hidden takes the move with it, rather
+ * than leaving an outline on empty space or on something else. */
+let following=0;
+function follow(){
+ cancelAnimationFrame(following);let last='';
+ const tick=()=>{
+  if(!chip||!hint)return;
+  for(const m of marked){
+   if(m.point||m.el.isConnected)continue;
+   const step=hint.plan.steps.find(s=>touches(s)&&!s.at),again=step?findTarget(targetOf(step)):null;
+   if(!again){hide();return;}
+   m.el=again;
+  }
+  const first=marked.find(m=>!m.point);
+  if(first){const r=first.el.getBoundingClientRect();if(!r.width&&!r.height&&!(first.el===document.documentElement)){hide();return;}}
+  const now=marked.map(m=>{if(m.point)return 'p';const r=m.el.getBoundingClientRect();return `${Math.round(r.left)},${Math.round(r.top)},${Math.round(r.width)},${Math.round(r.height)}`;}).join(';');
+  if(now!==last){last=now;place();}
+  following=requestAnimationFrame(tick);
+ };
+ following=requestAnimationFrame(tick);
 }
 type Mark={el:Element;to:boolean;text?:string;ring?:HTMLDivElement;point?:[number,number]};
 let marked:Mark[]=[];
@@ -443,23 +531,34 @@ function place(){
   if(m.ring&&m.point)Object.assign(m.ring.style,{left:`${m.point[0]-9}px`,top:`${m.point[1]-9}px`,width:'18px',height:'18px'});
   else if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
  }
- // Beside what the move touches first (its outline; else the field the cursor is in): to its right, centred on it; where
- // there is no room, just above its right end; with nothing to touch, in the bottom right corner.
- const anchor=(marked.find(m=>m.ring)?.ring??fieldOf(deepActive())?.el) as Element|undefined;
+ // The label is joined to the outline of what the move touches first, like a tab on its edge, so which box it means is
+ // never in doubt: on its top left corner; else its bottom left; else beside it. Never over the page's own controls (a
+ // Join or Search button right by the field) where another place is free. With no outline, by the field the cursor is
+ // in; with nothing at all, in the bottom right corner.
+ const first=marked.find(m=>m.ring&&!m.point),ring=first?.ring;
+ chip.classList.remove('above','below','off-up','off-down');for(const g of rings)g.classList.remove('above','below');
+ const anchor=(ring??marked.find(m=>m.ring)?.ring??fieldOf(deepActive())?.el) as Element|undefined;
  const r=anchor&&anchor.isConnected?anchor.getBoundingClientRect():null,c=chip.getBoundingClientRect();
  let left=innerWidth-c.width-16,top=innerHeight-c.height-16;
- if(r){
-  if(r.right+8+c.width<=innerWidth-8){left=r.right+8;top=r.top+(r.height-c.height)/2;}
-  else{left=Math.max(8,r.right-c.width);top=r.top-c.height-6;if(top<8)top=r.bottom+6;}
-  // Never over the page's own controls (a Join or Search button right beside the field): above the target then, or below.
-  const target=(marked.find(m=>m.ring)?.el??fieldOf(deepActive())?.el) as Element|undefined;
-  const covers=(x:number,y:number)=>[[x+4,y+c.height/2],[x+c.width/2,y+c.height/2],[x+c.width-4,y+c.height/2]].some(([px,py])=>{const under=document.elementFromPoint(px,py)?.closest('button,a[href],input,select,textarea,[role=button],[role=link],[contenteditable=true]');return !!under&&!!target&&under!==target&&!target.contains(under)&&!under.contains(target);});
-  if(covers(left,top)){const above=r.top-c.height-6;left=Math.max(8,Math.min(r.left,innerWidth-c.width-8));top=above>=8&&!covers(left,above)?above:r.bottom+6;}
+ // Just off screen (the Submit below the fold): the label waits at that edge, an arrow pointing the way.
+ if(r&&(r.top>innerHeight||r.bottom<0)){
+  const down=r.top>innerHeight;chip.classList.add(down?'off-down':'off-up');
+  left=Math.min(Math.max(8,r.left),innerWidth-c.width-8);top=down?innerHeight-c.height-12:12;
  }
- chip.style.left=`${Math.round(left)}px`;chip.style.top=`${Math.round(Math.min(Math.max(8,top),innerHeight-c.height-8))}px`;
+ else if(r){
+  const target=(first?.el??fieldOf(deepActive())?.el) as Element|undefined;
+  const covers=(x:number,y:number)=>[[x+4,y+c.height/2],[x+c.width/2,y+c.height/2],[x+c.width-4,y+c.height/2]].some(([px,py])=>{const under=document.elementFromPoint(px,py)?.closest('button,a[href],input,select,textarea,[role=button],[role=link],[contenteditable=true]');return !!under&&!!target&&under!==target&&!target.contains(under)&&!under.contains(target);});
+  const fits=(x:number,y:number)=>x>=4&&y>=4&&x+c.width<=innerWidth-4&&y+c.height<=innerHeight-4;
+  const x=Math.min(Math.max(4,r.left),innerWidth-c.width-4),middle=r.top+(r.height-c.height)/2;
+  const spots:[number,number,string][]=[[x,r.top-c.height,'above'],[x,r.bottom,'below'],[r.right+6,middle,''],[r.left-c.width-6,middle,'']];
+  const [sx,sy,side]=spots.find(([a,b])=>fits(a,b)&&!covers(a,b))??spots.find(([a,b])=>fits(a,b))??spots[0];
+  left=sx;top=sy;
+  if(side&&ring&&Math.abs(sx-r.left)<1){chip.classList.add(side);ring.classList.add(side);}
+ }
+ chip.style.left=`${Math.round(left)}px`;chip.style.top=`${Math.round(Math.min(Math.max(4,top),innerHeight-c.height-4))}px`;
  drawPreviews();
 }
-function hide(){chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;cycle=null;}
+function hide(){cancelAnimationFrame(following);if(chip)moveShown(false);chip?.remove();for(const r of rings)r.remove();for(const g of previews)g.remove();chip=null;rings=[];previews=[];preview=null;marked=[];hint=null;cycle=null;}
 /** A move in words, by what each step touched ("type “…” into Street address", "drag “Write tests” onto “Done”"), so it
  * can be shown to the model later as what this person took or turned down, and labelled when it is the next move. */
 function wordsOf(plan:{steps:PlanStep[]}){
@@ -493,8 +592,9 @@ function onKey(event:KeyboardEvent){
   return;
  }
  if(!hint||running)return;
- if(ghostShown()){hide();return;}
- if(takes(event)){took(event);void go();return;}
+ // A text suggestion showing has the keys, unless it was the move they saw when they pressed Tab.
+ if(ghostShown()&&!(takes(event)&&mayTake('move')&&!mayTake('text'))){hide();return;}
+ if(takes(event)&&mayTake('move')){took(event);void go();return;}
  if(event.key==='Escape'){
   event.preventDefault();event.stopImmediatePropagation();
   // Turned down: the guess still on its way is stopped, and this move does not come back on this page for a while.
@@ -536,7 +636,7 @@ async function go(){
   await new Promise<void>(r=>{finalArrived=r;setTimeout(r,2000);});finalArrived=null;taking=false;
  }
  const current=hint;if(!current)return;
- hide();running=true;let ok=true;
+ hide();lastPlan=undefined;running=true;let ok=true;
  // How to take each step back, kept as it is done: Undo (Ctrl+Z, a few seconds) takes them back in reverse.
  const undo:(()=>void)[]=[];let undoable=true;
  try{
@@ -630,11 +730,15 @@ function labelOn(s:PlanStep,el:Element|null){
 /** A final step (send, submit, post, pay, delete) takes a second press: the first one arms it, and the chip says so by
  * the thing it would press. A wrong guess, a confusing page or a stray key never sends anything. */
 function confirmEnter(what:string,at?:Element|null):Promise<boolean>{
- layer();const box=document.createElement('div');box.className='chip';
- const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=`${what}? Press again (or Enter) · Esc: not now`;
+ // As the move's label looked, on the same outline, pulsing: the eye is already there.
+ layer();const box=document.createElement('div');box.className='move armed above';
+ const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=`again to ${what} · Esc: not now`;
  box.append(key,text);surface().appendChild(box);
- const r=(at?.isConnected?at:deepActive())?.getBoundingClientRect();box.style.left=`${Math.max(8,Math.min(r?.left??innerWidth-260,innerWidth-300))}px`;box.style.top=`${Math.min((r?.bottom??innerHeight-60)+6,innerHeight-44)}px`;
- return new Promise(resolve=>{const t=setTimeout(()=>waitEnter?.(false),6000);waitEnter=yes=>{clearTimeout(t);waitEnter=null;box.remove();resolve(yes);};});
+ const el=at?.isConnected?at:deepActive(),r=el?.getBoundingClientRect(),c=box.getBoundingClientRect();
+ let ring:HTMLDivElement|undefined;
+ if(r){ring=document.createElement('div');ring.className='tab-ring above';Object.assign(ring.style,{left:`${r.left-3}px`,top:`${r.top-3}px`,width:`${r.width+6}px`,height:`${r.height+6}px`});surface().appendChild(ring);}
+ box.style.left=`${Math.max(4,Math.min((r?.left??innerWidth)-3,innerWidth-c.width-4))}px`;box.style.top=`${Math.max(4,(r?.top??innerHeight)-3-c.height)}px`;
+ return new Promise(resolve=>{const t=setTimeout(()=>waitEnter?.(false),6000);waitEnter=yes=>{clearTimeout(t);waitEnter=null;box.remove();ring?.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
 export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan,chipRect:chip?(r=>[r.left,r.top,r.width,r.height])(chip.getBoundingClientRect()):undefined});

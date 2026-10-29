@@ -2,7 +2,7 @@ import {model} from '../model';
 import {recent,getSealed,putSealed} from '../db';
 import {config} from './config';
 import {all as allProjects} from './projects';
-import {emptyProfile,applyOps,recurringFacts,styleStats,routinesOf,type Profile,type Op} from '../../shared/profile-core';
+import {emptyProfile,applyOps,recurringFacts,styleStats,routinesOf,PROFILE_RULES,type Profile,type Op} from '../../shared/profile-core';
 import {loadSettings} from '../../shared/settings';
 import {PROFILE_SYSTEM} from '../../shared/prompts';
 import {textOf} from '../../shared/gateway';
@@ -27,8 +27,13 @@ export function updateProfile({llm=true}:{llm?:boolean}={}):Promise<Profile>{
   let next:Profile={...structuredClone(base),facts:recurringFacts(writing),routines:routinesOf(visits.filter(v=>v.source==='browser'||v.source==='import'))};
   // The numbers are learned again; the tone and length the model gave a context are kept.
   const stats=styleStats(writing);next.style=Object.fromEntries(Object.entries(stats).map(([k,s])=>[k,{...s,tone:base.style[k]?.tone,length:base.style[k]?.length}]));
-  const fresh=writing.filter(w=>(w.id??0)>base.cursor).slice(0,30);
-  if(llm&&fresh.length>=3){
+  // A profile made under older rules is checked again against their latest writing, new or not.
+  const revise=(base.rules??0)<PROFILE_RULES&&(!!base.who||base.work.length>0);
+  // Who they are and their work are learned again from nothing: a check that may only add kept a wrong role (a student
+  // taken for the teacher of the class pages they read).
+  if(revise){base.who=undefined;base.work=[];}
+  const fresh=revise?writing.slice(0,30):writing.filter(w=>(w.id??0)>base.cursor).slice(0,30);
+  if(llm&&(fresh.length>=3||revise)){
    const sites=new Map<string,number>();for(const v of visits)sites.set(v.site,(sites.get(v.site)??0)+Math.max(1,v.activeMs/60_000));
    const topSites=[...sites].sort((a,b)=>b[1]-a[1]).slice(0,15).map(([s])=>s);
    const current={who:base.who,work:base.work,people:base.people,places:base.places,tools:base.tools,style:Object.fromEntries(Object.entries(base.style).filter(([,s])=>s.tone||s.length).map(([k,s])=>[k,{tone:s.tone,length:s.length}]))};
@@ -37,7 +42,7 @@ export function updateProfile({llm=true}:{llm?:boolean}={}):Promise<Profile>{
     const settings=await loadSettings();
     const {message}=await model({model:settings.models.notes,system:PROFILE_SYSTEM,messages:[{role:'user',content:input}],max_tokens:500,purpose:'action',stream:false});
     const json=/\[[\s\S]*\]/.exec(textOf(message)??'')?.[0];
-    if(json){const ops=JSON.parse(json) as Op[];next=applyOps(next,Array.isArray(ops)?ops:[]);}
+    if(json){const ops=JSON.parse(json) as Op[];next=applyOps(next,Array.isArray(ops)?ops:[]);next.rules=PROFILE_RULES;}
     next.cursor=Math.max(base.cursor,...fresh.map(w=>w.id??0));
    }catch{}
   }
@@ -45,5 +50,7 @@ export function updateProfile({llm=true}:{llm?:boolean}={}):Promise<Profile>{
  })().finally(()=>{updating=undefined;});
 }
 chrome.alarms.onAlarm.addListener(alarm=>{if(alarm.name==='profile')void updateProfile();});
+// A profile made under older rules is put right soon after the worker starts.
+setTimeout(()=>void profile().then(p=>{if((p.rules??0)<PROFILE_RULES&&(p.who||p.work.length))void updateProfile();}).catch(()=>{}),15_000);
 void chrome.alarms.get('profile').then(alarm=>{if(!alarm)void chrome.alarms.create('profile',{periodInMinutes:24*60,delayInMinutes:30});});
 chrome.idle.onStateChanged.addListener(state=>{if(state==='idle'&&newWritings>=3){newWritings=0;void updateProfile();}});

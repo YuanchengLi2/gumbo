@@ -19,12 +19,28 @@ test('suggests after a pause, Tab accepts it into the field, Ctrl+Z takes it bac
  // suggestion, asked ahead, is not counted).
  const asked=standin.bodies.filter(b=>b.purpose==='tab'&&!JSON.stringify(b.messages).includes('call.⟨cursor⟩'));expect(asked.length).toBeLessThanOrEqual(3);
  const prompt=JSON.stringify(asked.at(-1).messages);expect(prompt).toContain('Thanks for⟨cursor⟩');expect(prompt).toContain('What the field is for');
- await page.keyboard.press('Alt+q');
+ await page.keyboard.press('Tab');
  await expect(page.locator('#ta')).toHaveValue('Thanks for the notes from our call.');
  // Focus stayed in the field: Tab was Gumbo's, not the page's.
  expect(await page.evaluate(()=>document.activeElement?.id)).toBe('ta');
  await page.keyboard.press('Control+z');await expect(page.locator('#ta')).toHaveValue('Thanks for');
  await expect.poll(async()=>(await signedIn.evaluate(()=>(globalThis as any).gumbo.stats())).accepted).toBe(1);
+});
+
+test('Tab held with 1 goes to another way to go on, and Tab takes it; with nothing offered Tab is the page\'s',async({page,signedIn,standin})=>{
+ standin.script=()=>({text:' the notes from our call.⟂ your quick reply.',firstMs:30,chunkMs:8});
+ await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
+ await page.keyboard.type('Thanks for',{delay:20});
+ expect((await ghost(signedIn,page)).rest).toBe(' the notes from our call.');
+ await page.keyboard.down('Tab');await page.keyboard.press('1');await page.keyboard.up('Tab');
+ await expect.poll(async()=>(await tabState(signedIn,page))?.rest).toBe(' your quick reply.');
+ // Letting go of Tab after going through them took nothing.
+ await expect(page.locator('#ta')).toHaveValue('Thanks for');
+ await page.keyboard.press('Tab');await expect(page.locator('#ta')).toHaveValue('Thanks for your quick reply.');
+ // Nothing offered in the next field: Tab moves on, as the page would have it.
+ standin.script=()=>({text:'',firstMs:10,chunkMs:5});
+ await page.locator('#in').click();await page.keyboard.press('Tab');
+ await expect.poll(()=>page.evaluate(()=>document.activeElement?.id)).not.toBe('in');
 });
 
 test('typing the same letters keeps the suggestion with no new request; Esc dismisses; Ctrl+→ takes one word',async({page,signedIn,standin})=>{

@@ -4,6 +4,7 @@ import {add} from './db';
 import {invalidate,recallFor} from './recall';
 import {heardJustNow,asksAboutNow} from './memory-context';
 import {getContext} from './memory/context';
+import {GRAPH_TOOLS,runGraphTool} from './memory/graph';
 import {viewPicture} from './predict';
 import {offscreen} from './offscreen';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
@@ -41,7 +42,7 @@ on('inline.prewarm',async(message:Omit<Ask,'id'|'instruction'>,{url,port})=>{
  const [recall,bundle]=await Promise.all([recallFor({site:message.site,intent:message.intent??'other',before:message.before}),bundleFor(message,port.sender?.tab?.id,url,0)]);
  const stable=inlineStable({...message,facts:settings.facts,style:recall.style,memory:bundle.stable}),key=stable.slice(0,300)+stable.length;
  if(Date.now()-(warmed.get(key)??0)<240_000)return;warmed.set(key,Date.now());if(warmed.size>100)warmed.delete(warmed.keys().next().value!);
- await model({model:settings.models.inline,system:INLINE_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:'.'}]}],max_tokens:0,stream:false,purpose:'prewarm'}).catch(()=>{});
+ await model({model:settings.models.inline,system:INLINE_SYSTEM,tools:GRAPH_TOOLS,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:'.'}]}],max_tokens:0,stream:false,purpose:'prewarm'}).catch(()=>{});
 });
 
 /** What Ctrl+K offers as it opens: the instant ideas from the selection at once, then the model's, from the page, the
@@ -87,12 +88,24 @@ on('inline',async(message:Ask,{send,signal,url,port})=>{
   if(final||text.length>40||text.includes('\n')){mode??=message.inField?'edit':'answer';return text;}
   return null;
  };
+ // It may look things up in their browsing first (memory/graph.ts: search, open, follow), three times at most, then
+ // answers; what it writes streams as it comes.
+ const messages:any[]=[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},...picture,{type:'text',text:fresh}]}];
  try{
-  await model({model:settings.models.inline,system:INLINE_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},...picture,{type:'text',text:fresh}]}],max_tokens:room,purpose:'inline'},{signal,onEvent:event=>{
-   if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
-   raw+=event.data.delta.text;const body=parse(false);
-   if(body!==null&&mode!=='act'&&body!==sent){sent=body;send({type:'inline.text',id:message.id,mode,text:shape(body,message),final:false});}
-  }});
+  for(let round=0;;round++){
+   raw='';
+   const {message:reply}=await model({model:settings.models.inline,system:INLINE_SYSTEM,messages,...(round<3?{tools:GRAPH_TOOLS}:{}),max_tokens:Math.max(room,600),purpose:'inline'},{signal,onEvent:event=>{
+    if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
+    raw+=event.data.delta.text;const body=parse(false);
+    if(body!==null&&mode!=='act'&&body!==sent){sent=body;send({type:'inline.text',id:message.id,mode,text:shape(body,message),final:false});}
+   }});
+   const uses=(reply?.content??[]).filter((b:any)=>b.type==='tool_use');
+   if(!uses.length||signal.aborted)break;
+   messages.push({role:'assistant',content:reply.content});
+   const results=[];
+   for(const use of uses){const done=await runGraphTool(use.name,use.input??{},port.sender?.tab?.id).catch(error=>({content:`Failed: ${(error as Error).message}`,summary:''}));results.push({type:'tool_result',tool_use_id:use.id,content:done.content});}
+   messages.push({role:'user',content:results});
+  }
  }catch(error){if(signal.aborted)return;send({type:'inline.text',id:message.id,mode:mode??'answer',text:'',final:true,error:(error as Error).message});return;}
  const body=parse(true)??'';
  if(mode==='act'){const action=actionOf(body);send({type:'inline.text',id:message.id,mode:action?'act':'answer',text:action?action.label:'That could not be turned into an action.',action,final:true});return;}

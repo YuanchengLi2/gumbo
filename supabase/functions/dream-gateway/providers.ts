@@ -5,13 +5,14 @@
  * Anthropic-compatible Messages endpoint (messagesRequest). Prices are per million tokens (official pages, October 15,
  * 2026): GPT-6 above 272K prompt tokens at its long-context rate, Gemini's announced increases from their dates, DeepSeek
  * at half its peak rate off-peak. */
-export type ProviderId='openai'|'google'|'deepseek'|'groq';
+export type ProviderId='openai'|'google'|'deepseek'|'groq'|'cerebras';
 type Rates={price:[number,number];cachedRead:number};
 export type ProviderModel=Rates&{provider:ProviderId;api:'responses'|'chat'|'messages';vision:boolean;reasoning:boolean;
  /** The provider's own name for the model, when it differs from the gateway's. */ remote?:string;
  /** A price change announced for a date. */ change?:Rates&{from:string};
  /** The rate for prompts (uncached and cached) above this many tokens. */ longContext?:Rates&{above:number};
- /** The share of the price charged outside the provider's peak hours. */ offPeak?:number};
+ /** The share of the price charged outside the provider's peak hours. */ offPeak?:number;
+ /** How much a reasoning model reasons on a quick call (Cerebras's reasoning_effort): as little as it allows. */ quickEffort?:string};
 export const providerModels:Record<string,ProviderModel>={
  'gpt-6-astra':{provider:'openai',api:'responses',price:[10,50],cachedRead:1,longContext:{above:272_000,price:[20,75],cachedRead:2},vision:true,reasoning:true},
  'gpt-6.1-sol':{provider:'openai',api:'responses',price:[2,10],cachedRead:.1,longContext:{above:272_000,price:[4,15],cachedRead:.2},vision:true,reasoning:true},
@@ -22,7 +23,11 @@ export const providerModels:Record<string,ProviderModel>={
  'gemini-3.8-flash':{provider:'google',api:'chat',price:[.75,3.75],cachedRead:.075,change:{from:'2027-01-01T00:00:00Z',price:[1.5,7.5],cachedRead:.15},vision:true,reasoning:true},
  'deepseek-flash':{provider:'deepseek',api:'chat',price:[.3,1.2],cachedRead:.006,offPeak:.5,vision:true,reasoning:false},
  // Groq's hosted Llama: the first word in a fraction of the time, for Tab when speed decides (Gumbo for Chrome).
- 'groq-fast':{provider:'groq',api:'chat',remote:'llama-3.3-70b-versatile',price:[.59,.79],cachedRead:.59,vision:false,reasoning:false}
+ 'groq-fast':{provider:'groq',api:'chat',remote:'llama-3.3-70b-versatile',price:[.59,.79],cachedRead:.59,vision:false,reasoning:false},
+ // Cerebras's gpt-oss-120b (October 27, 2026): among the quickest to a first word, tried for Tab; it reasons, kept low.
+ 'cerebras-oss':{provider:'cerebras',api:'chat',remote:'gpt-oss-120b',price:[.35,.75],cachedRead:.35,vision:false,reasoning:true,quickEffort:'low'},
+ // Qwen 3.8 27B on Cerebras: it reasons on high unless told none, which a quick call does.
+ 'cerebras-qwen':{provider:'cerebras',api:'chat',remote:'qwen-3.8-27b',price:[.99,1.49],cachedRead:.99,vision:false,reasoning:true,quickEffort:'none'}
 };
 /** DeepSeek's peak hours: 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday (its public holidays are not known here). */
 const peak=(at:Date)=>{const day=at.getUTCDay(),hour=at.getUTCHours();return day>=1&&day<=5&&(hour>=1&&hour<4||hour>=6&&hour<10);};
@@ -33,9 +38,9 @@ export function providerRates(model:ProviderModel,usage:Record<string,any>,at=ne
  if(model.offPeak&&!peak(at))rates={price:[rates.price[0]*model.offPeak,rates.price[1]*model.offPeak],cachedRead:rates.cachedRead*model.offPeak};
  return rates;
 }
-export const providerSecrets:Record<ProviderId,string>={openai:'OPENAI_API_KEY',google:'GEMINI_API_KEY',deepseek:'DEEPSEEK_API_KEY',groq:'GROQ_API_KEY'};
-export const providerNames:Record<ProviderId,string>={openai:'OpenAI',google:'Google Gemini',deepseek:'DeepSeek',groq:'Groq'};
-export const providerEndpoints:Record<ProviderId,string>={openai:'https://api.openai.com/v1/responses',google:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',deepseek:'https://api.deepseek.com/chat/completions',groq:'https://api.groq.com/openai/v1/chat/completions'};
+export const providerSecrets:Record<ProviderId,string>={openai:'OPENAI_API_KEY',google:'GEMINI_API_KEY',deepseek:'DEEPSEEK_API_KEY',groq:'GROQ_API_KEY',cerebras:'CEREBRAS_API_KEY'};
+export const providerNames:Record<ProviderId,string>={openai:'OpenAI',google:'Google Gemini',deepseek:'DeepSeek',groq:'Groq',cerebras:'Cerebras'};
+export const providerEndpoints:Record<ProviderId,string>={openai:'https://api.openai.com/v1/responses',google:'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',deepseek:'https://api.deepseek.com/chat/completions',groq:'https://api.groq.com/openai/v1/chat/completions',cerebras:'https://api.cerebras.ai/v1/chat/completions'};
 /** DeepSeek's Anthropic-compatible Messages endpoint (https://api-docs.deepseek.com/guides/anthropic_api), the one its own
  * harness uses. Off unless the gateway's DEEPSEEK_ROUTE is 'messages': the chat route stays the default until the two
  * are compared on real edits. */
@@ -106,6 +111,8 @@ export function chatRequest(body:any,model:ProviderModel,maxTokens:number,thinki
  const tools=functionTools(body.tools),effort=effortOf(body);
  return{model:model.remote??body.model,messages,...(tools.length?{tools:tools.map(f=>({type:'function',function:f})),tool_choice:body.tool_choice?.type==='none'?'none':'auto'}:{}),max_tokens:maxTokens,stream:true,stream_options:{include_usage:true},
   ...(model.provider==='google'&&model.reasoning&&effort?{reasoning_effort:effort==='xhigh'?'high':effort}:{}),
+  // Cerebras's gpt-oss reasons before it writes: kept to its least, as a quick call needs its first word at once.
+  ...(model.provider==='cerebras'&&model.reasoning?{reasoning_effort:model.quickEffort??'low'}:{}),
   // DeepSeek's thinking as on its Messages route (deepseekThinking): its effort only matters while it thinks.
   // Thinking on is the request as it always was (its effort only); off adds the switch.
   ...(model.provider==='deepseek'?(()=>{const thinking=deepseekThinking(body,thinkingMode);return thinking.type==='disabled'?{thinking}:effort?{reasoning_effort:deepseekEffortFor(effort,thinkingMode)}:{};})():{})};

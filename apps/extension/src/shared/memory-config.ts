@@ -10,11 +10,14 @@ export type MemoryConfig={
 };
 const MINUTE=60_000;
 export const defaults:MemoryConfig={
- rank:{cos:0.35,bm25:0.2,recency:0.15,project:0.1,chain:0.1,site:0.05,seen:0.05,useful:0.05,tauSessionMs:60*MINUTE,tauPastMs:3*24*60*MINUTE,mmr:0.7,minCos:0.45,minBm25:0.6},
+ // Oct 27, after real use: what is retrieved is what is relevant, with no rule about where it comes from (no bonus or
+ // penalty for the same site, project or tab). Closeness in meaning decides; how recently it was seen and whether it was
+ // really read break ties, so what they read a few minutes ago comes before last week's page on the same subject.
+ rank:{cos:0.55,bm25:0.15,recency:0.2,project:0,chain:0,site:0,seen:0.1,useful:0,tauSessionMs:30*MINUTE,tauPastMs:2*24*60*MINUTE,mmr:0.7,minCos:0.45,minBm25:0.6},
  // Measured on the first computer (Oct 27, 1,332 visits): unrelated title pairs p90 0.68, pairs reached one from the
  // other p10 0.61 (so the chain bonus brings those in).
  projects:{join:0.7,chainBonus:0.15,siteBonus:0.1,chainWindowMs:30*MINUTE,promoteVisits:3,promoteMs:5*MINUTE,noteVisits:5,noteActiveMs:10*MINUTE,noteGapMs:15*MINUTE},
  profile:{everyWritings:20,everyMs:24*60*MINUTE},
- text:{requestGapMs:300,beatMs:250,chainDepth:1,maxTokensMulti:120,maxTokensSingle:30,alternatives:3},
+ text:{requestGapMs:300,beatMs:250,chainDepth:1,maxTokensMulti:45,maxTokensSingle:25,alternatives:3},
  action:{beatMs:250,dwellMs:1500,margin:0.1},
 };

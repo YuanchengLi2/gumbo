@@ -25,16 +25,19 @@ export type Settings={
  realInput?:boolean;
 };
 export const defaultSettings:Settings={enabled:true,pausedUntil:0,siteOff:[],altK:[],
- models:{tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},modelsVersion:2,facts:{},listen:true,listenOff:[],mic:false};
-/** The defaults before version 2 (October 26): a model still set to one of them was never picked, so it follows the new
- * default; a model the user chose stays. */
+ // Tab runs on Qwen 3.8 27B on Cerebras (October 27: first word in 0.36 s, against gpt-oss's 0.58 and Haiku's 1.18 on the
+ // same moments, and the fewest mistakes);
+ // the engine falls back to Haiku when it fails.
+ models:{tab:'cerebras-qwen',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'},modelsVersion:3,facts:{},listen:true,listenOff:[],mic:false};
+/** The defaults before version 3 (October 27; the same before version 2): a model still set to one of them was never
+ * picked, so it follows the new default; a model the user chose stays. */
 const firstDefaults:Record<Surface,string>={tab:'claude-haiku-5-5',inline:'claude-haiku-5-5',action:'claude-haiku-5-5',notes:'claude-haiku-5-5',agent:'deepseek-flash'};
 
 export async function loadSettings():Promise<Settings>{
  const {settings}=await chrome.storage.local.get('settings') as {settings?:Partial<Settings>};
- const stored=settings?.models??{},current=(settings?.modelsVersion??1)>=2;
+ const stored=settings?.models??{},current=(settings?.modelsVersion??1)>=3;
  const chosen=current?stored:Object.fromEntries(Object.entries(stored).filter(([surface,id])=>firstDefaults[surface as Surface]!==id));
- return{...defaultSettings,...settings,models:{...defaultSettings.models,...chosen},modelsVersion:2,facts:{...settings?.facts}};
+ return{...defaultSettings,...settings,models:{...defaultSettings.models,...chosen},modelsVersion:3,facts:{...settings?.facts}};
 }
 /** Saved on this computer, and in Chrome sync, so a reinstall (or another computer signed in to Chrome) has them back. */
 export async function saveSettings(change:Partial<Settings>){const now=await loadSettings(),next={...now,...change};await chrome.storage.local.set({settings:next});await chrome.storage.sync?.set({settings:next}).catch(()=>{});}

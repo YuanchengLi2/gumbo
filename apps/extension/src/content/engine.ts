@@ -5,7 +5,9 @@ import {caretOf} from './fields/caret';
 import {insert} from './fields/insert';
 import {readContext} from './context';
 import {showGhost,hideGhost} from './ui/ghost';
-import {layer} from './ui/root';
+import {layer,clearStale,removeLayer} from './ui/root';
+import {alive,claimFrame} from './port';
+import {startDebugBridge} from './debug-bridge';
 import {pageModel} from './perceive';
 import {perform,irreversible,findTarget,type Action} from './act';
 import {deepActive} from './dom';
@@ -16,7 +18,7 @@ import {startCapture,pageText} from './capture';
 import {startPredict,predictState} from './predict';
 import {startListen,listenState} from './listen';
 import {startSeen} from './seen';
-import {pressTake} from './keys';
+import {pressTake,startKeys} from './keys';
 
 /** Gumbo in one frame (or one of the extension's own pages): tracks the field in focus, runs Tab, Ctrl+K and capture,
  * and answers the engine's requests (the page model, an action, and checks the tests use). */
@@ -38,7 +40,9 @@ export function start(_window:Window){
   const answer=handle(message);if(answer===undefined)return;
   answer.then(reply,error=>reply({ok:false,detail:(error as Error).message}));return true;
  });
- startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();startSeen();
+ // What an earlier copy of Gumbo left on this page goes; and when this copy is cut off in turn, what it drew goes too.
+ claimFrame();clearStale();const watch=window.setInterval(()=>{if(!alive()){removeLayer();clearInterval(watch);}},3000);
+ startDebugBridge();startKeys();startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();startSeen();
 }
 /** Requests from the engine. A request about the field in focus is answered only by the frame that has it, so the
  * reply comes from the right frame of a page with many. */

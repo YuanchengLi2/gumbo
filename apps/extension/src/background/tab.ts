@@ -3,7 +3,7 @@ import {model} from './model';
 import {recallFor,invalidate} from './recall';
 import {add,addTiming,recent,suggestionOutcomes} from './db';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
-import {tabRequest,stableContext,TAB_SYSTEM} from '../shared/prompts';
+import {tabRequest,stableContext,LEAN_TAB_SYSTEM,emptyRecall} from '../shared/prompts';
 import {cleanSuggestion,lastWordOf,alternativesOf} from '../shared/suggestion';
 import type {FieldContext} from '../content/context';
 import {fieldKey,fieldQuery,writingQuery} from './memory-context';
@@ -20,11 +20,21 @@ import {config} from './memory/config';
  * first word) and what it cost. chain: asked for what comes after a suggestion not yet taken (the page keeps it ready). */
 type Ask={id:string;context:FieldContext;before:string;after:string;text:string;chain?:boolean};
 const warmed=new Map<string,number>();
+/** The model Tab falls back to when its own fails. */
+const FALLBACK='claude-haiku-5-5';
 /** A memory item as the user would name it (the bundle words items for the model: "they wrote in …"). */
 function shownAs(item:Bundle['items'][number]){
  const site=(()=>{try{return new URL(item.url??'').hostname.replace(/^www\./,'');}catch{return '';}})();
  return item.kind==='wrote'||item.kind==='writing'?`what you wrote${site?` on ${site}`:''}`:item.kind==='copy'?'what you copied':item.title;
 }
+/** A part of Tab's context, or what stands in for it when it has not come in time (and a note of what was slow). */
+function within<T>(part:Promise<T>,fallback:T,what:string,site:string,ms=250):Promise<T>{
+ let late=false;
+ const timer=new Promise<T>(r=>setTimeout(()=>{late=true;r(fallback);},ms));
+ void part.then(()=>{if(late)void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} took over ${ms} ms`,at:Date.now()}).catch(()=>{});},error=>{void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} failed: ${(error as Error)?.message}`,at:Date.now()}).catch(()=>{});});
+ return Promise.race([part.catch(()=>fallback),timer]);
+}
+const noBundle=():Bundle=>({surface:'tab-text',at:Date.now(),ms:0,query:'',stable:'',fresh:'',items:[],known:'',searching:true,blocks:{page:'',browser:'',session:'',memory:'',map:''}});
 /** Where a fact in a suggestion came from: the first memory item that holds a fact the page and the field do not. */
 function sourceOf(text:string,bundle:Bundle,seen:string){
  // Facts only: an email, a link, a number or time, a capitalised name inside a sentence (never any word: a plain word in
@@ -40,31 +50,41 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const c={...message.context,singleLine:message.context.singleLine||message.context.intent==='search'},cfg=(await config()).text;
  // The memory every surface has, for this field and what is being written now (its search kept per field and refreshed
  // behind it as the writing moves on); the user's own writing in this kind of field, for their voice.
+ // Each part is waited for 600 ms at most: memory that is slow (or stuck) never silences Tab; it writes from the field and
+ // the page alone, and what was slow is kept as a failure for the debug page.
  const [recall,bundle,before]=await Promise.all([
-  recallFor({site,intent:c.intent,before:message.before,thread:c.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text}),
-  getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1600,key:fieldKey(site,c.intent,c.label,c.thread)}),
-  lately(c.url),
+  within(recallFor({site,intent:c.intent,before:message.before,thread:c.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text}),emptyRecall(),'recall',site),
+  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key:fieldKey(site,c.intent,c.label,c.thread)}),noBundle(),'getContext',site),
+  within(lately(c.url),undefined,'lately',site),
  ]);
- recall.copied=before.copied.filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
+ if(signal.aborted)return;
+ recall.copied=(before?.copied??[]).filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
  const contextMs=performance.now()-started;
- const {system,messages,known}=tabRequest(c,message.before,message.after,recall,bundle);
+ // A search box gets no tabs or memories: they put the screen's words in the box instead of what was being typed.
+ const {system,messages,known}=tabRequest(c,message.before,message.after,recall,c.intent==='search'?{...bundle,fresh:''}:bundle,LEAN_TAB_SYSTEM);
+ // Asked for what comes after its own suggestion: the model is told so, and judges whether the text is now whole.
+ if(message.chain)(messages[0].content as any[]).push({type:'text',text:'The last words before the cursor are your own suggestion, which they are taking. Judge the whole text as it stands: if it already says what they want (a query that names what they are looking for, a message that makes its point), reply ∎ alone. Write more only if their thought plainly goes on.'});
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:c.singleLine,known,final,lastWord,own:c.thread?.map(m=>m.text).join('\n')});
  let raw='',shown='',firstMs:number|undefined;const asked=performance.now();
  try{
-  const {message:reply,timing}=await model({model:settings.models.tab,system,messages,max_tokens:(c.singleLine?cfg.maxTokensSingle:cfg.maxTokensMulti)+(cfg.alternatives>1?40:0),purpose:'tab'},{signal,onEvent:event=>{
+  const ask=(id:string)=>model({model:id,system,messages,max_tokens:(c.singleLine?cfg.maxTokensSingle:cfg.maxTokensMulti)+(cfg.alternatives>1?40:0),purpose:'tab'},{signal,onEvent:event=>{
    if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
    firstMs??=performance.now()-asked;raw+=event.data.delta.text;
    // The best one shows as it streams (whole words only); the alternatives come with the final answer.
-   const [best,...more]=alternativesOf(raw),text=check(best,more.length>0);
+   const [best,...more]=alternativesOf(raw.replace(/∎/g,'')),text=check(best,more.length>0);
    if(text.length>shown.length){shown=text;send({type:'tab.text',id:message.id,text,final:false});}
   }});
+  // Tab's model failing before it wrote anything (its provider down, a limit reached): Haiku answers the same request.
+  const {message:reply,timing}=await ask(settings.models.tab).catch(error=>{if(signal.aborted||raw||settings.models.tab===FALLBACK)throw error;return ask(FALLBACK);});
   if(signal.aborted)return;
-  const [best='',...more]=alternativesOf(raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''));
+  // ∎ after the best: the text is finished once it is typed (alone: it already is). The next step is then a move.
+  const full=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),done=(full.split('⟂')[0]??'').includes('∎');
+  const [best='',...more]=alternativesOf(full.replace(/∎/g,''));
   const text=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==text).slice(0,Math.max(0,cfg.alternatives-1));
   const source=text?sourceOf(text,bundle,`${message.before}\n${message.after}\n${c.label}\n${c.page??''}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
   const split={context:Math.round(contextMs),firstToken:firstMs===undefined?undefined:Math.round(firstMs),gateway:timing?.provider,total:Math.round(performance.now()-started)};
   void addTiming({surface:message.chain?'tab-chain':'tab-model',ms:split.total,gateway:timing,at:Date.now()});
-  send({type:'tab.text',id:message.id,text,alternatives,final:true,source,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
+  send({type:'tab.text',id:message.id,text,alternatives,final:true,done,source,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
  }catch(error){if(!signal.aborted)send({type:'tab.text',id:message.id,text:'',final:true,error:(error as Error).message});}
 });
 
@@ -80,7 +100,7 @@ on('tab.prewarm',async(message:{context:FieldContext},{url})=>{
  const stable=(bundle.stable?bundle.stable+'\n':'')+stableContext(message.context,{...recall,facts:{}}),key=`${settings.models.tab}|${stable.length}|${stable.slice(0,400)}`;
  if(Date.now()-(warmed.get(key)??0)<240_000)return;warmed.set(key,Date.now());
  if(warmed.size>200)warmed.delete(warmed.keys().next().value!);
- await model({model:settings.models.tab,system:TAB_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable||'<field>\nA text field.\n</field>',cache_control:{type:'ephemeral'}},{type:'text',text:'.'}]}],max_tokens:0,stream:false,purpose:'prewarm'}).catch(()=>{});
+ await model({model:settings.models.tab,system:LEAN_TAB_SYSTEM,messages:[{role:'user',content:[{type:'text',text:stable||'<field>\nA text field.\n</field>',cache_control:{type:'ephemeral'}},{type:'text',text:'.'}]}],max_tokens:0,stream:false,purpose:'prewarm'}).catch(()=>{});
 });
 
 /** How fast the first ghost word came, as the user saw it (from the pause in typing). */

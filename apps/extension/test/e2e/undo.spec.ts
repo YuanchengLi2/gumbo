@@ -28,11 +28,9 @@ test('a link Tab followed is undone by going back',async({page,signedIn,standin}
  void signedIn;
  standin.script=b=>{if(!isPredict(b))return{text:''};const id=idIn(text(b),'Open the biology course');return id?{text:JSON.stringify({confidence:0.9,label:'Open the course',steps:[{do:'click',id}]})}:{text:'{"confidence":0,"steps":[]}'};};
  await page.goto(`${standin.url}/pages/trail.html`);await page.mouse.move(200,200);
- await expect.poll(async()=>(await tab(signedIn,page))?.glow?.likely?.length,{timeout:8000}).toBeGreaterThan(0);
- // Pointing at it: the likely move the pointer is on is the one Alt+Q makes.
- await page.locator('#course').hover();
- await expect.poll(async()=>(await tab(signedIn,page))?.glow?.now,{timeout:3000}).toBe('Open the course');
- await page.keyboard.press('Alt+q');
+ // A sure move on a link in view shows plainly, on its own; Tab takes it.
+ await expect.poll(async()=>(await tab(signedIn,page))?.label,{timeout:8000}).toBe('Open the course');
+ await page.keyboard.press('Tab');
  await page.waitForURL(/course\.html/);
  // The new page offers Undo for a few seconds: Ctrl+Z goes back.
  await page.waitForTimeout(600);

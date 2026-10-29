@@ -35,12 +35,12 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
  const started=Date.now();
  const reserving:Promise<{usageId?:string;limit?:any}>=Promise.resolve(db.rpc('dream_reserve_usage',{p_user:userId,p_request:body.requestId,p_turn:body.turnId??body.requestId,p_model:body.model,p_reserved:estimate})).then(({data,error}:any)=>{if(timing)timing.reserve=Date.now()-started;return{usageId:data,limit:error};},(error:any)=>({limit:{message:error?.message??'Usage could not be reserved.',code:'reservation_error'}}));
  const refused=async(limit:any)=>{const result=failed(limit.message,limit.code==='D0001'?403:limit.code==='D0002'?409:limit.code==='D0003'?429:limit.code==='D0004'?402:limit.code==='D0007'?429:503,limit.code==='D0004'?'credits_exhausted':limit.code==='D0003'?'daily_limit':limit.code==='D0007'?'guest_capacity':limit.code==='D0006'?'at_capacity':limit.code??'reservation_error');await store?.finish(userId,body.requestId,'failed',result.body,limit.message);return result;};
- // A quick call to Claude reserves its usage while the request is already on its way, which saves a database round trip
- // before the first word; a refused reservation aborts the call before anything reaches the client.
+ // A quick call reserves its usage while the request is already on its way (to Claude or another provider), which saves a
+ // database round trip before the first word; a refused reservation aborts the call before anything reaches the client.
  let usageId:string|undefined;
- if(!fast||other){const reserved=await reserving;if(reserved.limit)return refused(reserved.limit);usageId=reserved.usageId;}
+ if(!fast){const reserved=await reserving;if(reserved.limit)return refused(reserved.limit);usageId=reserved.usageId;}
  let response:Response;const abort=new AbortController();
- if(other)return handleProvider(body,userId,{db,usageId:usageId!,maxTokens,abort,fetcher,timeoutMs,requests:store,key:providerKeys[other.provider]!,api:other.provider==='deepseek'&&deepseekRoute==='messages'?'messages':other.api,deepseekThinking});
+ if(other)return handleProvider(body,userId,{db,usageId,reserving,refused,maxTokens,abort,fetcher,timeoutMs,requests:store,key:providerKeys[other.provider]!,api:other.provider==='deepseek'&&deepseekRoute==='messages'?'messages':other.api,deepseekThinking});
  const policyFor=(budget:boolean)=>fast?fastPolicy(body.model):inferencePolicy(body.model,body.purpose,body.profile,budget?{taskBudget:body.taskBudget}:{});
  const send=(fallback:boolean,budget:boolean)=>fetcher('https://api.anthropic.com/v1/messages',{method:'POST',headers:providerHeaders(key!,[...(fallback?[FALLBACK_BETA]:[]),...(budget?[TASK_BUDGET_BETA]:[])]),body:JSON.stringify({model:body.model,max_tokens:maxTokens,messages:anthropicMessages(body.messages),...cachedPrompt(body.system,body.tools,body.cacheTtl,fast),...policyFor(budget),tool_choice:body.tool_choice,stream:body.stream===true&&!prewarm,...(fallback?{fallbacks:'default'}:{})}),signal:AbortSignal.any([abort.signal,AbortSignal.timeout(timeoutMs)])});
  let withFallback=!fast&&fallbackAccepted&&refusalFallback(body.model),withBudget=!fast&&taskBudgetAccepted&&!!body.taskBudget;
@@ -73,14 +73,17 @@ export async function handleAI(body:any,userId:string,{db,key,providerKeys={},fe
 
 /** A request for another provider's model: translated, sent, and its stream translated back into Anthropic events, then
  * streamed and accounted exactly like a Claude request. A non-streaming request reads the translated stream to the end. */
-async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;maxTokens:number;abort:AbortController;fetcher:typeof fetch;timeoutMs:number;requests?:RequestStore;key:string;api:ProviderModel['api'];deepseekThinking?:string}){
+async function handleProvider(body:any,userId:string,o:{db:any;usageId?:string;reserving:Promise<{usageId?:string;limit?:any}>;refused:(limit:any)=>Promise<any>;maxTokens:number;abort:AbortController;fetcher:typeof fetch;timeoutMs:number;requests?:RequestStore;key:string;api:ProviderModel['api'];deepseekThinking?:string}){
  const prepare=(api:ProviderModel['api'])=>{const model={...providerModels[body.model],api},messages=api==='messages';
   return{model,request:api==='responses'?responsesRequest(body,model,o.maxTokens,userId):messages?messagesRequest(body,model,o.maxTokens,o.deepseekThinking):chatRequest(body,model,o.maxTokens,o.deepseekThinking),
    endpoint:messages?deepseekMessagesEndpoint:providerEndpoints[model.provider],headers:(messages?{'Content-Type':'application/json','x-api-key':o.key,'anthropic-version':'2023-06-01'}:{'Content-Type':'application/json',Authorization:`Bearer ${o.key}`}) as Record<string,string>};};
  let {model,request,endpoint,headers}=prepare(o.api),response:Response,fellBack=false;
  const send=()=>o.fetcher(endpoint,{method:'POST',headers,body:JSON.stringify(request),signal:AbortSignal.any([o.abort.signal,AbortSignal.timeout(o.timeoutMs)])});
+ let usageId=o.usageId;
  try{
-  response=await send();
+  const sent=send();sent.catch(()=>{});
+  if(usageId===undefined){const reserved=await o.reserving;if(reserved.limit){o.abort.abort();return o.refused(reserved.limit);}usageId=reserved.usageId;}
+  response=await sent;
   // A request DeepSeek's Messages endpoint refuses (400 or 422: not processed, not billed) is answered on the chat route,
   // which takes every conversation Gumbo sends; the log keeps why, so the Messages form can be fixed.
   if(model.api==='messages'&&(response.status===400||response.status===422)){
@@ -89,7 +92,7 @@ async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;ma
   }
  }
  catch{
-  await o.requests?.finish(userId,body.requestId,'uncertain',undefined,'The provider connection ended before confirming the response.');await o.db.from('dream_usage').update({status:'uncertain',error_code:'connection_ended'}).eq('id',o.usageId);
+  await o.requests?.finish(userId,body.requestId,'uncertain',undefined,'The provider connection ended before confirming the response.');await o.db.from('dream_usage').update({status:'uncertain',error_code:'connection_ended'}).eq('id',usageId!);
   return{status:503,body:{error:{message:'The provider connection ended before its outcome was received.',type:'connection_ended'},dream_request:{status:'uncertain',retryable:false}}};
  }
  // The receipt names the cache key the call was sent with, so the app's records show which gateway answered: a key per
@@ -99,16 +102,16 @@ async function handleProvider(body:any,userId:string,o:{db:any;usageId:string;ma
  const policy={pricingVersion,thinkingDisplay:'omitted',maxTokens:o.maxTokens,features:['cost-receipts',...route,...((request as any).prompt_cache_key?['prompt-cache-key:'+(request as any).prompt_cache_key]:[])]};
  if(!response.ok){
   const body_=await response.json().catch(()=>({})) as any,detail=Array.isArray(body_)?body_[0]:body_,message=detail?.error?.message?`${providerNames[model.provider]} refused the request (${response.status}): ${String(detail.error.message).slice(0,300)}`:`${providerNames[model.provider]} returned ${response.status}.`,retryable=[429,500,502,503,504].includes(response.status);
-  await o.db.from('dream_usage').update({status:'failed',provider_status:response.status,error_code:detail?.error?.type??detail?.error?.code??'provider_error'}).eq('id',o.usageId);
+  await o.db.from('dream_usage').update({status:'failed',provider_status:response.status,error_code:detail?.error?.type??detail?.error?.code??'provider_error'}).eq('id',usageId!);
   const answer={status:response.status,body:{error:{message,type:detail?.error?.type??'provider_error'},dream_policy:policy,dream_request:{status:'failed',retryable,retryAfterMs:retryable?2000:undefined}}};
   await o.requests?.finish(userId,body.requestId,'failed',answer.body,message);return answer;
  }
  const translated=anthropicStream(response,model,body.model,body.requestId);
- if(body.stream===true)return{status:200,body:null,...streamProvider(translated,{db:o.db,usageId:o.usageId,model:body.model,price:model.price,abort:o.abort,requests:o.requests,userId,maxTokens:o.maxTokens,requestId:body.requestId,effectivePolicy:{},features:policy.features})};
+ if(body.stream===true)return{status:200,body:null,...streamProvider(translated,{db:o.db,usageId:usageId!,model:body.model,price:model.price,abort:o.abort,requests:o.requests,userId,maxTokens:o.maxTokens,requestId:body.requestId,effectivePolicy:{},features:policy.features})};
  let message:any;
  try{message=await readMessageStream(translated);}
- catch(error){await o.db.from('dream_usage').update({status:'uncertain',error_code:'invalid_provider_response'}).eq('id',o.usageId);const body_={error:{message:(error as Error).message,type:'invalid_provider_response'},dream_request:{status:'uncertain',retryable:false}};await o.requests?.finish(userId,body.requestId,'uncertain',undefined,(error as Error).message);return{status:502,body:body_};}
- const usage=message.usage??{},cost=usageCost(body.model,usage,model.price),{error:accountingError}=await o.db.from('dream_usage').update({status:'completed',input_tokens:usage.input_tokens??0,output_tokens:usage.output_tokens??0,cache_read_tokens:usage.cache_read_input_tokens??0,cache_write_tokens:0,cost_usd:cost,provider_status:200}).eq('id',o.usageId);
+ catch(error){await o.db.from('dream_usage').update({status:'uncertain',error_code:'invalid_provider_response'}).eq('id',usageId!);const body_={error:{message:(error as Error).message,type:'invalid_provider_response'},dream_request:{status:'uncertain',retryable:false}};await o.requests?.finish(userId,body.requestId,'uncertain',undefined,(error as Error).message);return{status:502,body:body_};}
+ const usage=message.usage??{},cost=usageCost(body.model,usage,model.price),{error:accountingError}=await o.db.from('dream_usage').update({status:'completed',input_tokens:usage.input_tokens??0,output_tokens:usage.output_tokens??0,cache_read_tokens:usage.cache_read_input_tokens??0,cache_write_tokens:0,cost_usd:cost,provider_status:200}).eq('id',usageId!);
  const answer={status:200,body:{...message,dream_policy:policy,dream_request:{status:'completed',retryable:false,accountingPending:!!accountingError,effectivePolicy:{},costUsd:cost}}};
  await o.requests?.finish(userId,body.requestId,'completed',answer.body);return answer;
 }

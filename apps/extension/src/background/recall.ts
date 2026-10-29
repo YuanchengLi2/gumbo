@@ -7,12 +7,16 @@ import {memoryChanged} from './search';
  * it changes; a keyword match finds the passages that fit what is being written. With nothing in memory every surface
  * still works: recall is empty, not an error. */
 type Cache={at:number;writing:Writing[];accepted:SuggestionRecord[];pages:{page:Page;passages:string[]}[];media:Media[]};
-let cache:Cache|undefined,loading:Promise<Cache>|undefined;
+let cache:Cache|undefined,loading:Promise<Cache>|undefined,loadingAt=0;
 const DAY=86_400_000;
-export function invalidate(){cache=undefined;memoryChanged();}
+/** Memory changed: what is held is refreshed in the background (kept meanwhile, so no suggestion waits for the disk). */
+export function invalidate(){if(cache)cache.at=0;memoryChanged();}
 
 async function load():Promise<Cache>{
  if(cache&&Date.now()-cache.at<30_000)return cache;
+ // A load still not done after five seconds is stuck: it is not waited on by every later suggestion.
+ if(loading&&Date.now()-loadingAt>5000)loading=undefined;
+ if(!loading)loadingAt=Date.now();
  return loading??=(async()=>{
   try{
    const now=Date.now();
@@ -49,11 +53,15 @@ function best<T>(items:T[],textOf:(item:T)=>string,words:string[],take:number,mi
 export async function recallFor(input:{site:string;intent:string;before:string;thread?:string;current?:string}):Promise<Recall>{
  const recall=emptyRecall();
  try{
-  const [c,settings]=await Promise.all([load(),loadSettings()]);
+  // Never waits on reading memory from disk: what is held now is used, and a stale copy is refreshed behind it.
+  const fresh=cache&&Date.now()-cache.at<30_000;if(!fresh)void load();
+  const c=cache??{at:0,writing:[],accepted:[],pages:[],media:[]},settings=await loadSettings();
   recall.facts=settings.facts;
-  // The user's own writing in the same kind of field, this site first; never the text being written now.
-  const same=c.writing.filter(w=>w.intent===input.intent&&w.text.length>=30&&w.text!==input.current);
-  recall.style=[...same.filter(w=>w.site===input.site),...same.filter(w=>w.site!==input.site)].slice(0,3).map(w=>({site:w.site,intent:w.intent,text:w.text}));
+  // How they write, from what they wrote: this site and this kind of field first, then this site, then this kind of field
+  // anywhere, newest first within each; short pieces count (a chat line is how they talk). Never the text being written now.
+  const mine=c.writing.filter(w=>w.text.trim().length>=8&&w.text!==input.current);
+  const rank=(w:typeof mine[number])=>(w.site===input.site?2:0)+(w.intent===input.intent?1:0);
+  recall.style=mine.filter(w=>rank(w)>0).sort((a,b)=>rank(b)-rank(a)||b.at-a.at).slice(0,4).map(w=>({site:w.site,intent:w.intent,text:w.text}));
   recall.accepted=c.accepted.filter(s=>s.site===input.site&&s.kind==='text').slice(0,5).map(s=>s.text.trim()).filter(Boolean);
   const words=keywords(`${input.thread??''}\n${input.before.slice(-600)}`);
   const passages=c.pages.filter(p=>p.page.site!==input.site||true).flatMap(p=>p.passages.map(text=>({title:p.page.title,url:p.page.url,text})));

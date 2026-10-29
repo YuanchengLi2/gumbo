@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {takes,took} from './keys';
+import {takes,took,offers,mayTake} from './keys';
 import {fieldOf,hiddenBox,type Field} from './fields/field';
 import {insert} from './fields/insert';
 import {deepActive} from './dom';
@@ -21,6 +21,7 @@ export function startDrawnTab(){
  void loadSettings().then(s=>{settings=s;});onSettings(s=>{settings=s;if(!active())drop();});
  // Before Tab for actions and the page: Tab here means "take these words".
  window.addEventListener('keydown',onKey,true);
+ offers('drawn',()=>!!shown&&shown.el===fieldOf(deepActive())?.el);
  document.addEventListener('focusout',()=>{drop();typed='';},true);
  // The page showing the words: a press or a scroll anywhere puts them away.
  window.addEventListener('pointerdown',hideDrawnWords,true);window.addEventListener('scroll',hideDrawnWords,{capture:true,passive:true});
@@ -31,7 +32,7 @@ function onKey(event:KeyboardEvent){
  if(!alive())return;
  if(!event.isTrusted||event.isComposing||!active())return;
  const field=hiddenField();if(!field)return;
- if(takes(event)&&shown?.el===field.el){
+ if(takes(event)&&mayTake('drawn')&&shown?.el===field.el){
   took(event);
   const text=shown.text;drop();typed=(typed+text).slice(-300);void typeInto(field,text);return;
  }

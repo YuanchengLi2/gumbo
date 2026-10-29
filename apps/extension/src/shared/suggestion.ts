@@ -19,7 +19,7 @@ export type SuggestionInput={before:string;after:string;singleLine:boolean;
 /** The word the caret is in or right after: what the model restates so the join is exact. */
 export const lastWordOf=(before:string)=>{const m=/([\p{L}\p{N}'’-]{1,30})$/u.exec(before);return m?m[1]:'';};
 /** Answers that say there is no answer, or talk about the task instead of doing it. */
-const nonAnswer=/^\s*[(\[]?\s*(nothing|empty|no (completion|suggestion|continuation)|none|n\/a)\s*[)\].]?\s*$|\b(can't tell|cannot tell|can not tell|not sure what|unclear what|i'?ll leave it|leave (it|this) blank|the user (is|wants|was|typed)|the cursor|⟨cursor⟩|autocomplete|continuation:|as an ai)\b/i;
+const nonAnswer=/^\s*[(\[]?\s*(nothing|empty|no (completion|suggestion|continuation)|none|n\/a)\s*[)\].]?\s*$|\b(can't tell|cannot tell|can not tell|not sure what|unclear what|i'?ll leave it|leave (it|this) blank|the user (is|wants|was|typed)|the cursor|⟨cursor⟩|autocomplete|continuation:|as an ai|(the|this|their|your) (message|text|reply|email|field|sentence) (is|was) already|already (complete|finished|a complete)|already typed|finish (that|the|this) word|continue it\b|so finish|(not able|unable|can'?t|cannot) to? ?(predict|guess|tell what)|i have no (text|memory|information|context)|any guess would|would (have to|need to) (guess|invent)|no (name|memory|information) (is )?(given|known|available))\b/i;
 
 const preamble=/^\s*(?:(?:sure|okay|ok|here(?:'s| is)(?: the)?(?: completion| continuation| text)?|completion|continuation|answer|output)\s*[:,-]\s*)+/i;
 export function cleanSuggestion(raw:string,input:SuggestionInput):string{
@@ -37,8 +37,11 @@ export function cleanSuggestion(raw:string,input:SuggestionInput):string{
   if(lead.toLowerCase().startsWith(word.toLowerCase()))text=lead.slice(word.length);
   // Still streaming the restated word.
   else if(!input.final&&word.toLowerCase().startsWith(lead.toLowerCase()))return '';
-  // It went straight on instead: people pause after whole words, so the next word needs a space.
-  else if(/^[\p{L}\p{N}]/u.test(lead))text=' '+lead;
+  // The cursor is inside a word the model did not finish as typed (it wrote another word, or the same one misspelled):
+  // nothing, rather than a second word glued after theirs.
+  else if(/[\p{L}\p{N}]$/u.test(input.before)&&input.final&&/^[\p{L}\p{N}]/u.test(lead)&&lead.slice(0,2).toLowerCase()===word.slice(0,2).toLowerCase())return '';
+  // Otherwise it went straight on from the cursor, and its own spacing says how: "ary" finishes "summ", " you" starts a
+  // new word. A space is never added for it (that typed "summ ary").
  }
  text=dropEcho(input.before,text);
  text=input.lastWord?text:join(input.before,text);
@@ -74,7 +77,7 @@ export function join(before:string,text:string){
 }
 /** Where a suggestion ends: in a one-line field, its first sentence on its line; elsewhere up to three sentences, within
  * the paragraph it is in (a blank line ends it), or two lines when it is a list or a sign-off. */
-export function firstSentence(text:string,{singleLine,before,sentences=singleLine?1:3}:{singleLine:boolean;before:string;sentences?:number}){
+export function firstSentence(text:string,{singleLine,before,sentences=singleLine?1:2}:{singleLine:boolean;before:string;sentences?:number}){
  const lead=/^\n+/.exec(text)?.[0].length??0;
  if(singleLine){const nl=text.indexOf('\n');if(nl>=0)text=text.slice(0,nl);}
  else{

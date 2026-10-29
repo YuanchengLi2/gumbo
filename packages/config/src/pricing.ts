@@ -16,7 +16,7 @@ export function providerRates(model:ModelInfo,usage:Record<string,any>,at=new Da
  return rates;
 }
 /** Models only Gumbo for Chrome uses (not in the editor's menu), at their gateway prices. */
-const extensionModels:{id:string;price:[number,number];cachedRead:number}[]=[{id:'groq-fast',price:[.59,.79],cachedRead:.59},{id:'gpt-6.1-terra',price:[1,5],cachedRead:.05}];
+const extensionModels:{id:string;price:[number,number];cachedRead:number}[]=[{id:'groq-fast',price:[.59,.79],cachedRead:.59},{id:'cerebras-oss',price:[.35,.75],cachedRead:.35},{id:'cerebras-qwen',price:[.99,1.49],cachedRead:.99},{id:'gpt-6.1-terra',price:[1,5],cachedRead:.05}];
 export function usageCost(model:string,usage:Record<string,any>,price:[number,number]=modelPrices[model]??[0,0],at=new Date()):number{
  // Other providers' models: uncached input, cache reads at that model's rate, and output (the gateway's providerCost).
  const other=modelCatalog.find(m=>m.id===model&&m.provider!=='anthropic')??extensionModels.find(m=>m.id===model) as ModelInfo|undefined;if(other){const rates=providerRates(other,usage,at);return((usage.input_tokens??0)*rates.price[0]+(usage.cache_read_input_tokens??0)*rates.cachedRead+(usage.output_tokens??0)*rates.price[1])/1e6;}

@@ -1,5 +1,33 @@
 # Dream decisions
 
+## October 27, 2026 — Gumbo for Chrome: Tab writes, moves only when sure; the agent goes places; Tab is the key again
+
+- **What Tab is for (the user's call, after a day of real use).** Text is the core, as in Cursor: a good completion
+  saves tens of keystrokes, while a click Tab guesses saves one click and costs a look to check it. So Tab still speaks
+  up on its own at every moment (a page opening, an entry finished, the page answering), but a move shows only when it
+  is plain: sure (the bar went from 0.35 to 0.7, a site moving it between 0.6 and 0.85), one step, on something in view.
+  Going somewhere (opening a page by its address, a habit of visiting a site, a chain of pages) is the sidebar agent's
+  and Ctrl+K's: the user says where, so nothing is guessed and nothing has to be checked on a page not yet seen. The
+  model is told to give nothing when the next move is not obvious; the engine drops any move that is unsure, off screen
+  or opens an address.
+- **No more quiet line or "likely" ranking.** The line that followed the pointer and the clear-leader chip showed
+  guesses Tab was not sure of. Dropping the ranked list also made each guess shorter: the user's call log showed action
+  replies of 180 to 330 output tokens (about 1.5 to 2.5 s of writing before the chip could show), most of it that list.
+  The cap went from 500 to 300 tokens, a sure move shows as soon as its first step has streamed in, and the waits
+  before asking are shorter (a page opening 400 → 150 ms, a click 200 → 100, a dialog 120 → 60, the settle cap
+  600 → 350 ms, an address change noticed every 250 ms instead of 600).
+- **Tab takes it again, held Tab with 1 goes through the options.** Alt+Q was chosen to leave Tab to the page, but the
+  user wants Tab. It is Gumbo's only while something is offered (a ghost, a move's chip, a step waiting for its second
+  press); otherwise, and always with Shift, it moves the focus as before. Tab is taken on release, so holding it and
+  pressing 1 cycles instead (letting go then takes nothing; the next Tab takes the one shown), and any other key while
+  it is held cancels the take. Code editors that own Tab (Monaco, CodeMirror) keep it. Alt+Q still works as Chrome's
+  command. The "1 of 3 · Alt++ next" hint is gone.
+- **The highlight says which thing, plainly.** Moves were a small dark chip beside a thin grey outline, easy to lose on
+  a busy page. Now the target gets an orange outline with a light orange tint and one pulse as it appears, and the label
+  (same orange, the key in white) is joined to the outline's top left corner like a tab on its edge (bottom left when
+  there is no room above, beside it when neither fits, never over the page's own controls). A send, submit, pay or
+  delete armed by the first press shows the same way, pulsing, "Tab again to …".
+
 ## October 27, 2026 — Gumbo for Chrome's Tab moves: sequences, Undo, cycling, and a chip you notice
 
 - **Sequences.** The learner counts each step after the two steps before it (A → B → C) as well as after the last one,
