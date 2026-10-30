@@ -1,6 +1,7 @@
 import {on} from './surfaces';
 import {add,save,getPage,removePassages,passagesOfRef,type Page} from './db';
 import {invalidate,pagePassages} from './recall';
+import {holdFacts} from './memory/working';
 import {cleanFacts,factsOfLines,uniqueFacts,type Fact} from '../shared/facts';
 import {noteCopy,current,recordEvent} from './memory/live';
 import {pageKindOf} from '../shared/learn';
@@ -39,6 +40,8 @@ export async function capturePage(message:{url:string;title:string;text:string;f
   const facts=fresh?message.facts??uniqueFacts(factsOfLines(text.split('\n').map(text=>({text})))):old?.facts;
   const page:Page={url,site:siteOf(url),title:message.title.slice(0,300)||old?.title||url,text:fresh?text:old!.text,firstSeen:old?.firstSeen??now,lastSeen:now,visibleMs:(old?.visibleMs??0)+Math.max(0,message.visibleMs??0),visits:(old?.visits??0)+(message.visibleMs?0:1),highlights:old?.highlights??[],source:'browser',...(facts?.length?{facts}:{})};
   await add('pages',page);
+  // Its facts are held ready for Tab at once (memory/working.ts), before any search has them.
+  holdFacts(url,page.title,page.facts,now);
   // Passages are what search reads: re-cut when the text or its facts changed (what was seen of the old ones is carried
   // over).
   if(page.text!==old?.text||JSON.stringify(page.facts??[])!==JSON.stringify(old?.facts??[])){

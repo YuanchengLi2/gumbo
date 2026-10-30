@@ -10,6 +10,7 @@ import {fieldKey,fieldQuery,writingQuery} from './memory-context';
 import {lately} from './memory/live';
 import {getContext,type Bundle} from './memory/context';
 import {config} from './memory/config';
+import {factsFor,factsBlock} from './memory/working';
 import {thrifty} from './thrift';
 /** Tab in the engine: a page asks with the field's context and the text around the caret, and gets back, streaming, what
  * comes next. One run of the model, written in the user's voice from the memory every surface has (memory/context.ts:
@@ -74,7 +75,12 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const contextMs=performance.now()-started;
  // A search box gets what they read and wrote before (the product in the review they just read), never the screens of
  // their tabs: those put the screen's words in the box instead of what was being typed.
- const {system,messages,known}=tabRequest(c,message.before,message.after,recall,c.intent==='search'?{...bundle,fresh:bundle.blocks.memory}:bundle,LEAN_TAB_SYSTEM);
+ // The facts of what they saw lately that bear on this very moment (memory/working.ts): ranked against the words as they
+ // are now, so the fact the sentence just reached for is in this request. A search box goes without (its words are a
+ // query, not a sentence that reaches for a value).
+ const moment=[message.before.slice(-300),c.label,...(c.around??[]).slice(0,3),c.thread?.at(-1)?.text.slice(0,300)??''].join('\n');
+ const saw=c.intent==='search'?'':factsBlock(factsFor({text:moment,url:c.url}));
+ const {system,messages,known}=tabRequest(c,message.before,message.after,recall,c.intent==='search'?{...bundle,fresh:bundle.blocks.memory}:bundle,LEAN_TAB_SYSTEM,saw);
  // Asked for what comes after its own suggestion: the model is told so, and judges whether the text is now whole.
  if(message.chain)(messages[0].content as any[]).push({type:'text',text:'The last words before the cursor are your own suggestion, which they are taking. Judge the whole text as it stands: if it already says what they want (a query that names what they are looking for, a message that makes its point), reply ∎ alone. Write more only if their thought plainly goes on.'});
  // An empty field, just entered: what goes in it, only when their context says it plainly.

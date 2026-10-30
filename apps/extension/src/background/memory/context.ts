@@ -121,9 +121,9 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const quick=req.surface==='tab-text'||req.surface==='tab-action'||req.surface==='drawn';
  // The past: the search for this moment (kept per key), waited for only as long as the surface can.
  const key=req.key??`${req.surface}|${tab??''}|${req.url??''}`,k=quick?8:16,search=searchFor(key,req.query,k);
- // Text Tab waits on the search only for a field's first one (a few tens of milliseconds, usually begun as the field was
- // focused): after that it uses what the last one found, and this one is ready for the next words.
- const wait=req.wait??(req.surface==='tab-text'?(search.at?0:150):quick?(search.at?0:80):req.surface==='agent'?1500:200);
+ // Text Tab never waits on it: what was seen lately is in the working set (memory/working.ts), ranked in the request
+ // itself; the search for the past runs behind, for the next words.
+ const wait=req.wait??(req.surface==='tab-text'?0:quick?(search.at?0:80):req.surface==='agent'?1500:200);
  const settled=()=>new Promise<void>(r=>{const check=()=>!search.searching&&!search.wanted?r():setTimeout(check,15);check();});
  if((search.searching||search.wanted)&&wait>0)await Promise.race([settled(),new Promise(r=>setTimeout(r,wait))]);
  // Nothing in hand yet (memory still starting, after Chrome opened): the question may be all about memory, so the

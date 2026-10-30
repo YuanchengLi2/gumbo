@@ -63,7 +63,7 @@ export const LEAN_TAB_SYSTEM=`You are an autocomplete engine in a person's brows
 - Continue their own text, in their voice: the next phrase, usually 2 to 6 words, ending at a natural break. Sound exactly like them: their casing (all lowercase if they write that way), slang, punctuation, emoji and length, from what they are typing and from how they write elsewhere.
 - In a message to someone (an email, a chat, an AI's prompt box) you write their side, never the reply.
 - What surrounds the cursor decides what to write: their text before and after it, the field, the question or message they are answering, the document or table it is in (<around_the_field>, the conversation). Write what fits there.
-- What they saw before (<their_memory>, <this_session>, what they copied) is only for a fact the moment calls for: when their words or the field reach for a name, date, figure, title, link or finding that is not on this page, bring it in from there. Never take its wording or its topic otherwise, and never invent a fact.
+- What they saw before (<facts_from_what_they_saw>, <their_memory>, <this_session>, what they copied) is only for a fact the moment calls for: when their words or the field reach for a name, date, time, figure, title, link or finding that is not on this page, take it from there, exactly, choosing the one whose label fits (an arrival time for "lands at", a total for "how much"). Never take its wording or its topic otherwise, and never invent a fact.
 - When the text is whole (the message has made its point, the search names what they want), output ∎ alone; when your words make it whole, end with ∎.
 - If you are not fairly sure what they will type next, output nothing.
 - After your continuation you may add up to two other likely ones, each after ⟂.
@@ -109,7 +109,9 @@ export function stableContext(context:Omit<FieldContext,'url'|'title'>&{url?:str
   +section('about_the_person',facts)+section('how_they_write_copy_their_casing_slang_punctuation_and_length_never_the_content',style);
 }
 /** The part that changes with every keystroke: matching memory, then the text around the cursor. */
-export function freshContext(before:string,after:string,recall:Pick<Recall,'reading'|'heard'>&{memory?:Recall['memory'];copied?:Recall['copied']}){
+/** saw: the facts from what they saw that bear on the moment (memory/working.ts factsBlock), put right before their
+ * text, where the model looks for what the words reach for. */
+export function freshContext(before:string,after:string,recall:Pick<Recall,'reading'|'heard'>&{memory?:Recall['memory'];copied?:Recall['copied'];saw?:string}){
  const remembered=(recall.memory??[]).slice(0,3).map(m=>`From "${clip(m.title,80)}" (${m.when}):\n${clip(m.text,450)}`).join('\n\n');
  const seen=new Set((recall.memory??[]).map(m=>m.title));
  const reading=recall.reading.filter(r=>!seen.has(r.title)).slice(0,4).map(r=>`From "${clip(r.title,80)}":\n${clip(r.text,800)}`).join('\n\n');
@@ -120,7 +122,7 @@ export function freshContext(before:string,after:string,recall:Pick<Recall,'read
  // No instruction after the text: the model wrote such lines back into the field ("is in thra, so finish that word"). Where
  // the words join is worked out in code (suggestion.ts).
  void start;
- return section('from_their_memory',remembered)+section('recently_read',reading)+section('recently_heard',heard)+section('they_just_copied',copied)+`<text_they_are_typing>\n${before.slice(-2000)}⟨cursor⟩${after.slice(0,500)}\n</text_they_are_typing>`;
+ return section('from_their_memory',remembered)+section('recently_read',reading)+section('recently_heard',heard)+section('they_just_copied',copied)+(recall.saw??'')+`<text_they_are_typing>\n${before.slice(-2000)}⟨cursor⟩${after.slice(0,500)}\n</text_they_are_typing>`;
 }
 /** Everything the suggestion may take facts from, for the facts guard. */
 export function knownText(context:Partial<FieldContext>,recall:Recall){
@@ -129,10 +131,10 @@ export function knownText(context:Partial<FieldContext>,recall:Recall){
 /** memory: what getContext gave (memory/context.ts): its stable part (who they are and how they write here, what they
  * are working on) goes first with the field's own, cached; its fresh part (this session, their memory) replaces the
  * keyword matches of before. */
-export function tabRequest(context:FieldContext,before:string,after:string,recall:Recall,memory?:{stable:string;fresh:string;known:string},system=TAB_SYSTEM){
+export function tabRequest(context:FieldContext,before:string,after:string,recall:Recall,memory?:{stable:string;fresh:string;known:string},system=TAB_SYSTEM,saw=''){
  const stable=(memory?.stable?memory.stable+'\n':'')+(stableContext(context,memory?{...recall,facts:{}}:recall)||'<field>\nA text field.\n</field>');
  // What recall matched by its words (pages read today, what was heard) comes too, except what memory gave already.
- const fresh=memory?(memory.fresh?memory.fresh+'\n':'')+freshContext(before,after,{reading:recall.reading.filter(r=>!memory.fresh.includes(r.title)),heard:recall.heard.filter(h=>!memory.fresh.includes(h.title)),copied:recall.copied}):freshContext(before,after,recall);
+ const fresh=memory?(memory.fresh?memory.fresh+'\n':'')+freshContext(before,after,{reading:recall.reading.filter(r=>!memory.fresh.includes(r.title)),heard:recall.heard.filter(h=>!memory.fresh.includes(h.title)),copied:recall.copied,saw}):freshContext(before,after,{...recall,saw});
  // What a suggestion may take a fact from is exactly what the model was shown (and the user's own facts): a fact it read
  // in the request is never cut as if it were made up, and one it was not shown always is.
  return{system,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],known:`${stable}\n${fresh}\n${Object.values(recall.facts).filter(Boolean).join('\n')}`};

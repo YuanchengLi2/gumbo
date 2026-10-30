@@ -2,6 +2,7 @@ import {on} from '../surfaces';
 import {add,type ActionEvent,type PageCategory} from '../db';
 import {loadSettings,activeOn,siteOf} from '../../shared/settings';
 import {cleanFacts,type Fact} from '../../shared/facts';
+import {holdFacts} from './working';
 /** Memory's "now" and "this session", held in the worker for every surface to read at once: each open tab with its trail
  * of visits (the pages it went through, how long each held them, what was read there), what is on its screen right now
  * (the text in view, the field in focus and what is being typed, the selection), the steps taken in it (clicked, chose,
@@ -113,6 +114,8 @@ on('now',async(m:Now,{port,url})=>{
  const tab=port.sender?.tab?.id;if(tab===undefined||port.sender?.frameId||!await allowed(url,port.sender?.tab?.incognito))return;
  const facts=cleanFacts(m.facts,80);
  await noteNow(tab,{...m,url,at:Date.now(),visible:String(m.visible??'').slice(0,3000),selection:m.selection?.slice(0,1000),facts:facts.length?facts:undefined});
+ // What is on its screen now is what Tab may need in the next tab (memory/working.ts).
+ holdFacts(url,String(m.title??''),facts);
 });
 on('seen',async(m:{blocks:{text:string;ms:number}[]},{port,url})=>{
  const tab=port.sender?.tab?.id;if(tab===undefined||port.sender?.frameId||!await allowed(url,port.sender?.tab?.incognito))return;

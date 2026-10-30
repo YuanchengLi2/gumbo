@@ -4,6 +4,7 @@ import {brain,lastStep,stepBefore} from './actions';
 import {getSealed,putSealed} from './db';
 import {lately,latelyKnown,doingText} from './memory/live';
 import {getContext} from './memory/context';
+import {factsFor,factsBlock} from './memory/working';
 import {wordsOf,overlap} from '../shared/rank';
 import {offscreen} from './offscreen';
 import {thrifty} from './thrift';
@@ -150,7 +151,9 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   // it to the cache each time made every guess slower.
   const stableHead=bundle.stable||'<about_them>\n(nothing known yet)\n</about_them>';
   const page=`${outer}<page url="${url}" title="${title}">\n${m.text.slice(0,m.where?1500:3500)}\n</page>\n${there}<elements${m.where?' where_they_are':''}>\n${listing}\n</elements>\n${whole}`;
-  const fresh=[says,bundle.fresh,doing,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
+  // The facts of what they saw lately that bear on where they are (memory/working.ts): what a form here asks for.
+  const saw=factsBlock(factsFor({text:query,url}));
+  const fresh=[says,bundle.fresh,saw,doing,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
   // What a move may type is exactly what the model was shown, and the user's own details.
   const known=`${stableHead}\n${page}\n${fresh}\n${Object.values(facts).filter(Boolean).join('\n')}`;
   // On a page drawn as pixels, the picture of what they see goes with it, and its points come back in the page's terms.
