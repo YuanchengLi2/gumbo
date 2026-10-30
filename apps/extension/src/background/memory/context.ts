@@ -141,11 +141,12 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // slower surfaces give it longer.
  if(!quick&&(search.searching||search.wanted)&&!search.found.length)await Promise.race([settled(),new Promise(r=>setTimeout(r,1500))]);
  // Ctrl+K's answer and the sidebar's are waited on by the person who asked: a search that judged memory by words alone
- // (the model loading after Chrome opened or after a quiet spell, what was just seen still being embedded) is asked again
- // until one is whole, a few seconds at most, so the page they read is not missed for want of its meaning. Not for a
- // warm-up ahead of the question (wait 0).
+ // (the model loading after Chrome opened or after a quiet spell) is asked again until one is whole, so the page they read
+ // is not missed for want of its meaning. A moment for Ctrl+K, whose card warmed the model as it opened and whose answer
+ // must start at once (words find what the question names meanwhile); longer for the sidebar, whose runs take a while
+ // anyway. Not for a warm-up ahead of the question (wait 0).
  if(!quick&&req.wait!==0){
-  const until=performance.now()+(req.surface==='agent'?3000:2500);
+  const until=performance.now()+(req.surface==='agent'?3000:800);
   while(!search.whole&&performance.now()<until){
    if(!search.searching&&!search.wanted)searchFor(key,req.query,k,true,req.focus);
    await Promise.race([settled(),new Promise(r=>setTimeout(r,Math.max(0,until-performance.now())))]);

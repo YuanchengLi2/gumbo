@@ -307,8 +307,9 @@ small batches with pauses.
     recording, which adds to it every few seconds). A search kept for a field or moment that was not whole is asked
     again (after 1.5 s), so one made
     while the model loaded (Chrome just opened, or the offscreen document closed after ten idle minutes) is not the
-    answer for good. Ctrl+K and the sidebar, which someone is waiting on, ask again until one is whole, 2.5 s (3 s for
-    the sidebar) at most; a warm-up ahead of the question does not wait.
+    answer for good. Ctrl+K and the sidebar, which someone is waiting on, ask again until one is whole, 0.8 s for
+    Ctrl+K (its card warms the model as it opens) and 3 s for the sidebar at most; a warm-up ahead of the question does
+    not wait.
   - **A match with no meaning yet is judged by its words** (`Found.words`: how many of the question's words it holds, one
     more for one in its title): two count. BM25 alone grows with the size of memory, so a small memory, a new user's, could
     never match by words. What search accepted is not judged again by its words against the whole question.

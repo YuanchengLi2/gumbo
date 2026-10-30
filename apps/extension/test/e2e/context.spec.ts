@@ -12,7 +12,9 @@ test('Ctrl+K in a field is given the page, this session and who they are',async(
  await signedIn.evaluate(()=>chrome.storage.local.set({settings:{enabled:true,pausedUntil:0,siteOff:[],altK:[],facts:{name:'Dana Park',signOff:'Best, Dana'},listen:false,listenOff:[],mic:false}}));
  await page.goto(`${standin.url}/pages/trail.html`);await page.waitForTimeout(800);
  await page.goto(`${standin.url}/pages/plain.html`);await page.locator('#ta').click();
- await page.keyboard.type('thx for the notes');await page.keyboard.press('Control+a');await page.keyboard.press('Control+k');
+ // The page before is about what they write (the notes on tide pools): this session comes when it bears on the moment,
+ // not whatever page came before (memory/context.ts, the relevance bar of Oct 30).
+ await page.keyboard.type('thx for the notes on the tide pools and the sea stars');await page.keyboard.press('Control+a');await page.keyboard.press('Control+k');
  await card(page);await page.keyboard.type('more formal');await page.keyboard.press('Enter');
  await expect.poll(()=>standin.bodies.filter((b:any)=>b.purpose==='inline').length,{timeout:8000}).toBeGreaterThan(0);
  const sent=JSON.stringify(standin.bodies.find((b:any)=>b.purpose==='inline').messages);
