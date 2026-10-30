@@ -74,7 +74,7 @@ async function layOut(tab:number|undefined,options:{tabs?:boolean}):Promise<GNod
 }
 /** What memory holds from before, as nodes: read on a visit of this tab's trail is one step away, the rest three. */
 export function pastNodes(found:Found[],trailVisits:Set<number>):GNode[]{
- const out=found.map(f=>({id:f.id,kind:f.kind,rel:f.visit!==undefined&&trailVisits.has(f.visit)?'read earlier in this tab':f.kind==='writing'?'something they wrote before':f.kind==='media'?'something they heard':f.kind==='note'?'one of their notes':'something they read before',title:f.title,url:f.url,text:f.text,at:f.at,site:f.site,project:f.project,hops:f.visit!==undefined&&trailVisits.has(f.visit)?1:3,visit:f.visit,seenMs:f.seenMs,cos:f.cos,bm25:f.bm25,links:[]}));
+ const out=found.map(f=>({id:f.id,kind:f.kind,rel:f.visit!==undefined&&trailVisits.has(f.visit)?'read earlier in this tab':f.kind==='writing'?'something they wrote before':f.kind==='media'?'something they heard':f.kind==='note'?'one of their notes':f.kind==='fact'?'a fact on a page they read':'something they read before',title:f.title,url:f.url,text:f.text,at:f.at,site:f.site,project:f.project,hops:f.visit!==undefined&&trailVisits.has(f.visit)?1:3,visit:f.visit,seenMs:f.seenMs,cos:f.cos,bm25:f.bm25,links:[]}));
  keep(out);return out;
 }
 

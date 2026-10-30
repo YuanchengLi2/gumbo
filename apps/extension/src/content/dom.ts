@@ -1,6 +1,9 @@
 /** Small DOM helpers the field engine shares: the focused element through shadow roots, visibility, roles and
  * accessible names (what a screen reader would read), and text clean-up. */
 export const BLOCK=new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DD','DIV','DL','DT','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','HR','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TBODY','THEAD','TR','TD','TH','UL','DETAILS','SUMMARY']);
+/** What is not the page's content: its menus, banner and footer, side bars, fields being written in, and Gumbo's own
+ * layer. */
+export const SKIP='nav,header,footer,aside,[role=navigation],[role=banner],[role=contentinfo],[contenteditable=true],[contenteditable=""],textarea,gumbo-layer';
 /** Zero-width characters editors keep in their text (Draft, Slate, Lexical) that mean nothing to a reader. */
 export const INVISIBLE=/[​‌‍﻿]/g;
 export const clean=(text:string)=>text.replace(INVISIBLE,'').replace(/ /g,' ');

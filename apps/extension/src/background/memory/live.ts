@@ -1,6 +1,7 @@
 import {on} from '../surfaces';
 import {add,type ActionEvent,type PageCategory} from '../db';
 import {loadSettings,activeOn,siteOf} from '../../shared/settings';
+import {cleanFacts,type Fact} from '../../shared/facts';
 /** Memory's "now" and "this session", held in the worker for every surface to read at once: each open tab with its trail
  * of visits (the pages it went through, how long each held them, what was read there), what is on its screen right now
  * (the text in view, the field in focus and what is being typed, the selection), the steps taken in it (clicked, chose,
@@ -11,7 +12,8 @@ import {loadSettings,activeOn,siteOf} from '../../shared/settings';
 export type Now={at:number;url:string;title:string;
  /** The words in view (whole blocks at least half on screen), top to bottom. */visible:string;
  focus?:{label:string;intent:string;typed?:string};selection?:string;
- /** How far down the page (px) and how tall it is. */scroll:[number,number];kind?:PageCategory};
+ /** How far down the page (px) and how tall it is. */scroll:[number,number];kind?:PageCategory;
+ /** The facts on the page (shared/facts.ts), so an open tab's are at hand without reading the disk. */facts?:Fact[]};
 export type Step={at:number;kind:string;label:string;text?:string;title:string;site:string};
 export type LiveVisit={id?:number;url:string;title:string;site:string;pageKind:string;kind:PageCategory;in:number;out?:number;
  activeMs:number;visibleMs:number;readMs:number;from?:number;opener?:number;transition:string;events:number;project?:string;
@@ -109,7 +111,8 @@ export async function snapshot(){return structuredClone(await load());}
 /** What a page reports of itself: what is on its screen, and what was read there (seen.ts). */
 on('now',async(m:Now,{port,url})=>{
  const tab=port.sender?.tab?.id;if(tab===undefined||port.sender?.frameId||!await allowed(url,port.sender?.tab?.incognito))return;
- await noteNow(tab,{...m,url,at:Date.now(),visible:String(m.visible??'').slice(0,3000),selection:m.selection?.slice(0,1000)});
+ const facts=cleanFacts(m.facts,80);
+ await noteNow(tab,{...m,url,at:Date.now(),visible:String(m.visible??'').slice(0,3000),selection:m.selection?.slice(0,1000),facts:facts.length?facts:undefined});
 });
 on('seen',async(m:{blocks:{text:string;ms:number}[]},{port,url})=>{
  const tab=port.sender?.tab?.id;if(tab===undefined||port.sender?.frameId||!await allowed(url,port.sender?.tab?.incognito))return;

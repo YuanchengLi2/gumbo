@@ -4,10 +4,12 @@ import {snapshot} from './fields/text';
 import {readContext} from './context';
 import {deepActive,pathOf,squash} from './dom';
 import {post} from './port';
+import {readPage,contentRoot,blocksOf,changed} from './facts';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 /** What memory keeps from a page, handed to the engine (which seals it): the user's own writing when a field is left or
- * sent, the page's text once it has been read for a moment and again when it changes a lot, how long it was in view,
- * and what was copied. Never from sensitive fields (they are not fields), payment frames, or where Gumbo is off. */
+ * sent, the page's text and facts once it has been read for a moment and again when its content changes, how long it
+ * was in view, and what was copied. Never from sensitive fields (they are not fields), payment frames, or where Gumbo is
+ * off. */
 let settings:Settings|undefined;
 const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame();
 const keyOf=(field:Field)=>location.origin+location.pathname+'|'+(field.el.id||field.el.getAttribute('name')||pathOf(field.el));
@@ -29,29 +31,29 @@ function keepWriting(field:Field){
  const last=context.thread?.at(-1);
  post({type:'capture.writing',key:keyOf(field),intent:context.intent,label:context.label,editor:field.editor,text:snap.text,replyTo:last?`${last.author?last.author+': ':''}${last.text.slice(0,300)}`:undefined});
 }
-/** The page's text, once it has been on screen for a few seconds, and again when it changed a lot (a new address in an
- * app that never reloads, a feed that grew); how long it was in view, when it is left. */
+/** The page's text and its facts, once it has been on screen for a few seconds, and again when its content changed (a
+ * new email opened in an app that never reloads, a feed that grew, a new address); how long it was in view, when it is
+ * left. Content changed means its blocks of text did (content/facts.ts changed), not its length. */
 function watchPage(){
- let url=location.href,sentLength=0,visibleSince=document.visibilityState==='visible'?Date.now():0,timer:number|undefined,lastRead=0;
+ let url=location.href,sent:Map<number,number>|undefined,visibleSince=document.visibilityState==='visible'?Date.now():0,timer:number|undefined,lastRead=0;
+ const page=()=>readPage(contentRoot(),{except:fieldOf(deepActive())?.el});
  const read=()=>{
   lastRead=Date.now();
   if(!active()||document.visibilityState!=='visible')return;
-  const text=pageText();if(text.length<80)return;
-  if(Math.abs(text.length-sentLength)<Math.max(400,sentLength*0.25)&&location.href===url&&sentLength)return;
-  sentLength=text.length;post({type:'capture.page',title:document.title,text,visibleMs:0});
+  const {text,lines,facts}=page();if(text.length<80)return;
+  const blocks=blocksOf(lines);
+  if(sent&&location.href===url&&!changed(sent,blocks))return;
+  sent=blocks;post({type:'capture.page',title:document.title,text,facts,visibleMs:0});
  };
  const soon=(ms:number)=>{clearTimeout(timer);timer=window.setTimeout(read,ms);};
  soon(3000);
  document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'&&visibleSince){if(active()&&sentLength)post({type:'capture.page',title:document.title,text:pageText(),visibleMs:Date.now()-visibleSince});visibleSince=0;}
+  if(document.visibilityState==='hidden'&&visibleSince){if(active()&&sent){const {text,facts}=page();post({type:'capture.page',title:document.title,text,facts,visibleMs:Date.now()-visibleSince});}visibleSince=0;}
   else if(document.visibilityState==='visible'){visibleSince=Date.now();soon(3000);}
  });
- // Apps change address without reloading; feeds grow as they are read.
- setInterval(()=>{if(location.href!==url){url=location.href;sentLength=0;soon(2500);}else if(lastRead&&Date.now()-lastRead>30_000)read();},1500);
+ // Apps change address without reloading, and open messages without changing it; feeds grow as they are read.
+ setInterval(()=>{if(location.href!==url){url=location.href;sent=undefined;soon(2500);}else if(lastRead&&Date.now()-lastRead>30_000)read();},1500);
 }
-/** The readable text of the page: its main content when it has one, without navigation, scripts or Gumbo's own layer. */
-export function pageText(max=200_000){
- const root=document.querySelector('main,article,[role=main]')??document.body;if(!root)return '';
- const text=(root as HTMLElement).innerText??'';
- return text.replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim().slice(0,max);
-}
+/** The readable text of the page: its main content when it has one, without its menus, banner and footer, fields,
+ * scripts or Gumbo's own layer. */
+export function pageText(max=200_000){return readPage(contentRoot(),{max,facts:false}).text;}

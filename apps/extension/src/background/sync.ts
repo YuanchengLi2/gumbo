@@ -2,7 +2,7 @@ import {getSealed,putSealed,syncing,setSyncing,enroll,nameChanges,outgoing,sent,
 import {Locked} from './vault';
 import {token} from './auth';
 import {offscreen} from './offscreen';
-import {invalidate,passagesOf} from './recall';
+import {invalidate,pagePassages} from './recall';
 import {memoryReset} from './search';
 import {endpoints} from '../shared/config';
 import {gatewayGet,gatewayPost,GatewayError} from '../shared/gateway';
@@ -48,7 +48,7 @@ function replica(s:Secret):Replica{
    if(!(SYNCED as readonly string[]).includes(body.s))return false;
    const store=body.s as Synced,changed=await arrive(store,sid,stamp,body.v);
    // A page arriving is cut into passages here, for search, as it is when it is read.
-   if(changed&&store==='pages'&&body.v){const page=body.v as Page;await removePassages(page.url);for(const passage of passagesOf(page.text).slice(0,400))await add('passages',{ref:page.url,kind:'page',text:passage,at:page.lastSeen,site:page.site,title:page.title,url:page.url});}
+   if(changed&&store==='pages'&&body.v){const page=body.v as Page;await removePassages(page.url);for(const passage of pagePassages(page))await add('passages',passage);}
    return changed;
   },
  };
