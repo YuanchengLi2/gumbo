@@ -59,3 +59,18 @@ describe('Tab suggestion checks',()=>{
   expect(remainder('Thanks for',' the notes.','Thanks for the notes.')).toBeNull();
  });
 });
+
+describe('what a suggestion says about the writer comes from what is theirs',()=>{
+ const page='Junior Video Editor. You would color grade in DaVinci Resolve. Which editing software do you use most, and for how long?';
+ const base={after:'',singleLine:false,final:true,known:page};
+ it('a job post naming its software is not their experience: the claim is cut',()=>{
+  expect(cleanSuggestion(' DaVinci Resolve for the last three years.',{...base,before:'I mostly use',mine:'Dana Park'})).toBe('');
+ });
+ it('their own writing makes it theirs to say',()=>{
+  expect(cleanSuggestion(' DaVinci Resolve, for three years now.',{...base,before:'I mostly use',mine:'I have been editing in DaVinci Resolve for three years now.'})).toBe(' DaVinci Resolve, for three years now.');
+ });
+ it('words that say nothing about them are checked as before',()=>{
+  expect(cleanSuggestion(' take a look and get back to you.',{...base,before:'Thanks for the deck. I will',mine:''})).toBe(' take a look and get back to you.');
+  expect(cleanSuggestion(' ask Sarah about it.',{...base,known:'Sarah: can you send the deck?',before:'Sure, I will',mine:''})).toBe(' ask Sarah about it.');
+ });
+});

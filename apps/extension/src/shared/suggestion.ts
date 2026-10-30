@@ -13,6 +13,8 @@ export type SuggestionInput={before:string;after:string;singleLine:boolean;
  /** What they wrote above this field (their earlier messages in the conversation), which a suggestion never repeats. */own?:string;
  /** Everything the suggestion may take facts from: the page, the conversation, the user's writing, memory, facts. */
  known:string;final:boolean;
+ /** What is theirs: their own writing, profile and notes, the only source of facts about the writer (selfClaimGuard). */
+ mine?:string;
  /** The word the caret is in (or just after), which the model was asked to repeat before continuing: repeating it lets
   * the model finish a half-typed word, and its own spacing after a whole word says exactly where the next one starts. */
  lastWord?:string};
@@ -49,6 +51,7 @@ export function cleanSuggestion(raw:string,input:SuggestionInput):string{
  text=trimOverlap(text,input.after);
  if(!sameScript(input.before+input.after,text))return '';
  text=factsGuard(text,input.known+'\n'+input.before+'\n'+input.after,input.before);
+ if(input.mine!==undefined)text=selfClaimGuard(text,input.before,`${input.mine}\n${input.before}\n${input.after}`);
  if(repeats(input.before,text,input.own))return '';
  if(!input.final)text=wholeWords(text);
  text=text.replace(/[ \t]+$/,'');
@@ -121,22 +124,24 @@ export function sameScript(field:string,text:string){const a=scriptOf(field.slic
 
 const months='january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec';
 const days='monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|tonight|yesterday';
-/** Tokens that state a fact: a number, an email, a link, a handle, a date word, or a capitalised word inside a sentence. */
-function factTokens(text:string):{token:string;index:number}[]{
+/** Tokens that state a fact: a number, an email, a link, a handle, a date word, or a capitalised word inside a sentence;
+ * with counted, a number in words too ("three years", "a dozen"). */
+function factTokens(text:string,counted=false):{token:string;index:number}[]{
  const out:{token:string;index:number}[]=[];
  const add=(re:RegExp)=>{for(const m of text.matchAll(re))out.push({token:m[0],index:m.index!});};
  add(/[\w.+-]+@[\w-]+\.[\w.-]+/g);add(/\bhttps?:\/\/\S+|\bwww\.\S+|\b[\w-]+\.(?:com|org|net|io|ai|app|dev|co)\b\S*/gi);add(/@\w{2,}/g);
  add(/[$€£¥]?\d[\d,.:/-]*(?:\s?(?:%|am|pm|k|m|bn|usd|eur)\b)?/gi);
+ if(counted)add(/\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|hundred|thousand|dozen|several|a few|a couple)\b/gi);
  add(new RegExp(`\\b(?:${months}|${days})\\b`,'gi'));
  // A capitalised word that does not start a sentence (and is not "I"): a name.
  for(const m of text.matchAll(/(?<=[\p{L}\p{N},;:)]\s+)\p{Lu}[\p{L}'-]+/gu))if(!/^I('|$)/.test(m[0]))out.push({token:m[0],index:m.index!});
  return out.sort((a,b)=>a.index-b.index);
 }
 const leadIn=/\s*\b(no\.?|nos?\.|number|#|at|on|in|the|a|an|to|for|of|by|from|with|and|or|is|are|was|were|be|about|around|until|by|via|named|called)\s*[#:]?$/i;
-export function factsGuard(text:string,known:string,before=''){
+export function factsGuard(text:string,known:string,before='',counted=false){
  // The end of the text before the cursor is read with the suggestion, so a name right at its start counts as mid-sentence.
  const lead=before.slice(-40),haystack=known.toLowerCase();
- for(const {token,index:at} of factTokens(lead+text)){
+ for(const {token,index:at} of factTokens(lead+text,counted)){
   if(at<lead.length)continue;const index=at-lead.length;
   const bare=token.toLowerCase().trim().replace(/[.,;:!?)]+$/,'');
   if(bare.length<2&&!/\d/.test(bare))continue;
@@ -148,6 +153,17 @@ export function factsGuard(text:string,known:string,before=''){
   return cut;
  }
  return text;
+}
+/** Words that state something about the writer themselves: what they use, did, know, are, studied or have, what their
+ * job or experience is, for how long. */
+const aboutThem=/\b(?:I|we)\s+(?:(?:have|'ve|’ve|had|mostly|mainly|usually|often|also|currently|always|really|just)\s+)*(?:use|used|using|work|worked|working|study|studied|studying|know|knew|speak|spoke|live|lived|graduated|teach|taught|learned|learnt|built|made|led|managed|run|ran|own|owned|been|have|edit|edited|design|designed|code|coded|play|played)\b|\b(?:I'm|I’m|I am|I was|we're|we are)\s+(?:a|an|the|in|at|from|based|studying|working|fluent|certified|experienced)\b|\b(?:my|our)\s+(?:job|role|title|experience|degree|major|school|university|college|company|employer|age|background|skills?|team|grade|gpa)\b|\bfor\s+(?:the\s+(?:last|past)\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a few|several|many)\s+(?:years?|months?|weeks?)\b/i;
+/** The claims-about-them check: a suggestion that says something about the writer themselves ("I mostly use DaVinci
+ * Resolve, for three years") takes its facts (the names, the numbers, the counts) only from what is theirs, mine: their
+ * own writing, their profile, their notes, never the page or the question in front of them (a job post naming the
+ * software it wants is not their experience). Anything else is cut before, as an invented fact is. */
+export function selfClaimGuard(text:string,before:string,mine:string){
+ if(!aboutThem.test(`${before.slice(-80)}${text}`))return text;
+ return factsGuard(text,mine,before,true);
 }
 /** A suggestion that says again what they already wrote: its words, in runs of three, mostly found in their text (or in
  * their messages above), even reordered or lightly changed. A continuation brings new words; an echo brings theirs. */

@@ -89,7 +89,10 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  // words are a new sentence, which shows only when the model is sure of it, so they wait for its whole answer.
  const overrun=['email','chat','comment','post','prompt'].includes(c.intent)&&/[.!?…]["”’)]?\s*$/u.test(message.before)&&!message.after.trim();
  if(empty)(messages[0].content as any[]).push({type:'text',text:'The field is empty: they just clicked into it. Write what goes in it only when it is plain from what the field asks for (its label, the question or column it sits under) and a fact in their context (what they read, copied or have open): that value, exactly. Otherwise output nothing.'});
- const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:c.singleLine,known,final,lastWord,own:c.thread?.map(m=>m.text).join('\n')});
+ // What is theirs, the only source of what a suggestion may say about them (shared/suggestion.ts selfClaimGuard): their
+ // own writing (here and in memory), their notes, the facts of their profile and who they are; never a page.
+ const mine=[...recall.style.map(s=>s.text),...Object.values(recall.facts).filter(Boolean),bundle.stable,...bundle.items.filter(i=>/^(wrote|writing|note|fact)$/.test(i.kind)).map(i=>i.text)].join('\n');
+ const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:c.singleLine,known,mine,final,lastWord,own:c.thread?.map(m=>m.text).join('\n')});
  // How sure the model is, as it says at the end of its reply (⟦7⟧: seven in ten), and the reply without it.
  const sureOf=(raw:string)=>{const m=/⟦(\d)⟧/.exec(raw);return m?Math.min(0.95,Number(m[1])/10):undefined;},bare=(raw:string)=>raw.replace(/⟦\d?⟧?|⟦$/g,'');
  let raw='',shown='',firstMs:number|undefined;const asked=performance.now();
