@@ -74,7 +74,7 @@ export async function recallFor(input:{site:string;intent:string;before:string;t
   recall.style=mine.filter(w=>rank(w)>0).sort((a,b)=>rank(b)-rank(a)||b.at-a.at).slice(0,4).map(w=>({site:w.site,intent:w.intent,text:w.text}));
   recall.accepted=c.accepted.filter(s=>s.site===input.site&&s.kind==='text').slice(0,5).map(s=>s.text.trim()).filter(Boolean);
   const words=keywords(`${input.thread??''}\n${input.before.slice(-600)}`);
-  const passages=c.pages.filter(p=>p.page.site!==input.site||true).flatMap(p=>p.passages.map(text=>({title:p.page.title,url:p.page.url,text})));
+  const passages=c.pages.flatMap(p=>p.passages.map(text=>({title:p.page.title,url:p.page.url,text})));
   recall.reading=best(passages,p=>p.text,words,2);
   const segments=c.media.flatMap(m=>windows(m).map(w=>({title:m.title,speaker:w.speaker,text:w.text})));
   recall.heard=best(segments,s=>s.text,words,2);

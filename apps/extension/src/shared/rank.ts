@@ -20,6 +20,19 @@ export const wordsOf=(text:string)=>[...new Set((text.toLowerCase().match(/[\p{L
  * moment's words they hold. */
 export const overlap=(words:string[],text:string)=>{if(!words.length)return 0;const t=text.toLowerCase();return words.filter(w=>t.includes(w)).length/words.length;};
 
+/** Whether something search found bears on the moment (memory/context.ts, and scripts/relevance.ts, which sets the bar):
+ * close enough in meaning (minCos: with this model unrelated texts score about 0.45 and answers about 0.7), or a strong
+ * word match (minBm25 of the best, and 2 at least). With no meaning for it yet (the model loading, just seen), by how many
+ * of the question's words it holds: two, or one in its title (BM25 alone grows with the size of memory, so a small one,
+ * a new user's, could never match by words). */
+export function bearing(found:{cos?:number;bm25?:number;words?:number}[],w:{minCos:number;minBm25:number;nearBest?:number}){
+ const best=Math.max(0,...found.map(f=>f.bm25??0)),closest=Math.max(0,...found.map(f=>f.cos??0));
+ const strong=(f:{bm25?:number})=>best>0&&(f.bm25??0)/best>=w.minBm25&&(f.bm25??0)>=2;
+ // Close in meaning: above the bar, and (nearBest) near the moment's closest match. A question about a field is close to
+ // many memories at once (every email is a little like an email being written); what is about it stands out above them.
+ const close=(cos:number)=>cos>=w.minCos&&(w.nearBest===undefined||cos>=closest-w.nearBest);
+ return(f:{cos?:number;bm25?:number;words?:number})=>f.cos!==undefined?close(f.cos)||strong(f):strong(f)||(f.words??0)>=2;
+}
 export function score(c:Candidate,m:Moment,w:Weights,bestBm25:number):Scored{
  const tau=c.layer==='past'?w.tauPastMs:w.tauSessionMs;
  const parts:Record<string,number>={

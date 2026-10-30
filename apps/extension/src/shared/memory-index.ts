@@ -10,7 +10,9 @@ export type Doc={id:string;kind:'page'|'fact'|'writing'|'note'|'media';title:str
  /** The visit a passage was read on (or writing written on), and how long it was in view. */visit?:number;seenMs?:number;project?:string};
 /** A match, with the two raw scores it got (cosine, and BM25 as MiniSearch gives it), for memory/context.ts to weigh
  * with what it knows of the moment. */
-export type Found=Doc&{score:number;cos?:number;bm25?:number};
+export type Found=Doc&{score:number;cos?:number;bm25?:number;
+ /** How many of the question's words it holds, one more when it holds one in its title (what it is about): a keyword
+ * match's strength that does not grow with the size of memory, as BM25 does. */words?:number};
 export const DIMENSIONS=384;
 const STOP=new Set('a an the and or but if then so of to in on at by for with from as is are was were be been being it its this that these those i you he she we they me my your our their his her them us not no do does did done have has had will would can could should may might just also than too very into about over after before more most some any all each other such only own same what which who whom whose when where why how there here out up down off again further once am get got'.split(' '));
 
@@ -52,13 +54,14 @@ export class MemoryIndex{
  /** The best matches for a question; `query` is its embedding when there is one. */
  find(text:string,{k=6,query,since,kinds,sites}:{k?:number;query?:Int8Array;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Found[]{
   const allowed=(d:Doc)=>(!since||d.at>=since)&&(!kinds||kinds.includes(d.kind))&&(!sites||!!d.site&&sites.includes(d.site));
-  const ranks=new Map<string,number>(),depth=Math.max(50,k*8),raw=new Map<string,{cos?:number;bm25?:number}>();
-  if(text.trim())this.search.search(text).filter(hit=>allowed(this.docs.get(hit.id as string)!)).slice(0,depth).forEach((hit,i)=>{ranks.set(hit.id as string,(ranks.get(hit.id as string)??0)+1/(60+i));raw.set(hit.id as string,{bm25:hit.score});});
+  const ranks=new Map<string,number>(),depth=Math.max(50,k*8),raw=new Map<string,{cos?:number;bm25?:number;words?:number}>();
+  if(text.trim())this.search.search(text).filter(hit=>allowed(this.docs.get(hit.id as string)!)).slice(0,depth).forEach((hit,i)=>{ranks.set(hit.id as string,(ranks.get(hit.id as string)??0)+1/(60+i));raw.set(hit.id as string,{bm25:hit.score,words:new Set(hit.queryTerms).size+(Object.values(hit.match).some(fields=>fields.includes('title'))?1:0)});});
   if(query){
    const scored:[string,number][]=[];
    for(const [id,v] of this.vectors){const d=this.docs.get(id);if(!d||!allowed(d))continue;let dot=0;for(let i=0;i<v.length;i++)dot+=v[i]*query[i];scored.push([id,dot]);}
    scored.sort((a,b)=>b[1]-a[1]);
-   // What is unrelated in meaning does not count (a paraphrase scores 0.2 to 0.5 with this model, noise below 0.1).
+   // Ranked by meaning; what bears on the moment is judged after (shared/rank.ts bearing: with bge-small unrelated texts
+   // score about 0.45 and answers about 0.7, scripts/relevance.ts). Only what is plainly nothing is left out here.
    scored.slice(0,depth).filter(([,dot])=>dot/(127*127)>0.1).forEach(([id,dot],i)=>{ranks.set(id,(ranks.get(id)??0)+1/(60+i));raw.set(id,{...raw.get(id),cos:dot/(127*127)});});
   }
   // A question about what the user themself said or wrote leans toward their own writing; one about what someone said,

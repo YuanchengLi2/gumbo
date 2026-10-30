@@ -10,13 +10,18 @@ let fallback:{index:MemoryIndex;at:number}|undefined;
 export let memoryGeneration=0;
 export function memoryChanged(){fallback=undefined;memoryGeneration++;void notifyOffscreen('index.changed');}
 export function memoryReset(){fallback=undefined;void notifyOffscreen('index.reset');}
-export async function searchMemory(query:string,options:{k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Promise<Found[]>{
- if(!query.trim())return[];
- try{return await offscreen<Found[]>({type:'search',query,options});}
+/** focus: what meaning is judged by, when the question's words hold more than its heart (memory/context.ts). */
+type Options={k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[];focus?:string};
+export async function searchMemory(query:string,options:Options={}):Promise<Found[]>{return (await searchWhole(query,options)).found;}
+/** A search, and whether it was whole (by meaning as well as words, over everything: offscreen/memory.ts searchWhole). By
+ * words here, when the offscreen document cannot answer, it never is. */
+export async function searchWhole(query:string,options:Options={}):Promise<{found:Found[];whole:boolean}>{
+ if(!query.trim())return{found:[],whole:true};
+ try{return await offscreen<{found:Found[];whole:boolean}>({type:'search.whole',query,options});}
  catch{
   try{
    if(!fallback){const [passages,writing,notes,media]=await Promise.all([recent('passages',20_000),recent('writing',5_000),recent('notes',5_000),recent('media',500)]);const index=new MemoryIndex();index.add(docsFrom({passages,writing,notes,media}));fallback={index,at:Date.now()};}
-   return fallback.index.find(query,options);
-  }catch{return[];}
+   return{found:fallback.index.find(query,options),whole:false};
+  }catch{return{found:[],whole:false};}
  }
 }

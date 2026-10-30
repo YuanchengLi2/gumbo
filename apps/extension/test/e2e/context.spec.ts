@@ -28,7 +28,8 @@ import {memory} from '../fixtures/memory';
 test('getContext ranks the session and the past, fast enough for Tab',async({signedIn,page,standin})=>{
  const pages=memory.filter(d=>d.kind==='page').slice(0,8);
  await signedIn.evaluate(async pages=>{const g=(globalThis as any).gumbo;for(const p of pages)await g.capture({url:p.url,title:p.title,text:p.text});},pages.map(p=>({url:p.url,title:p.title,text:p.text})));
- await page.goto(`${standin.url}/pages/trail.html`);await page.waitForTimeout(500);
+ // The page before is read as a person reads it (a few seconds on it): memory keeps what was on screen, not a glance.
+ await page.goto(`${standin.url}/pages/trail.html`);await page.waitForTimeout(3500);
  await page.goto(`${standin.url}/pages/plain.html`);
  const ask=(query:string)=>signedIn.evaluate(async query=>{
   const [tab]=await chrome.tabs.query({url:'*://*/pages/plain.html'});
@@ -41,9 +42,11 @@ test('getContext ranks the session and the past, fast enough for Tab',async({sig
  times.sort((a,b)=>a-b);console.log(`getContext for Tab: ${times.join(', ')} ms`);
  expect(times[2]).toBeLessThan(50);
  const bundle=await ask(query);
- // This session: the page before this one in the tab.
- expect(bundle.items.some((i:any)=>i.layer==='session'&&i.title.includes('tide pools'))).toBe(true);
  expect(bundle.fresh).toContain('<their_memory>');
+ // This session: the page before this one in the tab, its passage that matches when the moment is about it (text Tab
+ // takes what matches from the tabs around, never a tab's screen whole).
+ const about=await ask('the sea stars that pry mussels open at low tide');
+ expect(about.items.some((i:any)=>i.layer==='session'&&i.title.includes('tide pools')),JSON.stringify(about.items.map((i:any)=>[i.layer,i.kind,i.title]))).toBe(true);
  // The debug page shows it, with why.
  const debug=await page.context().newPage();await debug.goto(extensionPage('debug.html'));
  await expect(debug.getByText('tab-text',{exact:false}).first()).toBeVisible({timeout:10_000});

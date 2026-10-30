@@ -29,11 +29,15 @@ on('capture.writing',async(message:{key:string;intent:string;label:string;editor
 on('capture.page',async(message:{title:string;text:string;facts?:unknown;visibleMs:number},{url,port})=>{
  if(!await allowed(url,port.sender?.tab?.incognito))return;
  const visit=port.sender?.tab?.id!==undefined?await current(port.sender.tab.id):undefined;
- await capturePage({url,title:message.title,text:message.text,facts:cleanFacts(message.facts),visibleMs:message.visibleMs,visit:visit?.id});
+ // A page in a tab is searched through the recording of what was on screen (memory/record.ts): its whole text is kept as
+ // the page (opened whole, synced, its facts), and only its facts are passages, so search does not hold it twice.
+ await capturePage({url,title:message.title,text:message.text,facts:cleanFacts(message.facts),visibleMs:message.visibleMs,visit:visit?.id,recorded:true});
 });
 /** Keeps a page, its facts (read from its structure by the page, or from its lines when it comes from elsewhere: an
  * email or a document a connector fetched), and its passages for search. */
-export async function capturePage(message:{url:string;title:string;text:string;facts?:Fact[];visibleMs?:number;visit?:number}){
+export async function capturePage(message:{url:string;title:string;text:string;facts?:Fact[];visibleMs?:number;visit?:number;
+ /** The recording of the screen holds what was read of it (a page in a tab): its text is not cut into passages too. A
+  * PDF, which no script can record, and a page another computer sent are. */recorded?:boolean}){
  const url=message.url;
  try{
   const now=Date.now(),old=await getPage(url),text=message.text.slice(0,MAX_PAGE),fresh=text.length>=(old?.text.length??0)*0.6;
@@ -48,7 +52,7 @@ export async function capturePage(message:{url:string;title:string;text:string;f
    const before=old?await passagesOfRef(url).catch(()=>[]):[];
    const seenBefore=new Map(before.filter(p=>p.seenMs).map(p=>[p.text.slice(0,80),p.seenMs!]));
    await removePassages(url);
-   for(const passage of pagePassages(page,message.visit,seenBefore,now))await add('passages',passage);
+   for(const passage of pagePassages(page,message.visit,seenBefore,now))if(!message.recorded||passage.kind==='fact')await add('passages',passage);
   }
   invalidate();
  }catch{}

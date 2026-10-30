@@ -1,5 +1,5 @@
 import {it,expect,describe} from 'vitest';
-import {rank,wordsOf,type Candidate} from '../../../apps/extension/src/shared/rank';
+import {rank,wordsOf,bearing,type Candidate} from '../../../apps/extension/src/shared/rank';
 import {defaults} from '../../../apps/extension/src/shared/memory-config';
 
 const now=new Date('2026-10-27T15:00:00').getTime(),hour=3_600_000,day=24*hour;
@@ -31,5 +31,30 @@ describe('ranking what a moment is given',()=>{
  it('counts what was read longer, and what helped before',()=>{
   const c=[past('skimmed','Notes on the API rate limits',{cos:0.5,bm25:3}),past('read','Notes on the API rate limits and retries',{cos:0.5,bm25:3,seenMs:120_000,useful:2})];
   const [first]=rank(c,m('API rate limits'),defaults.rank,4000);expect(first.id).toBe('read');expect(first.parts.seen).toBeGreaterThan(0);
+ });
+});
+
+describe('what bears on the moment (the relevance bar, set by scripts/relevance.ts)',()=>{
+ // A field's question: the floor alone (nearBest is for focused questions, as memory/context.ts asks).
+ const w={...defaults.rank,nearBest:undefined};
+ it('keeps what is close in meaning and drops what is merely like it (unrelated texts score about 0.45)',()=>{
+  const found=[{cos:0.72},{cos:0.56},{cos:0.48}];
+  expect(found.map(bearing(found,w))).toEqual([true,true,false]);
+ });
+ it('for a focused question keeps only what is near its closest match',()=>{
+  const found=[{cos:0.74},{cos:0.69},{cos:0.6}];
+  expect(found.map(bearing(found,{...w,nearBest:defaults.rank.nearBest}))).toEqual([true,true,false]);
+  // Nothing about it in memory: the closest is noise, and the floor keeps it out.
+  const none=[{cos:0.52},{cos:0.5}];
+  expect(none.map(bearing(none,{...w,nearBest:defaults.rank.nearBest}))).toEqual([false,false]);
+ });
+ it('keeps a strong word match whatever its meaning, and only a strong one',()=>{
+  const found=[{cos:0.4,bm25:6},{cos:0.4,bm25:1.5},{cos:0.4,bm25:2.4}];
+  expect(found.map(bearing(found,w))).toEqual([true,false,false]);
+ });
+ it('with no meaning yet (the model loading, just seen) judges by how many of the question\'s words it holds, whatever the size of memory',()=>{
+  // One memory: BM25 is small however well it matches.
+  const found=[{bm25:1.3,words:2},{bm25:0.9,words:1}];
+  expect(found.map(bearing(found,w))).toEqual([true,false]);
  });
 });

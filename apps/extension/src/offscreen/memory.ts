@@ -1,5 +1,5 @@
 import {MemoryIndex,docsFrom,mediaDocs,quantize,type Doc,type Found} from '../shared/memory-index';
-import {recent,allVectors,putVectors,type Media} from '../background/db';
+import {recent,allVectors,putVectors,SEARCHABLE_PASSAGES,type Media} from '../background/db';
 import {forQuery,forDoc,EMBED_BATCH} from '../shared/embedding';
 import {rest,power} from './power';
 /** Memory search, held in the offscreen document (it lives longer than the worker): everything remembered is loaded and
@@ -25,7 +25,7 @@ async function load():Promise<MemoryIndex>{
  if(index)return index;
  return loading??=(async()=>{
   const started=Date.now(),built=new MemoryIndex();
-  const [passages,writing,notes,media,vectors]=await Promise.all([recent('passages',200_000),recent('writing',50_000),recent('notes',50_000),recent('media',5_000),allVectors()]);
+  const [passages,writing,notes,media,vectors]=await Promise.all([recent('passages',SEARCHABLE_PASSAGES),recent('writing',50_000),recent('notes',50_000),recent('media',5_000),allVectors()]);
   built.add(docsFrom({passages,writing,notes,media}));
   for(const [id,v] of vectors)if(built.docs.has(id))built.setVector(id,v);
   index=built;loadedAt=started;loading=undefined;void fillVectors();
@@ -76,14 +76,22 @@ function fillVectors(){
  backfill=run;void run.then(()=>{if(backfill===run){backfill=undefined;stage='idle';}});
  return run;
 }
-export async function search(query:string,options:{k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Promise<Found[]>{
+export async function search(query:string,options:{k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Promise<Found[]>{return (await searchWhole(query,options)).found;}
+/** A search, and whether it was whole: asked by meaning as well as by words (the question embedded). One made while the
+ * model loads (the first seconds after Chrome opens, or after the offscreen document closed when idle) judged memory by
+ * words alone; a search kept for a moment (memory/context.ts) is asked again until one is whole. */
+export async function searchWhole(query:string,{focus,...options}:{k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[];focus?:string}={}):Promise<{found:Found[];whole:boolean}>{
  lastActive=Date.now();const built=await load();
  if(refreshing)await Promise.race([refreshing,new Promise(r=>setTimeout(r,400))]);
  // By meaning when the model is ready (a few milliseconds); while it is still loading (the first question after Chrome
  // starts), by words at once, and the model keeps loading for the next question. A search never waits on the model.
- const vector=await Promise.race([embed([forQuery(query)]).then(v=>v[0]).catch(()=>undefined),new Promise<undefined>(r=>setTimeout(()=>r(undefined),modelReady?2000:250))]);
+ // Meaning is judged by the focus when there is one (the instruction, the message, the field), the words by everything.
+ const vector=await Promise.race([embed([forQuery(focus||query)]).then(v=>v[0]).catch(()=>undefined),new Promise<undefined>(r=>setTimeout(()=>r(undefined),modelReady?2000:250))]);
  if(vector)modelReady=true;
- return built.find(query,{...options,query:vector});
+ // Whole once the question was asked by meaning. What was seen a moment ago and is still being embedded is judged by its
+ // words meanwhile (shared/rank.ts bearing): waiting for all of memory to be embedded would wait on the recording, which
+ // adds to it every few seconds.
+ return{found:built.find(query,{...options,query:vector}),whole:!!vector};
 }
 /** Loads memory and the embedding model ahead of the first question (the side panel opening is a good moment). */
 export async function warm(){lastActive=Date.now();await load();await embed([forQuery('warm')]).catch(()=>{});return{ok:true};}

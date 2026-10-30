@@ -1,5 +1,5 @@
 import {on} from '../surfaces';
-import {add} from '../db';
+import {add,passagesOfRef} from '../db';
 import {model} from '../model';
 import {thrifty} from '../thrift';
 import {viewPicture} from '../predict';
@@ -15,12 +15,19 @@ import {textOf} from '../../shared/gateway';
  * seconds a tab and only when it changed, and never while saving credits. Tab, Ctrl+K and the agent then pull from it
  * what matches what the user is doing (memory/context.ts). Nothing from incognito, blocked or paused sites. */
 const GROUP=700,PIXELS_MS=15_000;
-/** What was recorded lately on each page (a page seen again records only what is new). */
-const kept=new Map<string,Set<string>>();
+/** What was recorded of each page (a page seen again records only what is new): what this worker recorded, by hash, and
+ * what memory held of it already, read from the database the first time the page is seen in the worker's life. The
+ * worker sleeps every few minutes and a page is seen again on other days (an inbox, a dashboard): kept only in the
+ * worker, the same words were recorded again each time, and the copies filled the few places a search has. */
+const kept=new Map<string,{hashes:Set<string>;before:Promise<string>}>();
 const hashOf=(s:string)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36)+s.length;};
-function fresh(url:string,blocks:string[]){
- let set=kept.get(url);if(!set){set=new Set();kept.set(url,set);if(kept.size>400)kept.delete(kept.keys().next().value!);}else{kept.delete(url);kept.set(url,set);}
- return blocks.filter(b=>{const k=hashOf(b);if(set!.has(k))return false;set!.add(k);return true;});
+async function fresh(url:string,blocks:string[]){
+ let page=kept.get(url);
+ if(!page){page={hashes:new Set(),before:passagesOfRef(`seen:${url}`).then(ps=>ps.map(p=>p.text).join('\n')).catch(()=>'')};kept.set(url,page);if(kept.size>400)kept.delete(kept.keys().next().value!);}
+ else{kept.delete(url);kept.set(url,page);}
+ const before=await page.before;
+ // A long block was kept cut at its sentences (grouped): it is there when each of its pieces is.
+ return blocks.filter(b=>{const k=hashOf(b);if(page!.hashes.has(k))return false;page!.hashes.add(k);return !(b.length>GROUP?passagesOf(b,GROUP):[b]).every(p=>before.includes(p));});
 }
 /** Blocks joined in page order into passages of a few hundred characters (a long block is cut at its sentences). */
 function grouped(blocks:string[]){
@@ -43,7 +50,7 @@ export async function keep(url:string,title:string,texts:string[],visit?:number)
 on('record',async(m:{title:string;blocks:string[];pixels?:boolean;view?:[number,number]},{url,port})=>{
  const tab=port.sender?.tab;if(tab?.id===undefined||!await allowed(url,tab.incognito))return;
  const visit=await current(tab.id),title=String(m.title||tab.title||url).slice(0,200);
- const blocks=fresh(url,(m.blocks??[]).map(b=>String(b).slice(0,4000)).filter(Boolean).slice(0,200));
+ const blocks=await fresh(url,(m.blocks??[]).map(b=>String(b).slice(0,4000)).filter(Boolean).slice(0,200));
  if(blocks.length)await keep(url,title,blocks,visit?.id);
  if(m.pixels&&!port.sender?.frameId)void readPicture(tab,url,title,m.view,visit?.id);
 });
@@ -60,5 +67,5 @@ export async function readPicture(tab:chrome.tabs.Tab,url:string,title:string,vi
  const settings=await loadSettings(),vision=settings.models.notes.startsWith('claude-')?settings.models.notes:'claude-haiku-5-5';
  const {message}=await model({model:vision,system:READ_SCREEN,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:`The page: “${title}” (${siteOf(url)})`}]}],max_tokens:700,purpose:'notes',stream:false}).catch(()=>({message:undefined}));
  const text=String(textOf(message)).trim();if(text.length<12)return;
- await keep(url,`${title} (on screen)`,fresh(url,text.split('\n').map((line:string)=>line.trim()).filter(Boolean)),visit);
+ await keep(url,`${title} (on screen)`,await fresh(url,text.split('\n').map((line:string)=>line.trim()).filter(Boolean)),visit);
 }

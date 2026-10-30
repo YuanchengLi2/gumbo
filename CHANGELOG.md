@@ -5,6 +5,26 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-30 · Gumbo for Chrome: memory brings what you read, and leaves out what's merely like it
+Ctrl+K and the sidebar now find what you read when Chrome has just opened or you've been away for a while. Before, a
+question asked while Gumbo's memory was still waking up could miss the page you read, and keep missing it for as long
+as you asked the same thing.
+
+New memory is found by its words too. With only a little in memory, as when you've just started using Gumbo, a page you
+read could fail to come up for a question that named it. Now a page that shares your question's words, or names it in
+its title, comes up.
+
+The sidebar now looks for memories about what's on your screen as well as what you typed. "Reply to Dana that I'll be
+there" on a chat about the planning meeting now brings back your notes on that meeting.
+
+Memory is pickier about what it brings. It used to pass along almost anything a little like what you were doing, so
+Tab, Ctrl+K and the sidebar could be handed a page about something else entirely. Now Ctrl+K and the sidebar get one or
+two other memories with the right one instead of nearly ten, and Tab about half as many, without losing the ones that
+matter.
+
+Memory also keeps each page you read once, records only what's new when you come back to a page, and makes room by
+letting go of the oldest things it saw first, never more than it can search.
+
 ## 2026-10-30 · Gumbo for Chrome: Tab sees all of big apps, and knows when a click did nothing
 Tab now sees the whole page in big apps like inboxes, boards and dashboards. Before, it could stop reading a large page
 partway, so the list or board you were working in might never reach it.

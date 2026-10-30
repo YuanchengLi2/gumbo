@@ -241,8 +241,17 @@ export async function dropUnvisitedImports(before:number,limit=2000):Promise<num
  }
  await tx.done;return n;
 }
+/** How many passages search holds (offscreen/memory.ts loads the newest this many): retention keeps no more than that,
+ * since a passage past it can never be found (budget.ts). */
+export const SEARCHABLE_PASSAGES=200_000;
+/** The oldest passages of any kind, with their embeddings, `limit` at most: what is past what search holds. */
+export async function dropOldestPassages(limit:number):Promise<number>{
+ const d=await db(),tx=d.transaction(['passages','vectors'],'readwrite');let n=0;
+ for(let c=await tx.objectStore('passages').index('at').openCursor();c&&n<limit;c=await c.continue()){await tx.objectStore('vectors').delete('p'+c.primaryKey);await c.delete();n++;}
+ await tx.done;return n;
+}
 /** Retention for the recording of the screen (memory/record.ts): what was on screen longer ago than `before` goes, with
- * its embeddings (the page it was on keeps its own record). */
+ * its embeddings (the page it was on keeps its own record), oldest first. */
 export async function dropOldSeen(before:number,limit=5000):Promise<number>{
  const d=await db(),tx=d.transaction(['passages','vectors'],'readwrite');let n=0;
  for(let c=await tx.objectStore('passages').index('at').openCursor(IDBKeyRange.upperBound(before));c&&n<limit;c=await c.continue()){

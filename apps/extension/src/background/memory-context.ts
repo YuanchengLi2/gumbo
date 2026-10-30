@@ -26,6 +26,12 @@ const touched=new Map<string,number>();
 
 /** What a field is about, as a question to memory: what is being written and what surrounds it (the sentence under way,
  * the question above the field or the column it is in, the last messages above it), then the field's label and page. */
+/** The heart of a field's question, what closeness in meaning is judged by (memory/context.ts focus): the sentence under
+ * way, the message it answers (the last one above the field) and the field's label. Not the page's other words: they
+ * make a question close in meaning to every page (scripts/relevance.ts measures it). */
+export function focusOf(input:{label?:string;thread?:{author?:string;text:string}[];sentence?:string}){
+ return[input.sentence,input.thread?.at(-1)?.text.slice(0,400),input.label].filter(Boolean).join('\n');
+}
 export function fieldQuery(input:{title?:string;label?:string;thread?:{author?:string;text:string}[];headings?:string[];sentence?:string;around?:string[]}){
  return[input.sentence,...(input.around??[]).slice(0,3).map(a=>a.slice(0,300)),...(input.thread??[]).slice(-2).map(m=>`${m.author?`${m.author}: `:''}${m.text.slice(0,400)}`),input.label,...(input.headings??[]).slice(0,2),input.title].filter(Boolean).join('\n');
 }

@@ -1,4 +1,4 @@
-import {searchMemory,memoryGeneration,type Found} from '../search';
+import {searchWhole,memoryGeneration,type Found} from '../search';
 import {recent,touchPages} from '../db';
 import {model} from '../model';
 import {workspace} from '../workspace';
@@ -8,7 +8,7 @@ import {around,pastNodes,weigh,order,mapOf,matchingSnippets,type GNode} from './
 import {all as allProjects} from './projects';
 import {profile} from './profile';
 import {loadSettings,siteOf} from '../../shared/settings';
-import {rank,wordsOf,overlap,type Candidate,type Scored} from '../../shared/rank';
+import {rank,wordsOf,overlap,bearing,type Candidate,type Scored} from '../../shared/rank';
 import {textOf} from '../../shared/gateway';
 import {clock} from '../../shared/moment';
 /** One memory for every surface. Tab (text and actions), Ctrl+K and the sidebar ask getContext with what they are doing
@@ -28,6 +28,9 @@ import {clock} from '../../shared/moment';
 export type Surface='tab-text'|'tab-action'|'inline'|'inline-predict'|'agent'|'drawn';
 export type ContextRequest={surface:Surface;tab?:number;url?:string;
  /** The moment, as a question to memory. */query:string;
+ /** What closeness in meaning is judged by, when the question holds more than the moment's heart (a page's text, which
+  * is close in meaning to every page): the instruction and selection, the message, the field. The question's words are
+  * still matched as words. scripts/relevance.ts measures the difference. */focus?:string;
  field?:{intent:string;label:string};
  /** In tokens (about four characters each). */budget:number;
  /** A key for this field or moment: its search is kept and refreshed behind it. */key?:string;
@@ -49,21 +52,29 @@ const when=(f:{at:number;kind:string;start?:number})=>new Date(f.at).toLocaleDat
 
 /** Searches kept per field or moment, refreshed when the question moves on. */
 type Search={query:string;found:Found[];at:number;searching?:Promise<void>;wanted?:string;
- /** memoryGeneration when it was asked: memory that changed since makes it stale. */generation?:number};
+ /** memoryGeneration when it was asked: memory that changed since makes it stale. */generation?:number;
+ /** By meaning as well as words, over everything (search.ts searchWhole): one that was not is asked again. */whole?:boolean};
+/** How soon a search that was not whole is asked again (the model loading, what was just seen being embedded). */
+const UNWHOLE_MS=1500,FOCUS='\u0001';
 const searches=new Map<string,Search>();
 /** One search at a time per key; a question asked while one runs is searched the moment it is done (the newest only). */
-function searchFor(key:string,query:string,k:number):Search{
+function searchFor(key:string,words:string,k:number,again=false,focus?:string):Search{
  let s=searches.get(key);
  if(!s){s={query:'',found:[],at:0};searches.set(key,s);if(searches.size>300)searches.delete(searches.keys().next().value!);}
  const mine=s;
+ // The question is its words and, when it has one, its focus (what meaning is judged by): together they are what is asked.
+ const query=focus?`${focus}${FOCUS}${words}`:words;
  const start=(asked:string)=>{
   mine.query=asked;mine.wanted=undefined;mine.generation=memoryGeneration;
-  mine.searching=searchMemory(asked.slice(0,1500),{k}).then(found=>{mine.found=found;mine.at=Date.now();}).catch(()=>{}).finally(()=>{
+  const [meant,said]=asked.includes(FOCUS)?asked.split(FOCUS):[undefined,asked];
+  mine.searching=searchWhole(said.slice(0,1500),{k,focus:meant?.slice(0,1500)}).then(({found,whole})=>{mine.found=found;mine.whole=whole;mine.at=Date.now();}).catch(()=>{}).finally(()=>{
    mine.searching=undefined;if(mine.wanted&&(mine.wanted!==mine.query||mine.generation!==memoryGeneration))start(mine.wanted);
   });
  };
- // A new question, or the same one after memory took in something new (what they just saw may be the answer).
- if(query&&(query!==s.query||s.generation!==memoryGeneration)){if(s.searching)s.wanted=query;else start(query);}
+ // A new question, the same one after memory took in something new (what they just saw may be the answer), or the same
+ // one again when the last search judged part of memory by words alone: a keyword search made while the model loaded is
+ // not the answer for good.
+ if(query&&(query!==s.query||s.generation!==memoryGeneration||!s.whole&&(again||Date.now()-s.at>=UNWHOLE_MS))){if(s.searching)s.wanted=query;else start(query);}
  return s;
 }
 /** What helped before: memory items that were in suggestions the user took (their ids). */
@@ -120,7 +131,7 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const here=tab!==undefined?await current(tab):undefined;
  const quick=req.surface==='tab-text'||req.surface==='tab-action'||req.surface==='drawn';
  // The past: the search for this moment (kept per key), waited for only as long as the surface can.
- const key=req.key??`${req.surface}|${tab??''}|${req.url??''}`,k=quick?8:16,search=searchFor(key,req.query,k);
+ const key=req.key??`${req.surface}|${tab??''}|${req.url??''}`,k=quick?8:16,search=searchFor(key,req.query,k,false,req.focus);
  // Text Tab never waits on it: what was seen lately is in the working set (memory/working.ts), ranked in the request
  // itself; the search for the past runs behind, for the next words.
  const wait=req.wait??(req.surface==='tab-text'?0:quick?(search.at?0:80):req.surface==='agent'?1500:200);
@@ -129,12 +140,26 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // Nothing in hand yet (memory still starting, after Chrome opened): the question may be all about memory, so the
  // slower surfaces give it longer.
  if(!quick&&(search.searching||search.wanted)&&!search.found.length)await Promise.race([settled(),new Promise(r=>setTimeout(r,1500))]);
+ // Ctrl+K's answer and the sidebar's are waited on by the person who asked: a search that judged memory by words alone
+ // (the model loading after Chrome opened or after a quiet spell, what was just seen still being embedded) is asked again
+ // until one is whole, a few seconds at most, so the page they read is not missed for want of its meaning. Not for a
+ // warm-up ahead of the question (wait 0).
+ if(!quick&&req.wait!==0){
+  const until=performance.now()+(req.surface==='agent'?3000:2500);
+  while(!search.whole&&performance.now()<until){
+   if(!search.searching&&!search.wanted)searchFor(key,req.query,k,true,req.focus);
+   await Promise.race([settled(),new Promise(r=>setTimeout(r,Math.max(0,until-performance.now())))]);
+   // A moment between tries: the model is loading, and asking again at once only waits on it again.
+   if(!search.whole)await new Promise(r=>setTimeout(r,200));
+  }
+ }
  const [usefulMap,visitMap,near,about,project]=await Promise.all([usefulness(),projectsOfVisits(),around(tab),aboutThem(req,site),workingOn(tab)]);
  // The graph around the moment (graph.ts): what led here and sits beside it, who they are, and the past search found,
  // each weighed by its closeness in meaning to the moment (Tab waits a moment at most for that; what is not embedded yet
  // is ready for its next keystroke).
- const bestBm25=Math.max(0,...search.found.map(f=>f.bm25??0));
- const bearsOn=(f:Found)=>(f.cos??0)>=cfg.rank.minCos||bestBm25>0&&(f.bm25??0)/bestBm25>=cfg.rank.minBm25&&(f.bm25??0)>=2;
+ // A focused question (Ctrl+K's instruction, a message to the sidebar) keeps what stands out near its closest match; a
+ // field is close to much of memory at once, and its closest match is often only like it (scripts/relevance.ts).
+ const bearsOn=bearing(search.found,{...cfg.rank,nearBest:req.focus?cfg.rank.nearBest:undefined});
  const trailVisits=new Set(near.filter(n=>n.kind==='trail'&&n.visit!==undefined).map(n=>n.visit!));
  // The best-matching passage of each tab around them (the neighbouring tabs, as Copilot does for code) comes first.
  const snippets=await matchingSnippets(near.filter(n=>!samePage(n.url,req.url)),req.query,quick?3:6);
@@ -142,9 +167,10 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // found them, wherever and whenever they were on screen), never a tab's screen whole: the latest page or the top of a
  // page is not what is relevant. What they copied and wrote, who they are and their project still come as they are.
  const screens=new Set(['tab','left','trail','closed']),fromRecording=quick&&req.surface!=='tab-action';
- const nodes=[...snippets,...near.filter(n=>(!samePage(n.url,req.url)||n.kind==='fact'||n.kind==='project')&&!(fromRecording&&screens.has(n.kind))),...pastNodes(search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)),trailVisits)];
+ const past=pastNodes(search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)),trailVisits),searched=new Set(past.map(n=>n.id));
+ const nodes=[...snippets,...near.filter(n=>(!samePage(n.url,req.url)||n.kind==='fact'||n.kind==='project')&&!(fromRecording&&screens.has(n.kind))),...past];
  // Text Tab never waits for meaning: what is embedded already counts now, the rest is embedded for the next keystroke.
- await weigh(nodes,req.query,req.surface==='tab-text'?0:quick?40:600);
+ await weigh(nodes,req.focus??req.query,req.surface==='tab-text'?0:quick?40:600);
  const moment={now:Date.now(),project:here?.project,site,words:wordsOf(req.query).slice(0,40)};
  // What comes is what is relevant: every node, wherever and whenever it is from, by the same test, its closeness in
  // meaning to the moment (its words, when it is not embedded yet). A tab's best-matching passage was chosen by its words
@@ -154,7 +180,9 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // common ("eat", "dinner", "eight" in the quiz and in the chat that answered it).
  const telling=moment.words.filter(w=>w.length>3);
  const shares=(n:GNode)=>{const t=`${n.title} ${n.text}`.toLowerCase();return overlap(moment.words,t)>=0.2||telling.filter(w=>t.includes(w)).length>=3;};
- const close=(n:GNode)=>n.kind==='snippet'||n.kind==='copy'&&Date.now()-n.at<15*MINUTE||(n.cos!==undefined?n.cos>=cfg.rank.minCos:shares(n));
+ // What search found was judged already (bearsOn): with no meaning for it yet, it is not judged again by its words against
+ // the whole question, which holds the page's own text and so shares little with anything.
+ const close=(n:GNode)=>n.kind==='snippet'||n.kind==='copy'&&Date.now()-n.at<15*MINUTE||(n.cos!==undefined?n.cos>=cfg.rank.minCos:searched.has(n.id)||shares(n));
  const candidates:Candidate[]=nodes.filter(close).map(n=>({id:n.id,layer:n.hops>=3?'past':'session',kind:n.kind,title:n.title,url:n.url,text:n.text,at:n.at,site:n.site,cos:n.cos,bm25:n.bm25,project:n.project??(n.visit!==undefined?visitMap.get(n.visit):undefined),chain:n.hops<=1,seenMs:Math.max(n.seenMs??0,seenNow.get(n.id)??0),useful:usefulMap.get(n.id)}));
  const rels=new Map(nodes.map(n=>[n.id,n.rel]));
  const chars=req.budget*4,stableText=about.length?`<about_them>\n${about.join('\n')}\n</about_them>`:'';
@@ -210,4 +238,4 @@ async function askRerank(query:string,items:Scored[]):Promise<string[]>{
  return nums.map(n=>items[n-1]?.id).filter((id):id is string=>!!id);
 }
 /** Starts the search (and, for the slower surfaces, the rerank) for a moment ahead of its question. */
-export function warmContext(req:ContextRequest){searchFor(req.key??`${req.surface}|${req.tab??''}|${req.url??''}`,req.query,req.surface.startsWith('tab')?8:16);}
+export function warmContext(req:ContextRequest){searchFor(req.key??`${req.surface}|${req.tab??''}|${req.url??''}`,req.query,req.surface.startsWith('tab')?8:16,false,req.focus);}

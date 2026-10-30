@@ -5,6 +5,7 @@ import {searchMemory} from './search';
 import {invalidate} from './recall';
 import {heardJustNow,asksAboutNow} from './memory-context';
 import {getContext} from './memory/context';
+import {load as liveState} from './memory/live';
 import {GRAPH_TOOLS,runGraphTool} from './memory/graph';
 import {workspace,openTabs,searchHistory} from './workspace';
 import {add,recent,getChat,getPage,removeChat,type Chat} from './db';
@@ -154,7 +155,11 @@ async function run(l:Live,text:string,tabId?:number,attached:number[]=[]){
  // who they are, what they are working on, the page in front of them, this session and the past ranked and reranked for
  // the request; and what is being heard when the question is about what was just said. The panel shows the past as
  // "Remembered".
- const [bundle,heard,browser]=await Promise.all([getContext({surface:'agent',tab:here?.id,url:turn.page?.url,query:`${text}\n${turn.page?.title??''}`,budget:6000,rerank:true,withPage:true}),asksAboutNow(text)?heardJustNow():Promise.resolve(undefined),workspace({here:here?.id,opened:l.opened}).catch(()=>'')]);
+ // The question memory is asked is the request and what they are looking at, as Ctrl+K's is its selection and page:
+ // "reply to Dana" says nothing of what Dana asked; the chat on screen does (the meeting, its room). Its words match as
+ // words; closeness in meaning is judged by the request and the page's title (a page's text is close to every page).
+ const inView=here?.id!==undefined?(await liveState().catch(()=>undefined))?.tabs[here.id]?.now?.visible?.slice(0,600)??'':'';
+ const [bundle,heard,browser]=await Promise.all([getContext({surface:'agent',tab:here?.id,url:turn.page?.url,query:`${text}\n${turn.page?.title??''}\n${inView}`,focus:`${text}\n${turn.page?.title??''}`,budget:6000,rerank:true,withPage:true}),asksAboutNow(text)?heardJustNow():Promise.resolve(undefined),workspace({here:here?.id,opened:l.opened}).catch(()=>'')]);
  const matched=bundle.items.filter(i=>i.layer==='past');
  const remembered=[...(heard?[heard]:[]),...matched].map((r,i)=>({...r,n:turn.sources.length+i+1}));
  for(const r of remembered)turn.sources.push({n:r.n,title:r.title,url:r.url,kind:r.kind});

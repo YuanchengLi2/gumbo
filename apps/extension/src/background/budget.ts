@@ -1,4 +1,4 @@
-import {db,compactOldPages,dropUnvisitedImports,dropOldVisits,dropBookmarkNotes,dropOldSeen,getSealed,putSealed} from './db';
+import {db,compactOldPages,dropUnvisitedImports,dropOldVisits,dropBookmarkNotes,dropOldSeen,dropOldestPassages,SEARCHABLE_PASSAGES,getSealed,putSealed} from './db';
 import {invalidate} from './recall';
 /** Memory never weighs the computer down. Once an hour, and only while the computer is idle, in small batches that yield
  * between them:
@@ -36,11 +36,21 @@ export async function keepWithinBudget({force=false}:{force?:boolean}={}){
  removed+=await dropUnvisitedImports(now).catch(()=>0);
  // The recording of the screen keeps half a year.
  removed+=await dropOldSeen(now-180*DAY).catch(()=>0);
+ // No more passages than search holds (offscreen/memory.ts loads the newest that many): past it, the oldest of the
+ // recording go first (it is what grows), then the oldest of anything.
+ for(let over=await d.count('passages')-SEARCHABLE_PASSAGES,batch=1;over>0&&batch;over-=batch){batch=await dropOldSeen(now,Math.min(over,5000)).catch(()=>0);removed+=batch;await yieldNow();}
+ for(let over=await d.count('passages')-SEARCHABLE_PASSAGES,batch=1;over>0&&batch;over-=batch){batch=await dropOldestPassages(Math.min(over,5000)).catch(()=>0);removed+=batch;await yieldNow();}
  if(!await getSealed<number>('bookmarks-dropped').catch(()=>1)){removed+=await dropBookmarkNotes().catch(()=>0);await putSealed('bookmarks-dropped',now).catch(()=>{});}
  if(compacted)removed++;
  // A gigabyte at most, and never more than a tenth of what Chrome allows on this disk.
  const estimate=await navigator.storage.estimate(),budget=Math.min(1024**3,(estimate.quota??10*1024**3)*0.1);
  let usage=estimate.usage??0,trimmed=0;
+ // Over the budget, the oldest of the recording goes first: it is what grows, and it is kept apart from the pages (under
+ // seen:<address>), so taking pages away never made room from it.
+ while(usage>budget){
+  const batch=await dropOldSeen(now,2000).catch(()=>0);if(!batch)break;
+  removed+=batch;usage=(await navigator.storage.estimate()).usage??0;await yieldNow();
+ }
  while(usage>budget){
   // The page least worth keeping goes (least recently seen or used, fewest visits, least time on it), with its
   // passages and their embeddings.

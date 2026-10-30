@@ -270,8 +270,9 @@ small batches with pauses.
 | Voices you have named, as voice prints | Until deleted |
 | Profile facts you set (name, sign-off, email) and notes you save | Until deleted |
 
-- **Never captured:** password, payment and ID fields; blocked sites; incognito; anything while paused. Other people's
-  messages (an email thread, a chat) are read live for a request and never stored.
+- **Never captured:** password, payment and ID fields; blocked sites; incognito; anything while paused. Since October 29
+  the recording of the screen keeps what was on it, other people's messages in an email thread or a chat included (the
+  user asked for memory of everything seen); what the agent reads through a connector, never on screen, is not kept.
 - **History import:** `chrome.history` for the last 60 days, with each URL's visits (time, transition,
   `referringVisitId`), gives navigation chains and routines. Since October 29 none of it is searchable memory (a title
   and an address are not a page the user saw), and bookmarks are not brought in.
@@ -300,6 +301,32 @@ small batches with pauses.
 - **Search:** meaning (bge-small sentence embeddings, 8-bit, run in the offscreen document) fused with keywords (BM25,
   stop words left out) by reciprocal rank, filtered by site, intent and time. Pages are kept whole, split into
   passages. Nothing leaves the computer to be searched.
+  As built (October 30):
+  - **A search says whether it was whole** (`searchWhole`): asked by meaning, the question embedded (what was seen a
+    moment ago and is still being embedded is judged by its words meanwhile; waiting on all of memory would wait on the
+    recording, which adds to it every few seconds). A search kept for a field or moment that was not whole is asked
+    again (after 1.5 s), so one made
+    while the model loaded (Chrome just opened, or the offscreen document closed after ten idle minutes) is not the
+    answer for good. Ctrl+K and the sidebar, which someone is waiting on, ask again until one is whole, 2.5 s (3 s for
+    the sidebar) at most; a warm-up ahead of the question does not wait.
+  - **A match with no meaning yet is judged by its words** (`Found.words`: how many of the question's words it holds, one
+    more for one in its title): two count. BM25 alone grows with the size of memory, so a small memory, a new user's, could
+    never match by words. What search accepted is not judged again by its words against the whole question.
+  - **The sidebar asks memory about what is in view too** (the request, the page's title and its first 600 characters on
+    screen), as Ctrl+K asks with the selection and the page.
+  - **What bears on the moment, measured** (`scripts/relevance.ts`, over the recall set and Tab's moments; `shared/rank.ts`
+    bearing): with bge-small unrelated texts score about 0.45 and answers about 0.7, so the old bar of 0.45 let in nearly
+    everything search found. The bar is 0.55. A question that holds a page's text is close in meaning to every page, so
+    Ctrl+K and the sidebar judge meaning by their focus (the instruction, selection, field and words before it; the request
+    and the page's title) and match the page's words as words; a focused question also keeps only what is within 0.08 of
+    its closest match. Tab's field questions are judged whole (their title and thread carry the meaning) by the bar alone.
+    Measured: Ctrl+K 39 of 41 answers with 1.4 other memories each (9.7 before); Tab every answer with 6.9 (13.8 before).
+  - **Each page once:** a page read in a tab is searched through the recording; its whole text is kept as the page (opened
+    whole, synced, its facts) with only its facts as passages. A PDF, and a page another computer sent, are cut into
+    passages as before. The recording knows what it kept of a page from the database, not only from the worker (which
+    sleeps), so a page seen again records only what is new.
+  - **Retention matches search:** no more passages are kept than search loads (`SEARCHABLE_PASSAGES`, 200,000), the
+    oldest of the recording going first; over the disk budget, the oldest of the recording goes before any page.
 - **Bringing in what the user has:** history (for habits only) after the first sign-in; the Gumbo profile (name, what they
   make); settings through `chrome.storage.sync`, so a reinstall restores them; another assistant's memory, pasted on the
   welcome page, kept as notes and facts (a fact the user set is never overwritten).

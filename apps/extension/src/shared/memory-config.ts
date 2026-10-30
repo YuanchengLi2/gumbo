@@ -2,7 +2,9 @@
 export type MemoryConfig={
  rank:{cos:number;bm25:number;recency:number;project:number;chain:number;site:number;seen:number;useful:number;tauSessionMs:number;tauPastMs:number;mmr:number;
   /** Memory from the past is given only when it is really about the moment: this close in meaning, or this strong a word
-   * match (relative to the best). A loose match steers a suggestion somewhere the user is not going. */minCos:number;minBm25:number};
+   * match (relative to the best). A loose match steers a suggestion somewhere the user is not going. */minCos:number;minBm25:number;
+  /** For a focused question (Ctrl+K's instruction, a message to the sidebar): only what is this near its closest match
+   * in meaning, which stands out from memory that is merely like it. */nearBest:number};
  projects:{join:number;chainBonus:number;siteBonus:number;chainWindowMs:number;promoteVisits:number;promoteMs:number;noteVisits:number;noteActiveMs:number;noteGapMs:number};
  profile:{everyWritings:number;everyMs:number};
  text:{requestGapMs:number;beatMs:number;chainDepth:number;maxTokensMulti:number;maxTokensSingle:number;alternatives:number};
@@ -16,7 +18,11 @@ export const defaults:MemoryConfig={
  // Oct 29: memory is the recording of what was on screen (memory/record.ts), and what matches what they are doing comes
  // from it wherever and whenever it was seen: being recent or one step away in what they did (the tab just left) only
  // breaks ties; memory that helped a suggestion they took counts a little.
- rank:{cos:0.6,bm25:0.15,recency:0.1,project:0,chain:0.05,site:0,seen:0.05,useful:0.1,tauSessionMs:30*MINUTE,tauPastMs:2*24*60*MINUTE,mmr:0.7,minCos:0.45,minBm25:0.6},
+ // Oct 30, measured (scripts/relevance.ts, the recall set and Tab's moments): with bge-small unrelated texts score about
+ // 0.45, so a bar of 0.45 let in nearly everything search found (14 unrelated memories of 16 for a Tab moment). 0.55
+ // keeps every answer Tab's moments need and halves what comes with them; a focused question also keeps only what is
+ // within 0.08 of its closest match (39 of 41 answers, one or two others with them, from nearly ten).
+ rank:{cos:0.6,bm25:0.15,recency:0.1,project:0,chain:0.05,site:0,seen:0.05,useful:0.1,tauSessionMs:30*MINUTE,tauPastMs:2*24*60*MINUTE,mmr:0.7,minCos:0.55,minBm25:0.6,nearBest:0.08},
  // Measured on the first computer (Oct 27, 1,332 visits): unrelated title pairs p90 0.68, pairs reached one from the
  // other p10 0.61 (so the chain bonus brings those in).
  projects:{join:0.7,chainBonus:0.15,siteBonus:0.1,chainWindowMs:30*MINUTE,promoteVisits:3,promoteMs:5*MINUTE,noteVisits:5,noteActiveMs:10*MINUTE,noteGapMs:15*MINUTE},

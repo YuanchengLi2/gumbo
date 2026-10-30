@@ -1,5 +1,5 @@
 /// <reference types="chrome" />
-import {search,refresh,reset,stats,warm,lastActive,embed} from './memory';
+import {search,searchWhole,refresh,reset,stats,warm,lastActive,embed} from './memory';
 import {listening,startListening,listenAudio,stopListening,listenCues,nameVoice,listenState,log} from './listen';
 import {useKeys} from '../background/vault';
 import {powerNow} from './power';
@@ -18,6 +18,7 @@ async function handle(message:any){
  if(message.keys)useKeys(message.keys.user,message.keys.dek);
  switch(message.type){
   case 'search':return search(message.query,message.options);
+  case 'search.whole':return searchWhole(message.query,message.options);
   case 'index.changed':await refresh();return{};
   case 'index.reset':reset();return{};
   case 'index.stats':return stats();

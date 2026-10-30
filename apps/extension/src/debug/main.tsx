@@ -40,7 +40,8 @@ function Debug(){
   <h2>Profile</h2>
   {data.profile?<pre>{JSON.stringify({who:data.profile.who,work:data.profile.work,people:data.profile.people,tools:data.profile.tools,facts:data.profile.facts?.slice(0,12).map((f:any)=>`${f.text} (${f.kind}, ×${f.count})`),routines:data.profile.routines,style:data.profile.style,updated:time(data.profile.updatedAt)},null,1)}</pre>:<p className="muted">Not built yet.</p>}
   <h2>What each surface was last given</h2>
-  {Object.values(data.contexts??{}).map((c:any)=><div key={c.surface}>
+  {/* Each surface's last bundle; textHistory (text Tab's last twenty) sits beside them and is not one. */}
+  {Object.entries(data.contexts??{}).filter(([k])=>k!=='textHistory').map(([,c]:[string,any])=><div key={c.surface}>
    <h3>{c.surface} <span className="muted small">· {time(c.at)} · assembled in {c.ms} ms{c.searching?' · its search still running':''}{c.project?` · project ${c.project.name}`:''}</span></h3>
    <p className="small muted">Asked: “{c.query}”</p>
    <table><thead><tr><th>#</th><th>Item</th><th className="num">Score</th><th>Why</th></tr></thead><tbody>
@@ -48,7 +49,7 @@ function Debug(){
    </tbody></table>
    {c.stable&&<pre>{c.stable}</pre>}
   </div>)}
-  {!Object.keys(data.contexts??{}).length&&<p className="muted">No surface has asked yet.</p>}
+  {!Object.keys(data.contexts??{}).filter(k=>k!=='textHistory').length&&<p className="muted">No surface has asked yet.</p>}
   <h2>Speed and how often</h2>
   <table><thead><tr><th>What</th><th className="num">Times (7 days)</th><th className="num">Typical</th><th className="num">9 in 10 within</th></tr></thead><tbody>
    {Object.entries(data.speed??{}).sort().map(([s,v]:any)=><tr key={s}><td>{s}</td><td className="num">{v.n}</td><td className="num">{ms(v.p50)}</td><td className="num">{ms(v.p90)}</td></tr>)}

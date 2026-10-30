@@ -42,8 +42,10 @@ test('no chip while typing in a field; Esc dismisses one',async({page,signedIn,s
  expect((await chip(signedIn,page))?.showing).toBeFalsy();
 });
 
-test('brings in history and bookmarks',async({page,signedIn,standin})=>{
+// Since Oct 29 history teaches habits and becomes visits, never searchable pages (memory is what the user saw), and
+// bookmarks are not brought in.
+test('brings in history as visits for habits, not as pages',async({page,signedIn,standin})=>{
  for(const p of ['flow.html','plain.html','actions.html'])await page.goto(`${standin.url}/pages/${p}`);
  const state=await signedIn.evaluate(()=>(globalThis as any).gumbo.importHistory());
- expect(state.state).toBe('done');expect(state.pages).toBeGreaterThan(0);
+ expect(state.state).toBe('done');expect(state.visits).toBeGreaterThan(0);expect(state.pages).toBe(0);
 });
