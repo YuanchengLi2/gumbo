@@ -2,7 +2,7 @@
 import {takes,took,cycles,offers,mayTake,TAKE_KEY} from './keys';
 import {onTextDone,moveShown,moveBeatsWords,yieldWords,offerWords} from './bus';
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
-import {describe,pageModel,deepQuery,hoverOwner,elementById,type Item} from './perceive';
+import {describe,pageModel,deepQuery,hoverOwner,elementById,shownBy,type Item} from './perceive';
 import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {readContext} from './context';
@@ -410,8 +410,6 @@ function heldForText(plan:Plan){
  const el=findTarget(targetOf(s));return !!el&&irreversible(toAction(s),el);
 }
 const touches=(s:PlanStep)=>!!(s.id||s.name||s.at);
-/** What the chip says: the model's words when they name the element it outlines, else that element's own name on the page
- * ("Click “Post comment”"). The words and the outline then always mean the same thing, whatever the model called it. */
 /** The move goes where the model's words say. Its words name what it means ("Send the message", "Open Assignments"); the
  * id it picked can be a neighbour. When the chosen element's name is not in its words but another element's on the page
  * is, the move is aimed at that one, so the outline, the label and what Tab presses are all the thing it meant. */
@@ -427,11 +425,17 @@ function aimed(plan:Plan):Plan{
  }
  return best?{...plan,steps:[{...first,id:best.id},...plan.steps.slice(1)]}:plan;
 }
+/** What the chip says: exactly what Tab will do to what it outlines, in the page's own names ("Click “Submit for
+ * approval”", "Type “NL-58213-77” in “Message”", "Fill in “Merchant”, “Amount”"), so the words and the outline never
+ * disagree, whatever the model called it. The model's own words, and why, show when the chip is pointed at. Only a spot on
+ * a page drawn as pixels, which has no name, says it in the model's words. */
 function labelFor(plan:Plan,el?:Element){
- const first=plan.steps[0];if(!first||!el||plan.steps.length>1&&plan.steps.every(s=>s.do==='type'))return plan.label;
- const name=squash(nameOf(el,60)).toLowerCase();if(!name)return plan.label;
- const words=name.split(' ').filter(w=>w.length>2),said=plan.label.toLowerCase();
- return words.length&&words.some(w=>said.includes(w))?plan.label:labelOn(first,el);
+ const first=plan.steps[0];if(!first||first.at)return plan.label;
+ if(plan.steps.length>1&&plan.steps.every(s=>s.do==='type'||s.do==='select')){
+  const names=plan.steps.map(s=>{const t=touches(s)?findTarget(targetOf(s)):null;return squash(t?nameOf(t,30):s.name??'');}).filter(Boolean);
+  return names.length?`Fill in ${names.slice(0,3).map(n=>`“${n}”`).join(', ')}${names.length>3?` and ${names.length-3} more`:''}`:plan.label;
+ }
+ return labelOn(first,el??(touches(first)?findTarget(targetOf(first)):null));
 }
 const refused=new Map<string,number>();
 /** The last move shown in full, so a click that put it away does not lose it. */
@@ -470,10 +474,10 @@ function show(plan:Plan,final:boolean,source?:string){
   // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).
   if(step.at)return[{el:document.documentElement,to:false,point:step.at},...(step.toAt?[{el:document.documentElement,to:true,point:step.toAt}]:[])];
   // An item hidden in a menu that opens on hover is marked on the menu's trigger.
-  const found=touches(step)?findTarget(targetOf(step)):null,at=found&&!visible(found)?hoverOwner(found)??found:found,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
+  const found=touches(step)?findTarget(targetOf(step)):null,at=found&&!visible(found)&&!shownBy(found)?hoverOwner(found)??found:found,drop=step.do==='drag'&&step.to?findTarget(targetOf({do:'click',id:step.to})):null;
   return[...(at?[{el:at,to:false,text:step.do==='type'?step.text:undefined}]:[]),...(drop?[{el:drop,to:true}]:[])];
  });
- for(const m of marked)if(m.point||visible(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.point?' dot':'')+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
+ for(const m of marked)if(m.point||visible(m.el)||shownBy(m.el)){const ring=document.createElement('div');ring.className='tab-ring'+(m.point?' dot':'')+(m.to?' to':'');surface().appendChild(ring);rings.push(ring);m.ring=ring;}
  place();follow();if(from)glide(from);
 }
 /** The outline and its label move and resize from where the last move was to the new target, in a fifth of a second
@@ -542,11 +546,41 @@ function ghostIn(el:Element,text:string,single:boolean){
  g.textContent=text;surface().appendChild(g);return g;
 }
 /** By the cursor (the focused field) or the thing it would touch; else the bottom corner. */
+/** The box the user sees for an element, which is what an outline must go around: a native box the page hides and draws
+ * itself (a checkbox, a radio, a file input under a styled label) is its label; a wrapper with no box of its own
+ * (display: contents, a zero-size anchor) is its children's together; a container far bigger than what it holds (a card
+ * around one button) is the control inside it. */
+export function boxOf(el:Element):DOMRect{
+ const r=el.getBoundingClientRect(),style=getComputedStyle(el),seen=(b:DOMRect)=>b.width>=4&&b.height>=4;
+ const hidden=!seen(r)||style.opacity==='0'||style.visibility==='hidden'||style.clipPath==='inset(50%)'||/rect\(0(px)?,? ?0(px)?/.test(style.clip);
+ if(hidden){
+  const id=(el as HTMLElement).id,label=(id?el.ownerDocument.querySelector(`label[for="${CSS.escape(id)}"]`):null)??el.closest('label');
+  if(label&&seen(label.getBoundingClientRect()))return seenAs(label);
+  const kids=[...el.children].map(k=>k.getBoundingClientRect()).filter(seen);
+  if(kids.length){const left=Math.min(...kids.map(k=>k.left)),top=Math.min(...kids.map(k=>k.top));return new DOMRect(left,top,Math.max(...kids.map(k=>k.right))-left,Math.max(...kids.map(k=>k.bottom))-top);}
+  for(let p=el.parentElement;p;p=p.parentElement){const b=p.getBoundingClientRect();if(seen(b))return b;}
+ }
+ if(r.width*r.height>innerWidth*innerHeight*0.4){
+  const inner=[...el.querySelectorAll('button,a[href],input:not([type=hidden]),select,textarea,[role=button],[role=link],[role=checkbox],[role=menuitem],[role=option]')].filter(i=>seen(i.getBoundingClientRect()));
+  if(inner.length===1)return inner[0].getBoundingClientRect();
+ }
+ return seenAs(el);
+}
+/** An element that paints nothing of its own (no background, border or shadow: a full-width label or link around a
+ * pill, a row around its text) is seen as its contents, not its layout box. */
+function seenAs(el:Element):DOMRect{
+ const r=el.getBoundingClientRect(),s=getComputedStyle(el);
+ const clear=(c:string)=>c==='transparent'||/rgba\([^)]*,\s*0\)$/.test(c);
+ const paints=!clear(s.backgroundColor)||s.backgroundImage!=='none'||s.boxShadow!=='none'||['Top','Right','Bottom','Left'].some(side=>parseFloat((s as any)[`border${side}Width`])>0&&(s as any)[`border${side}Style`]!=='none'&&!clear((s as any)[`border${side}Color`]));
+ if(paints)return r;
+ const range=el.ownerDocument.createRange();range.selectNodeContents(el);const c=range.getBoundingClientRect();
+ return c.width>=4&&c.height>=4&&c.width*c.height<r.width*r.height*0.8?c:r;
+}
 function place(){
  if(!chip||!hint)return;
  for(const m of marked){
   if(m.ring&&m.point)Object.assign(m.ring.style,{left:`${m.point[0]-9}px`,top:`${m.point[1]-9}px`,width:'18px',height:'18px'});
-  else if(m.ring&&m.el.isConnected){const e=m.el.getBoundingClientRect();Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
+  else if(m.ring&&m.el.isConnected){const e=boxOf(m.el);Object.assign(m.ring.style,{left:`${e.left-3}px`,top:`${e.top-3}px`,width:`${e.width+6}px`,height:`${e.height+6}px`});}
  }
  // The label is joined to the outline of what the move touches first, like a tab on its edge, so which box it means is
  // never in doubt: on its top left corner; else its bottom left; else beside it. Never over the page's own controls (a
@@ -742,7 +776,8 @@ async function undoArrival(){
 /** A next move's line, from what it touches now. */
 function labelOn(s:PlanStep,el:Element|null){
  const name=el?nameOf(el,40):s.name,on=name?` “${name}”`:'';
- return s.do==='type'?`Type “${(s.text??'').slice(0,30)}”`:s.do==='select'?`Choose “${s.option}”`:s.do==='key'?`Press ${s.combo}`:s.do==='open'?`Open ${(()=>{try{return new URL(s.url!).hostname;}catch{return 'the page';}})()}`:s.do==='back'?'Go back':s.do==='drag'?`Drag${on}`:s.do==='scroll'?`Scroll to${on}`:s.do==='hover'?`Open${on}`:s.do==='double_click'?`Double-click${on}`:s.do==='right_click'?`Right-click${on}`:`Click${on}`;
+ const onto=s.do==='drag'&&s.to?findTarget(targetOf({do:'click',id:s.to})):null;
+ return s.do==='type'?`Type “${(s.text??'').slice(0,30)}”${on?` in${on}`:''}`:s.do==='select'?`Choose “${s.option}”${on?` in${on}`:''}`:s.do==='drag'&&onto?`Drag${on} onto “${nameOf(onto,30)}”`:s.do==='key'?`Press ${s.combo}`:s.do==='open'?`Open ${(()=>{try{return new URL(s.url!).hostname;}catch{return 'the page';}})()}`:s.do==='back'?'Go back':s.do==='drag'?`Drag${on}`:s.do==='scroll'?`Scroll to${on}`:s.do==='hover'?`Open${on}`:s.do==='double_click'?`Double-click${on}`:s.do==='right_click'?`Right-click${on}`:`Click${on}`;
 }
 /** A final step (send, submit, post, pay, delete) takes a second press: the first one arms it, and the chip says so by
  * the thing it would press. A wrong guess, a confusing page or a stray key never sends anything. */
@@ -751,11 +786,11 @@ function confirmEnter(what:string,at?:Element|null):Promise<boolean>{
  layer();const box=document.createElement('div');box.className='move armed above';
  const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=`again to ${what} · Esc: not now`;
  box.append(key,text);surface().appendChild(box);
- const el=at?.isConnected?at:deepActive(),r=el?.getBoundingClientRect(),c=box.getBoundingClientRect();
+ const el=at?.isConnected?at:deepActive(),r=el?boxOf(el):undefined,c=box.getBoundingClientRect();
  let ring:HTMLDivElement|undefined;
  if(r){ring=document.createElement('div');ring.className='tab-ring above';Object.assign(ring.style,{left:`${r.left-3}px`,top:`${r.top-3}px`,width:`${r.width+6}px`,height:`${r.height+6}px`});surface().appendChild(ring);}
  box.style.left=`${Math.max(4,Math.min((r?.left??innerWidth)-3,innerWidth-c.width-4))}px`;box.style.top=`${Math.max(4,(r?.top??innerHeight)-3-c.height)}px`;
  return new Promise(resolve=>{const t=setTimeout(()=>waitEnter?.(false),6000);waitEnter=yes=>{clearTimeout(t);waitEnter=null;box.remove();ring?.remove();resolve(yes);};});
 }
 /** What Tab would do now (for the engine's checks and the tests). */
-export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan,chipRect:chip?(r=>[r.left,r.top,r.width,r.height])(chip.getBoundingClientRect()):undefined});
+export const predictState=()=>({glow:glowState(),showing:!!chip,label:hint?.plan.label,steps:hint?.plan.steps.length??0,waiting:!!waitEnter,final:hint?.final??false,source:hint?.source,preview:preview?.textContent??undefined,previews:previews.map(p=>p.textContent),outlined:rings.length,plan:hint?.plan,chipRect:chip?(r=>[r.left,r.top,r.width,r.height])(chip.getBoundingClientRect()):undefined,rings:rings.map(g=>(r=>[r.left,r.top,r.width,r.height])(g.getBoundingClientRect())),chipText:chip?.querySelector('.text')?.textContent??undefined});

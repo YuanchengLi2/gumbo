@@ -286,6 +286,14 @@ small batches with pauses.
   It is searched by meaning and by words like every passage, kept half a year, and written in idle time in batches, so
   browsing never waits on it. Tab, moves, Ctrl+K and the agent take from it what matches what the user is doing (the
   field, the text around it, the words being typed), wherever and whenever it was seen. Being recent only breaks ties.
+- **PDFs:** Chrome's viewer runs no extension's script, so a tab showing a PDF (its address, or the file it serves) is
+  read from the file with pdf.js in the offscreen document once it has been in front for two seconds, once a day, and
+  kept as a page with its facts (`background/memory/pdf.ts`). A scan goes to the picture reader.
+- **Fresh first:** what has no embedding yet is embedded newest first, in batches of eight, one request at a time in
+  the model's worker. A search waits a moment for memory joining the index. A field's kept search is asked again once
+  memory took in something new.
+- **Pages drawn as pixels:** once per site a month, a small note in the corner says Gumbo reads the page from pictures
+  (`content/notice.ts`), decided by how the page is built (mostly canvas, few words of its own).
 - **Only what the user saw:** memory's pages, and the tabs every surface is told about, are pages that were on their
   screen. A tab opened behind and never brought forward, and what the agent read through a connector for them, are not
   kept.

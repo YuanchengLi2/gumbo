@@ -35,7 +35,9 @@ function within<T>(part:Promise<T>,fallback:T,what:string,site:string,ms=250):Pr
  void part.then(()=>{if(late)void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} took over ${ms} ms`,at:Date.now()}).catch(()=>{});},error=>{void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} failed: ${(error as Error)?.message}`,at:Date.now()}).catch(()=>{});});
  return Promise.race([part.catch(()=>fallback),timer]);
 }
-const lastBundle=new Map<string,Bundle>();
+/** The memory each field had last, and how long it may be used as is while the next is put together behind it. */
+const lastBundle=new Map<string,Bundle>(),BUNDLE_MS=8000;
+const keepBundle=(key:string,b:Bundle)=>{lastBundle.delete(key);lastBundle.set(key,b);if(lastBundle.size>100)lastBundle.delete(lastBundle.keys().next().value!);};
 const noBundle=():Bundle=>({surface:'tab-text',at:Date.now(),ms:0,query:'',stable:'',fresh:'',items:[],known:'',searching:true,blocks:{page:'',browser:'',session:'',memory:'',map:''}});
 /** Where a fact in a suggestion came from: the first memory item that holds a fact the page and the field do not. */
 function sourceOf(text:string,bundle:Bundle,seen:string){
@@ -57,11 +59,14 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  // Each part is waited for 600 ms at most: memory that is slow (or stuck) never silences Tab; it writes from the field and
  // the page alone, and what was slow is kept as a failure for the debug page.
  // Memory that is slow this once stands in with what this field had last (never with nothing: a request with no memory
- // is a guess at the very fact memory holds).
- const key=fieldKey(site,c.intent,c.label,c.thread);
+ // is a guess at the very fact memory holds). What the field had a few seconds ago (the words before these, or the field
+ // as it was entered) is used at once, and this moment's memory is put together behind it for the next words: memory is
+ // never what the first word waits on.
+ const key=fieldKey(site,c.intent,c.label,c.thread),had=lastBundle.get(key);
+ const fresh=getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,around:c.around,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key}).then(b=>{keepBundle(key,b);return b;});
  const [recall,bundle,before]=await Promise.all([
   within(recallFor({site,intent:c.intent,before:message.before,thread:c.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text}),emptyRecall(),'recall',site),
-  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,around:c.around,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key}).then(b=>{lastBundle.set(key,b);if(lastBundle.size>100)lastBundle.delete(lastBundle.keys().next().value!);return b;}),lastBundle.get(key)??noBundle(),'getContext',site,400),
+  had&&Date.now()-had.at<BUNDLE_MS?(fresh.catch(()=>{}),had):within(fresh,had??noBundle(),'getContext',site,400),
   within(lately(c.url),undefined,'lately',site),
  ]);
  if(signal.aborted)return;

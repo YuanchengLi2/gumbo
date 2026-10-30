@@ -18,6 +18,7 @@ import {startCapture,pageText} from './capture';
 import {startPredict,predictState} from './predict';
 import {startListen,listenState} from './listen';
 import {startSeen} from './seen';
+import {startNotice} from './notice';
 import {pressTake,startKeys} from './keys';
 
 /** Gumbo in one frame (or one of the extension's own pages): tracks the field in focus, runs Tab, Ctrl+K and capture,
@@ -42,7 +43,7 @@ export function start(_window:Window){
  });
  // What an earlier copy of Gumbo left on this page goes; and when this copy is cut off in turn, what it drew goes too.
  claimFrame();clearStale();const watch=window.setInterval(()=>{if(!alive()){removeLayer();clearInterval(watch);}},3000);
- startDebugBridge();startKeys();startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();startSeen();
+ startDebugBridge();startKeys();startDrawnTab();startTab();startInline();startCapture();startPredict();startListen();startSeen();startNotice();
 }
 /** Requests from the engine. A request about the field in focus is answered only by the frame that has it, so the
  * reply comes from the right frame of a page with many. */

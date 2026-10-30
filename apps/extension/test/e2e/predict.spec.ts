@@ -360,3 +360,19 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  await second.keyboard.press('Alt+q');
  await expect(second.locator('#street')).toHaveValue('410 Lakeview Drive');
 });
+
+test('a move on a box the page hides and draws itself outlines what the user sees, and says exactly what it does',async({page,signedIn,standin})=>{
+ void signedIn;
+ standin.script=b=>isPredict(b)?{text:JSON.stringify({confidence:0.9,label:'Keep me signed in',steps:[{do:'click',id:idIn(b,'Remember me on this computer')}]})}:{text:'{"confidence":0,"steps":[]}'};
+ await page.goto(`${standin.url}/pages/toggles.html`);await page.locator('h1').click();
+ await expect.poll(async()=>(await tab(signedIn,page))?.showing,{timeout:8000}).toBe(true);
+ const state=await tab(signedIn,page),label=await page.locator('#remember-label span').boundingBox();
+ // The outline goes around the pill the user sees (the native box is a pixel, the label a full-width row): its 3 px
+ // margin and 2 px border aside.
+ const [x,y,w,h]=state.rings[0];
+ expect(Math.abs(x+3-label!.x)).toBeLessThan(2);expect(Math.abs(y+3-label!.y)).toBeLessThan(2);expect(Math.abs(w-10-label!.width)).toBeLessThan(2);expect(Math.abs(h-10-label!.height)).toBeLessThan(2);
+ // The chip names the thing outlined, in the page's own words, not the model's.
+ expect(state.chipText).toBe('Click “Remember me on this computer”');
+ await page.keyboard.press('Alt+q');
+ await expect(page.locator('#status')).toHaveText('Remembered');
+});

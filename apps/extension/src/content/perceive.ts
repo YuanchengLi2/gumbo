@@ -38,7 +38,7 @@ export function nearbyText(el:Element):string|undefined{
 export function pageModel(limit=250,within:ParentNode=document):PageModel{
  // What is on screen first, then the rest in page order; only the ones kept are described (the words around each cost a
  // layout read, and a big app has thousands of controls).
- const els=deepQuery(interactive,within).filter(el=>visible(el));
+ const els=deepQuery(interactive,within).filter(el=>visible(el)||!!shownBy(el));
  // Where things can be dropped: when the page has things to drag, the lists or columns that hold them, and the ones
  // beside those (a board's other columns).
  const zones=new Set<Element>(),have=new Set(els);
@@ -48,7 +48,8 @@ export function pageModel(limit=250,within:ParentNode=document):PageModel{
  }
  for(const z of zones)if(!have.has(z))els.push(z);
  const found=els.map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
- const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>describe(f.el));
+ // A box the page hides and draws itself is where its label is.
+ const items=[...found.filter(f=>f.on),...found.filter(f=>!f.on)].slice(0,limit).map(f=>{const item=describe(f.el),label=shownBy(f.el);if(!label)return item;const at=describe(label);return{...item,rect:at.rect,inView:at.inView};});
  // Menus that open on hover by CSS alone (no event a page script sends opens them): their items are in the page, hidden,
  // and listed with the menu they are in, so a move can go straight to one.
  for(const {el,owner} of hoverMenuItems(Math.max(0,Math.min(40,limit-items.length))).filter(h=>within===document||(within as Element).contains(h.el))){
@@ -57,6 +58,13 @@ export function pageModel(limit=250,within:ParentNode=document):PageModel{
  }
  const focused=document.activeElement&&document.activeElement!==document.body?idOf(document.activeElement):undefined;
  return{url:location.href,title:document.title,items,headings:[...document.querySelectorAll('h1,h2,h3')].map(h=>squash(h.textContent??'')).filter(Boolean).slice(0,20),focused};
+}
+/** The label a page shows in place of a native box it hides and draws itself (a checkbox, a radio, a file input made
+ * invisible or a pixel wide, its styled label clicked instead): the box is a control the user sees there. */
+export function shownBy(el:Element):Element|null{
+ if(!(el instanceof HTMLInputElement)||!/^(checkbox|radio|file)$/.test(el.type)||visible(el)||el.disabled)return null;
+ const label=(el.id?el.ownerDocument.querySelector(`label[for="${CSS.escape(el.id)}"]`):null)??el.closest('label')??el.labels?.[0]??null;
+ return label&&visible(label)?label:null;
 }
 /** The hidden items of navigation menus that open on hover: links and menu items in a nav, header or menu bar that are
  * not shown while the item of the menu that holds them is (its trigger: what the pointer rests on to open it). */

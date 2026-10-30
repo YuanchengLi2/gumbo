@@ -22,6 +22,15 @@ is kept, inside embedded frames too, along with the words in images and on pages
 whatever matches what you're doing, however long ago you saw it, while the text around your cursor decides how the
 words go. Moves use it too, show up more readily, and never offer to type again what's already on the page.
 
+PDFs you read are remembered too: an invoice, a reading or a handout open in Chrome's viewer is read from the file once
+you've looked at it for a moment, its totals, dates and numbers kept as facts Tab can bring back.
+
+What you just saw is findable right away, by what it means and not only by its words. Before, memory could stop
+working out what new pages meant for the rest of the session, so Tab missed things you had just read.
+
+On a page drawn as pictures (a design tool, a sheet, a whiteboard), Gumbo says once, in a small note in the corner, that
+it reads that page from images, so Tab is slower and less exact there.
+
 Memory keeps only what you saw: pages that were on your screen, what you copied and wrote, what you heard. Titles from
 your history, bookmarks, tabs you never opened and emails the agent read for you are no longer kept as memory (your
 history still teaches Tab where you usually go next).
