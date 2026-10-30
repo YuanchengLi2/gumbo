@@ -6,7 +6,7 @@ import {momentUrl} from './moment';
  * and the two rankings are fused (reciprocal rank fusion): by keywords (BM25, with prefix and fuzzy matches) and by
  * meaning (cosine similarity of sentence embeddings, made on this computer). Exact names and numbers come up through
  * the first; "that thing about latency" through the second. */
-export type Doc={id:string;kind:'page'|'writing'|'note'|'media';title:string;url?:string;text:string;at:number;site?:string;start?:number;
+export type Doc={id:string;kind:'page'|'fact'|'writing'|'note'|'media';title:string;url?:string;text:string;at:number;site?:string;start?:number;
  /** The visit a passage was read on (or writing written on), and how long it was in view. */visit?:number;seenMs?:number;project?:string};
 /** A match, with the two raw scores it got (cosine, and BM25 as MiniSearch gives it), for memory/context.ts to weigh
  * with what it knows of the moment. */
@@ -16,7 +16,8 @@ const STOP=new Set('a an the and or but if then so of to in on at by for with fr
 
 export function docsFrom({passages,writing,notes,media}:{passages:Passage[];writing:Writing[];notes:Note[];media:Media[]}):Doc[]{
  const docs:Doc[]=[];
- for(const p of passages)docs.push({id:'p'+p.id,kind:p.kind==='media'?'media':'page',title:p.title,url:p.url,text:p.text,at:p.at,site:p.site,visit:p.visit,seenMs:p.seenMs});
+ // A fact on a page is a small document of its own, under the page's title and time (“Total due: $482.00”).
+ for(const p of passages)docs.push({id:'p'+p.id,kind:p.kind==='media'?'media':p.kind==='fact'?'fact':'page',title:p.title,url:p.url,text:p.text,at:p.at,site:p.site,visit:p.visit,seenMs:p.seenMs});
  for(const w of writing)docs.push({id:'w'+w.id,kind:'writing',title:`You wrote on ${w.site}${w.label?` (${w.label})`:''}`,url:w.url,text:w.text+(w.replyTo?`\n(in reply to ${w.replyTo})`:''),at:w.at,site:w.site,visit:w.visit,project:w.project});
  for(const n of notes)docs.push({id:'n'+n.id,kind:'note',title:n.title??'Your note',url:n.url,text:n.text,at:n.at});
  for(const m of media)docs.push(...mediaDocs(m));

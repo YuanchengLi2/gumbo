@@ -2,6 +2,7 @@ import {openDB,type IDBPDatabase} from 'idb';
 import {vaultKeys,seal,open,sealBytes,openBytes,hashOf,databaseName,Locked,currentUser,exportKeys,type Box} from './vault';
 import {newer,nextStamp,type Outgoing} from '../shared/sync-engine';
 import type {Stamp} from '../shared/sync-crypto';
+import type {Fact} from '../shared/facts';
 /** Everything Gumbo remembers, in IndexedDB on this computer, sealed (vault.ts): each record is stored as the few things
  * lookups need in the clear (its time, and for some stores what kind of thing it is) plus hashed keys for site and
  * address, and a sealed box with the rest. Every record says where it came from (`source`: the browser today; other
@@ -17,8 +18,10 @@ export type SuggestionRecord={id?:number;site:string;intent:string;kind:'text'|'
  * a box's state), never what was typed. */
 export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:'click'|'navigate'|'submit'|'key'|'open'|'type'|'select'|'check'|'paste'|'copy'|'drag'|'switch'|'scroll'|'dialog';role:string;name:string;path?:string;nearby?:string;title?:string;transition?:string;at:number;source:Source;
  tab?:number;visit?:number;prev?:number;value?:string;project?:string};
-export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source};
-export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string;
+export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source;
+ /** The facts on it, read from its structure (shared/facts.ts): labelled and typed values with the words near them. */facts?:Fact[]};
+/** A piece of something remembered, for search: a passage of a page's text, or one fact on it (kind fact). */
+export type Passage={id?:number;ref:string;kind:'page'|'fact'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string;
  /** The visit it was read on, and how long it was actually in view while they were there (ms). */visit?:number;seenMs?:number};
 /** What kind of page a visit was (memory/page-kind.ts). */
 export type PageCategory='inbox'|'thread'|'doc'|'search'|'results'|'form'|'dashboard'|'article'|'video'|'chat'|'product'|'checkout'|'settings'|'other';

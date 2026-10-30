@@ -148,7 +148,7 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  let ranked=rank(candidates,moment,cfg.rank,Math.max(400,chars-stableText.length-(req.withPage?1600:0)));
  if(req.rerank)ranked=await reranked(key,req,ranked);
  // Pages memory keeps bringing up are the ones worth keeping longest when it runs short of room.
- const pages=ranked.filter(r=>r.layer==='past'&&r.kind==='page'&&r.url).map(r=>r.url!);if(pages.length)void touchPages(pages.slice(0,4));
+ const pages=ranked.filter(r=>r.layer==='past'&&(r.kind==='page'||r.kind==='fact')&&r.url).map(r=>r.url!);if(pages.length)void touchPages(pages.slice(0,4));
  let n=0;
  const items:Item[]=ranked.map(r=>({n:r.layer==='past'?++n:0,id:r.id,layer:r.layer,kind:r.kind,title:r.title,url:r.url,when:r.layer==='past'?when(r):ago(r.at),text:r.text,score:Math.round(r.score*1000)/1000,parts:Object.fromEntries(Object.entries(r.parts).map(([a,b])=>[a,Math.round(b*1000)/1000]))}));
  // A tab's words: its start and its end (where a chat's newest answer is), the more for what is one step away.

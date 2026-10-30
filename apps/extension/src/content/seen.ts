@@ -3,7 +3,9 @@ import {post} from './port';
 import {fieldOf,inPaymentFrame} from './fields/field';
 import {snapshot} from './fields/text';
 import {readContext} from './context';
-import {deepActive,squash,visible} from './dom';
+import {deepActive,squash,visible,SKIP} from './dom';
+import {readPage,contentRoot} from './facts';
+import type {Fact} from '../shared/facts';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {categoryOf,type PageSigns} from '../shared/page-kind';
 /** What memory knows of this page right now, and what of it was actually read (the top page only):
@@ -12,14 +14,14 @@ import {categoryOf,type PageSigns} from '../shared/page-kind';
  *   half on screen count a second more. Every few seconds what was read since goes to memory (memory/live.ts), which adds
  *   it to the page's passages when the visit ends.
  * - now: the words in view, the field in focus (its label, what it is for, the last words typed), the selection, how far
- *   down the page, and what kind of page it is; sent when it changed, at most once a second.
+ *   down the page, what kind of page it is, and the facts on it (content/facts.ts, read again as the page changes, every
+ *   five seconds at most); sent when it changed, at most once a second.
  * It costs the page next to nothing: one IntersectionObserver, new blocks picked up when the page has been quiet, the
  * work done when the browser is idle. Never inside fields being written (that is writing), Gumbo's own layer, sensitive
  * fields (they are not fields), payment frames, or where Gumbo is off. */
 const BLOCKS='p,li,h1,h2,h3,h4,blockquote,pre,td,dd,figcaption,[role=listitem],[role=article],[role=row]';
-const SKIP='nav,header,footer,aside,[role=navigation],[role=banner],[role=contentinfo],[contenteditable=true],[contenteditable=""],textarea,gumbo-layer';
 const MAX_BLOCKS=400;
-let settings:Settings|undefined,io:IntersectionObserver|undefined,observed=0,lastInput=Date.now(),lastNow='',lastSent=0,nowTimer:number|undefined,signs:Partial<PageSigns>={},signsAt=0;
+let settings:Settings|undefined,io:IntersectionObserver|undefined,observed=0,lastInput=Date.now(),lastNow='',lastSent=0,nowTimer:number|undefined,signs:Partial<PageSigns>={},signsAt=0,facts:Fact[]=[];
 const watched=new WeakSet<Element>(),inView=new Set<Element>(),dwell=new Map<Element,{ms:number;sent:number}>();
 const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame();
 const idle=(work:()=>void,timeout=2000)=>{if(typeof requestIdleCallback==='function')requestIdleCallback(()=>work(),{timeout});else setTimeout(work,50);};
@@ -55,7 +57,7 @@ function scan(){
   const text=squash((el as HTMLElement).innerText??'');if(text.length<(/^H\d$/.test(el.tagName)?8:40))continue;
   io.observe(el);observed++;
  }
- if(Date.now()-signsAt>5000){signsAt=Date.now();signs=signsOf();}
+ if(Date.now()-signsAt>5000){signsAt=Date.now();signs=signsOf();facts=readPage(contentRoot(),{max:100_000,except:fieldOf(deepActive())?.el}).facts.slice(0,80);}
 }
 function flush(){
  if(!active())return;
@@ -83,7 +85,7 @@ function sendNow(leaving=false){
  // A selection inside a field Gumbo may not touch (a password) is not read.
  const inField=deepActive() instanceof HTMLInputElement||deepActive() instanceof HTMLTextAreaElement;
  const selection=inField&&!field?undefined:squash(String(getSelection()??'')).slice(0,1000)||undefined;
- const now={title:document.title,visible:words,focus,selection,scroll:[Math.round(scrollY),document.documentElement.scrollHeight],kind:categoryOf(location.href,document.title,signs)};
+ const now={title:document.title,visible:words,focus,selection,scroll:[Math.round(scrollY),document.documentElement.scrollHeight],kind:categoryOf(location.href,document.title,signs),facts:facts.length?facts:undefined};
  const json=JSON.stringify(now);if(json===lastNow)return;
  lastNow=json;lastSent=Date.now();post({type:'now',...now});
 }

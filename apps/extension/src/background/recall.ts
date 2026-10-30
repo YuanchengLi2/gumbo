@@ -1,4 +1,5 @@
-import {recent,type Writing,type Page,type Media,type SuggestionRecord} from './db';
+import {recent,type Writing,type Page,type Passage,type Media,type SuggestionRecord} from './db';
+import {factText} from '../shared/facts';
 import {loadSettings} from '../shared/settings';
 import {emptyRecall,type Recall} from '../shared/prompts';
 import {memoryChanged} from './search';
@@ -26,6 +27,15 @@ async function load():Promise<Cache>{
   }catch{return cache={at:Date.now(),writing:[],accepted:[],pages:[],media:[]};}
   finally{loading=undefined;}
  })();
+}
+/** What search reads of a page: its text cut into passages, and each of its facts as a passage of its own (“Total due:
+ * $482.00”, under the page's title and time), so a search finds the fact itself and not the top of the page it was on. */
+export function pagePassages(page:Page,visit?:number,seenBefore?:Map<string,number>,at=page.lastSeen):Passage[]{
+ const base={ref:page.url,at,site:page.site,title:page.title,url:page.url,visit};
+ return [
+  ...passagesOf(page.text).slice(0,400).map(text=>({...base,kind:'page' as const,text,seenMs:seenBefore?.get(text.slice(0,80))})),
+  ...(page.facts??[]).map(f=>({...base,kind:'fact' as const,text:factText(f)})),
+ ];
 }
 /** Splits page text into passages of a few hundred characters at paragraph and sentence ends. */
 export function passagesOf(text:string,size=600):string[]{
