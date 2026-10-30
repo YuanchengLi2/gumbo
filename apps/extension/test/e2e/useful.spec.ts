@@ -81,7 +81,7 @@ const db=(w:Worker,store:string)=>w.evaluate(s=>(globalThis as any).gumbo.db.rec
  * others. */
 const models={...(process.env.GUMBO_LIVE!=='deployed'?{tab:'claude-haiku-5-5'}:{}),...(process.env.GUMBO_TAB_MODEL?{tab:process.env.GUMBO_TAB_MODEL}:{}),...(process.env.GUMBO_ACTION_MODEL?{action:process.env.GUMBO_ACTION_MODEL}:{})};
 async function setUp(w:Worker){
- await w.evaluate(models=>chrome.storage.local.get('settings').then(({settings}:any)=>chrome.storage.local.set({settings:{...settings,models:{...settings?.models,...models},modelsVersion:4,facts:{...settings?.facts,name:'Dana Park',email:'dana.park@example.com'}}})),models);
+ await w.evaluate(models=>chrome.storage.local.get('settings').then(({settings}:any)=>chrome.storage.local.set({settings:{...settings,models:{...settings?.models,...models},modelsVersion:5,facts:{...settings?.facts,name:'Dana Park',email:'dana.park@example.com'}}})),models);
 }
 /** Reads a page as a person does: in front, scrolled through for a few seconds; then memory has it. */
 async function read(context:BrowserContext,w:Worker,base:string,r:Read){
