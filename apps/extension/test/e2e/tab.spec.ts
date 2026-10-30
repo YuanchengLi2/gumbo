@@ -13,8 +13,8 @@ test('suggests after a pause, Tab accepts it into the field, Ctrl+Z takes it bac
  await page.keyboard.type('Thanks for',{delay:20});
  const shown=await ghost(signedIn,page);expect(shown.rest).toBe(' the notes from our call.');
  const body=standin.bodies.find(b=>b.purpose==='tab');
- // One run, room for up to three sentences and two alternatives.
- expect(body).toMatchObject({model:'claude-haiku-5-5',stream:true,max_tokens:160});
+ // One run on Tab's model (Qwen at Cerebras, shared/settings.ts), with room for the words and two alternatives.
+ expect(body).toMatchObject({model:'cerebras-qwen',stream:true,max_tokens:85});
  // Asked as a word ended ("Thanks "), and again as typing stopped mid-word: never once per keystroke (the part after the
  // suggestion, asked ahead, is not counted).
  const asked=standin.bodies.filter(b=>b.purpose==='tab'&&!JSON.stringify(b.messages).includes('call.⟨cursor⟩'));expect(asked.length).toBeLessThanOrEqual(3);
@@ -99,7 +99,8 @@ test('memory is sealed on disk and feeds the next field: the user\'s own writing
  const second=()=>standin.bodies.find(b=>b.purpose==='tab'&&JSON.stringify(b.messages).includes('Quick update⟨cursor⟩'));
  await expect.poll(()=>!!second(),{timeout:5000}).toBe(true);
  const prompt=JSON.stringify(second().messages);
- expect(prompt).toContain('examples_of_their_own_writing');expect(prompt).toContain('Lisbon offsite');
+ // Their own writing comes as how they write (shared/prompts.ts stableContext), not as content to copy.
+ expect(prompt).toContain('how_they_write');expect(prompt).toContain('Lisbon offsite');
 });
 
 test('every suggestion carries what memory knows, and a fact from memory may be suggested',async({page,signedIn,standin})=>{

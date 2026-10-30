@@ -52,15 +52,15 @@ A move is ONE thing they would do next: one click, one choice, one key, or filli
 Also give "then", when you are sure of it: the part of the same task right after this move (the next field, the confirm in the dialog, the item of the menu this move opens). Its element may not be on the page yet: then name it by role and name instead of an id. Leave it out when unsure.
 Confidence is your honest chance that this is their very next move: 0.8 or more only when what they just did, the page's own words or a habit point straight at it (the Submit after an answer typed, the Send after a reply written, the next field of a form half filled, the item the email they just read named); 0.5 to 0.8 when it is the likely one among a few; below 0.5 a guess. A sure move is shown to them plainly, so never call a guess sure.
 Reply with one JSON object and nothing else, its keys in this order (the move first, so it can show while the rest is written): {"confidence":0.0-1.0,"label":"what it does, as a short imperative of at most 6 words","steps":[the move: one of {"do":"click","id":"e12"} {"do":"double_click","id":"e12"} {"do":"right_click","id":"e12"} {"do":"hover","id":"e12"} {"do":"drag","id":"e4","to":"e9"} {"do":"drag","id":"e4","by":[120,0]} {"do":"select","id":"e9","option":"…"} {"do":"key","id":"e7","combo":"Enter"} {"do":"scroll","id":"e30"} {"do":"back"}, or one or more {"do":"type","id":"e7","text":"…"} for the fields they fill],"why":"the evidence for it, in a few words (what they did, what the page says, their habit, their memory)","then":{a move in the same task, or {"do":"click","role":"button","name":"Next"} for one not on the page yet}}. When nothing on the page follows plainly from what they are doing: {"confidence":0,"steps":[]}.`;
-/** The move, as the one tool Claude calls: the same object the reply format above names, keys in that order. */
-const MOVE_TOOL={name:'next_move',description:'Their next move on this page, as the reply format says (confidence 0 and no steps when nothing follows plainly).',input_schema:{type:'object',properties:{confidence:{type:'number'},label:{type:'string'},steps:{type:'array',items:{type:'object'}},why:{type:'string'},then:{type:'object'}},required:['confidence','steps']}};
 const decided=new Map<string,{at:number;plan:Plan|null}>();
 /** What the user turned down, by tab and page: not offered again for ten minutes. */
 const turnedDown=new Map<string,{at:number;labels:string[];steps:string[]}>();
 /** The bar a move clears to show: high. Tab speaks up at every moment it is asked, but offers a move only when it is sure:
  * a wrong move costs the user a look and a decision, which is all a click would have cost them. Each site moves it a
  * little as moves there are taken or ignored, within a range that never shuts Tab off. */
-const BAR=0.6,DOWN_MS=600_000;
+// Oct 29: Tab offers its move more readily (0.5, within 0.45 to 0.75 by each site's record), since it now reads the
+// recording of what they saw and the move that only repeats the page is never offered.
+const BAR=0.5,DOWN_MS=600_000;
 const placeOf=(tab:number,url:string)=>{try{const u=new URL(url);return`${tab}|${u.origin}${u.pathname}`;}catch{return`${tab}|${url}`;}};
 function declined(tab:number,url:string){const d=turnedDown.get(placeOf(tab,url));return d&&Date.now()-d.at<DOWN_MS?d:undefined;}
 const allowedPlan=(plan:Plan|null,d?:{labels:string[];steps:string[]})=>!plan||!d?plan:d.labels.includes(plan.label.toLowerCase())||d.steps.includes(stepKey(plan.steps[0]))?null:plan;
@@ -96,7 +96,7 @@ async function tasteText(site:string){
  const took=lines(b.took),refused=lines(b.refused);
  return [took&&`<what_they_took_from_tab_on_this_site>\n${took}\n</what_they_took_from_tab_on_this_site>`,refused&&`<what_they_turned_down_on_this_site>\n${refused}\n</what_they_turned_down_on_this_site>`].filter(Boolean).join('\n');
 }
-async function barOf(site:string){const b=(await loadBars())[site];return b?Math.min(0.75,Math.max(0.5,BAR+0.2*(b.no-b.yes)/(b.yes+b.no+4))):BAR;}
+async function barOf(site:string){const b=(await loadBars())[site];return b?Math.min(0.75,Math.max(0.45,BAR+0.2*(b.no-b.yes)/(b.yes+b.no+4))):BAR;}
 
 on('predict',async(m:Ask,{send,url,port,signal})=>{
  const tab=port.sender?.tab?.id;
@@ -125,7 +125,9 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   // The memory every surface has (memory/context.ts): who they are and what they are working on, this session (the
   // pages before this one, their other tabs with what is on them, what they copied and wrote) and the past, ranked for
   // this moment. Put together in a few milliseconds from what is held: no surface waits on a search or another tab.
-  const query=`${m.title}\n${m.where?.text.slice(0,400)??''}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${(m.digest?.said??[]).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`;
+  // What they are doing is the place they work in, or, with none (a bare page, a frame with one question), the page's
+  // own words: the question the quiz asks is what the answer they saw elsewhere matches.
+  const query=`${m.title}\n${m.where?.text.trim().slice(0,400)||m.text.slice(0,600)}\n${m.focused??''}\n${m.activity.slice(-3).map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${(m.digest?.said??[]).join('\n')}\n${before.copied.at(-1)?.text.slice(0,300)??''}`;
   const [bundle,habits,taste,shot,doing]=await Promise.all([getContext({surface:'tab-action',tab,url,query,budget:1500,key:`predict|${placeOf(tab,url)}`}),habitsText(tab,url),tasteText(siteOf(url)),m.drawn&&!port.sender?.frameId?viewPicture(port.sender?.tab,m.view):null,doingText(tab)]);
   const memoryLate=bundle.searching;
   if(signal.aborted)return;
@@ -153,20 +155,24 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   const inView=(plan:Plan|null)=>plan&&shot&&m.view?onView(plan,m.view[0]/shot.w,m.view[1]/shot.h):plan;
   // The first complete steps are offered while the rest is still being written; the whole plan replaces them.
   let raw='',shown=0;
-  // Claude answers through one tool it must call, so its first token is the move's JSON: told to reply in JSON alone, it
-  // still began with a sentence of reasoning one time in six, all of it time before the move could show.
-  const claude=settings.models.action.startsWith('claude-');
-  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:stableHead,cache_control:{type:'ephemeral'}},{type:'text',text:page},...picture,{type:'text',text:fresh}]}],max_tokens:300,purpose:'action',...(claude?{tools:[MOVE_TOOL],tool_choice:{type:'tool',name:MOVE_TOOL.name}}:{})},{signal,onEvent:event=>{
-   if(event.data?.type!=='content_block_delta')return;
-   const delta=event.data.delta;if(delta?.type!=='text_delta'&&delta?.type!=='input_json_delta')return;
-   raw+=delta.type==='text_delta'?delta.text:delta.partial_json??'';
-   const early=inView(allowedPlan(partialPlan(raw,ids,known),down));
-   if(early&&early.confidence>=bar&&plain(early,m)&&early.steps.length>shown){shown=early.steps.length;answer(early,false,'stream');}
+  // Fields filled with a row the page already shows (an existing row typed again into the empty one: all its values on
+  // one line of the page, none from anywhere else) are not their next step: what goes in a form comes from what they saw
+  // elsewhere, copied or wrote. Words the page has here and there (their name in a greeting) may.
+  const elsewhere=`${bundle.known}\n${latelyKnown(before)}`,lines=m.text.split('\n');
+  const copiesPage=(p:Plan|null)=>{
+   if(!p||p.steps.length<2||!p.steps.every(s=>s.do==='type'&&!!s.text&&s.text.trim().length>=2&&!elsewhere.includes(s.text.trim())))return false;
+   const values=p.steps.map(s=>s.text!.trim());return lines.some(l=>values.every(v=>l.includes(v)));
+  };
+  const offered=(p:Plan|null)=>p&&p.confidence>=bar&&plain(p,m)&&!copiesPage(p)?p:null;
+  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:stableHead,cache_control:{type:'ephemeral'}},{type:'text',text:page},...picture,{type:'text',text:fresh}]}],max_tokens:300,purpose:'action'},{signal,onEvent:event=>{
+   if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
+   raw+=event.data.delta.text;
+   const early=offered(inView(allowedPlan(partialPlan(raw,ids,known),down)));
+   if(early&&early.steps.length>shown){shown=early.steps.length;answer(early,false,'stream');}
   }});
-  const called=(message?.content??[]).find((b:any)=>b?.type==='tool_use')?.input;
-  const plan=inView(allowedPlan(planOf(called?JSON.stringify(called):textOf(message)||raw,ids,known),down));
+  const plan=inView(allowedPlan(planOf(textOf(message)||raw,ids,known),down));
   // Only a move sure enough, on something they can see, is offered; anything less is nothing at all.
-  const sure=plan&&plan.confidence>=bar&&plain(plan,m)?plan:null;
+  const sure=offered(plan);
   if(!memoryLate&&!m.drawn){decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);}
   done(sure);answer(sure?.steps.length?sure:instant??sure);
  }catch{if(!signal.aborted)answer(instant);}

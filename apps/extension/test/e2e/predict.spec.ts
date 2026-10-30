@@ -165,10 +165,12 @@ test('Tab works inside a frame from another site, and knows what the tab the use
  const lesson=await context.newPage();await lesson.goto(`${standin.url}/pages/lesson.html`);await lesson.bringToFront();
  const activity=lesson.frameLocator('#activity');
  await activity.locator('#answer').click();
- await expect.poll(async()=>(await tab(signedIn,lesson))?.label,{timeout:10_000}).toBe('Answer from your chat');
+ // A move that only types into the field they are in shows as words there (content/bus.ts), taken with Tab.
+ await expect.poll(async()=>(await tell(signedIn,lesson,{type:'debug.tab'}))?.rest,{timeout:10_000}).toBe('Cenamos a las ocho.');
  // The frame was asked about by itself, with the page around it named, and the chat it came from in hand.
  const asked=JSON.stringify(standin.bodies.filter(isPredict).at(-1).messages);
- expect(asked).toContain('Lesson 4B practice');expect(asked).toContain('the_tab_they_just_left');
+ // The chat's answer came as what matches the quiz (memory/context.ts), not as "the tab just left" whole.
+ expect(asked).toContain('Lesson 4B practice');expect(asked).toContain('Cenamos a las ocho');
  await lesson.keyboard.press('Alt+q');
  await expect(activity.locator('#answer')).toHaveValue('Cenamos a las ocho.');
  // And the next move, inside the frame too.
@@ -353,9 +355,8 @@ test('what was copied a moment ago in another tab is what Tab fills in',async({p
  await expect.poll(()=>signedIn.evaluate(()=>chrome.storage.session.get('live').then(r=>JSON.stringify(r))),{timeout:5000}).toContain('410 Lakeview Drive');
  const second=await context.newPage();
  await second.goto(`${standin.url}/pages/shipping.html`);await second.bringToFront();await second.locator('#street').click();
- await expect.poll(async()=>(await tab(signedIn,second))?.label,{timeout:8000}).toBe('Use the address you copied');
- // What it would type shows faintly in the field the cursor is in, where it would land.
- expect((await tab(signedIn,second)).preview).toBe('410 Lakeview Drive');
+ // It types only into the field the cursor is in, so it shows there as words, where they would land.
+ await expect.poll(async()=>(await tell(signedIn,second,{type:'debug.tab'}))?.rest,{timeout:8000}).toBe('410 Lakeview Drive');
  await second.keyboard.press('Alt+q');
  await expect(second.locator('#street')).toHaveValue('410 Lakeview Drive');
 });

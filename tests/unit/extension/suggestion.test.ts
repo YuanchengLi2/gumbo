@@ -16,9 +16,9 @@ describe('Tab suggestion checks',()=>{
   expect(cleanSuggestion('nks for the help.',input('Tha'))).toBe('nks for the help.');
   expect(join('','  Hello')).toBe('Hello');
  });
- it('goes up to three whole sentences, leaves an unfinished one out, and never puts a newline in a one-line field',()=>{
+ it('goes up to two whole sentences, leaves an unfinished one out, and never puts a newline in a one-line field',()=>{
   expect(firstSentence(' see you then. Also, bring the',{singleLine:false,before:'Great,'})).toBe(' see you then.');
-  expect(firstSentence(' see you then. Bring the slides. I will book the room. Lunch after?',{singleLine:false,before:'Great,'})).toBe(' see you then. Bring the slides. I will book the room.');
+  expect(firstSentence(' see you then. Bring the slides. I will book the room. Lunch after?',{singleLine:false,before:'Great,'})).toBe(' see you then. Bring the slides.');
   expect(firstSentence(' go through it this afternoon',{singleLine:false,before:'I will'})).toBe(' go through it this afternoon');
   expect(firstSentence(' flights to Tokyo. And hotels.',{singleLine:true,before:'cheap'})).toBe(' flights to Tokyo.');
   expect(cleanSuggestion(' flights to Tokyo\nand hotels',input('cheap',{singleLine:true,known:'Tokyo'}))).toBe(' flights to Tokyo');
@@ -36,11 +36,12 @@ describe('Tab suggestion checks',()=>{
   expect(cleanSuggestion(' meet at noon tomorrow.',input('Can we',{after:' tomorrow?'}))).toBe(' meet at noon');
  });
  it('cuts before facts the user has not seen or written',()=>{
-  expect(factsGuard(' call me at 555-0199 tomorrow','')).toBe(' call me at');
+  // Cut where a sentence could pause: never on a word waiting for what was cut ("at").
+  expect(factsGuard(' call me at 555-0199 tomorrow','')).toBe(' call me');
   expect(factsGuard(' the invoice for $1,200 is attached','the invoice for $1,200')).toBe(' the invoice for $1,200 is attached');
   expect(cleanSuggestion(' Sarah and I will be there.',input('Thanks to',{known:''}))).toBe('');
   expect(cleanSuggestion(' Sarah and I will be there.',input('Thanks to',{known:'From: Sarah Lee'}))).toBe(' Sarah and I will be there.');
-  expect(cleanSuggestion(' see you on Friday.',input('Great,'))).toBe(' see you on');
+  expect(cleanSuggestion(' see you on Friday.',input('Great,'))).toBe(' see you');
  });
  it('drops a suggestion in another script, or one that repeats the text',()=>{
   expect(cleanSuggestion(' see you soon.',input('明日の会議ですが、'))).toBe('');

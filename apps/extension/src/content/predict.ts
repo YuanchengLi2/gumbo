@@ -139,7 +139,13 @@ export function startPredict(){
   if(looksComplete(f.el,s?.text??'')){lastKey=0;task(f.el,0,true);}else task(f.el,BEAT,true);
  },true);
  // The text is done (tab.ts): what was written is whole, so the next step is a move (Send, Post, Next), shown now.
- onTextDone(el=>{if(running||!active())return;finished.add(el);lastKey=0;typingIn=undefined;const ready=aheadForPause();if(ready&&!hint)show(ready,true,'ahead');task(el,0,true);});
+ onTextDone(el=>{
+  if(running||!active())return;finished.add(el);lastKey=0;typingIn=undefined;
+  // A move's words taken from the ghost: the part of the task after them (the Check, the Send) shows, as after any move.
+  const after=wordsThen;wordsThen=undefined;
+  if(after&&after.el===el&&Date.now()-after.at<60_000&&after.plan.then){const next=after.plan.then,target=touches(next)?findTarget(targetOf(next)):null;if(!touches(next)||target){show({label:labelOn(next,target),confidence:after.plan.confidence,steps:[next]},true,'then');return;}}
+  const ready=aheadForPause();if(ready&&!hint)show(ready,true,'ahead');task(el,0,true);
+ });
  // Enter in a field, or leaving one with something in it: the entry is done.
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.isTrusted&&!waitEnter){const f=fieldOf(deepActive());if(f){lastKey=0;task(f.el,60,true);}}},true);
  document.addEventListener('focusout',e=>{const f=fieldOf(e.target as Element);if(f&&e.isTrusted&&!running&&(snapshot(f)?.text.trim()??'')){typingIn=undefined;lastKey=0;task(f.el,80,true);}},true);
@@ -389,6 +395,8 @@ function listen(id:string){
  * many: its send waits for the text to be done. A search box or a form's field is not. */
 const intents=new WeakMap<Element,string>();
 const writing=(f:NonNullable<ReturnType<typeof fieldOf>>)=>{if(!f.singleLine)return true;let i=intents.get(f.el);if(!i){i=readContext(f).intent;intents.set(f.el,i);}return ['email','chat','prompt','comment','post','document'].includes(i);};
+/** A move shown as words in the field (bus.ts offerWords), whose next part comes once they are taken. */
+let wordsThen:{el:Element;plan:Plan;at:number}|undefined;
 /** The writing fields whose text the text model said is done (bus.ts), until they type in them again. */
 const finished=new WeakSet<Element>();
 /** A step that sends what is being written (Send, Post, Reply, Submit, Enter in the box) waits while the text is not done:
@@ -444,8 +452,8 @@ function show(plan:Plan,final:boolean,source?:string){
  // A move that only types into the field they are in is words in that field: shown as the ghost is, taken the same way.
  const here=fieldOf(deepActive());
  const intoHere=plan.steps.length===1&&first?.do==='type'&&!!first.text&&!first.at&&!!here&&!!el&&(el===here.el||here.el.contains(el)||el.contains(here.el));
- if(intoHere&&!final)return;
- if(intoHere&&offerWords(here!.el,first.text!,plan.confidence,plan.why)){if(chip)hide();return;}
+ // The chip it streamed in as goes first: the words are what is on screen now.
+ if(intoHere&&final){if(chip)hide();if(offerWords(here!.el,first.text!,plan.confidence,plan.why)){wordsThen=plan.then?{el:here!.el,plan,at:Date.now()}:undefined;return;}}
  // The same move, further along: the line is updated in place, never flashed.
  if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=labelFor(plan,el);place();return;}
  if(taking)return;

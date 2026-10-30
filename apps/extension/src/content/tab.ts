@@ -69,7 +69,7 @@ function offerMoveWords(el:Element,text:string,confidence:number,why?:string):bo
  if(snap.text.includes(text.trim()))return false;
  const rest=text.startsWith(snap.before)&&!snap.after.trim()?text.slice(snap.before.length):join(snap.before,text);if(!rest.trim())return false;
  if(live)drop('ignored');
- live={id:`w${++seq}`,field,key:keyOf(field),base:snap.before,text:rest,alts:[],final:true,pausedAt:performance.now(),context:readContext(field),taken:0,reported:false,from:'move',confidence,source:why?{title:why.slice(0,60),when:'now'}:undefined};
+ live={id:`w${++seq}`,field,key:keyOf(field),base:snap.before,text:rest,alts:[],final:true,pausedAt:performance.now(),context:readContext(field),taken:0,reported:false,from:'move',confidence,done:true,source:why?{title:why.slice(0,60),when:'now'}:undefined};
  render();return true;
 }
 const fieldIsFocused=(field:Field)=>{const a=deepActive();return !!a&&(a===field.el||field.el.contains(a));};

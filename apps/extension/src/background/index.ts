@@ -18,6 +18,7 @@ import './memory-view';
 import './predict';
 import './drawn-tab';
 import './memory/live';
+import './memory/record';
 import {flushVisits} from './memory/visits';
 import {snapshot as liveSnapshot} from './memory/live';
 import {all as allProjects,calibrate,writeNote,forgetProjects} from './memory/projects';

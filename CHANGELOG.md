@@ -15,7 +15,12 @@ it, like the total from the invoice in an "Amount" column or the order number su
 
 Tab offers one thing at a time, the one most likely right. When it is much surer of a move (Send, Submit, the next
 field) than of the words it was about to suggest, the move shows instead, and a move that would only type into your
-field shows as words there, taken with Tab like any suggestion. Moves also show sooner.
+field shows as words there, taken with Tab like any suggestion.
+
+Memory is now a recording of what's on your screen. As you scroll, switch tabs or a page changes, what comes into view
+is kept, inside embedded frames too, along with the words in images and on pages drawn as pictures. Tab pulls from it
+whatever matches what you're doing, however long ago you saw it, while the text around your cursor decides how the
+words go. Moves use it too, show up more readily, and never offer to type again what's already on the page.
 
 Memory keeps only what you saw: pages that were on your screen, what you copied and wrote, what you heard. Titles from
 your history, bookmarks, tabs you never opened and emails the agent read for you are no longer kept as memory (your

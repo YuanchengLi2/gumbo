@@ -136,15 +136,23 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const trailVisits=new Set(near.filter(n=>n.kind==='trail'&&n.visit!==undefined).map(n=>n.visit!));
  // The best-matching passage of each tab around them (the neighbouring tabs, as Copilot does for code) comes first.
  const snippets=await matchingSnippets(near.filter(n=>!samePage(n.url,req.url)),req.query,quick?3:6);
- const nodes=[...snippets,...near.filter(n=>!samePage(n.url,req.url)||n.kind==='fact'||n.kind==='project'),...pastNodes(search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)),trailVisits)];
+ // Tab's words and moves take what was seen from the recording, the passages that match what they are doing (search
+ // found them, wherever and whenever they were on screen), never a tab's screen whole: the latest page or the top of a
+ // page is not what is relevant. What they copied and wrote, who they are and their project still come as they are.
+ const screens=new Set(['tab','left','trail','closed']),fromRecording=quick&&req.surface!=='tab-action';
+ const nodes=[...snippets,...near.filter(n=>(!samePage(n.url,req.url)||n.kind==='fact'||n.kind==='project')&&!(fromRecording&&screens.has(n.kind))),...pastNodes(search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)),trailVisits)];
  // Text Tab never waits for meaning: what is embedded already counts now, the rest is embedded for the next keystroke.
  await weigh(nodes,req.query,req.surface==='tab-text'?0:quick?40:600);
  const moment={now:Date.now(),project:here?.project,site,words:wordsOf(req.query).slice(0,40)};
- // What comes is what is relevant: every node by its closeness in meaning to the moment (its words, when it is not
- // embedded yet), and what is one step away in what they did (the tab just left, the one this was opened from, this
- // tab's trail, what they copied, the project) by that alone: it shares few words with what they write about it. Ranking
- // then weighs both (rank.chain). A tab's best-matching passage was chosen by its words already.
- const close=(n:GNode)=>n.kind==='snippet'||n.hops<=1||(n.cos!==undefined?n.cos>=cfg.rank.minCos:overlap(moment.words,`${n.title} ${n.text}`)>=0.2);
+ // What comes is what is relevant: every node, wherever and whenever it is from, by the same test, its closeness in
+ // meaning to the moment (its words, when it is not embedded yet). A tab's best-matching passage was chosen by its words
+ // already. How recent it is, and whether it is one step away in what they did, only break ties (rank).
+ // What they copied in the last quarter hour is part of what they are doing (they took it to use it), not a page they saw.
+ // Not embedded yet (seen a moment ago), it is judged by its words: a share of the moment's, or three telling words in
+ // common ("eat", "dinner", "eight" in the quiz and in the chat that answered it).
+ const telling=moment.words.filter(w=>w.length>3);
+ const shares=(n:GNode)=>{const t=`${n.title} ${n.text}`.toLowerCase();return overlap(moment.words,t)>=0.2||telling.filter(w=>t.includes(w)).length>=3;};
+ const close=(n:GNode)=>n.kind==='snippet'||n.kind==='copy'&&Date.now()-n.at<15*MINUTE||(n.cos!==undefined?n.cos>=cfg.rank.minCos:shares(n));
  const candidates:Candidate[]=nodes.filter(close).map(n=>({id:n.id,layer:n.hops>=3?'past':'session',kind:n.kind,title:n.title,url:n.url,text:n.text,at:n.at,site:n.site,cos:n.cos,bm25:n.bm25,project:n.project??(n.visit!==undefined?visitMap.get(n.visit):undefined),chain:n.hops<=1,seenMs:Math.max(n.seenMs??0,seenNow.get(n.id)??0),useful:usefulMap.get(n.id)}));
  const rels=new Map(nodes.map(n=>[n.id,n.rel]));
  const chars=req.budget*4,stableText=about.length?`<about_them>\n${about.join('\n')}\n</about_them>`:'';
@@ -155,12 +163,10 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  let n=0;
  const items:Item[]=ranked.map(r=>({n:r.layer==='past'?++n:0,id:r.id,layer:r.layer,kind:r.kind,title:r.title,url:r.url,when:r.layer==='past'?when(r):ago(r.at),text:r.text,score:Math.round(r.score*1000)/1000,parts:Object.fromEntries(Object.entries(r.parts).map(([a,b])=>[a,Math.round(b*1000)/1000]))}));
  // A tab's words: its start and its end (where a chat's newest answer is), the more for what is one step away. For text
- // Tab, the tab just left and the others open give what was on their screen (the total at the bottom of the invoice they
- // scrolled to), not its first lines.
- const beside=(i:Item)=>i.kind==='left'||i.kind==='tab'||i.kind==='trail'||i.kind==='copy';
- const words=(i:Item)=>{const t=squash(i.text),max=req.surface==='tab-text'?(beside(i)?1500:400):i.kind==='left'||i.kind==='project'?1800:600;return t.length>max&&max>=1200?`${t.slice(0,300)} … ${t.slice(-(max-300))}`:cut(t,max);};
+ // Tab, a passage whole (the recording's are a few hundred characters): the fact in it is not cut off.
+ const words=(i:Item)=>{const t=squash(i.text),max=req.surface==='tab-text'?720:i.kind==='left'||i.kind==='project'?1800:600;return t.length>max&&max>=1200?`${t.slice(0,300)} … ${t.slice(-(max-300))}`:cut(t,max);};
  const sessionLines=items.filter(i=>i.layer==='session').map(i=>`- [${i.id}] ${rels.get(i.id)??i.kind} (${i.when}): “${cut(i.title,90)}”${i.url&&i.kind!=='copy'?` (${siteOf(i.url)})`:''}\n  ${words(i)}`);
- const memoryLines=items.filter(i=>i.layer==='past').map(i=>`[${i.n}] ${cut(i.title,90)} (${i.when})\n${cut(i.text,req.surface==='tab-text'?400:700)}`);
+ const memoryLines=items.filter(i=>i.layer==='past').map(i=>`[${i.n}] ${cut(i.title,90)} (${i.when})\n${cut(i.text,req.surface==='tab-text'?720:700)}`);
  const s=await load(),nowHere=tab!==undefined?s.tabs[tab]?.now:undefined;
  const page=req.withPage&&nowHere?`<in_front_of_them url="${req.url??''}" title="${cut(nowHere.title,120).replace(/"/g,'')}"${here?.kind?` kind="${here.kind}"`:''}>\n${nowHere.selection?`Selected: ${cut(nowHere.selection,600)}\n`:''}${nowHere.focus?`Their cursor is in “${nowHere.focus.label}” (${nowHere.focus.intent})${nowHere.focus.typed?`, after “${cut(nowHere.focus.typed,200)}”`:''}\n`:''}${cut(nowHere.visible,1500)}\n</in_front_of_them>`:'';
  const browser=req.withBrowser?await workspace({here:tab}).catch(()=>''):'';

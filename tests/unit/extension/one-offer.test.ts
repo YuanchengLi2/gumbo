@@ -22,12 +22,12 @@ describe('Tab offers one thing at a time, the one most likely right',()=>{
  });
 });
 
-describe('a move written as the input of the one tool Claude calls',()=>{
+describe('a move that types into the field, as the model writes it',()=>{
  const ids=new Set(['e1','e2']),known='Send NL-58213-77';
- it('reads as the same plan as a reply in JSON, while it streams and when it is whole',()=>{
+ it('reads as one plan while it streams and when it is whole',()=>{
   const input={confidence:0.85,label:'Type the order number',steps:[{do:'type',id:'e2',text:'NL-58213-77'}],why:'support asked for it'};
   expect(planOf(JSON.stringify(input),ids,known)).toMatchObject({confidence:0.85,steps:[{do:'type',id:'e2',text:'NL-58213-77'}]});
-  // The tool's input streams as JSON from its first character: the move shows as soon as its first step closes.
+  // The move shows as soon as its first step closes.
   const streamed='{"confidence":0.85,"label":"Type the order number","steps":[{"do":"type","id":"e2","text":"NL-58213-77"}';
   expect(partialPlan(streamed,ids,known)?.steps).toHaveLength(1);
  });

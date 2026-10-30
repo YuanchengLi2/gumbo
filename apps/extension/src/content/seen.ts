@@ -6,6 +6,7 @@ import {readContext} from './context';
 import {deepActive,squash,visible} from './dom';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
 import {categoryOf,type PageSigns} from '../shared/page-kind';
+import {deepQuery} from './perceive';
 /** What memory knows of this page right now, and what of it was actually read (the top page only):
  * - read: the page's blocks of text (paragraphs, list items, headings, cells) are watched as they come and go from view;
  *   each second the tab is in front and the user is about (moved, typed, scrolled in the last minute), the blocks at least
@@ -18,14 +19,16 @@ import {categoryOf,type PageSigns} from '../shared/page-kind';
  * fields (they are not fields), payment frames, or where Gumbo is off. */
 const BLOCKS='p,li,h1,h2,h3,h4,blockquote,pre,td,dd,figcaption,[role=listitem],[role=article],[role=row]';
 const SKIP='nav,header,footer,aside,[role=navigation],[role=banner],[role=contentinfo],[contenteditable=true],[contenteditable=""],textarea,gumbo-layer';
-const MAX_BLOCKS=400;
+// A long feed or thread is recorded as it is scrolled through, not only its first screens.
+const MAX_BLOCKS=1500;
 let settings:Settings|undefined,io:IntersectionObserver|undefined,observed=0,lastInput=Date.now(),lastNow='',lastSent=0,nowTimer:number|undefined,signs:Partial<PageSigns>={},signsAt=0;
 const watched=new WeakSet<Element>(),inView=new Set<Element>(),dwell=new Map<Element,{ms:number;sent:number}>();
 const active=()=>!!settings&&activeOn(settings,location.hostname)&&!inPaymentFrame();
 const idle=(work:()=>void,timeout=2000)=>{if(typeof requestIdleCallback==='function')requestIdleCallback(()=>work(),{timeout});else setTimeout(work,50);};
 
 export function startSeen(){
- if(window!==window.top)return;
+ // Every frame records what it shows (an embedded lesson, an email body, a document in a frame); what is on screen now
+ // (the 'now' message) is the top page's alone.
  void loadSettings().then(s=>{settings=s;idle(()=>{scan();nowSoon();});});onSettings(s=>{settings=s;});
  io=new IntersectionObserver(entries=>{for(const e of entries){if(e.isIntersecting&&e.intersectionRatio>=0.5)inView.add(e.target);else inView.delete(e.target);}nowSoon();},{threshold:[0,0.5]});
  for(const type of ['pointermove','keydown','wheel','touchstart'])window.addEventListener(type,()=>{lastInput=Date.now();},{capture:true,passive:true});
@@ -36,18 +39,49 @@ export function startSeen(){
  let scanned=0;
  new MutationObserver(()=>{if(Date.now()-scanned<2000)return;scanned=Date.now();idle(()=>{scan();nowSoon();});}).observe(document.documentElement,{childList:true,subtree:true});
  setInterval(()=>{
-  if(document.visibilityState!=='visible'||!document.hasFocus()||Date.now()-lastInput>60_000||!active())return;
+  if(!looking()||!active())return;
   for(const el of inView){if(!el.isConnected){inView.delete(el);continue;}const d=dwell.get(el)??{ms:0,sent:0};d.ms+=1000;dwell.set(el,d);}
  },1000);
- setInterval(()=>idle(flush),5000);
+ setInterval(()=>idle(()=>{flush();record();}),RECORD_MS);
  // Leaving the tab: what it shows now is what the next tab may need (a chat's answer, a lesson), so it goes at once.
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){sendNow(true);flush();}else nowSoon();});
- window.addEventListener('pagehide',flush);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){sendNow(true);flush();record(true);}else nowSoon();});
+ window.addEventListener('pagehide',()=>{flush();record(true);});
 }
-/** Picks up the blocks of text not watched yet (a page that renders late, a feed that grew). */
+/** The user is looking at this: the tab is in front of a focused window (a frame cannot tell, so it counts while shown)
+ * and they moved, typed or scrolled in the last minute. */
+const looking=()=>document.visibilityState==='visible'&&(window!==window.top||document.hasFocus())&&Date.now()-lastInput<60_000;
+/** Memory is a recording of what was on the user's screen: every few seconds, each block of text that has been in view
+ * for a second while they looked (as they scroll, as they switch to the tab, as the page changes under them) is
+ * recorded once, in page order; so are images' words (alt text, captions), and on a page whose words are not in blocks
+ * (a chat's messages, an app's cards) what is in view. When the screen is mostly pictures or drawn as pixels (a scan, a
+ * sheet, a design), the engine is told, and reads the picture (background/memory/record.ts). Cheap: it reads only what
+ * the screen watcher already watches, when the browser is idle. */
+const RECORD_MS=4000,recorded=new Set<string>();let recordedOn=location.href,lastPixels='';
+const hash=(s:string)=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return(h>>>0).toString(36)+s.length;};
+function record(leaving=false){
+ if(!active()||!leaving&&!looking())return;
+ if(location.href!==recordedOn){recordedOn=location.href;recorded.clear();}
+ const keep=(text:string,into:string[])=>{const t=text.trim();if(t.length<3)return;const k=hash(t);if(recorded.has(k))return;recorded.add(k);into.push(t);};
+ const blocks:string[]=[],els=[...dwell].filter(([el,d])=>d.ms>=1000&&el.isConnected).map(([el])=>el).sort(above);
+ for(const el of els)keep(squash((el as HTMLElement).innerText??'').slice(0,4000),blocks);
+ // A page whose words are not in paragraphs: what is in view, read from its text directly.
+ if(!els.length&&!leaving)keep(inViewText(3000),blocks);
+ // Images in view: their words, and whether the screen is mostly pictures.
+ let pictured=0;const area=innerWidth*innerHeight;
+ for(const img of deepQuery('img,canvas,svg[role=img],[role=img]',document,300)){
+  const r=img.getBoundingClientRect(),w=Math.max(0,Math.min(r.right,innerWidth)-Math.max(r.left,0)),h=Math.max(0,Math.min(r.bottom,innerHeight)-Math.max(r.top,0));
+  if(w<120||h<80)continue;pictured+=w*h;
+  const words=[img.getAttribute('alt'),img.getAttribute('aria-label'),img.getAttribute('title'),img.closest('figure')?.querySelector('figcaption')?.textContent].map(s=>squash(s??'')).filter(Boolean);
+  if(words.length)keep(`[image] ${[...new Set(words)].join(' — ')}`,blocks);
+ }
+ const inViewWords=[...inView].reduce((n,el)=>n+((el as HTMLElement).innerText?.length??0),0);
+ const pixels=window===window.top&&!leaving&&pictured>area*0.35&&inViewWords<600&&(()=>{const k=`${location.href}|${scrollY}|${Math.round(pictured/1000)}`;if(k===lastPixels)return false;lastPixels=k;return true;})();
+ if(blocks.length||pixels)post({type:'record',title:document.title,blocks,pixels,view:[innerWidth,innerHeight]});
+}
+/** Picks up the blocks of text not watched yet (a page that renders late, a feed that grew), open shadow roots too. */
 function scan(){
  if(!active()||!io||!document.body)return;
- for(const el of document.body.querySelectorAll(BLOCKS)){
+ for(const el of deepQuery(BLOCKS,document,6000)){
   if(observed>=MAX_BLOCKS)break;
   if(watched.has(el))continue;watched.add(el);
   // A block inside another (a paragraph in a list item) is read with it.

@@ -18,7 +18,8 @@ export type SuggestionRecord={id?:number;site:string;intent:string;kind:'text'|'
 export type ActionEvent={id?:number;site:string;pageKind:string;url:string;kind:'click'|'navigate'|'submit'|'key'|'open'|'type'|'select'|'check'|'paste'|'copy'|'drag'|'switch'|'scroll'|'dialog';role:string;name:string;path?:string;nearby?:string;title?:string;transition?:string;at:number;source:Source;
  tab?:number;visit?:number;prev?:number;value?:string;project?:string};
 export type Page={url:string;site:string;title:string;text:string;firstSeen:number;lastSeen:number;visibleMs:number;visits:number;highlights:string[];source:Source};
-export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import';text:string;vector?:number[];at:number;site:string;title:string;url?:string;
+/** kind 'seen': a piece of the recording of the user's screen (memory/record.ts), its ref `seen:<url>`. */
+export type Passage={id?:number;ref:string;kind:'page'|'media'|'writing'|'note'|'import'|'seen';text:string;vector?:number[];at:number;site:string;title:string;url?:string;
  /** The visit it was read on, and how long it was actually in view while they were there (ms). */visit?:number;seenMs?:number};
 /** What kind of page a visit was (memory/page-kind.ts). */
 export type PageCategory='inbox'|'thread'|'doc'|'search'|'results'|'form'|'dashboard'|'article'|'video'|'chat'|'product'|'checkout'|'settings'|'other';
@@ -233,6 +234,16 @@ export async function dropUnvisitedImports(before:number,limit=2000):Promise<num
  const d=await db(),tx=d.transaction(['passages','pages','vectors'],'readwrite');let n=0;
  for(let c=await tx.objectStore('passages').index('at').openCursor(IDBKeyRange.upperBound(before));c&&n<limit;c=await c.continue()){
   if(c.value.kind!=='page'||await tx.objectStore('pages').getKey(c.value.ref)!==undefined)continue;
+  await tx.objectStore('vectors').delete('p'+c.primaryKey);await c.delete();n++;
+ }
+ await tx.done;return n;
+}
+/** Retention for the recording of the screen (memory/record.ts): what was on screen longer ago than `before` goes, with
+ * its embeddings (the page it was on keeps its own record). */
+export async function dropOldSeen(before:number,limit=5000):Promise<number>{
+ const d=await db(),tx=d.transaction(['passages','vectors'],'readwrite');let n=0;
+ for(let c=await tx.objectStore('passages').index('at').openCursor(IDBKeyRange.upperBound(before));c&&n<limit;c=await c.continue()){
+  if(c.value.kind!=='seen')continue;
   await tx.objectStore('vectors').delete('p'+c.primaryKey);await c.delete();n++;
  }
  await tx.done;return n;

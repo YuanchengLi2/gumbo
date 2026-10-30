@@ -61,7 +61,7 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const key=fieldKey(site,c.intent,c.label,c.thread);
  const [recall,bundle,before]=await Promise.all([
   within(recallFor({site,intent:c.intent,before:message.before,thread:c.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text}),emptyRecall(),'recall',site),
-  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key}).then(b=>{lastBundle.set(key,b);if(lastBundle.size>100)lastBundle.delete(lastBundle.keys().next().value!);return b;}),lastBundle.get(key)??noBundle(),'getContext',site,400),
+  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,around:c.around,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key}).then(b=>{lastBundle.set(key,b);if(lastBundle.size>100)lastBundle.delete(lastBundle.keys().next().value!);return b;}),lastBundle.get(key)??noBundle(),'getContext',site,400),
   within(lately(c.url),undefined,'lately',site),
  ]);
  if(signal.aborted)return;
@@ -94,7 +94,10 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
   // ∎ after the best: the text is finished once it is typed (alone: it already is). The next step is then a move.
   const said=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),confidence=sureOf(said),full=bare(said),done=(full.split('⟂')[0]??'').includes('∎');
   const [best='',...more]=alternativesOf(full.replace(/∎/g,''));
-  const checked=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==checked).slice(0,Math.max(0,cfg.alternatives-1));
+  // The ⟂ between ways to go on takes the space around it: each alternative starts where the best one does (after a
+  // whole word, with its space), so taking one never glues it to the word before.
+  const lead=/^\s*/.exec(best)?.[0]??'';
+  const checked=check(best,true),alternatives=more.map(a=>check(/^\s/.test(a)?a:lead+a,true)).filter(a=>a&&a!==checked).slice(0,Math.max(0,cfg.alternatives-1));
   const source=checked?sourceOf(checked,bundle,`${message.before}\n${message.after}\n${c.label}\n${(c.around??[]).join('\n')}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
   // In an empty field, words with no fact from their context behind them are a guess at what someone might type there:
   // shown only when the model is sure.
@@ -113,7 +116,7 @@ on('tab.prewarm',async(message:{context:FieldContext},{url})=>{
  // The field's memory is searched now, so it is there when the first suggestion is asked for; and the part of the prompt
  // that stays the same while they type here is put in the provider's cache, exactly as tabRequest will send it.
  const c=message.context;
- const [recall,bundle]=await Promise.all([recallFor({site,intent:c.intent,before:''}),getContext({surface:'tab-text',tab:undefined,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings}),field:{intent:c.intent,label:c.label},budget:1600,key:fieldKey(site,c.intent,c.label,c.thread),wait:0})]);
+ const [recall,bundle]=await Promise.all([recallFor({site,intent:c.intent,before:''}),getContext({surface:'tab-text',tab:undefined,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,around:c.around}),field:{intent:c.intent,label:c.label},budget:1600,key:fieldKey(site,c.intent,c.label,c.thread),wait:0})]);
  const stable=(bundle.stable?bundle.stable+'\n':'')+stableContext(message.context,{...recall,facts:{}}),key=`${settings.models.tab}|${stable.length}|${stable.slice(0,400)}`;
  if(Date.now()-(warmed.get(key)??0)<240_000)return;warmed.set(key,Date.now());
  if(warmed.size>200)warmed.delete(warmed.keys().next().value!);

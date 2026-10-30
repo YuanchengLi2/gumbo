@@ -10,7 +10,9 @@ import {clean} from '../dom';
  * A try that changed the field without the right result is undone before the next. */
 export type Inserted={ok:boolean;method?:'insertText'|'insertHTML'|'setRangeText'|'beforeinput'|'textupdate'|'paste';reason?:string};
 const norm=(text:string)=>clean(text).replace(/\s+/g,' ').trim();
-const frame=()=>new Promise<void>(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0)));
+/** The next frame, or a tenth of a second when none is drawn (a tab hidden mid-insert, a busy computer): reading the
+ * field back never waits on painting. */
+const frame=()=>new Promise<void>(resolve=>{const done=()=>{clearTimeout(late);resolve();},late=setTimeout(done,100);requestAnimationFrame(()=>setTimeout(done,0));});
 
 /** Replaces the text from `from` to `to` (default: the selection) with `text`; `html` is offered to rich editors. */
 export async function insert(field:Field,text:string,options:{from?:number;to?:number;html?:string}={}):Promise<Inserted>{

@@ -1,4 +1,4 @@
-import {db,compactOldPages,dropUnvisitedImports,dropOldVisits,dropBookmarkNotes,getSealed,putSealed} from './db';
+import {db,compactOldPages,dropUnvisitedImports,dropOldVisits,dropBookmarkNotes,dropOldSeen,getSealed,putSealed} from './db';
 import {invalidate} from './recall';
 /** Memory never weighs the computer down. Once an hour, and only while the computer is idle, in small batches that yield
  * between them:
@@ -34,6 +34,8 @@ export async function keepWithinBudget({force=false}:{force?:boolean}={}){
  // Memory holds what the user saw: addresses brought in from Chrome's history with no page of them kept go at once, and
  // the bookmarks once brought in as notes go the first time this runs.
  removed+=await dropUnvisitedImports(now).catch(()=>0);
+ // The recording of the screen keeps half a year.
+ removed+=await dropOldSeen(now-180*DAY).catch(()=>0);
  if(!await getSealed<number>('bookmarks-dropped').catch(()=>1)){removed+=await dropBookmarkNotes().catch(()=>0);await putSealed('bookmarks-dropped',now).catch(()=>{});}
  if(compacted)removed++;
  // A gigabyte at most, and never more than a tenth of what Chrome allows on this disk.

@@ -275,6 +275,17 @@ small batches with pauses.
 - **History import:** `chrome.history` for the last 60 days, with each URL's visits (time, transition,
   `referringVisitId`), gives navigation chains and routines. Since October 29 none of it is searchable memory (a title
   and an address are not a page the user saw), and bookmarks are not brought in.
+- **A recording of the screen (October 29):** memory records what is on the user's screen as they use it
+  (`content/seen.ts`, `background/memory/record.ts`):
+  - every block of text in view for a second while they look is kept once, in page order, with the page, the time and
+    the visit, as they scroll, switch tabs or the page changes under them, in every frame and open shadow root;
+  - so are images' words (alt text, captions); on pages whose words are not in blocks, what is in view;
+  - a screen that is mostly pictures or drawn as pixels is read from a picture of it by a model, at most every 15 s a
+    tab, only when it changed, never while saving credits.
+
+  It is searched by meaning and by words like every passage, kept half a year, and written in idle time in batches, so
+  browsing never waits on it. Tab, moves, Ctrl+K and the agent take from it what matches what the user is doing (the
+  field, the text around it, the words being typed), wherever and whenever it was seen. Being recent only breaks ties.
 - **Only what the user saw:** memory's pages, and the tabs every surface is told about, are pages that were on their
   screen. A tab opened behind and never brought forward, and what the agent read through a connector for them, are not
   kept.

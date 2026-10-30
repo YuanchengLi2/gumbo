@@ -24,9 +24,10 @@ export async function relevant(query:string,options:{k?:number;page?:string}={})
 }
 const touched=new Map<string,number>();
 
-/** What a field is about, as a question to memory: its page, its label, the last messages above it, the last sentence. */
-export function fieldQuery(input:{title?:string;label?:string;thread?:{author?:string;text:string}[];headings?:string[];sentence?:string}){
- return[input.title,input.label,...(input.thread??[]).slice(-2).map(m=>`${m.author?`${m.author}: `:''}${m.text.slice(0,400)}`),...(input.headings??[]).slice(0,2),input.sentence].filter(Boolean).join('\n');
+/** What a field is about, as a question to memory: what is being written and what surrounds it (the sentence under way,
+ * the question above the field or the column it is in, the last messages above it), then the field's label and page. */
+export function fieldQuery(input:{title?:string;label?:string;thread?:{author?:string;text:string}[];headings?:string[];sentence?:string;around?:string[]}){
+ return[input.sentence,...(input.around??[]).slice(0,3).map(a=>a.slice(0,300)),...(input.thread??[]).slice(-2).map(m=>`${m.author?`${m.author}: `:''}${m.text.slice(0,400)}`),input.label,...(input.headings??[]).slice(0,2),input.title].filter(Boolean).join('\n');
 }
 type Field={query:string;items:Remembered[];at:number;searching?:Promise<void>};
 const fields=new Map<string,Field>();
