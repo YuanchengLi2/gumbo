@@ -1,4 +1,4 @@
-import {deepQuery,elementById,describe,idOf,pageModel,hoverOwner,type Item} from './perceive';
+import {deepQuery,elementById,describe,idOf,pageModel,hoverOwner,behaving,actsAsControl,type Item} from './perceive';
 import {nameOf,roleOf,visible,squash,deepActive} from './dom';
 import {fieldOf} from './fields/field';
 import {insert} from './fields/insert';
@@ -35,7 +35,10 @@ export function irreversible(action:Action,el?:Element|null):boolean{
  // "Add another file" is not a send.
  if(action.do==='click'&&el){
   const name=nameOf(el,60),form=(el as HTMLButtonElement).form,submits=(el instanceof HTMLButtonElement||el instanceof HTMLInputElement)&&el.type==='submit'&&!!form&&!navigates(form);
-  return finalWords.test(name)&&!navigates(form)||submits&&!stepWords.test(name);
+  // A box the page made clickable (a row, a card) is named by what it holds (an email's subject, "Quarterly report"): its
+  // words say what it is about, not that it sends or deletes, unless they are a short label of its own ("Delete").
+  const labelled=!actsAsControl(el)||name.split(/\s+/).length<=2;
+  return finalWords.test(name)&&labelled&&!navigates(form)||submits&&!stepWords.test(name);
  }
  // Enter in a form submits it, unless it is a search or a form that only goes to an address (nothing changes).
  if(action.do==='key'){const el=action.target?findTarget(action.target):null,form=el?.closest('form');return /(^|\+)enter$/i.test(action.combo)&&!!form&&!navigates(form as HTMLFormElement)&&!el!.closest('[role=search]')&&!(el instanceof HTMLInputElement&&el.type==='search');}
@@ -47,16 +50,21 @@ const navigates=(form:HTMLFormElement|null|undefined)=>!!form&&!!form.getAttribu
 export function findTarget(target:Target):Element|null{
  if(target.point){const [x,y]=target.point;return document.elementFromPoint(x,y);}
  if(target.id){const el=elementById(target.id);if(el)return el;}
- const candidates=()=>deepQuery('a,button,input,textarea,select,summary,label,h1,h2,h3,h4,h5,h6,[role],[contenteditable=true],[tabindex],[onclick]').filter(visible);
+ // What says it is a control, then what acts as one in view (perceive.ts behaving: a row or card the page made
+ // clickable in script), so a step on one is found again after the page drew it anew.
+ let listed:Element[]|undefined;
+ const marked=()=>listed??=deepQuery('a,button,input,textarea,select,summary,label,h1,h2,h3,h4,h5,h6,[role],[contenteditable=true],[tabindex],[onclick]',document,20_000).filter(visible);
+ const candidates=()=>[...marked(),...behaving(document,new Set(marked()))];
  if(target.name){
-  const want=squash(target.name).toLowerCase(),all=candidates();
-  const scored=all.map(el=>{const name=nameOf(el,120).toLowerCase(),role=roleOf(el);let score=name===want?3:name.startsWith(want)?2:name.includes(want)?1:0;if(score&&target.role&&role===target.role)score+=2;
+  const want=squash(target.name).toLowerCase();
+  const scoredIn=(all:Element[])=>all.map(el=>{const name=nameOf(el,120).toLowerCase(),role=roleOf(el);let score=name===want?3:name.startsWith(want)?2:name.includes(want)?1:0;if(score&&target.role&&role===target.role)score+=2;
    // A label or a plain element named the same loses to the control itself.
    if(score&&(el.tagName==='LABEL'||role==='generic'))score-=0.5;
    // The words near it: the closer the ancestor that holds them, the surer the match (its row beats the whole page).
    if(score&&target.nearby){const near=target.nearby.toLowerCase().slice(0,40);let node=el.parentElement;for(let level=1;node&&level<=5;level++,node=node.parentElement)if(squash(node.innerText??'').toLowerCase().includes(near)){score+=2/level;break;}}
    return{el,score};}).filter(x=>x.score>0).sort((a,b)=>b.score-a.score);
-  if(scored.length)return scored[0].el;
+  const scored=scoredIn(marked()),acting=scored.length?scored:scoredIn(behaving(document,new Set(marked())));
+  if(acting.length)return acting[0].el;
  }
  if(target.path){try{const el=document.querySelector(target.path);if(el&&visible(el))return el;}catch{}}
  const text=(target.text??target.nearby)?.toLowerCase();
@@ -69,15 +77,15 @@ export async function perform(action:Action):Promise<Done>{
   case 'click':{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
    // A spot on a drawing: clicked there, as it is (what it changes is pixels, which nothing here can watch).
-   if(action.target.point){const changed=await watch(()=>pointerClick(el,action.target.point),400,false);return{ok:true,changed,detail:`Clicked at ${action.target.point.map(Math.round).join(', ')}.`};}
+   if(action.target.point){const changed=await watch(()=>pointerClick(el,action.target.point),400,{loose:true});return{ok:true,changed,detail:`Clicked at ${action.target.point.map(Math.round).join(', ')}.`};}
    // An item of a menu that opens on hover: the pointer goes to its trigger first (a script-driven menu opens; a CSS one
    // stays shut, and its hidden item still takes the click).
    const owner=visible(el)?null:hoverOwner(el);if(owner){hover(owner);await frames(2);}
    el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);
    // A click focusing what it clicked is not the page reacting.
-   let changed=await watch(()=>pointerClick(el),700,false);
-   if(!changed&&el.isConnected){changed=await watch(()=>(el as HTMLElement).click(),700,false);}
-   if(!changed&&el.isConnected){(el as HTMLElement).focus();changed=await watch(()=>keyPress(el,'Enter'),700,false);}
+   let changed=await watch(()=>pointerClick(el),700,{target:el});
+   if(!changed&&el.isConnected){changed=await watch(()=>(el as HTMLElement).click(),700,{target:el});}
+   if(!changed&&el.isConnected){(el as HTMLElement).focus();changed=await watch(()=>keyPress(el,'Enter'),700,{target:el});}
    return{ok:changed,changed,detail:changed?`Clicked ${nameOf(el,60)||roleOf(el)}.`:`Clicked ${nameOf(el,60)}, but nothing changed.`,item:el.isConnected?describe(el):undefined};
   }
   case 'type':{
@@ -111,7 +119,7 @@ export async function perform(action:Action):Promise<Done>{
    const named=action.target?findTarget(action.target):null,cursor=fieldOf(deepActive())?.el;
    const el=(named&&(fieldOf(named)||!cursor)?named:cursor??named)??document.activeElement??document.body;
    const url=location.href,before=(el as HTMLInputElement).value??(el as HTMLElement).innerText;
-   let changed=await watch(()=>keyPress(el,action.combo));
+   let changed=await watch(()=>keyPress(el,action.combo),700,{target:el,countFocus:true});
    // Many pages ignore a simulated Enter. When it went nowhere (after a second and a half the address is the same and the
    // field still holds the same text, so nothing took it), Enter in a field does what it stands for there: submit the
    // field's form, as the browser's own Enter does; else press the box's own submitting button.
@@ -146,14 +154,14 @@ export async function perform(action:Action):Promise<Done>{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
    const point=action.target.point;if(!point){el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);}
    const what=action.do==='double_click'?'Double-clicked':action.do==='right_click'?'Right-clicked':'Pointed at';
-   const changed=await watch(()=>action.do==='double_click'?doubleClick(el,point):action.do==='right_click'?rightClick(el,point):hover(el,point),700,false);
+   const changed=await watch(()=>action.do==='double_click'?doubleClick(el,point):action.do==='right_click'?rightClick(el,point):hover(el,point),700,{target:el,loose:!!point});
    return{ok:true,changed,detail:`${what} ${nameOf(el,60)||roleOf(el)}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
   }
   case 'drag':{
    const el=findTarget(action.target);if(!el)return{ok:false,detail:`Nothing on the page matches ${label(action.target)}.`};
    const toPoint=action.to?.point,to=action.to&&!toPoint?findTarget(action.to):null;if(action.to&&!toPoint&&!to)return{ok:false,detail:`Nothing on the page matches ${label(action.to)} to drop it on.`};
    const point=action.target.point;if(!point){el.scrollIntoView({block:'center',inline:'nearest'});await frames(1);}
-   const changed=await watch(()=>drag(el,to,action.by,point,toPoint),700,false);
+   const changed=await watch(()=>drag(el,to,action.by,point,toPoint),700,{target:el,moved:true,loose:!!point});
    return{ok:true,changed,detail:`Dragged ${nameOf(el,40)||roleOf(el)}${to?` to ${nameOf(to,40)||roleOf(to)}`:''}${changed?'':' (nothing visibly changed)'}.`,item:el.isConnected?describe(el):undefined};
   }
   case 'scroll':{
@@ -163,7 +171,7 @@ export async function perform(action:Action):Promise<Done>{
    if(el)el.scrollBy({top:by,behavior:'instant' as ScrollBehavior});else window.scrollBy({top:by,behavior:'instant' as ScrollBehavior});
    return{ok:true,detail:`Scrolled ${by>0?'down':'up'}.`};
   }
-  case 'back':{const url=location.href;history.back();const moved=await watch(()=>{},1500,false)||location.href!==url;return{ok:true,changed:moved,detail:'Went back.'};}
+  case 'back':{const url=location.href;history.back();const moved=await watch(()=>{},1500,{loose:true})||location.href!==url;return{ok:true,changed:moved,detail:'Went back.'};}
   case 'wait':return waitFor(action.for,action.timeoutMs??8000);
   case 'read':{
    if(!action.target)return{ok:true,detail:'Read the page.',value:pageModel()};
@@ -191,14 +199,47 @@ function submitAfter(field:Element):HTMLElement|null{
  }
  return null;
 }
-async function watch(run:()=>void|Promise<unknown>,ms=700,countFocus=true):Promise<boolean>{
- const url=location.href,focus=document.activeElement;let mutated=false;
- const observer=new MutationObserver(records=>{if(records.some(r=>!(r.target instanceof Element&&r.target.tagName==='GUMBO-LAYER')))mutated=true;});
+/** Whether a step did anything, within a moment. A busy app changes all the time by itself (a clock, a presence dot, a
+ * counter, a feed), so a change somewhere on the page is not the step working. What the page keeps changing is watched for
+ * a moment first (its churn); then the step counts as done when:
+ * - the address moved, the page scrolled, or (for a key) the focus moved;
+ * - the element acted on changed (its state: expanded, checked, pressed, selected, its value or words), or is gone;
+ * - the page said something new (an alert, a status, a live region, read again for its words);
+ * - for a drag, the thing moved;
+ * - or anything changed that the page was not already changing by itself (a panel opened, a row went, "Thanks, sent.").
+ * Only a step that did none of these is tried again another way, so a toggle that worked is never pressed twice. loose:
+ * any change at all counts, with no churn watched first (a spot on a drawing, where what changes is pixels; going back). */
+type Watch={target?:Element|null;countFocus?:boolean;loose?:boolean;moved?:boolean};
+const CHURN_MS=120,FEEDBACK='[role=alert],[role=status],[aria-live]:not([aria-live=off]),[role=alertdialog]';
+const stateOf=(el:Element)=>JSON.stringify([...['aria-expanded','aria-checked','aria-pressed','aria-selected','aria-current','aria-hidden','open','hidden','disabled'].map(a=>el.getAttribute(a)),(el as HTMLInputElement).value,(el as HTMLInputElement).checked,squash((el as HTMLElement).innerText??'').slice(0,300)]);
+/** What the page is telling them (alerts, status and live regions), its numbers left out (a "checked 12:01" ticking). */
+const feedbackOf=()=>deepQuery(FEEDBACK,document,100).filter(visible).map(el=>squash((el as HTMLElement).innerText??'').replace(/\d+/g,'#')).join('\n');
+async function watch(run:()=>void|Promise<unknown>,ms=700,o:Watch={}):Promise<boolean>{
+ // A key pressed on the page as a whole has no element of its own to watch.
+ const whole=(el?:Element|null)=>!el||el===document.body||el===document.documentElement;
+ const url=location.href,focus=document.activeElement,target=whole(o.target)?null:o.target!,y=scrollY;
+ // What changes by itself: an element changing, or a small one holding it (a clock's text), not a big box around it.
+ const churn=new Set<Element>(),byItself=(node:Element)=>{for(const c of churn)if(c===node||c.contains(node)&&(c.textContent?.length??0)<500)return true;return false;};
+ const nodeOf=(r:MutationRecord)=>{const node=r.target instanceof Element?r.target:r.target.parentElement;return node&&!node.closest('gumbo-layer')?node:null;};
+ let watching=false,any=false,fresh=false,said=false;
+ const observer=new MutationObserver(records=>{for(const r of records){
+  const node=nodeOf(r);if(!node)continue;
+  if(!watching){churn.add(node);continue;}
+  any=true;if(node.closest(FEEDBACK))said=true;if(!fresh&&!byItself(node))fresh=true;
+ }});
  observer.observe(document,{subtree:true,childList:true,attributes:true,characterData:true});
+ if(!o.loose){await new Promise(r=>setTimeout(r,CHURN_MS));for(const r of observer.takeRecords()){const node=nodeOf(r);if(node)churn.add(node);}}
+ watching=true;
+ const state=target?stateOf(target):'',rect=target?.getBoundingClientRect(),parent=target?.parentElement,told=o.loose?'':feedbackOf();
  try{await run();}catch{}
- const until=Date.now()+ms;while(Date.now()<until&&!mutated&&location.href===url){await new Promise(r=>setTimeout(r,50));}
+ // A live region that changed is read again: it said something new only when its words did.
+ const spoke=()=>{if(!said)return false;said=false;return feedbackOf()!==told;};
+ const moved=()=>{if(!o.moved||!target?.isConnected)return false;const now=target.getBoundingClientRect();return target.parentElement!==parent||Math.hypot(now.left-rect!.left,now.top-rect!.top)>8;};
+ const did=()=>location.href!==url||(o.loose?any:fresh||spoke()||moved()||!!target&&(!target.isConnected||stateOf(target)!==state))||!!o.countFocus&&document.activeElement!==focus||Math.abs(scrollY-y)>40;
+ const until=Date.now()+ms;let done=did();
+ while(!done&&Date.now()<until){await new Promise(r=>setTimeout(r,50));done=did();}
  observer.disconnect();
- return mutated||location.href!==url||(countFocus&&document.activeElement!==focus);
+ return done;
 }
 /** Real pointer events at the element's centre, as a mouse would send them. */
 function pointerClick(el:Element,point?:[number,number]){

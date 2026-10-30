@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Busy app</title><link rel="stylesheet" href="style.css">
+<style>
+ body{margin:0}
+ #history{position:absolute;top:1400px;left:0;width:300px}
+ header{display:flex;gap:16px;padding:8px 16px;border-bottom:1px solid #ddd}
+ main{padding:8px 16px}
+ [role=toolbar]{display:flex;gap:6px;margin:8px 0}
+ .icon{width:32px;height:32px;padding:4px}
+ .icon svg,.icon i{display:block;width:20px;height:20px}
+ .row{display:flex;gap:12px;padding:6px 8px;border-bottom:1px solid #eee;cursor:pointer}
+ #reader{min-height:40px;margin:12px 0;padding:8px;border:1px solid #ddd}
+ .online{color:green}.away{color:gray}
+</style></head>
+<body>
+<!-- A long history first in the page's code (thousands of elements), the app's own controls after it, as a big app is
+     built: a reader that stops after a few thousand elements never reaches them. -->
+<div id="history"></div>
+<header>
+ <span id="dot" class="online">Priya is here</span>
+ <p id="clock">Synced at 12:00:00 PM today</p>
+ <span id="unread">Unread 41</span>
+ <div role="status" id="pulse">Last checked 12:00:00</div>
+</header>
+<main>
+ <div role="toolbar" aria-label="Message actions">
+  <button class="icon" id="trash"><svg class="lucide lucide-trash-2" viewBox="0 0 20 20"><path d="M4 4h12v12H4z"/></svg></button>
+  <button class="icon" id="archive" data-tooltip="Archive"><svg viewBox="0 0 20 20"><path d="M2 4h16v4H2z"/></svg></button>
+  <button class="icon" id="star" aria-pressed="false"><i class="fa-regular fa-star"></i></button>
+  <button id="dead">Does nothing</button>
+  <button id="save">Save draft</button>
+ </div>
+ <div id="menu" role="menu" hidden><div role="menuitem" tabindex="0">Archive this conversation</div></div>
+ <div id="list"></div>
+ <div id="reader">Pick a message to read it.</div>
+</main>
+<footer><div role="status" id="saved"></div></footer>
+<script>
+ const older=document.getElementById('history');
+ for(let i=0;i<5000;i++){const s=document.createElement('span');s.textContent=`Old note ${i} `;older.appendChild(s);}
+ const messages=[['Priya','Quarterly report','The quarterly report is attached, and the numbers are up twelve percent.'],['Marco','Offsite dates','Can everyone make the offsite on the ninth? Reply by Friday.']];
+ // Rows are plain boxes whose click the app handles in script: no role, no tab stop, only the pointer says so.
+ window.drawRows=()=>{
+  const list=document.getElementById('list');list.innerHTML='';
+  for(const [from,subject,body] of messages){
+   const row=document.createElement('div');row.className='row';
+   row.innerHTML=`<span>${from}</span><span>${subject}</span>`;
+   row.addEventListener('click',()=>{document.getElementById('reader').textContent=`From ${from}: ${body}`;});
+   list.appendChild(row);
+  }
+ };
+ drawRows();
+ document.getElementById('trash').addEventListener('click',()=>{document.getElementById('saved').textContent='Moved to trash';});
+ document.getElementById('archive').addEventListener('click',()=>{document.getElementById('menu').hidden=false;});
+ document.getElementById('star').addEventListener('click',e=>{const b=e.currentTarget;b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');});
+ document.getElementById('save').addEventListener('click',()=>{document.getElementById('saved').textContent='Draft saved';});
+ // What a busy app does all the time by itself: a clock, a presence dot, a counter, a live region ticking.
+ let tick=0;
+ setInterval(()=>{tick++;const t=`12:00:${String(tick%60).padStart(2,'0')}`;
+  document.getElementById('clock').textContent=`Synced at ${t} PM today`;
+  document.getElementById('pulse').textContent=`Last checked ${t}`;
+  document.getElementById('unread').textContent=`Unread ${41+tick}`;
+  const dot=document.getElementById('dot');dot.className=tick%2?'away':'online';
+ },60);
+</script>
+</body>
+</html>

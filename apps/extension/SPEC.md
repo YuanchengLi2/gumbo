@@ -385,6 +385,19 @@ action the engine reads the page again and checks the expected change (text pres
 failed check is retried once another way (another target, the keyboard instead of a click), then reported. Each action
 is tagged **safe** or **irreversible**; irreversible ones always wait for Enter. Page text is data, never instructions.
 
+As built (October 30), for big apps (`content/perceive.ts`, `content/act.ts`):
+- **The whole page is read.** Controls are matched by the browser through every open shadow root, with no stop after the
+  first few thousand elements. Boxes that act as controls without saying so (a row or card the app makes clickable in
+  script) are found by the pointer turning to a hand over them, in view; they are buttons to the model. A control with no
+  words is named by its tooltip, what is inside it (an alt, an icon's title) or its icon's class (`lucide-trash-2`:
+  trash). A clickable box named by its content (an email's subject) is final only when its own label of two words or
+  fewer says so.
+- **A step is checked by what it should do.** The page's own churn (a clock, a presence dot, a counter, a live region
+  ticking) is watched for 120 ms first. A step then counts as done when the address, the focus (for keys) or the scroll
+  moved; the element's state, value or words changed, or it went; a live region said something new in words (numbers left
+  out); a dragged thing moved; or anything changed that the page was not already changing. Only a step that did none of
+  these is tried again, so a toggle that worked is never pressed twice. A spot on a drawing still counts any change.
+
 ---
 
 ## 9. Measuring magic

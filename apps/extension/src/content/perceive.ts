@@ -12,13 +12,59 @@ const ids=new WeakMap<Element,string>(),byId=new Map<string,WeakRef<Element>>();
 export function idOf(el:Element){let id=ids.get(el);if(!id){id='e'+next++;ids.set(el,id);byId.set(id,new WeakRef(el));}return id;}
 export function elementById(id:string):Element|null{const el=byId.get(id)?.deref();return el&&el.isConnected?el:null;}
 
-/** Every element matching a selector, through open shadow roots. */
+/** Every element matching a selector, through open shadow roots, in page order within each root: at most `limit` of
+ * them, however big the page. The browser does the matching, so a big app's controls are all found, not only those in its
+ * first few thousand elements (the old walk stopped there, and an inbox's list or a board came after its sidebar). */
 export function deepQuery(selector:string,root:ParentNode=document,limit=4000):Element[]{
- const out:Element[]=[],stack:ParentNode[]=[root];let seen=0;
- while(stack.length&&seen<limit){
-  const scope=stack.pop()!;
-  for(const el of scope.querySelectorAll('*')){seen++;if(el.matches(selector))out.push(el);if(el.shadowRoot)stack.push(el.shadowRoot);if(seen>=limit)break;}
+ const out:Element[]=[];
+ for(const scope of [root,...shadowRootsIn(root)]){
+  for(const el of scope.querySelectorAll(selector)){out.push(el);if(out.length>=limit)return out;}
  }
+ return out;
+}
+/** The open shadow roots inside a root (nested ones too), found by one walk and kept for a moment: a moment's guess reads
+ * the page several times, and roots come and go far less often than that. */
+const rootsKept=new WeakMap<ParentNode,{at:number;roots:ShadowRoot[]}>();
+function shadowRootsIn(root:ParentNode):ShadowRoot[]{
+ const had=rootsKept.get(root);if(had&&performance.now()-had.at<1000)return had.roots;
+ const roots:ShadowRoot[]=[];
+ for(let i=-1;i<roots.length;i++){const scope=i<0?root:roots[i];for(const el of scope.querySelectorAll('*'))if(el.shadowRoot)roots.push(el.shadowRoot);}
+ rootsKept.set(root,{at:performance.now(),roots});return roots;
+}
+/** Things that act like controls without saying so: a card, a row or an icon in a plain box whose click the page handles
+ * in script, with no role, tag or tab stop that marks it. The page shows them the way it shows any control: the pointer
+ * turns to a hand over them (and not already over what holds them). Only what is in view, a few thousand elements looked
+ * at at most; a box that only wraps a control already found is that control. */
+const actsLike=new WeakSet<Element>();
+/** Whether an element was found as a box that acts as a control (behaving), not one marked as a control. */
+export const actsAsControl=(el:Element)=>actsLike.has(el);
+export function behaving(within:ParentNode,known:Set<Element>,max=6000):Element[]{
+ const out:Element[]=[],cursors=new Map<Element,string>(),area=innerWidth*innerHeight;
+ const cursor=(el:Element)=>{let c=cursors.get(el);if(c===undefined){c=getComputedStyle(el).cursor;cursors.set(el,c);}return c;};
+ let looked=0;
+ const walk=(root:Node)=>{
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_ELEMENT,{acceptNode:node=>{
+   const el=node as Element;
+   if(/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|HEAD|GUMBO-LAYER)$/.test(el.tagName)||el.parentElement instanceof SVGElement)return NodeFilter.FILTER_REJECT;
+   const r=el.getBoundingClientRect();
+   // Off screen, it and what is inside it are passed over; a box with no size of its own may still hold what shows.
+   if(r.width&&r.height&&(r.bottom<0||r.top>innerHeight||r.right<0||r.left>innerWidth))return NodeFilter.FILTER_REJECT;
+   return NodeFilter.FILTER_ACCEPT;
+  }});
+  for(let n=walker.nextNode() as Element|null;n&&looked<max;n=walker.nextNode() as Element|null){
+   looked++;
+   if(n.shadowRoot)walk(n.shadowRoot);
+   if(known.has(n)||cursor(n)!=='pointer')continue;
+   const parent=n.parentElement??(n.parentNode instanceof ShadowRoot?n.parentNode.host:null);
+   if(parent&&cursor(parent)==='pointer')continue;
+   if(n.closest(interactive))continue;
+   const r=n.getBoundingClientRect();if(r.width<4||r.height<4||r.width*r.height>area*0.5)continue;
+   const inner=n.querySelector(interactive),text=squash((n as HTMLElement).innerText??'');
+   if(inner&&squash((inner as HTMLElement).innerText??'').length>=text.length-2)continue;
+   actsLike.add(n);out.push(n);
+  }
+ };
+ walk(within instanceof Document?within.body??within:within as Node);
  return out;
 }
 export function describe(el:Element):Item{
@@ -26,7 +72,9 @@ export function describe(el:Element):Item{
  for(const attr of ['aria-expanded','aria-checked','aria-selected','aria-pressed','aria-disabled']){const v=el.getAttribute(attr);if(v==='true')state.push(attr.slice(5));}
  if((el as HTMLInputElement).disabled)state.push('disabled');if((el as HTMLInputElement).checked)state.push('checked');
  const value=el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement?el.type==='password'?undefined:cut(el.value,80):el instanceof HTMLSelectElement?el.selectedOptions[0]?.text:undefined;
- return{id:idOf(el),role:roleOf(el),name:nameOf(el,80),value,state:state.length?state:undefined,rect:[Math.round(rect.left),Math.round(rect.top),Math.round(rect.width),Math.round(rect.height)],path:pathOf(el),nearby:nearbyText(el),inView:rect.bottom>0&&rect.top<innerHeight&&rect.right>0&&rect.left<innerWidth};
+ // A box that acts as a control (behaving) is a button to whoever reads the page.
+ const role=roleOf(el);
+ return{id:idOf(el),role:role==='generic'&&actsLike.has(el)?'button':role,name:nameOf(el,80),value,state:state.length?state:undefined,rect:[Math.round(rect.left),Math.round(rect.top),Math.round(rect.width),Math.round(rect.height)],path:pathOf(el),nearby:nearbyText(el),inView:rect.bottom>0&&rect.top<innerHeight&&rect.right>0&&rect.left<innerWidth};
 }
 /** A few words around an element (its row, card or list item), to tell apart buttons with the same name. */
 export function nearbyText(el:Element):string|undefined{
@@ -37,8 +85,12 @@ export function nearbyText(el:Element):string|undefined{
 /** within: only what is inside this element (where the user is working: a form, a dialog, a menu). */
 export function pageModel(limit=250,within:ParentNode=document):PageModel{
  // What is on screen first, then the rest in page order; only the ones kept are described (the words around each cost a
- // layout read, and a big app has thousands of controls).
- const els=deepQuery(interactive,within).filter(el=>visible(el)||!!shownBy(el));
+ // layout read, and a big app has thousands of controls). Every control of the page is a candidate, and so is what acts
+ // as one in view (behaving); whether each is shown is asked in that order, only until enough are kept.
+ const matched=deepQuery(interactive,within,20_000),all=[...matched,...behaving(within,new Set(matched))];
+ const placed=all.map(el=>{const r=el.getBoundingClientRect();return{el,on:r.bottom>0&&r.top<innerHeight&&r.right>0&&r.left<innerWidth};});
+ const els:Element[]=[];
+ for(const {el} of [...placed.filter(p=>p.on),...placed.filter(p=>!p.on)]){if(els.length>=limit)break;if(visible(el)||shownBy(el))els.push(el);}
  // Where things can be dropped: when the page has things to drag, the lists or columns that hold them, and the ones
  // beside those (a board's other columns).
  const zones=new Set<Element>(),have=new Set(els);

@@ -5,6 +5,19 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-30 · Gumbo for Chrome: Tab sees all of big apps, and knows when a click did nothing
+Tab now sees the whole page in big apps like inboxes, boards and dashboards. Before, it could stop reading a large page
+partway, so the list or board you were working in might never reach it.
+
+It also sees controls that only act like buttons: an email row, a card or an icon the app makes clickable without
+marking it as a button. Icon buttons with no words get a name from their tooltip or their icon (trash, star, archive),
+so Tab can offer them and tell them apart.
+
+Tab can now tell when a step really did nothing. Busy apps change all the time on their own (a clock, a status dot, a
+counter), and Tab used to take any change as its click working. It now looks for what the step should do: the button's
+state changing, a menu opening, a row going, the page saying "Sent". When nothing happened, it tries once more another
+way, and it never presses a toggle twice.
+
 ## 2026-10-29 · Gumbo for Chrome: Tab brings what you saw, fills empty fields, and offers one thing at a time
 Tab now brings in what you saw a moment ago. Writing "My flight lands at" with the booking open in another tab, or
 answering "how much was the invoice?" after reading it, Tab's words carry the time or the amount, and say where they

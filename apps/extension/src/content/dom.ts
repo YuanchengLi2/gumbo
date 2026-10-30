@@ -49,7 +49,32 @@ export function nameOf(el:Element,max=120):string{
   const placeholder=squash(el.getAttribute('placeholder')??el.getAttribute('aria-placeholder')??el.getAttribute('data-placeholder')??'');
   if(placeholder||el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement||(el as HTMLElement).isContentEditable)return cut(placeholder,max);
  }
- return cut(squash((el as HTMLElement).innerText??el.textContent??''),max);
+ const text=squash((el as HTMLElement).innerText??el.textContent??'');
+ return cut(text||iconName(el),max);
+}
+/** What a control with no words of its own says to the eye (an icon button in a toolbar): its tooltip (what the pointer
+ * brings up over it, by aria-describedby or the attributes tooltip libraries read), the label or title of what is inside
+ * it (an image's alt, an icon's own title), or the icon's name in the icon set it is drawn from ("lucide-trash-2",
+ * "fa-star", "#icon-archive": trash, star, archive). */
+const tooltipAttrs=['aria-description','data-tooltip','data-tip','data-title','data-original-title','data-tooltip-content','data-label'];
+const iconSets=/(?:^|[\s#])(?:lucide|fa|fas|far|fab|bi|icon|icons|mdi|ti|ri|feather|octicon|glyphicon|ph|tabler|heroicon|codicon|ion|la|gg)-([a-z][a-z0-9-]*)/i;
+const notIcon=/^(solid|regular|light|thin|duotone|brands|sharp|outline|outlined|filled|fill|xs|sm|lg|xl|\d*x|fw|spin|pulse|border|inverse|flip-\w+|rotate-\d+|stack(-\dx)?|ul|li)$/i;
+export function iconName(el:Element):string{
+ const doc=el.ownerDocument,described=el.getAttribute('aria-describedby');
+ if(described){const text=squash(described.split(/\s+/).map(id=>doc.getElementById(id)?.textContent??'').join(' '));if(text)return text;}
+ for(const attr of tooltipAttrs){const v=squash(el.getAttribute(attr)??'');if(v)return v;}
+ const inner=el.querySelector('[aria-label],[title],img[alt]');
+ const said=inner&&squash(inner.getAttribute('aria-label')||inner.getAttribute('title')||inner.getAttribute('alt')||'');if(said)return said;
+ const svgTitle=squash(el.querySelector('svg title')?.textContent??'');if(svgTitle)return svgTitle;
+ for(const part of [el,...el.querySelectorAll('svg,i,span,use')].slice(0,8)){
+  for(const source of [part.getAttribute('class')??'',part.getAttribute('href')??part.getAttribute('xlink:href')??'']){
+   for(const word of source.split(/\s+/)){
+    const m=iconSets.exec(word.startsWith('#')?word:` ${word}`);if(!m||notIcon.test(m[1]))continue;
+    const name=m[1].replace(/-\d+$/,'').replace(/-/g,' ').trim();if(name)return name;
+   }
+  }
+ }
+ return '';
 }
 export const cut=(text:string,max:number)=>text.length>max?text.slice(0,max-1).trimEnd()+'…':text;
 /** A short CSS path to find the element again (ids where stable, else tag and position). */
