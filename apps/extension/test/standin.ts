@@ -96,7 +96,8 @@ export async function startStandin(script:Script=()=>({text:''})):Promise<Standi
  * Anthropic key from .secrets/anthropic.env, and streams back as the gateway would send it. What each call cost is kept
  * in a ledger across runs; past the cap (GUMBO_LIVE_CAP, $4.90 by default, the user's $5) every call is refused. */
 const root=resolve(import.meta.dirname,'../../..'),ledger=process.env.GUMBO_LIVE_LEDGER??resolve(tmpdir(),'gumbo-live-spend.json');
-export const liveLog:{purpose:string;model:string;usd:number;ms:number;firstMs?:number}[]=[];
+export const liveLog:{purpose:string;model:string;usd:number;ms:number;firstMs?:number;
+ /** What the model wrote, before the extension's checks; and the request it answered. */out?:string;body?:any;at?:number}[]=[];
 export function liveSpent():number{try{return JSON.parse(readFileSync(ledger,'utf8')).usd??0;}catch{return 0;}}
 function spend(usd:number){writeFileSync(ledger,JSON.stringify({usd:liveSpent()+usd,at:new Date().toISOString()}));}
 function liveKey(){
@@ -105,22 +106,41 @@ function liveKey(){
 }
 /** The gateway's code is loaded as a live run starts, not on its first call: that call's timing is the model's, as the
  * deployed gateway (loaded already) would see it. */
-let gateway=process.env.GUMBO_LIVE?import('../../../supabase/functions/dream-gateway/ai.ts'):undefined;
+const deployed=process.env.GUMBO_LIVE==='deployed';
+let gateway=process.env.GUMBO_LIVE&&!deployed?import('../../../supabase/functions/dream-gateway/ai.ts'):undefined;
+/** GUMBO_LIVE=deployed: every request goes to the deployed gateway, as a temporary test account given what is left of
+ * the cap in credits (scripts/lib/cloud-gateway.ts), so each surface runs on the model and provider key users get (Tab's
+ * text on Qwen at Cerebras, whose key only the gateway holds). Signed in once per test process; closeLive() deletes it. */
+let cloud:Promise<import('../../../scripts/lib/cloud-gateway').Gateway>|undefined;
+/** Signs in to the deployed gateway ahead of the first request (a minute: the project's keys, the test account), so no
+ * test spends its own time on it. Nothing to do on other live runs. */
+export async function startLive(){if(deployed&&process.env.GUMBO_LIVE)await cloudNow();}
+export async function closeLive(){const c=await cloud?.catch(()=>undefined);cloud=undefined;await c?.close();}
+const cloudNow=()=>cloud??=import('../../../scripts/lib/cloud-gateway').then(m=>m.cloudGateway({budget:Math.max(0.05,Math.min(2,Number(process.env.GUMBO_LIVE_CAP??4.9)-liveSpent())),prefix:'tab-eval-',app:'gumbo-tab-eval'}));
 async function live(body:any,req:IncomingMessage,res:ServerResponse){
  const key=liveKey(),cap=Number(process.env.GUMBO_LIVE_CAP??4.9);
- if(!process.env.GUMBO_LIVE||!key){res.statusCode=500;return send(res,{error:{type:'live_off',message:'Live runs need GUMBO_LIVE=1 and an Anthropic key.'}});}
+ if(!process.env.GUMBO_LIVE||!key&&!deployed){res.statusCode=500;return send(res,{error:{type:'live_off',message:'Live runs need GUMBO_LIVE=1 and an Anthropic key, or GUMBO_LIVE=deployed.'}});}
  if(liveSpent()>=cap){res.statusCode=402;return send(res,{error:{type:'live_budget',message:`The live budget is used up ($${liveSpent().toFixed(2)} of $${cap}).`}});}
- const {handleAI}=await (gateway??=import('../../../supabase/functions/dream-gateway/ai.ts'));
- const db={rpc:async()=>({data:randomUUID()}),from:()=>({update:()=>({eq:async()=>({})}),insert:async()=>({}),select:()=>({eq:()=>({maybeSingle:async()=>({data:null})})})})};
  const started=Date.now(),abort=new AbortController();req.on('close',()=>abort.abort());
- const result=await handleAI({...body,requestId:body.requestId??randomUUID()},'gumbo-live-test',{db,key,timeoutMs:120_000});
- const record=(usd:number,firstMs?:number)=>{liveLog.push({purpose:String(body.purpose),model:String(body.model),usd,ms:Date.now()-started,firstMs});spend(usd);};
- if(!result.stream){record(Number(result.body?.dream_request?.costUsd)||0);res.statusCode=result.status;return send(res,result.body);}
+ const record=(usd:number,firstMs?:number,out?:string)=>{liveLog.push({purpose:String(body.purpose),model:String(body.model),usd,ms:Date.now()-started,firstMs,out,body,at:started});spend(usd);};
+ let result:{status:number;body?:any;stream?:ReadableStream<Uint8Array>};
+ if(deployed){
+  const {url,token}=await (await cloudNow()).connection();
+  const response=await fetch(`${url}/ai`,{method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({...body,requestId:body.requestId??randomUUID()}),signal:abort.signal}).catch(error=>({ok:false,status:502,headers:new Headers(),json:async()=>({error:{type:'gateway_unreachable',message:String(error)}}),body:null}) as unknown as Response);
+  const timing=response.headers.get('server-timing');if(timing)res.setHeader('Server-Timing',timing);
+  result=/event-stream/.test(response.headers.get('content-type')??'')&&response.body?{status:response.status,stream:response.body}:{status:response.status,body:await response.json().catch(()=>({}))};
+ }else{
+  const {handleAI}=await (gateway??=import('../../../supabase/functions/dream-gateway/ai.ts'));
+  const db={rpc:async()=>({data:randomUUID()}),from:()=>({update:()=>({eq:async()=>({})}),insert:async()=>({}),select:()=>({eq:()=>({maybeSingle:async()=>({data:null})})})})};
+  result=await handleAI({...body,requestId:body.requestId??randomUUID()},'gumbo-live-test',{db,key,timeoutMs:120_000});
+ }
+ if(!result.stream){record(Number(result.body?.dream_request?.costUsd)||0,undefined,(result.body?.content??[]).map((b:any)=>b.text??'').join(''));res.statusCode=result.status;return send(res,result.body);}
  res.setHeader('Content-Type','text/event-stream');
  const reader=result.stream.getReader(),decoder=new TextDecoder();let text='',firstMs:number|undefined;
  try{
   for(;;){
-   const {done,value}=await reader.read();if(done)break;
+   // A request the extension stopped (the next keystroke) ends the stream from the gateway too.
+   const {done,value}=await reader.read().catch(()=>({done:true,value:undefined}));if(done||!value)break;
    if(abort.signal.aborted||res.destroyed){await reader.cancel().catch(()=>{});break;}
    const chunk=decoder.decode(value,{stream:true});text+=chunk;if(firstMs===undefined&&/"text_delta"|"input_json_delta"/.test(chunk))firstMs=Date.now()-started;
    res.write(Buffer.from(value));
@@ -130,7 +150,8 @@ async function live(body:any,req:IncomingMessage,res:ServerResponse){
   // A stream cut short reports no cost: its tokens are counted from what it said it used.
   const usage=[...text.matchAll(/"input_tokens":\s*(\d+)/g)].map(m=>Number(m[1])),output=[...text.matchAll(/"output_tokens":\s*(\d+)/g)].map(m=>Number(m[1]));
   const estimate=((usage.at(-1)??0)*1+(output.at(-1)??0)*5)/1e6;
-  record(costs.length?Number(costs.at(-1)![1]):estimate,firstMs);res.end();
+  const out=[...text.matchAll(/"type":"text_delta","text":("(?:[^"\\]|\\.)*")/g)].map(m=>{try{return JSON.parse(m[1]) as string;}catch{return '';}}).join('');
+  record(costs.length?Number(costs.at(-1)![1]):estimate,firstMs,out);res.end();
  }
 }
 /** Splits text into stream chunks of a few characters, as a model streams. */

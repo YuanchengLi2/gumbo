@@ -9,9 +9,9 @@ import {showGhost,hideGhost,ghostShown,showHint} from './ui/ghost';
 import {layer} from './ui/root';
 import {deepActive,pathOf} from './dom';
 import {post,listen,ask,alive} from './port';
-import {textDone,moveSince} from './bus';
+import {textDone,moveSince,wordsShown,wordsYield} from './bus';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
-import {remainder} from '../shared/suggestion';
+import {remainder,join} from '../shared/suggestion';
 /** Tab in a page, as it types:
  * - Every keystroke first tries the suggestion showing (or one of its alternatives): typing the same letters keeps the
  *   rest, with no new request; typing the way an alternative goes switches to it.
@@ -24,9 +24,13 @@ import {remainder} from '../shared/suggestion';
  *   through it) shows the next part at once.
  * - Tab takes it all, Ctrl+→ one word, Tab held with 1 goes to another way to go on, Esc dismisses. A fact
  *   taken from memory shows where it came from.
- * Every suggestion's fate, how it was served (kept, instant, model) and the time to show it are reported. */
+ * - An empty field asks once as it is focused: what goes in it, shown only when a fact from their context is behind it.
+ * - One offer at a time (bus.ts): the ghost gives way to a move much surer than it, and a move that only types into this
+ *   field is shown here as words.
+ * Every suggestion's fate, how it was served (kept, instant, model, a move's words) and the time to show it are reported. */
 type Live={id:string;field:Field;key:string;base:string;text:string;alts:string[];final:boolean;pausedAt:number;shownAt?:number;context:FieldContext;taken:number;reported:boolean;
- from:'model'|'cache'|'local';source?:{title:string;when:string};used?:string[];
+ from:'model'|'cache'|'local'|'move';source?:{title:string;when:string};used?:string[];
+ /** How sure the model was that this is what they type next (0 to 1), when it said. */confidence?:number;
  /** The ways to go on, in the order Tab+1 goes through them, once the user started going through them. */options?:string[];
  /** The text is finished once this is typed: the next step is a move, not more words. */done?:boolean};
 type Kept={text:string;alts:string[];source?:{title:string;when:string};used?:string[];done?:boolean};
@@ -54,16 +58,36 @@ export function startTab(){
  window.addEventListener('scroll',()=>requestAnimationFrame(render),{capture:true,passive:true});
  window.addEventListener('resize',()=>requestAnimationFrame(render));
  listen(onAnswer);
+ wordsYield(()=>{if(live)drop('ignored');},offerMoveWords);
+}
+/** A move that would type into the field the user is in, offered as ghost words at the caret: what it types that the
+ * field does not hold yet (its whole value when the field is empty, the rest of it when they started it, after their
+ * words when it adds to them). */
+function offerMoveWords(el:Element,text:string,confidence:number,why?:string):boolean{
+ const field=fieldOf(el);if(!field||!fieldIsFocused(field)||hiddenBox(field)||composing)return false;
+ const snap=snapshot(field);if(!snap||snap.selected||!text.trim())return false;
+ if(snap.text.includes(text.trim()))return false;
+ const rest=text.startsWith(snap.before)&&!snap.after.trim()?text.slice(snap.before.length):join(snap.before,text);if(!rest.trim())return false;
+ if(live)drop('ignored');
+ live={id:`w${++seq}`,field,key:keyOf(field),base:snap.before,text:rest,alts:[],final:true,pausedAt:performance.now(),context:readContext(field),taken:0,reported:false,from:'move',confidence,source:why?{title:why.slice(0,60),when:'now'}:undefined};
+ render();return true;
 }
 const fieldIsFocused=(field:Field)=>{const a=deepActive();return !!a&&(a===field.el||field.el.contains(a));};
 
 function onFocus(){
  if(!alive())return;
  if(!active())return;const field=fieldOf(deepActive());if(!field||hiddenBox(field))return;
- const key=keyOf(field);if(Date.now()-(warmed.get(key)??0)<60_000)return;warmed.set(key,Date.now());
- // Wake the engine, search memory for this field and warm the model's cache while the user starts typing.
- post({type:'tab.prewarm',context:readContext(field)});
- void ask<{debounceMs:number;minWords:number}>({type:'tab.bar',site:location.hostname.replace(/^www\./,'')},'tab.bar',3000).then(b=>{if(b)bar={debounceMs:b.debounceMs,minWords:b.minWords};});
+ const key=keyOf(field),cold=Date.now()-(warmed.get(key)??0)>=60_000;
+ if(cold){
+  warmed.set(key,Date.now());
+  // Wake the engine, search memory for this field and warm the model's cache while the user starts typing.
+  post({type:'tab.prewarm',context:readContext(field)});
+  void ask<{debounceMs:number;minWords:number}>({type:'tab.bar',site:location.hostname.replace(/^www\./,'')},'tab.bar',3000).then(b=>{if(b)bar={debounceMs:b.debounceMs,minWords:b.minWords};});
+ }
+ // An empty field is the moment memory matters most (the amount from the invoice just read, the order number asked for):
+ // what goes in it is asked each time it is entered empty (the answer is kept for these words, so again costs nothing), a
+ // moment after the field's memory search has started.
+ const snap=snapshot(field);if(snap&&!snap.text.trim())window.setTimeout(()=>{const now=snapshot(field);if(!live&&now&&!now.text.trim()&&fieldIsFocused(field))void request(field);},cold?60:0);
 }
 
 function onInput(event:Event){
@@ -158,7 +182,7 @@ function onAnswer(message:any){
   else if(message.final)other=message.text;
  }
  if(message.final){
-  live.final=true;live.alts=[...(other?[other]:[]),...(message.alternatives??[])].filter(a=>a!==live!.text).slice(0,3);live.source=message.source;live.used=message.used;
+  live.final=true;live.alts=[...(other?[other]:[]),...(message.alternatives??[])].filter(a=>a!==live!.text).slice(0,3);live.source=message.source;live.used=message.used;live.confidence=message.confidence;
   // The model decides when the text is whole (∎): then nothing more is asked, and the next step is a move.
   live.done=!!message.done&&!other;
   if(live.text){cache.set(cacheKey(live.key,live.base),{text:live.text,alts:live.alts,source:live.source,used:live.used,done:live.done});if(cache.size>200)cache.delete(cache.keys().next().value!);chain(live);}
@@ -185,6 +209,7 @@ function render(){
  // A search box is one line however the page built it (a textarea, an editable div): its ghost too.
  const oneLine=field.singleLine||live.context.intent==='search';
  showGhost(caret,oneLine?rest.split('\n')[0]:rest,{atLineEnd:!snap.after||snap.after.startsWith('\n'),singleLine:oneLine,ownWrapping:field.kind==='context'});
+ wordsShown(true,live.confidence);
  // Which of the ways to go on this is (once they go through them), and where a fact in it came from.
  const from=live.source?`from ${live.source.title} · ${live.source.when}`:'';
  if(from)showHint(caret,from);

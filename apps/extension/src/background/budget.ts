@@ -1,4 +1,4 @@
-import {db,compactOldPages,dropUnvisitedImports,dropOldVisits} from './db';
+import {db,compactOldPages,dropUnvisitedImports,dropOldVisits,dropBookmarkNotes,getSealed,putSealed} from './db';
 import {invalidate} from './recall';
 /** Memory never weighs the computer down. Once an hour, and only while the computer is idle, in small batches that yield
  * between them:
@@ -6,7 +6,7 @@ import {invalidate} from './recall';
  *   writing, notes and conversations (the oldest go first);
  * - visits are kept a year, and those left within seconds with nothing done, a month;
  * - a page not seen for a month keeps only what was read of it (and its opening); addresses brought in from Chrome's
- *   history and never visited again go after three months;
+ *   history (before Oct 29) with no page of them kept go, and so do the bookmarks once brought in as notes;
  * - when everything together passes the budget (1 GB, or a tenth of what Chrome allows on this disk, whichever is
  *   less), the pages least worth keeping go first (least recently seen or used in an answer, fewest visits, least time
  *   on them), with their passages and embeddings (their address and title stay in Chrome's own history); writing,
@@ -31,7 +31,10 @@ export async function keepWithinBudget({force=false}:{force?:boolean}={}){
  const now=Date.now();
  removed+=await dropOldVisits(now).catch(()=>0);await yieldNow();
  const compacted=await compactOldPages(now-30*DAY).catch(()=>0);await yieldNow();
- removed+=await dropUnvisitedImports(now-90*DAY).catch(()=>0);
+ // Memory holds what the user saw: addresses brought in from Chrome's history with no page of them kept go at once, and
+ // the bookmarks once brought in as notes go the first time this runs.
+ removed+=await dropUnvisitedImports(now).catch(()=>0);
+ if(!await getSealed<number>('bookmarks-dropped').catch(()=>1)){removed+=await dropBookmarkNotes().catch(()=>0);await putSealed('bookmarks-dropped',now).catch(()=>{});}
  if(compacted)removed++;
  // A gigabyte at most, and never more than a tenth of what Chrome allows on this disk.
  const estimate=await navigator.storage.estimate(),budget=Math.min(1024**3,(estimate.quota??10*1024**3)*0.1);

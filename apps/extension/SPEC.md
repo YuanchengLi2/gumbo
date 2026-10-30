@@ -273,11 +273,15 @@ small batches with pauses.
 - **Never captured:** password, payment and ID fields; blocked sites; incognito; anything while paused. Other people's
   messages (an email thread, a chat) are read live for a request and never stored.
 - **History import:** `chrome.history` for the last 60 days, with each URL's visits (time, transition,
-  `referringVisitId`), gives navigation chains and routines.
+  `referringVisitId`), gives navigation chains and routines. Since October 29 none of it is searchable memory (a title
+  and an address are not a page the user saw), and bookmarks are not brought in.
+- **Only what the user saw:** memory's pages, and the tabs every surface is told about, are pages that were on their
+  screen. A tab opened behind and never brought forward, and what the agent read through a connector for them, are not
+  kept.
 - **Search:** meaning (bge-small sentence embeddings, 8-bit, run in the offscreen document) fused with keywords (BM25,
   stop words left out) by reciprocal rank, filtered by site, intent and time. Pages are kept whole, split into
   passages. Nothing leaves the computer to be searched.
-- **Bringing in what the user has:** history and bookmarks after the first sign-in; the Gumbo profile (name, what they
+- **Bringing in what the user has:** history (for habits only) after the first sign-in; the Gumbo profile (name, what they
   make); settings through `chrome.storage.sync`, so a reinstall restores them; another assistant's memory, pasted on the
   welcome page, kept as notes and facts (a fact the user set is never overwritten).
 - **Every surface works with an empty memory** and gets better as it fills: Tab (style, facts, recent reading and
@@ -495,7 +499,8 @@ Chrome's own Google account (`chrome.identity`, an OAuth client made for this ex
 `GUMBO_GOOGLE_CLIENT_ID`). Supabase (projects, SQL), Vercel (deployments, build logs) and Stripe (balance, charges,
 customers, subscriptions, invoices, payouts) take a token the user makes and pastes in the popup; it is tried once,
 then kept sealed and sent only to that service. The agent sees a service's tools only once it is connected. Writes (a
-draft, an event, SQL that changes anything) ask first. An email or document the agent reads is remembered like a page.
+draft, an event, SQL that changes anything) ask first. An email or document the agent reads is not kept in memory (memory
+is what the user saw).
 
 ---
 

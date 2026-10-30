@@ -55,12 +55,14 @@ async function layOut(tab:number|undefined,options:{tabs?:boolean}):Promise<GNod
  const left=prev?.id!==undefined&&now-(prev.lastAccessed??0)<30*MINUTE?prev.id:undefined;
  for(const t of Object.values(s.tabs)){
   if(t.tab===tab)continue;const v=t.visits.at(-1);if(!v||v.out!==undefined)continue;
+  // A tab they never had in front (opened behind, restored, left loading) is not something they saw.
+  if(!t.now&&!(v.visibleMs>0)&&!lastSeen.has(t.tab))continue;
   const opener=here?.opener===t.tab,opened=v.opener===tab,justLeft=t.tab===left;
   const rel=justLeft?'the tab they were on just before this one':opener?'the tab this one was opened from':opened?'a tab opened from this one':'open in another tab';
   const words=t.now?.visible?squash(t.now.visible):excerpt(v);
   out.push({id:`tab:${t.tab}`,kind:justLeft?'left':'tab',rel,title:v.title||v.url,url:v.url,text:words||v.title,at:lastSeen.get(t.tab)??v.in,site:v.site,project:v.project,hops:justLeft||opener||opened?1:2,tab:t.tab,visit:v.id,seenMs:v.readMs,links:[...(opener?[{to:'here',rel:'opened'}]:[]),...(opened?[{to:'here',rel:'was opened from'}]:[])]});
  }
- for(const c of s.closed.slice(-8)){const v=c.visits.at(-1);if(v)out.push({id:`closed:${c.tab}:${c.at}`,kind:'closed',rel:'a tab they closed',title:c.title||c.url,url:c.url,text:excerpt(v)||c.title,at:c.at,site:v.site,project:v.project,hops:2,visit:v.id,links:[]});}
+ for(const c of s.closed.slice(-8)){const v=c.visits.at(-1);if(v&&v.visibleMs>0)out.push({id:`closed:${c.tab}:${c.at}`,kind:'closed',rel:'a tab they closed',title:c.title||c.url,url:c.url,text:excerpt(v)||c.title,at:c.at,site:v.site,project:v.project,hops:2,visit:v.id,links:[]});}
  for(const c of s.copies.filter(c=>now-c.at<60*MINUTE))out.push({id:`copy:${c.at}`,kind:'copy',rel:`what they copied on “${cut(c.title,60)}”`,title:`copied on ${c.title}`,url:c.url,text:c.text,at:c.at,site:siteOf(c.url),hops:1,links:[]});
  for(const w of await recent('writing',10,now-2*60*MINUTE).catch(()=>[]))out.push({id:`w${w.id}`,kind:'wrote',rel:`what they wrote in ${w.label||w.intent} on ${w.site}`,title:`wrote on ${w.site}`,url:w.url,text:w.text,at:w.at,site:w.site,project:w.project,hops:2,links:[]});
  // Who they are: each fact they type is a node like any other (it comes when it is close to the moment).

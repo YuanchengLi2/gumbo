@@ -237,6 +237,13 @@ export async function dropUnvisitedImports(before:number,limit=2000):Promise<num
  }
  await tx.done;return n;
 }
+/** Bookmarks brought in as notes before Oct 29 (often pages never opened): memory keeps what the user saw, so they go,
+ * forgotten on every synced computer too. */
+export async function dropBookmarkNotes():Promise<number>{
+ const d=await db(),keys=await d.getAllKeys('notes'),notes=await openAll<{text?:string;source?:string}>(d,await d.getAll('notes'));let n=0;
+ for(let i=0;i<keys.length;i++)if(notes[i]?.source==='import'&&/^Bookmark( in [^:]*)?: /.test(notes[i]?.text??'')){await remove('notes',keys[i]);n++;}
+ return n;
+}
 /** Retention: visits older than a year, and visits left within seconds with nothing done, after a month. */
 export async function dropOldVisits(now=Date.now()):Promise<number>{
  const d=await db(),tx=d.transaction('visits','readwrite');let n=0;

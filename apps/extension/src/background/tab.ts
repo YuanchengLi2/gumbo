@@ -10,6 +10,7 @@ import {fieldKey,fieldQuery,writingQuery} from './memory-context';
 import {lately} from './memory/live';
 import {getContext,type Bundle} from './memory/context';
 import {config} from './memory/config';
+import {thrifty} from './thrift';
 /** Tab in the engine: a page asks with the field's context and the text around the caret, and gets back, streaming, what
  * comes next. One run of the model, written in the user's voice from the memory every surface has (memory/context.ts:
  * who they are and how they write here, what they are working on, this session, the past), as long as it can see clearly
@@ -34,6 +35,7 @@ function within<T>(part:Promise<T>,fallback:T,what:string,site:string,ms=250):Pr
  void part.then(()=>{if(late)void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} took over ${ms} ms`,at:Date.now()}).catch(()=>{});},error=>{void add('failures',{site,editor:'',what:'context',detail:`Tab text: ${what} failed: ${(error as Error)?.message}`,at:Date.now()}).catch(()=>{});});
  return Promise.race([part.catch(()=>fallback),timer]);
 }
+const lastBundle=new Map<string,Bundle>();
 const noBundle=():Bundle=>({surface:'tab-text',at:Date.now(),ms:0,query:'',stable:'',fresh:'',items:[],known:'',searching:true,blocks:{page:'',browser:'',session:'',memory:'',map:''}});
 /** Where a fact in a suggestion came from: the first memory item that holds a fact the page and the field do not. */
 function sourceOf(text:string,bundle:Bundle,seen:string){
@@ -47,44 +49,59 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  const started=performance.now(),settings=await loadSettings(),site=siteOf(url)||message.context.site;
  if(!activeOn(settings,site)){send({type:'tab.text',id:message.id,text:'',final:true});return;}
  // A search box is one line, whatever the page made it of (Google's is a textarea).
+ // An empty field is asked about before they type a word: saving credits (thrift.ts), it waits for their first word.
+ if(!message.before.trim()&&!message.after.trim()&&await thrifty()){send({type:'tab.text',id:message.id,text:'',final:true});return;}
  const c={...message.context,singleLine:message.context.singleLine||message.context.intent==='search'},cfg=(await config()).text;
  // The memory every surface has, for this field and what is being written now (its search kept per field and refreshed
  // behind it as the writing moves on); the user's own writing in this kind of field, for their voice.
  // Each part is waited for 600 ms at most: memory that is slow (or stuck) never silences Tab; it writes from the field and
  // the page alone, and what was slow is kept as a failure for the debug page.
+ // Memory that is slow this once stands in with what this field had last (never with nothing: a request with no memory
+ // is a guess at the very fact memory holds).
+ const key=fieldKey(site,c.intent,c.label,c.thread);
  const [recall,bundle,before]=await Promise.all([
   within(recallFor({site,intent:c.intent,before:message.before,thread:c.thread?.slice(-2).map(m=>m.text).join('\n'),current:message.text}),emptyRecall(),'recall',site),
-  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key:fieldKey(site,c.intent,c.label,c.thread)}),noBundle(),'getContext',site),
+  within(getContext({surface:'tab-text',tab,url:c.url,query:fieldQuery({title:c.title,label:c.label,thread:c.thread,headings:c.headings,sentence:writingQuery(message.before)}),field:{intent:c.intent,label:c.label},budget:1200,key}).then(b=>{lastBundle.set(key,b);if(lastBundle.size>100)lastBundle.delete(lastBundle.keys().next().value!);return b;}),lastBundle.get(key)??noBundle(),'getContext',site,400),
   within(lately(c.url),undefined,'lately',site),
  ]);
  if(signal.aborted)return;
  recall.copied=(before?.copied??[]).filter(x=>Date.now()-x.at<5*60_000).map(x=>({title:x.title,text:x.text}));
  const contextMs=performance.now()-started;
- // A search box gets no tabs or memories: they put the screen's words in the box instead of what was being typed.
- const {system,messages,known}=tabRequest(c,message.before,message.after,recall,c.intent==='search'?{...bundle,fresh:''}:bundle,LEAN_TAB_SYSTEM);
+ // A search box gets what they read and wrote before (the product in the review they just read), never the screens of
+ // their tabs: those put the screen's words in the box instead of what was being typed.
+ const {system,messages,known}=tabRequest(c,message.before,message.after,recall,c.intent==='search'?{...bundle,fresh:bundle.blocks.memory}:bundle,LEAN_TAB_SYSTEM);
  // Asked for what comes after its own suggestion: the model is told so, and judges whether the text is now whole.
  if(message.chain)(messages[0].content as any[]).push({type:'text',text:'The last words before the cursor are your own suggestion, which they are taking. Judge the whole text as it stands: if it already says what they want (a query that names what they are looking for, a message that makes its point), reply ∎ alone. Write more only if their thought plainly goes on.'});
+ // An empty field, just entered: what goes in it, only when their context says it plainly.
+ const empty=!message.before.trim()&&!message.after.trim();
+ if(empty)(messages[0].content as any[]).push({type:'text',text:'The field is empty: they just clicked into it. Write what goes in it only when it is plain from what the field asks for (its label, the question or column it sits under) and a fact in their context (what they read, copied or have open): that value, exactly. Otherwise output nothing.'});
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:c.singleLine,known,final,lastWord,own:c.thread?.map(m=>m.text).join('\n')});
+ // How sure the model is, as it says at the end of its reply (⟦7⟧: seven in ten), and the reply without it.
+ const sureOf=(raw:string)=>{const m=/⟦(\d)⟧/.exec(raw);return m?Math.min(0.95,Number(m[1])/10):undefined;},bare=(raw:string)=>raw.replace(/⟦\d?⟧?|⟦$/g,'');
  let raw='',shown='',firstMs:number|undefined;const asked=performance.now();
  try{
   const ask=(id:string)=>model({model:id,system,messages,max_tokens:(c.singleLine?cfg.maxTokensSingle:cfg.maxTokensMulti)+(cfg.alternatives>1?40:0),purpose:'tab'},{signal,onEvent:event=>{
    if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
    firstMs??=performance.now()-asked;raw+=event.data.delta.text;
    // The best one shows as it streams (whole words only); the alternatives come with the final answer.
-   const [best,...more]=alternativesOf(raw.replace(/∎/g,'')),text=check(best,more.length>0);
-   if(text.length>shown.length){shown=text;send({type:'tab.text',id:message.id,text,final:false});}
+   const [best,...more]=alternativesOf(bare(raw).replace(/∎/g,'')),text=check(best,more.length>0);
+   // An empty field's answer waits until it is whole: it shows only if a fact turns out to be behind it.
+   if(!empty&&text.length>shown.length){shown=text;send({type:'tab.text',id:message.id,text,final:false});}
   }});
   // Tab's model failing before it wrote anything (its provider down, a limit reached): Haiku answers the same request.
   const {message:reply,timing}=await ask(settings.models.tab).catch(error=>{if(signal.aborted||raw||settings.models.tab===FALLBACK)throw error;return ask(FALLBACK);});
   if(signal.aborted)return;
   // ∎ after the best: the text is finished once it is typed (alone: it already is). The next step is then a move.
-  const full=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),done=(full.split('⟂')[0]??'').includes('∎');
+  const said=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),confidence=sureOf(said),full=bare(said),done=(full.split('⟂')[0]??'').includes('∎');
   const [best='',...more]=alternativesOf(full.replace(/∎/g,''));
-  const text=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==text).slice(0,Math.max(0,cfg.alternatives-1));
-  const source=text?sourceOf(text,bundle,`${message.before}\n${message.after}\n${c.label}\n${c.page??''}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
+  const checked=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==checked).slice(0,Math.max(0,cfg.alternatives-1));
+  const source=checked?sourceOf(checked,bundle,`${message.before}\n${message.after}\n${c.label}\n${c.page??''}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
+  // In an empty field, words with no fact from their context behind them are a guess at what someone might type there:
+  // shown only when the model is sure.
+  const text=empty&&!source&&(confidence??0)<0.8?'':checked;
   const split={context:Math.round(contextMs),firstToken:firstMs===undefined?undefined:Math.round(firstMs),gateway:timing?.provider,total:Math.round(performance.now()-started)};
   void addTiming({surface:message.chain?'tab-chain':'tab-model',ms:split.total,gateway:timing,at:Date.now()});
-  send({type:'tab.text',id:message.id,text,alternatives,final:true,done,source,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
+  send({type:'tab.text',id:message.id,text,alternatives:text?alternatives:[],final:true,done,source,confidence,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
  }catch(error){if(!signal.aborted)send({type:'tab.text',id:message.id,text:'',final:true,error:(error as Error).message});}
 });
 

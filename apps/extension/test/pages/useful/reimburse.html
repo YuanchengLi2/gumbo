@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>New expense report - Expensify</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <h1>New expense</h1>
+ <form onsubmit="event.preventDefault();document.getElementById('status').textContent='Submitted';">
+  <label for="vendor">Merchant</label><input id="vendor">
+  <label for="number">Invoice or receipt number</label><input id="number">
+  <label for="date">Date</label><input id="date">
+  <label for="amount">Amount</label><input id="amount">
+  <label for="memo">Description</label><input id="memo">
+  <button type="submit">Submit for approval</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

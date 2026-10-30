@@ -72,7 +72,7 @@ function Popup(){
    <section>
     <h2>{synced?'Memory, on your computers':'Memory, on this computer only'}</h2>
     <p className="muted">{kept?`${kept.writing??0} pieces of your writing · ${kept.pages??0} pages · ${kept.media??0} meetings and videos`:'…'}</p>
-    {imported&&<p className="muted">{imported.state==='done'?`Your history is in: ${imported.pages} pages, ${imported.visits} visits, ${imported.bookmarks} bookmarks`:imported.state==='running'?'Bringing in your history…':<button className="link" onClick={()=>{setImported({...imported,state:'running'});void ask({type:'import.run'}).then(setImported).catch(()=>{});}}>Bring in my history and bookmarks</button>}</p>}
+    {imported&&<p className="muted">{imported.state==='done'?`Tab learned where you go from ${imported.visits} visits`:imported.state==='running'?'Learning from your history…':<button className="link" onClick={()=>{setImported({...imported,state:'running'});void ask({type:'import.run'}).then(setImported).catch(()=>{});}}>Learn where I usually go from my history</button>}</p>}
     <div className="row">
      {site&&<button className="link" onClick={()=>void forget({site})}>Forget {site}</button>}
      <button className="link" onClick={()=>void forget({since:Date.now()-3_600_000})}>Forget the last hour</button>

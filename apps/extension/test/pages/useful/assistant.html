@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>New chat - Assistant</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <h1>How can I help you today?</h1>
+ <form onsubmit="event.preventDefault();document.getElementById('status').textContent='Asked';">
+  <textarea id="prompt" placeholder="Message Claude"></textarea>
+  <button type="submit">Send</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

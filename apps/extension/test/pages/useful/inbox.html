@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Inbox - Mail</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<!-- An app that never reloads: opening a message swaps the reading pane, the address does not change. -->
+<main>
+ <ul id="list">
+  <li><button id="open-1" type="button">Marcus: Design review Tuesday</button></li>
+  <li><button id="open-2" type="button">Marcus: Moved: design review</button></li>
+ </ul>
+ <section id="pane"><h2>Design review Tuesday</h2><p>Hi Dana, the design review for the new export screen is on Tuesday at 2 PM in the big room. Bring the latest mockups.</p></section>
+</main>
+<script>
+ document.getElementById('open-2').onclick=()=>{document.getElementById('pane').innerHTML='<h2>Moved: design review</h2><p>Hi Dana, sorry for the shuffle: the design review is now on Wednesday at 4 PM, same room. Tuesday is cancelled.</p>';};
+</script>
+</body>
+</html>

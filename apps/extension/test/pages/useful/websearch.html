@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Search</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <form role="search" onsubmit="event.preventDefault();document.getElementById('status').textContent='Searched: '+document.getElementById('q').value;">
+  <input id="q" type="search" placeholder="Search the web" aria-label="Search">
+  <button type="submit">Search</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Build failed · park-studio/web · Run #2231</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <h1>Build failed</h1>
+ <p>Workflow: CI · Branch: feature/gallery · Triggered by push · Duration 1m 42s</p>
+ <pre>
+Run npm test
+> web@1.4.0 test
+> vitest run
+
+ ✓ src/utils/format.test.ts (12 tests) 31ms
+ ✓ src/api/client.test.ts (8 tests) 54ms
+ ❯ src/components/Gallery.test.tsx (3 tests | 1 failed) 88ms
+   × Gallery > renders the photo grid
+     TypeError: Cannot read properties of undefined (reading 'map')
+      ❯ PhotoGrid src/components/PhotoGrid.tsx:42:23
+      ❯ Gallery src/components/Gallery.tsx:17:9
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  1 failed | 22 passed (23)
+Error: Process completed with exit code 1.
+ </pre>
+</main>
+</body>
+</html>

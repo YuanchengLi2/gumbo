@@ -1,12 +1,11 @@
 /// <reference types="chrome" />
 import {getSealed,putSealed} from './db';
-import {capturePage} from './capture';
 import {isLocal} from '../shared/config';
 /** Connectors: the user's own accounts, as tools the agent can use. Google (Gmail, Calendar, Drive, Docs, Slides) signs
  * in through Chrome's own Google account (chrome.identity; the build needs an OAuth client id); Supabase, Vercel and
  * Stripe take a token the user makes and pastes, kept sealed in memory like everything else and sent only to that
  * service. Reads come first; anything that writes (a draft, an event, a change to a database) asks the user first, like
- * every final step. What the agent reads through them (an email, a document) is remembered like a page read. */
+ * every final step. What the agent reads through them (an email, a document) is not kept in memory: memory is what the user saw. */
 export type ConnectorId='google'|'supabase'|'vercel'|'stripe';
 type Tokens=Partial<Record<Exclude<ConnectorId,'google'>,string>>&{google?:boolean};
 const KEY='connectors';
@@ -95,7 +94,7 @@ export async function runConnector(name:string,input:any):Promise<{content:strin
    const m=await google(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(input.id)}?format=full`);
    const h=(n:string)=>m.payload?.headers?.find((x:any)=>x.name===n)?.value??'';
    const text=bodyOf(m.payload);const subject=h('Subject')||'(no subject)';
-   void capturePage({url:`https://mail.google.com/mail/u/0/#all/${m.threadId}`,title:`Email: ${subject}`,text:`From ${h('From')} to ${h('To')}, ${h('Date')}\n\n${text}`});
+   // Not kept in memory: memory is what the user saw, and an email the agent read for them they may never have.
    return{summary:subject,content:`From: ${h('From')}\nTo: ${h('To')}\nDate: ${h('Date')}\nSubject: ${subject}\n\n${fence(text.slice(0,20_000))}`};
   }
   if(name==='gmail_draft'){
@@ -126,7 +125,6 @@ export async function runConnector(name:string,input:any):Promise<{content:strin
    let text='';
    if(meta.mimeType==='application/vnd.google-apps.presentation'){const deck=await google(`https://slides.googleapis.com/v1/presentations/${id}`);text=(deck.slides??[]).map((s:any,i:number)=>`Slide ${i+1}: ${(s.pageElements??[]).flatMap((e:any)=>e.shape?.text?.textElements??[]).map((t:any)=>t.textRun?.content??'').join('').trim()}`).join('\n');}
    else{const doc=await google(`https://docs.googleapis.com/v1/documents/${id}`);text=(doc.body?.content??[]).map((c:any)=>(c.paragraph?.elements??[]).map((e:any)=>e.textRun?.content??'').join('')).join('');}
-   void capturePage({url:meta.webViewLink,title:meta.name,text});
    return{summary:meta.name,content:`${meta.name}\n${meta.webViewLink}\n\n${fence(text.slice(0,30_000))}`};
   }
  }

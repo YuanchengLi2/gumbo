@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Re: Coffee? - Mail</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<!-- A reply already started around where the user is writing: a greeting above the caret, a sign-off below it. -->
+<main>
+ <div class="message"><b>Sam</b><p>Free for coffee this week? I could do Thursday at 3 or Friday at 10, at Blue Bottle on Mint Plaza.</p></div>
+ <form onsubmit="event.preventDefault();document.getElementById('status').textContent='Sent';">
+  <label for="to">To</label><input id="to" value="sam@example.com">
+  <label for="subject">Subject</label><input id="subject" value="Re: Coffee?">
+  <label for="body">Message Body</label><textarea id="body" style="height:200px">Hi Sam,
+
+Friday works better for me.
+
+Best,
+Dana</textarea>
+  <button type="submit">Send</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

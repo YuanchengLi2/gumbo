@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Export fails for files over 2 GB · Issue #812 · park-studio/web</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <h1>Export fails for files over 2 GB #812</h1>
+ <p>Open · opened by marcus-l</p>
+ <div class="comment"><b>marcus-l</b><p>Exporting a 2.4 GB project crashes the tab with "Array buffer allocation failed". Anything under 2 GB exports fine.</p></div>
+ <form onsubmit="event.preventDefault();document.getElementById('status').textContent='Commented';">
+  <label for="c">Add a comment</label><textarea id="c" placeholder="Leave a comment"></textarea>
+  <button type="submit">Comment</button>
+ </form>
+ <p id="status"></p>
+</main>
+</body>
+</html>

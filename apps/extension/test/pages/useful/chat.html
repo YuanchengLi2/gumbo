@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Chat</title><link rel="stylesheet" href="../style.css">
+<style>.msg{padding:6px 0;border-bottom:1px solid #eee;width:560px}</style></head>
+<body>
+<!-- A chat app: the conversation, then the composer. ?with=Name&m=Author|text&m=… -->
+<main>
+ <h1 id="with"></h1>
+ <div id="log" role="log"></div>
+ <div class="editor" id="composer" contenteditable="true" role="textbox" style="min-height:40px"></div>
+ <button id="send" type="button">Send</button>
+ <p id="status"></p>
+</main>
+<script>
+ const q=new URLSearchParams(location.search),who=q.get('with')||'Chat';
+ document.title=who+' - Chat';document.getElementById('with').textContent=who;
+ document.getElementById('composer').setAttribute('aria-label','Message '+who);
+ for(const m of q.getAll('m')){const [a,...t]=m.split('|');const d=document.createElement('div');d.className='msg';d.innerHTML='<b></b> <span></span>';d.querySelector('b').textContent=a;d.querySelector('span').textContent=t.join('|');document.getElementById('log').append(d);}
+ document.getElementById('send').onclick=()=>{document.getElementById('status').textContent='Sent: '+document.getElementById('composer').innerText;};
+</script>
+</body>
+</html>

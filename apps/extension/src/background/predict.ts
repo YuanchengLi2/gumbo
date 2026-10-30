@@ -52,6 +52,8 @@ A move is ONE thing they would do next: one click, one choice, one key, or filli
 Also give "then", when you are sure of it: the part of the same task right after this move (the next field, the confirm in the dialog, the item of the menu this move opens). Its element may not be on the page yet: then name it by role and name instead of an id. Leave it out when unsure.
 Confidence is your honest chance that this is their very next move: 0.8 or more only when what they just did, the page's own words or a habit point straight at it (the Submit after an answer typed, the Send after a reply written, the next field of a form half filled, the item the email they just read named); 0.5 to 0.8 when it is the likely one among a few; below 0.5 a guess. A sure move is shown to them plainly, so never call a guess sure.
 Reply with one JSON object and nothing else, its keys in this order (the move first, so it can show while the rest is written): {"confidence":0.0-1.0,"label":"what it does, as a short imperative of at most 6 words","steps":[the move: one of {"do":"click","id":"e12"} {"do":"double_click","id":"e12"} {"do":"right_click","id":"e12"} {"do":"hover","id":"e12"} {"do":"drag","id":"e4","to":"e9"} {"do":"drag","id":"e4","by":[120,0]} {"do":"select","id":"e9","option":"…"} {"do":"key","id":"e7","combo":"Enter"} {"do":"scroll","id":"e30"} {"do":"back"}, or one or more {"do":"type","id":"e7","text":"…"} for the fields they fill],"why":"the evidence for it, in a few words (what they did, what the page says, their habit, their memory)","then":{a move in the same task, or {"do":"click","role":"button","name":"Next"} for one not on the page yet}}. When nothing on the page follows plainly from what they are doing: {"confidence":0,"steps":[]}.`;
+/** The move, as the one tool Claude calls: the same object the reply format above names, keys in that order. */
+const MOVE_TOOL={name:'next_move',description:'Their next move on this page, as the reply format says (confidence 0 and no steps when nothing follows plainly).',input_schema:{type:'object',properties:{confidence:{type:'number'},label:{type:'string'},steps:{type:'array',items:{type:'object'}},why:{type:'string'},then:{type:'object'}},required:['confidence','steps']}};
 const decided=new Map<string,{at:number;plan:Plan|null}>();
 /** What the user turned down, by tab and page: not offered again for ten minutes. */
 const turnedDown=new Map<string,{at:number;labels:string[];steps:string[]}>();
@@ -151,13 +153,18 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   const inView=(plan:Plan|null)=>plan&&shot&&m.view?onView(plan,m.view[0]/shot.w,m.view[1]/shot.h):plan;
   // The first complete steps are offered while the rest is still being written; the whole plan replaces them.
   let raw='',shown=0;
-  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:stableHead,cache_control:{type:'ephemeral'}},{type:'text',text:page},...picture,{type:'text',text:fresh}]}],max_tokens:300,purpose:'action'},{signal,onEvent:event=>{
-   if(event.data?.type!=='content_block_delta'||event.data.delta?.type!=='text_delta')return;
-   raw+=event.data.delta.text;
+  // Claude answers through one tool it must call, so its first token is the move's JSON: told to reply in JSON alone, it
+  // still began with a sentence of reasoning one time in six, all of it time before the move could show.
+  const claude=settings.models.action.startsWith('claude-');
+  const {message}=await model({model:settings.models.action,system:SYSTEM,messages:[{role:'user',content:[{type:'text',text:stableHead,cache_control:{type:'ephemeral'}},{type:'text',text:page},...picture,{type:'text',text:fresh}]}],max_tokens:300,purpose:'action',...(claude?{tools:[MOVE_TOOL],tool_choice:{type:'tool',name:MOVE_TOOL.name}}:{})},{signal,onEvent:event=>{
+   if(event.data?.type!=='content_block_delta')return;
+   const delta=event.data.delta;if(delta?.type!=='text_delta'&&delta?.type!=='input_json_delta')return;
+   raw+=delta.type==='text_delta'?delta.text:delta.partial_json??'';
    const early=inView(allowedPlan(partialPlan(raw,ids,known),down));
    if(early&&early.confidence>=bar&&plain(early,m)&&early.steps.length>shown){shown=early.steps.length;answer(early,false,'stream');}
   }});
-  const plan=inView(allowedPlan(planOf(textOf(message)||raw,ids,known),down));
+  const called=(message?.content??[]).find((b:any)=>b?.type==='tool_use')?.input;
+  const plan=inView(allowedPlan(planOf(called?JSON.stringify(called):textOf(message)||raw,ids,known),down));
   // Only a move sure enough, on something they can see, is offered; anything less is nothing at all.
   const sure=plan&&plan.confidence>=bar&&plain(plan,m)?plan:null;
   if(!memoryLate&&!m.drawn){decided.set(key,{at:Date.now(),plan:sure});if(decided.size>300)decided.delete(decided.keys().next().value!);}

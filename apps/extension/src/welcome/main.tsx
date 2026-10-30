@@ -33,14 +33,14 @@ function Welcome(){
   </section>
  </main>;
 }
-/** What the user already has: history and bookmarks come in on their own after sign-in; another assistant's memory is
+/** What the user already has: history teaches Tab their habits on its own after sign-in; another assistant's memory is
  * pasted here. */
 function Bring(){
  const [state,setState]=useState<any>();const [text,setText]=useState('');const [done,setDone]=useState<string>();
  useEffect(()=>{const poll=()=>void ask({type:'import.state'}).then(setState).catch(()=>{});poll();const t=setInterval(poll,2000);return()=>clearInterval(t);},[]);
  return <section className="bring">
   <h2>Bring in what you already have</h2>
-  <p>{state?.state==='done'?`Your history is in: ${state.pages} pages and ${state.bookmarks} bookmarks. Tab already knows where you usually go next.`:state?.state==='running'?`Bringing in your history… ${state.pages} pages so far.`:'Your browsing history and bookmarks come in on their own, on this computer only.'}</p>
+  <p>{state?.state==='done'?`Tab learned where you usually go next from ${state.visits} visits in your history.`:state?.state==='running'?`Learning from your history… ${state.pages} pages so far.`:'Tab learns where you usually go next from your browsing history, on this computer only. Memory keeps only what you see.'}</p>
   <p>Ask ChatGPT or Claude "What do you remember about me?" and paste the answer here:</p>
   <textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Paste what your other assistant remembers about you" spellCheck={false}/>
   <div className="row"><button className="secondary" disabled={!text.trim()} onClick={()=>void ask<any>({type:'import.memory',text}).then(r=>{setDone(`Kept ${r.notes} things about you${r.facts?.name?`, ${r.facts.name}`:''}.`);setText('');})}>Bring it in</button>{done&&<span className="muted">{done}</span>}</div>

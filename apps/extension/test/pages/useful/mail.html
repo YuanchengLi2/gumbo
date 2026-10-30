@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Mail</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<!-- A mail client's reply view: the message being answered above, then To, Subject and the body. ?from=&msg=&subject=&to= -->
+<main>
+ <h1 id="subject-line"></h1>
+ <div id="thread"></div>
+ <form id="compose" onsubmit="event.preventDefault();document.getElementById('status').textContent='Sent';">
+  <label for="to">To</label><input id="to">
+  <label for="subject">Subject</label><input id="subject">
+  <div class="editor" id="body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Message Body"></div>
+  <button type="submit">Send</button>
+ </form>
+ <p id="status"></p>
+</main>
+<script>
+ const q=new URLSearchParams(location.search);
+ document.title=(q.get('subject')||'Mail')+' - Mail';
+ document.getElementById('subject-line').textContent=q.get('subject')||'';
+ document.getElementById('subject').value=q.get('subject')||'';
+ document.getElementById('to').value=q.get('to')||'';
+ if(q.get('msg')){const d=document.createElement('div');d.className='message';d.innerHTML='<b></b><p></p>';d.querySelector('b').textContent=q.get('from')||'';d.querySelector('p').textContent=q.get('msg');document.getElementById('thread').append(d);}
+</script>
+</body>
+</html>

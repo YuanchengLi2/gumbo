@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Upload client fails on large files · Issue #790 · park-studio/web</title><link rel="stylesheet" href="../style.css"></head>
+<body>
+<main>
+ <h1>Upload client fails on large files #790</h1>
+ <p>Closed · opened by jun-k on Oct 2</p>
+ <div class="comment"><b>jun-k</b><p>Uploading anything over about 2 GB crashes the tab with "Array buffer allocation failed". Smaller files are fine.</p></div>
+ <div class="comment"><b>dana-park</b><p>Found it: the upload client reads the whole file into one ArrayBuffer before sending. Fixed by streaming the file in 64 MB chunks in #455.</p></div>
+ <div class="comment"><b>jun-k</b><p>Confirmed fixed on staging. Closing.</p></div>
+</main>
+</body>
+</html>

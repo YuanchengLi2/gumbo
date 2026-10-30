@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 import {takes,took,cycles,offers,mayTake,TAKE_KEY} from './keys';
-import {onTextDone,moveShown} from './bus';
+import {onTextDone,moveShown,moveBeatsWords,yieldWords,offerWords} from './bus';
 import {roleOf,nameOf,deepActive,visible,squash} from './dom';
 import {describe,pageModel,deepQuery,hoverOwner,elementById,type Item} from './perceive';
 import {fieldOf,inPaymentFrame,unseenFrame} from './fields/field';
@@ -370,6 +370,9 @@ function listen(id:string){
   if(m?.type!=='predict.plan'||m.id!==id||Number(id.slice(1))!==seq)return;
   if(m.final){asking=undefined;finalArrived?.();}
   if(running)return;
+  // A move much surer than the words showing takes their place once the keyboard rests (bus.ts): the order number the
+  // support chat asked for over a guess at a sentence.
+  if(m.final&&m.plan?.steps.length&&ghostShown()&&Date.now()-lastKey>=BEAT&&moveBeatsWords(m.plan.confidence)&&!heldForText(m.plan))yieldWords();
   // An answer that lands while they type (or while a text suggestion shows) is kept, and shown at the next beat.
   if(typing()){const f=fieldOf(deepActive());if(m.final&&m.plan&&f)typedAhead={el:f.el,plan:m.plan,at:Date.now()};return;}
   // The engine sends only a move it is sure of, on something in view: it is said plainly, its chip by the thing it would
@@ -438,6 +441,11 @@ function show(plan:Plan,final:boolean,source?:string){
  const first=plan.steps[0];
  if(Date.now()-(refused.get(stepKey(first))??0)<600_000)return;
  const el=touches(first)?findTarget(targetOf(first))??undefined:undefined;
+ // A move that only types into the field they are in is words in that field: shown as the ghost is, taken the same way.
+ const here=fieldOf(deepActive());
+ const intoHere=plan.steps.length===1&&first?.do==='type'&&!!first.text&&!first.at&&!!here&&!!el&&(el===here.el||here.el.contains(el)||el.contains(here.el));
+ if(intoHere&&!final)return;
+ if(intoHere&&offerWords(here!.el,first.text!,plan.confidence,plan.why)){if(chip)hide();return;}
  // The same move, further along: the line is updated in place, never flashed.
  if(chip&&hint&&hint.plan.steps[0]&&JSON.stringify(hint.plan.steps[0])===JSON.stringify(first)){hint={plan,el,final,source};chip.querySelector('.text')!.textContent=labelFor(plan,el);place();return;}
  if(taking)return;
@@ -447,7 +455,7 @@ function show(plan:Plan,final:boolean,source?:string){
  // A small tag beside what the move touches, one line, that never takes a click: the page stays usable under it.
  chip=document.createElement('div');chip.className='move';chip.setAttribute('role','status');chip.title=plan.why?`${plan.label}: ${plan.why}`:plan.label;
  const key=document.createElement('kbd');key.textContent=TAKE_KEY;const text=document.createElement('span');text.className='text';text.textContent=labelFor(plan,el);
- chip.append(key,text);surface().appendChild(chip);moveShown(true);
+ chip.append(key,text);surface().appendChild(chip);moveShown(true,plan.confidence);
  // Everything the move touches is outlined (a drag's drop dashed), and what it would type shows faintly in each field.
  marked=plan.steps.flatMap((step):Mark[]=>{
   // A spot on a drawing is marked with a dot (a drag's drop, a dashed one).

@@ -5,6 +5,22 @@ to usegumbo.app/community as an update people can reply to and upvote (`npx tsx 
 write one for every change people will notice, the day it ships. The heading is `## YYYY-MM-DD · Title`; keep a
 title once published, since it names the entry.
 
+## 2026-10-29 · Gumbo for Chrome: Tab brings what you saw, fills empty fields, and offers one thing at a time
+Tab now brings in what you saw a moment ago. Writing "My flight lands at" with the booking open in another tab, or
+answering "how much was the invoice?" after reading it, Tab's words carry the time or the amount, and say where they
+came from.
+
+An empty field is filled from what you saw: click into one and Tab offers what goes there when something you read holds
+it, like the total from the invoice in an "Amount" column or the order number support asked for.
+
+Tab offers one thing at a time, the one most likely right. When it is much surer of a move (Send, Submit, the next
+field) than of the words it was about to suggest, the move shows instead, and a move that would only type into your
+field shows as words there, taken with Tab like any suggestion. Moves also show sooner.
+
+Memory keeps only what you saw: pages that were on your screen, what you copied and wrote, what you heard. Titles from
+your history, bookmarks, tabs you never opened and emails the agent read for you are no longer kept as memory (your
+history still teaches Tab where you usually go next).
+
 ## 2026-10-25 · Roux, rebuilt: it reads your footage, watches its own cut, and remembers the conversation
 Roux, the editor inside Gumbo, is rebuilt from the ground up to work the way the best coding agents do.
 

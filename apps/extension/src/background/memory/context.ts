@@ -119,8 +119,9 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const quick=req.surface==='tab-text'||req.surface==='tab-action'||req.surface==='drawn';
  // The past: the search for this moment (kept per key), waited for only as long as the surface can.
  const key=req.key??`${req.surface}|${tab??''}|${req.url??''}`,k=quick?8:16,search=searchFor(key,req.query,k);
- // Text Tab never waits on the search: it uses what the last one found, and this one is ready for the next words.
- const wait=req.wait??(req.surface==='tab-text'?0:quick?(search.at?0:80):req.surface==='agent'?1500:200);
+ // Text Tab waits on the search only for a field's first one (a few tens of milliseconds, usually begun as the field was
+ // focused): after that it uses what the last one found, and this one is ready for the next words.
+ const wait=req.wait??(req.surface==='tab-text'?(search.at?0:150):quick?(search.at?0:80):req.surface==='agent'?1500:200);
  const settled=()=>new Promise<void>(r=>{const check=()=>!search.searching&&!search.wanted?r():setTimeout(check,15);check();});
  if((search.searching||search.wanted)&&wait>0)await Promise.race([settled(),new Promise(r=>setTimeout(r,wait))]);
  // Nothing in hand yet (memory still starting, after Chrome opened): the question may be all about memory, so the
@@ -139,9 +140,11 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  // Text Tab never waits for meaning: what is embedded already counts now, the rest is embedded for the next keystroke.
  await weigh(nodes,req.query,req.surface==='tab-text'?0:quick?40:600);
  const moment={now:Date.now(),project:here?.project,site,words:wordsOf(req.query).slice(0,40)};
- // What comes is what is relevant: every node, wherever it is from, by the same test, its closeness in meaning to the
- // moment (its words, when it is not embedded yet). A tab's best-matching passage was chosen by its words already.
- const close=(n:GNode)=>n.kind==='snippet'||(n.cos!==undefined?n.cos>=cfg.rank.minCos:overlap(moment.words,`${n.title} ${n.text}`)>=0.2);
+ // What comes is what is relevant: every node by its closeness in meaning to the moment (its words, when it is not
+ // embedded yet), and what is one step away in what they did (the tab just left, the one this was opened from, this
+ // tab's trail, what they copied, the project) by that alone: it shares few words with what they write about it. Ranking
+ // then weighs both (rank.chain). A tab's best-matching passage was chosen by its words already.
+ const close=(n:GNode)=>n.kind==='snippet'||n.hops<=1||(n.cos!==undefined?n.cos>=cfg.rank.minCos:overlap(moment.words,`${n.title} ${n.text}`)>=0.2);
  const candidates:Candidate[]=nodes.filter(close).map(n=>({id:n.id,layer:n.hops>=3?'past':'session',kind:n.kind,title:n.title,url:n.url,text:n.text,at:n.at,site:n.site,cos:n.cos,bm25:n.bm25,project:n.project??(n.visit!==undefined?visitMap.get(n.visit):undefined),chain:n.hops<=1,seenMs:Math.max(n.seenMs??0,seenNow.get(n.id)??0),useful:usefulMap.get(n.id)}));
  const rels=new Map(nodes.map(n=>[n.id,n.rel]));
  const chars=req.budget*4,stableText=about.length?`<about_them>\n${about.join('\n')}\n</about_them>`:'';
@@ -151,8 +154,11 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const pages=ranked.filter(r=>r.layer==='past'&&r.kind==='page'&&r.url).map(r=>r.url!);if(pages.length)void touchPages(pages.slice(0,4));
  let n=0;
  const items:Item[]=ranked.map(r=>({n:r.layer==='past'?++n:0,id:r.id,layer:r.layer,kind:r.kind,title:r.title,url:r.url,when:r.layer==='past'?when(r):ago(r.at),text:r.text,score:Math.round(r.score*1000)/1000,parts:Object.fromEntries(Object.entries(r.parts).map(([a,b])=>[a,Math.round(b*1000)/1000]))}));
- // A tab's words: its start and its end (where a chat's newest answer is), the more for what is one step away.
- const words=(i:Item)=>{const t=squash(i.text),max=req.surface==='tab-text'?400:i.kind==='left'||i.kind==='project'?1800:600;return t.length>max&&max>=1200?`${t.slice(0,300)} … ${t.slice(-(max-300))}`:cut(t,max);};
+ // A tab's words: its start and its end (where a chat's newest answer is), the more for what is one step away. For text
+ // Tab, the tab just left and the others open give what was on their screen (the total at the bottom of the invoice they
+ // scrolled to), not its first lines.
+ const beside=(i:Item)=>i.kind==='left'||i.kind==='tab'||i.kind==='trail'||i.kind==='copy';
+ const words=(i:Item)=>{const t=squash(i.text),max=req.surface==='tab-text'?(beside(i)?1500:400):i.kind==='left'||i.kind==='project'?1800:600;return t.length>max&&max>=1200?`${t.slice(0,300)} … ${t.slice(-(max-300))}`:cut(t,max);};
  const sessionLines=items.filter(i=>i.layer==='session').map(i=>`- [${i.id}] ${rels.get(i.id)??i.kind} (${i.when}): “${cut(i.title,90)}”${i.url&&i.kind!=='copy'?` (${siteOf(i.url)})`:''}\n  ${words(i)}`);
  const memoryLines=items.filter(i=>i.layer==='past').map(i=>`[${i.n}] ${cut(i.title,90)} (${i.when})\n${cut(i.text,req.surface==='tab-text'?400:700)}`);
  const s=await load(),nowHere=tab!==undefined?s.tabs[tab]?.now:undefined;

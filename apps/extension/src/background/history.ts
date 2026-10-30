@@ -8,9 +8,8 @@ import {calibrateWhenReady} from './memory/projects';
 /** What the user already has, brought in once (and again from the popup): the last 60 days of Chrome's history, whose
  * visits and the links between them (referringVisitId) teach the learner where the user usually goes from where, and at
  * what hours, and become memory's visits (chained the same way, the newest 20,000; a second import adds only what is
- * newer than the first); and their bookmarks. Titles and addresses become searchable memory. It works in batches that
- * yield, while the computer is idle, and says how far it got. Nothing from blocked sites, and nothing leaves the
- * computer. */
+ * newer than the first). None of it is searchable memory: memory is what they saw. It works in batches that yield, while
+ * the computer is idle, and says how far it got. Nothing from blocked sites, and nothing leaves the computer. */
 export type ImportState={state:'idle'|'running'|'done';pages:number;visits:number;bookmarks:number;at?:number};
 let running:Promise<ImportState>|undefined;
 const DAY=86_400_000,yieldNow=()=>new Promise(r=>setTimeout(r,0));
@@ -50,17 +49,8 @@ export function importHistory(days=60):Promise<ImportState>{
     if(i%200===199)await yieldNow();
    }
    if(fresh.length)await putSealed('import-visits-until',fresh.at(-1)!.at);
-   // Titles and addresses as memory search can find ("that article about pricing pages I read last week").
-   for(const item of items.slice(0,4000)){
-    await add('passages',{ref:item.url!,kind:'page',text:`${item.title??''} ${item.url}`,at:item.lastVisitTime??Date.now(),site:siteOf(item.url!),title:item.title||item.url!,url:item.url}).catch(()=>{});
-    state.pages++;
-   }
-   try{
-    const walk=(nodes:chrome.bookmarks.BookmarkTreeNode[],folder:string):{title:string;url:string;folder:string}[]=>nodes.flatMap(n=>n.url?[{title:n.title,url:n.url,folder}]:walk(n.children??[],n.title||folder));
-    for(const mark of walk(await chrome.bookmarks.getTree(),'').filter(m=>/^https?:/.test(m.url)&&activeOn(settings,siteOf(m.url)))){
-     await add('notes',{text:`Bookmark${mark.folder?` in ${mark.folder}`:''}: ${mark.title} (${mark.url})`,url:mark.url,title:mark.title,at:Date.now(),source:'import'}).catch(()=>{});state.bookmarks++;
-    }
-   }catch{}
+   // Nothing of it becomes searchable memory (Oct 29): a title and an address are not a page they saw, and bookmarks are
+   // often pages never opened. Memory holds what was on their screen; history teaches only where they go next.
    invalidate();
    Object.assign(state,{state:'done',at:Date.now()});await putSealed('import',state);
    // Projects learn their threshold from the visits just brought in.

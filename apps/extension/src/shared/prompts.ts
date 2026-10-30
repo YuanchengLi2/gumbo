@@ -66,11 +66,12 @@ export const LEAN_TAB_SYSTEM=`You are an autocomplete engine in a person's brows
 - When the text is whole (the message has made its point, the search names what they want), output ∎ alone; when your words make it whole, end with ∎.
 - If you are not fairly sure what they will type next, output nothing.
 - After your continuation you may add up to two other likely ones, each after ⟂.
+- End with ⟦n⟧, n one digit: the chance in ten that they type your first continuation next.
 
 Examples (output after the arrow):
-- "Thanks for sending the deck over. I'll" → I'll look at it tonight.
-- A search box with "federalist 10 summ" → summary∎
-- "Sounds good, see you" after the thread set Thursday at 3 → you Thursday at 3!∎`;
+- "Thanks for sending the deck over. I'll" → I'll look at it tonight.⟦5⟧
+- A search box with "federalist 10 summ" → summary∎⟦8⟧
+- "Sounds good, see you" after the thread set Thursday at 3 → you Thursday at 3!∎⟦9⟧`;
 
 /** Tab for text in an editor drawn as pixels: the words are read from a picture with the cursor marked, and the reply is
  * exactly what goes in at the cursor (there is no text to trim it against). */
@@ -128,7 +129,8 @@ export function knownText(context:Partial<FieldContext>,recall:Recall){
  * keyword matches of before. */
 export function tabRequest(context:FieldContext,before:string,after:string,recall:Recall,memory?:{stable:string;fresh:string;known:string},system=TAB_SYSTEM){
  const stable=(memory?.stable?memory.stable+'\n':'')+(stableContext(context,memory?{...recall,facts:{}}:recall)||'<field>\nA text field.\n</field>');
- const fresh=memory?(memory.fresh?memory.fresh+'\n':'')+freshContext(before,after,{reading:[],heard:[],copied:recall.copied}):freshContext(before,after,recall);
+ // What recall matched by its words (pages read today, what was heard) comes too, except what memory gave already.
+ const fresh=memory?(memory.fresh?memory.fresh+'\n':'')+freshContext(before,after,{reading:recall.reading.filter(r=>!memory.fresh.includes(r.title)),heard:recall.heard.filter(h=>!memory.fresh.includes(h.title)),copied:recall.copied}):freshContext(before,after,recall);
  return{system,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],known:knownText(context,recall)+(memory?'\n'+memory.known:'')};
 }
 
