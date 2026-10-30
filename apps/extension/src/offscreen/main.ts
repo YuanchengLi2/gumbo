@@ -3,6 +3,7 @@ import {search,refresh,reset,stats,warm,lastActive,embed} from './memory';
 import {listening,startListening,listenAudio,stopListening,listenCues,nameVoice,listenState,log} from './listen';
 import {useKeys} from '../background/vault';
 import {powerNow} from './power';
+import {readPdf} from './pdf';
 /** The offscreen document: Gumbo's long-lived part, for what needs a page (WebAssembly and WebGPU models, workers, audio)
  * and outlives the service worker's naps: memory search, embedding, and listening. The worker talks to it with
  * {target:'offscreen'} messages; it closes itself after ten minutes with nothing to do. */
@@ -23,6 +24,8 @@ async function handle(message:any){
   case 'index.warm':return warm();
   // Texts as vectors (8-bit, as memory keeps them), for grouping visits into projects.
   case 'embed':return{vectors:(await embed((message.texts as string[]).slice(0,64))).map(v=>[...v])};
+  // A PDF on screen, page by page (Chrome's viewer runs no extension's script).
+  case 'pdf.read':return readPdf(String(message.url));
   case 'listen.start':return startListening(message);
   case 'listen.audio':return listenAudio(message);
   case 'listen.stop':return stopListening(message.session);

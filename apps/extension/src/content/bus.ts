@@ -21,7 +21,7 @@ let words:{confidence:number}|undefined;
 export function wordsShown(on:boolean,confidence=0.7){words=on?{confidence}:undefined;}
 export const wordsConfidence=()=>words?.confidence;
 /** How much surer one offer must be to take the place of the one on screen. */
-export const MARGIN=0.15,SURE=0.8;
+export const MARGIN=0.1,SURE=0.8;
 /** Whether a move this sure should take the place of the ghost words showing. */
 export const moveBeatsWords=(confidence:number)=>!!words&&confidence>=SURE&&confidence>=words.confidence+MARGIN;
 let yielder:(()=>void)|undefined,offerer:((el:Element,text:string,confidence:number,why?:string)=>boolean)|undefined;

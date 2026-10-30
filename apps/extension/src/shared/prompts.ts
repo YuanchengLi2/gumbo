@@ -133,7 +133,9 @@ export function tabRequest(context:FieldContext,before:string,after:string,recal
  const stable=(memory?.stable?memory.stable+'\n':'')+(stableContext(context,memory?{...recall,facts:{}}:recall)||'<field>\nA text field.\n</field>');
  // What recall matched by its words (pages read today, what was heard) comes too, except what memory gave already.
  const fresh=memory?(memory.fresh?memory.fresh+'\n':'')+freshContext(before,after,{reading:recall.reading.filter(r=>!memory.fresh.includes(r.title)),heard:recall.heard.filter(h=>!memory.fresh.includes(h.title)),copied:recall.copied}):freshContext(before,after,recall);
- return{system,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],known:knownText(context,recall)+(memory?'\n'+memory.known:'')};
+ // What a suggestion may take a fact from is exactly what the model was shown (and the user's own facts): a fact it read
+ // in the request is never cut as if it were made up, and one it was not shown always is.
+ return{system,messages:[{role:'user',content:[{type:'text',text:stable,cache_control:{type:'ephemeral'}},{type:'text',text:fresh}]}],known:`${stable}\n${fresh}\n${Object.values(recall.facts).filter(Boolean).join('\n')}`};
 }
 
 export const INLINE_SYSTEM=`You are Gumbo's inline assistant, opened with Ctrl+K on a web page. The person selected some text (or placed the cursor in a field) and typed an instruction. Do exactly one of three things, and name it alone on the first line:

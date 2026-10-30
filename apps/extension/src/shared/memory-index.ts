@@ -47,7 +47,8 @@ export class MemoryIndex{
  replace(doc:Doc){if(this.docs.has(doc.id)){this.search.discard(doc.id);this.docs.delete(doc.id);}this.add([doc]);}
  remove(ids:string[]){for(const id of ids)if(this.docs.has(id)){this.search.discard(id);this.docs.delete(id);this.vectors.delete(id);}}
  setVector(id:string,vector:Int8Array){this.vectors.set(id,vector);}
- missingVectors(limit=Infinity){const out:Doc[]=[];for(const d of this.docs.values()){if(!this.vectors.has(d.id))out.push(d);if(out.length>=limit)break;}return out;}
+ /** What has no embedding yet, newest first: what was just seen is found by meaning before the backlog of the past. */
+ missingVectors(limit=Infinity){const out:Doc[]=[];for(const d of [...this.docs.values()].reverse()){if(!this.vectors.has(d.id))out.push(d);if(out.length>=limit)break;}return out;}
  /** The best matches for a question; `query` is its embedding when there is one. */
  find(text:string,{k=6,query,since,kinds,sites}:{k?:number;query?:Int8Array;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Found[]{
   const allowed=(d:Doc)=>(!since||d.at>=since)&&(!kinds||kinds.includes(d.kind))&&(!sites||!!d.site&&sites.includes(d.site));

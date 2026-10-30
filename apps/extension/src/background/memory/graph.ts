@@ -6,7 +6,7 @@ import {load,current,type LiveVisit,type State} from './live';
 import {profile} from './profile';
 import {all as allProjects} from './projects';
 import {siteOf} from '../../shared/settings';
-import {forQuery,forDoc} from '../../shared/embedding';
+import {forQuery,forDoc,EMBED_BATCH} from '../../shared/embedding';
 /** The browser as a codebase, the way Cursor sees a repository: everything Gumbo holds is a node (the page in front, the
  * pages before it in this tab, the tab it was opened from and the ones opened from it, the tab just left, every open and
  * lately closed tab with what is on it, what was copied and written, the project and its note, what Gumbo knows about
@@ -126,7 +126,7 @@ let embedding:Promise<void>|undefined;const queued=new Set<string>();
 function embedLater(texts:string[]){
  for(const t of texts)if(!vectors.has(keyOf(t)))queued.add(t);
  if(embedding||!queued.size)return embedding;
- const batch=[...queued].slice(0,64);for(const t of batch)queued.delete(t);
+ const batch=[...queued].slice(0,EMBED_BATCH);for(const t of batch)queued.delete(t);
  embedding=offscreen<{vectors:number[][]}>({type:'embed',texts:batch}).then(r=>{r.vectors.forEach((v,i)=>vectors.set(keyOf(batch[i]),v));while(vectors.size>4000)vectors.delete(vectors.keys().next().value!);}).catch(()=>{}).finally(()=>{embedding=undefined;if(queued.size)void embedLater([]);});
  return embedding;
 }

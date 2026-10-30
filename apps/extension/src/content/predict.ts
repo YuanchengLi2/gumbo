@@ -378,7 +378,8 @@ function listen(id:string){
   if(running)return;
   // A move much surer than the words showing takes their place once the keyboard rests (bus.ts): the order number the
   // support chat asked for over a guess at a sentence.
-  if(m.final&&m.plan?.steps.length&&ghostShown()&&Date.now()-lastKey>=BEAT&&moveBeatsWords(m.plan.confidence)&&!heldForText(m.plan))yieldWords();
+  // Its being much surer also says the text is done: the Send it held for the words is no longer held.
+  if(m.final&&m.plan?.steps.length&&ghostShown()&&Date.now()-lastKey>=BEAT&&moveBeatsWords(m.plan.confidence)){const f=fieldOf(deepActive());if(f)finished.add(f.el);yieldWords();}
   // An answer that lands while they type (or while a text suggestion shows) is kept, and shown at the next beat.
   if(typing()){const f=fieldOf(deepActive());if(m.final&&m.plan&&f)typedAhead={el:f.el,plan:m.plan,at:Date.now()};return;}
   // The engine sends only a move it is sure of, on something in view: it is said plainly, its chip by the thing it would

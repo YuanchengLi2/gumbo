@@ -149,7 +149,8 @@ on('predict',async(m:Ask,{send,url,port,signal})=>{
   const stableHead=bundle.stable||'<about_them>\n(nothing known yet)\n</about_them>';
   const page=`${outer}<page url="${url}" title="${title}">\n${m.text.slice(0,m.where?1500:3500)}\n</page>\n${there}<elements${m.where?' where_they_are':''}>\n${listing}\n</elements>\n${whole}`;
   const fresh=[says,bundle.fresh,doing,`<what_they_just_did_here>\n${m.activity.slice(-8).map(a=>`- ${a.kind}: ${a.label}${a.text?` “${a.text.slice(0,160)}”`:''}`).join('\n')||'- opened the page'}\n</what_they_just_did_here>`,m.focused?`Their cursor is in ${m.focused}.`:'',habits?`<what_they_usually_do_here>\n${habits}\n</what_they_usually_do_here>`:'',taste,down?.labels.length?`<they_turned_down_here>\n${down.labels.map(l=>`- ${l}`).join('\n')}\n</they_turned_down_here>`:''].filter(Boolean).join('\n');
-  const known=`${m.text}\n${m.where?.text??''}\n${listing}\n${whole}\n${says}\n${bundle.known}\n${m.activity.map(a=>`${a.label} ${a.text??''}`).join('\n')}\n${latelyKnown(before)}`;
+  // What a move may type is exactly what the model was shown, and the user's own details.
+  const known=`${stableHead}\n${page}\n${fresh}\n${Object.values(facts).filter(Boolean).join('\n')}`;
   // On a page drawn as pixels, the picture of what they see goes with it, and its points come back in the page's terms.
   const picture=shot?[{type:'image',source:{type:'base64',media_type:'image/jpeg',data:shot.data}},{type:'text',text:`This page is drawn as pixels: its words and shapes are in this picture of what they see (${shot.w}×${shot.h}), not in the element list. To act on something in it, point at it: "at":[x,y] in this picture's pixels (and "to_at" for where a drag ends).`}]:[];
   const inView=(plan:Plan|null)=>plan&&shot&&m.view?onView(plan,m.view[0]/shot.w,m.view[1]/shot.h):plan;

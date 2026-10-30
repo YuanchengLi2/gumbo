@@ -5,7 +5,10 @@ import {recent} from './db';
  * keywords here, so a question is always answered from what is there. */
 export type {Found};
 let fallback:{index:MemoryIndex;at:number}|undefined;
-export function memoryChanged(){fallback=undefined;void notifyOffscreen('index.changed');}
+/** How many times memory has changed since the worker started: a search kept for a moment (memory/context.ts) is asked
+ * again once memory holds something newer, even when its question is the same. */
+export let memoryGeneration=0;
+export function memoryChanged(){fallback=undefined;memoryGeneration++;void notifyOffscreen('index.changed');}
 export function memoryReset(){fallback=undefined;void notifyOffscreen('index.reset');}
 export async function searchMemory(query:string,options:{k?:number;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Promise<Found[]>{
  if(!query.trim())return[];

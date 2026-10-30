@@ -1,4 +1,4 @@
-import {searchMemory,type Found} from '../search';
+import {searchMemory,memoryGeneration,type Found} from '../search';
 import {recent,touchPages} from '../db';
 import {model} from '../model';
 import {workspace} from '../workspace';
@@ -48,7 +48,8 @@ const ago=(at:number)=>{const m=Math.round((Date.now()-at)/MINUTE);return m<1?'j
 const when=(f:{at:number;kind:string;start?:number})=>new Date(f.at).toLocaleDateString('en-US',{month:'short',day:'numeric'})+(f.kind==='media'&&f.start!==undefined?`, at ${clock(f.start)}`:'');
 
 /** Searches kept per field or moment, refreshed when the question moves on. */
-type Search={query:string;found:Found[];at:number;searching?:Promise<void>;wanted?:string};
+type Search={query:string;found:Found[];at:number;searching?:Promise<void>;wanted?:string;
+ /** memoryGeneration when it was asked: memory that changed since makes it stale. */generation?:number};
 const searches=new Map<string,Search>();
 /** One search at a time per key; a question asked while one runs is searched the moment it is done (the newest only). */
 function searchFor(key:string,query:string,k:number):Search{
@@ -56,12 +57,13 @@ function searchFor(key:string,query:string,k:number):Search{
  if(!s){s={query:'',found:[],at:0};searches.set(key,s);if(searches.size>300)searches.delete(searches.keys().next().value!);}
  const mine=s;
  const start=(asked:string)=>{
-  mine.query=asked;mine.wanted=undefined;
+  mine.query=asked;mine.wanted=undefined;mine.generation=memoryGeneration;
   mine.searching=searchMemory(asked.slice(0,1500),{k}).then(found=>{mine.found=found;mine.at=Date.now();}).catch(()=>{}).finally(()=>{
-   mine.searching=undefined;if(mine.wanted&&mine.wanted!==mine.query)start(mine.wanted);
+   mine.searching=undefined;if(mine.wanted&&(mine.wanted!==mine.query||mine.generation!==memoryGeneration))start(mine.wanted);
   });
  };
- if(query&&query!==s.query){if(s.searching)s.wanted=query;else start(query);}
+ // A new question, or the same one after memory took in something new (what they just saw may be the answer).
+ if(query&&(query!==s.query||s.generation!==memoryGeneration)){if(s.searching)s.wanted=query;else start(query);}
  return s;
 }
 /** What helped before: memory items that were in suggestions the user took (their ids). */

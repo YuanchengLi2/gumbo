@@ -19,7 +19,7 @@ export type Standin={url:string;bodies:any[];script:Script;timing:string;close()
  /** The synced memory the stand-in gateway holds, by account: exactly what the server would see. */sync:Map<string,SyncAccount>;
  /** The plan and credits the gateway reports (a paid plan with plenty left, unless a test says otherwise). */billing:{plan:string;credits:{left:number;planTotal:number}}};
 const pages=resolve(import.meta.dirname,'pages'),modules=resolve(import.meta.dirname,'../../../node_modules'),audio=resolve(import.meta.dirname,'../../../packages/web-ml/test/fixtures');
-const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.ogg':'audio/ogg','.wav':'audio/wav','.mp4':'video/mp4','.webm':'video/webm','.png':'image/png'};
+const types:Record<string,string>={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.ogg':'audio/ogg','.wav':'audio/wav','.mp4':'video/mp4','.webm':'video/webm','.png':'image/png','.pdf':'application/pdf'};
 const wait=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 
 export async function startStandin(script:Script=()=>({text:''})):Promise<Standin>{

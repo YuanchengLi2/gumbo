@@ -10,8 +10,8 @@ describe('Tab offers one thing at a time, the one most likely right',()=>{
   wordsShown(true,0.8);expect(moveBeatsWords(0.85)).toBe(false);
   // Much surer than the words, but not sure.
   wordsShown(true,0.3);expect(moveBeatsWords(0.6)).toBe(false);
-  // Words the model gave no confidence for count as fairly sure.
-  wordsShown(true);expect(moveBeatsWords(0.8)).toBe(false);expect(moveBeatsWords(0.9)).toBe(true);
+  // Words the model gave no confidence for count as fairly sure (0.7): a sure move, a tenth surer, takes their place.
+  wordsShown(true);expect(moveBeatsWords(0.75)).toBe(false);expect(moveBeatsWords(0.8)).toBe(true);
   wordsShown(false);expect(moveBeatsWords(0.95)).toBe(false);
  });
  it('the ghost is asked to give way, and a move that types into the field is offered to it as words',()=>{

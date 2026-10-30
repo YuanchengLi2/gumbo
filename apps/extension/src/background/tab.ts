@@ -74,6 +74,9 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
  if(message.chain)(messages[0].content as any[]).push({type:'text',text:'The last words before the cursor are your own suggestion, which they are taking. Judge the whole text as it stands: if it already says what they want (a query that names what they are looking for, a message that makes its point), reply ∎ alone. Write more only if their thought plainly goes on.'});
  // An empty field, just entered: what goes in it, only when their context says it plainly.
  const empty=!message.before.trim()&&!message.after.trim();
+ // A message (an email, a chat, a comment, a post, a prompt) whose last sentence is finished, the cursor at its end: more
+ // words are a new sentence, which shows only when the model is sure of it, so they wait for its whole answer.
+ const overrun=['email','chat','comment','post','prompt'].includes(c.intent)&&/[.!?…]["”’)]?\s*$/u.test(message.before)&&!message.after.trim();
  if(empty)(messages[0].content as any[]).push({type:'text',text:'The field is empty: they just clicked into it. Write what goes in it only when it is plain from what the field asks for (its label, the question or column it sits under) and a fact in their context (what they read, copied or have open): that value, exactly. Otherwise output nothing.'});
  const lastWord=lastWordOf(message.before),check=(raw:string,final:boolean)=>cleanSuggestion(raw,{before:message.before,after:message.after,singleLine:c.singleLine,known,final,lastWord,own:c.thread?.map(m=>m.text).join('\n')});
  // How sure the model is, as it says at the end of its reply (⟦7⟧: seven in ten), and the reply without it.
@@ -86,7 +89,7 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
    // The best one shows as it streams (whole words only); the alternatives come with the final answer.
    const [best,...more]=alternativesOf(bare(raw).replace(/∎/g,'')),text=check(best,more.length>0);
    // An empty field's answer waits until it is whole: it shows only if a fact turns out to be behind it.
-   if(!empty&&text.length>shown.length){shown=text;send({type:'tab.text',id:message.id,text,final:false});}
+   if(!empty&&!overrun&&text.length>shown.length){shown=text;send({type:'tab.text',id:message.id,text,final:false});}
   }});
   // Tab's model failing before it wrote anything (its provider down, a limit reached): Haiku answers the same request.
   const {message:reply,timing}=await ask(settings.models.tab).catch(error=>{if(signal.aborted||raw||settings.models.tab===FALLBACK)throw error;return ask(FALLBACK);});
@@ -101,10 +104,18 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
   const source=checked?sourceOf(checked,bundle,`${message.before}\n${message.after}\n${c.label}\n${(c.around??[]).join('\n')}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
   // In an empty field, words with no fact from their context behind them are a guess at what someone might type there:
   // shown only when the model is sure.
-  const text=empty&&!source&&(confidence??0)<0.8?'':checked;
+  const sure=(confidence??0)>=0.8;
+  // A word they are in the middle of, finished by a few letters and nothing after, becomes a word that is there to be had
+  // (in what Tab was shown: the page, memory, their own writing): "Ac" becomes "Acme" from the invoice, never "Aca".
+  const word=lastWordOf(message.before),half=!!word&&/[\p{L}\p{N}]$/u.test(message.before)&&!!checked&&checked.length<=3&&/^[\p{L}\p{N}'’-]+$/u.test(checked);
+  const madeUp=half&&!new RegExp(`(^|[^\\p{L}\\p{N}])${(word+checked).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}($|[^\\p{L}\\p{N}])`,'u').test(known.toLowerCase());
+  const text=empty&&!source&&!sure||overrun&&!sure||madeUp?'':checked;
+  // Past a finished sentence in a message, words the model was not sure of mean the message is whole: the next step
+  // (Send, Post, Reply) is offered instead.
+  const whole=done||overrun&&!sure;
   const split={context:Math.round(contextMs),firstToken:firstMs===undefined?undefined:Math.round(firstMs),gateway:timing?.provider,total:Math.round(performance.now()-started)};
   void addTiming({surface:message.chain?'tab-chain':'tab-model',ms:split.total,gateway:timing,at:Date.now()});
-  send({type:'tab.text',id:message.id,text,alternatives:text?alternatives:[],final:true,done,source,confidence,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
+  send({type:'tab.text',id:message.id,text,alternatives:text?alternatives:[],final:true,done:whole,source,confidence,used:bundle.items.filter(i=>i.layer==='past').slice(0,4).map(i=>i.id),split});
  }catch(error){if(!signal.aborted)send({type:'tab.text',id:message.id,text:'',final:true,error:(error as Error).message});}
 });
 

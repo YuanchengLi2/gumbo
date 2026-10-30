@@ -11,7 +11,7 @@ import {deepActive,pathOf} from './dom';
 import {post,listen,ask,alive} from './port';
 import {textDone,moveSince,wordsShown,wordsYield} from './bus';
 import {loadSettings,onSettings,activeOn,type Settings} from '../shared/settings';
-import {remainder,join} from '../shared/suggestion';
+import {remainder,join,repeats} from '../shared/suggestion';
 /** Tab in a page, as it types:
  * - Every keystroke first tries the suggestion showing (or one of its alternatives): typing the same letters keeps the
  *   rest, with no new request; typing the way an alternative goes switches to it.
@@ -66,8 +66,12 @@ export function startTab(){
 function offerMoveWords(el:Element,text:string,confidence:number,why?:string):boolean{
  const field=fieldOf(el);if(!field||!fieldIsFocused(field)||hiddenBox(field)||composing)return false;
  const snap=snapshot(field);if(!snap||snap.selected||!text.trim())return false;
- if(snap.text.includes(text.trim()))return false;
- const rest=text.startsWith(snap.before)&&!snap.after.trim()?text.slice(snap.before.length):join(snap.before,text);if(!rest.trim())return false;
+ // Never their own words again: a move that would type what the field already says (or say it over, reworded) is not
+ // more of their text.
+ const lower=(s:string)=>s.toLowerCase().replace(/\s+/g,' ').trim();
+ if(lower(snap.text).includes(lower(text))||repeats(snap.before,text))return false;
+ const continues=lower(text).startsWith(lower(snap.before))&&!snap.after.trim();
+ const rest=continues?text.slice(snap.before.length):join(snap.before,text);if(!rest.trim()||!continues&&repeats(snap.before,rest))return false;
  if(live)drop('ignored');
  live={id:`w${++seq}`,field,key:keyOf(field),base:snap.before,text:rest,alts:[],final:true,pausedAt:performance.now(),context:readContext(field),taken:0,reported:false,from:'move',confidence,done:true,source:why?{title:why.slice(0,60),when:'now'}:undefined};
  render();return true;
@@ -177,6 +181,9 @@ function onAnswer(message:any){
  // What shows only ever grows (or is cut back to a shorter end): a different suggestion never takes its place under the
  // user's eyes, so Tab takes exactly what they saw. A different final answer is kept as another way to go on.
  let other:string|undefined;
+ // A final answer of nothing takes back what streamed: the checks on the whole answer (a fact not there to be had, a new
+ // sentence the model was unsure of) have the last word.
+ if(message.final&&!message.text&&live.from==='model')live.text='';
  if(message.text){
   if(!live.text||message.text.startsWith(live.text)||message.final&&live.text.startsWith(message.text)){live.text=message.text;if(live.from!=='cache')live.from='model';}
   else if(message.final)other=message.text;
