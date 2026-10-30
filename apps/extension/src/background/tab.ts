@@ -95,7 +95,7 @@ on('tab',async(message:Ask,{send,signal,url,tabId:tab})=>{
   const said=raw||(reply?.content??[]).map((b:any)=>b.text??'').join(''),confidence=sureOf(said),full=bare(said),done=(full.split('⟂')[0]??'').includes('∎');
   const [best='',...more]=alternativesOf(full.replace(/∎/g,''));
   const checked=check(best,true),alternatives=more.map(a=>check(a,true)).filter(a=>a&&a!==checked).slice(0,Math.max(0,cfg.alternatives-1));
-  const source=checked?sourceOf(checked,bundle,`${message.before}\n${message.after}\n${c.label}\n${c.page??''}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
+  const source=checked?sourceOf(checked,bundle,`${message.before}\n${message.after}\n${c.label}\n${(c.around??[]).join('\n')}\n${(c.thread??[]).map(m=>m.text).join('\n')}\n${(c.form??[]).map(f=>f.value).join('\n')}`):undefined;
   // In an empty field, words with no fact from their context behind them are a guess at what someone might type there:
   // shown only when the model is sure.
   const text=empty&&!source&&(confidence??0)<0.8?'':checked;

@@ -99,10 +99,11 @@ export function stableContext(context:Omit<FieldContext,'url'|'title'>&{url?:str
  // Their own writing elsewhere shows how they write, never what to write: one or two short samples. (Suggestions they took
  // before are not shown: the model copied them into text they had nothing to do with.)
  const style=recall.style.slice(0,4).map(s=>`[${s.intent} on ${s.site}] ${clip(s.text,200)}`).join('\n');
- // A search box is completed from what they typed, as a search engine's suggestions are: the page is not given (its words
- // ended up in the box). Elsewhere a short slice, marked as what they have already read.
+ // A search box is completed from what they typed, as a search engine's suggestions are: no conversation, and of the page
+ // only its label and heading (readContext gives no more; its words ended up in the box). Elsewhere the text around the
+ // field, closest first: the question above it, its column, its headings, what follows, what is in view.
  const search=context.intent==='search';
- return section('field',field)+section('other_fields_in_the_form',form)+section('conversation_above_the_field',search?'':thread)+section('document_headings',context.headings?.join('\n'))+section('on_the_page_already_read_by_them_never_copy_from_it',search?'':context.page&&clip(context.page,700))
+ return section('field',field)+section('other_fields_in_the_form',form)+section('conversation_above_the_field',search?'':thread)+section('document_headings',context.headings?.join('\n'))+section('around_the_field',context.around?.join('\n'))
   // Their notes come through memory like everything else (only when they bear on the moment), not every time.
   +section('about_the_person',facts)+section('how_they_write_copy_their_casing_slang_punctuation_and_length_never_the_content',style);
 }
@@ -122,7 +123,7 @@ export function freshContext(before:string,after:string,recall:Pick<Recall,'read
 }
 /** Everything the suggestion may take facts from, for the facts guard. */
 export function knownText(context:Partial<FieldContext>,recall:Recall){
- return [context.title,context.label,context.page,...(context.form??[]).map(f=>`${f.label} ${f.value}`),...(context.thread??[]).map(m=>`${m.author??''} ${m.text}`),...(context.headings??[]),...Object.values(recall.facts),...recall.style.map(s=>s.text),...recall.accepted,...recall.reading.map(r=>r.title+' '+r.text),...recall.heard.map(h=>`${h.title} ${h.speaker??''} ${h.text}`),...recall.notes,...(recall.memory??[]).map(m=>`${m.title} ${m.text}`),...(recall.copied??[]).map(c=>c.text)].filter(Boolean).join('\n');
+ return [context.title,context.label,...(context.around??[]),...(context.form??[]).map(f=>`${f.label} ${f.value}`),...(context.thread??[]).map(m=>`${m.author??''} ${m.text}`),...(context.headings??[]),...Object.values(recall.facts),...recall.style.map(s=>s.text),...recall.accepted,...recall.reading.map(r=>r.title+' '+r.text),...recall.heard.map(h=>`${h.title} ${h.speaker??''} ${h.text}`),...recall.notes,...(recall.memory??[]).map(m=>`${m.title} ${m.text}`),...(recall.copied??[]).map(c=>c.text)].filter(Boolean).join('\n');
 }
 /** memory: what getContext gave (memory/context.ts): its stable part (who they are and how they write here, what they
  * are working on) goes first with the field's own, cached; its fresh part (this session, their memory) replaces the

@@ -36,6 +36,18 @@ export function digestOf(region?:Element|null,exclude=new Set<string>()):Digest{
   const values=fields.map(el=>{const v=el instanceof HTMLInputElement&&/checkbox|radio/.test(el.type)?(el.checked?'checked':'not checked'):el instanceof HTMLInputElement||el instanceof HTMLTextAreaElement?el.value:el instanceof HTMLSelectElement?el.selectedOptions[0]?.text??'':(el as HTMLElement).innerText??'';return `${nameOf(el,40)||el.getAttribute('name')||'field'} [${idOf(el)}] = ${v?`“${cut(squash(v),60)}”`:'(empty)'}`;});
   forms.push(`${nameOf(f,40)||'form'}${region&&(f.contains(region)||region.contains(f))?' (where they are)':''}: ${values.join('; ')}`);
  }
+ const said=saidNow();
+ // Everything one can act on, and the page's main actions wherever they are (a long page's footer button included).
+ const mains=deepQuery('button,input[type=submit],[role=button],a[href]',document,6000).filter(el=>visible(el)&&main(el)).slice(0,30);
+ const mainIds=new Set(mains.map(el=>idOf(el)));
+ const all=[...pageModel(220).items,...mains.map(el=>describe(el))];
+ const rest:Digest['rest']=[],kept=new Set<string>();
+ for(const {id,role,name,value,state,inView,nearby} of all){if(exclude.has(id)||kept.has(id))continue;kept.add(id);rest.push({id,role,name,value,state,inView,nearby,...(mainIds.has(id)?{main:true}:{})});}
+ return{outline,forms,said,rest};
+}
+/** What the page is telling them now: alerts, status and live regions, banners, toasts, open dialogs, and text that just
+ * appeared where they are working; at most eight. */
+export function saidNow():string[]{
  const said:string[]=[];
  for(const el of deepQuery(feedbackSelector,document,6000)){
   if(said.length>=6)break;if(!visible(el))continue;
@@ -43,11 +55,5 @@ export function digestOf(region?:Element|null,exclude=new Set<string>()):Digest{
   said.push(text);
  }
  for(const a of appeared)if(Date.now()-a.at<30_000&&!said.some(s=>s.includes(a.text)))said.push(`(just appeared) ${a.text}`);
- // Everything one can act on, and the page's main actions wherever they are (a long page's footer button included).
- const mains=deepQuery('button,input[type=submit],[role=button],a[href]',document,6000).filter(el=>visible(el)&&main(el)).slice(0,30);
- const mainIds=new Set(mains.map(el=>idOf(el)));
- const all=[...pageModel(220).items,...mains.map(el=>describe(el))];
- const rest:Digest['rest']=[],kept=new Set<string>();
- for(const {id,role,name,value,state,inView,nearby} of all){if(exclude.has(id)||kept.has(id))continue;kept.add(id);rest.push({id,role,name,value,state,inView,nearby,...(mainIds.has(id)?{main:true}:{})});}
- return{outline,forms,said:said.slice(0,8),rest};
+ return said.slice(0,8);
 }

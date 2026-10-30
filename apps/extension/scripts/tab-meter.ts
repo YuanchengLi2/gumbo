@@ -34,7 +34,7 @@ async function suggest(moment:Moment){
  return{suggestion:agreed(a.suggestion,b.suggestion),raw:`${a.raw} | ${b.raw}`,firstMs:Math.max(a.firstMs??Infinity,b.firstMs??Infinity)};
 }
 async function predict(moment:Moment){
- const {sample}=moment,context:any={site:sample.site,url:`https://${sample.site}/`,title:sample.title??'',language:'en',editor:'contenteditable',singleLine:!!sample.singleLine,intent:sample.intent,label:sample.label,thread:sample.thread,page:sample.page};
+ const {sample}=moment,context:any={site:sample.site,url:`https://${sample.site}/`,title:sample.title??'',language:'en',editor:'contenteditable',singleLine:!!sample.singleLine,intent:sample.intent,label:sample.label,thread:sample.thread,around:sample.page?[`Just above: ${sample.page}`]:undefined};
  // The writer's other writing in the same kind of field stands in for their memory.
  const recall={...emptyRecall(),style:writing.filter(w=>w!==sample&&w.intent===sample.intent).slice(0,3).map(w=>({site:w.site,intent:w.intent,text:w.text}))};
  const {system,messages,known}=tabRequest(context,moment.before,moment.after,recall);
