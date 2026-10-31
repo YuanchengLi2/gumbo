@@ -11,6 +11,7 @@ import {loadSettings,siteOf} from '../../shared/settings';
 import {rank,wordsOf,overlap,bearing,type Candidate,type Scored} from '../../shared/rank';
 import {textOf} from '../../shared/gateway';
 import {clock} from '../../shared/moment';
+import {READINGS} from '../../shared/embedding';
 /** One memory for every surface. Tab (text and actions), Ctrl+K and the sidebar ask getContext with what they are doing
  * (the surface, the tab, the question: the field and the words being written, the page, the instruction) and a budget,
  * and get back one bundle, in the order a prompt caches best:
@@ -171,7 +172,8 @@ export async function getContext(req:ContextRequest):Promise<Bundle>{
  const past=pastNodes(search.found.filter(f=>!samePage(f.url,req.url)&&bearsOn(f)),trailVisits),searched=new Set(past.map(n=>n.id));
  const nodes=[...snippets,...near.filter(n=>(!samePage(n.url,req.url)||n.kind==='fact'||n.kind==='project')&&!(fromRecording&&screens.has(n.kind))),...past];
  // Text Tab never waits for meaning: what is embedded already counts now, the rest is embedded for the next keystroke.
- await weigh(nodes,req.focus??req.query,req.surface==='tab-text'?0:quick?40:600);
+ // The tabs and pages around are weighed by the focus as one text (its readings, together).
+ await weigh(nodes,(req.focus??req.query).split(READINGS).join('\n'),req.surface==='tab-text'?0:quick?40:600);
  const moment={now:Date.now(),project:here?.project,site,words:wordsOf(req.query).slice(0,40)};
  // What comes is what is relevant: every node, wherever and whenever it is from, by the same test, its closeness in
  // meaning to the moment (its words, when it is not embedded yet). A tab's best-matching passage was chosen by its words

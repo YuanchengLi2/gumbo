@@ -51,14 +51,16 @@ export class MemoryIndex{
  setVector(id:string,vector:Int8Array){this.vectors.set(id,vector);}
  /** What has no embedding yet, newest first: what was just seen is found by meaning before the backlog of the past. */
  missingVectors(limit=Infinity){const out:Doc[]=[];for(const d of [...this.docs.values()].reverse()){if(!this.vectors.has(d.id))out.push(d);if(out.length>=limit)break;}return out;}
- /** The best matches for a question; `query` is its embedding when there is one. */
- find(text:string,{k=6,query,since,kinds,sites}:{k?:number;query?:Int8Array;since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Found[]{
+ /** The best matches for a question; `query` is its embedding when there is one, or the embeddings of the ways it may be
+  * read (Ctrl+K's instruction alone, and with its selection): each memory is as close as its closest reading. */
+ find(text:string,{k=6,query:asked,since,kinds,sites}:{k?:number;query?:Int8Array|Int8Array[];since?:number;kinds?:Doc['kind'][];sites?:string[]}={}):Found[]{
+  const readings=asked===undefined?[]:Array.isArray(asked)?asked:[asked],query=readings[0];
   const allowed=(d:Doc)=>(!since||d.at>=since)&&(!kinds||kinds.includes(d.kind))&&(!sites||!!d.site&&sites.includes(d.site));
   const ranks=new Map<string,number>(),depth=Math.max(50,k*8),raw=new Map<string,{cos?:number;bm25?:number;words?:number}>();
   if(text.trim())this.search.search(text).filter(hit=>allowed(this.docs.get(hit.id as string)!)).slice(0,depth).forEach((hit,i)=>{ranks.set(hit.id as string,(ranks.get(hit.id as string)??0)+1/(60+i));raw.set(hit.id as string,{bm25:hit.score,words:new Set(hit.queryTerms).size+(Object.values(hit.match).some(fields=>fields.includes('title'))?1:0)});});
   if(query){
    const scored:[string,number][]=[];
-   for(const [id,v] of this.vectors){const d=this.docs.get(id);if(!d||!allowed(d))continue;let dot=0;for(let i=0;i<v.length;i++)dot+=v[i]*query[i];scored.push([id,dot]);}
+   for(const [id,v] of this.vectors){const d=this.docs.get(id);if(!d||!allowed(d))continue;let best=-Infinity;for(const q of readings){let dot=0;for(let i=0;i<v.length;i++)dot+=v[i]*q[i];if(dot>best)best=dot;}scored.push([id,best]);}
    scored.sort((a,b)=>b[1]-a[1]);
    // Ranked by meaning; what bears on the moment is judged after (shared/rank.ts bearing: with bge-small unrelated texts
    // score about 0.45 and answers about 0.7, scripts/relevance.ts). Only what is plainly nothing is left out here.

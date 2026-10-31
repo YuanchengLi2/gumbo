@@ -321,6 +321,9 @@ small batches with pauses.
     Ctrl+K and the sidebar judge meaning by their focus (the instruction, selection, field and words before it; the request
     and the page's title) and match the page's words as words; a focused question also keeps only what is within 0.08 of
     its closest match. Tab's field questions are judged whole (their title and thread carry the meaning) by the bar alone.
+    A Ctrl+K instruction may be about the selection or about something else ("where did I read about Groq latency?" with
+    a lunch invite selected), so it is read both ways (`READINGS`: alone, and with the selection and where it is), a
+    memory as close as its closest reading.
     Measured: Ctrl+K 39 of 41 answers with 1.4 other memories each (9.7 before); Tab every answer with 6.9 (13.8 before).
   - **Each page once:** a page read in a tab is searched through the recording; its whole text is kept as the page (opened
     whole, synced, its facts) with only its facts as passages. A PDF, and a page another computer sent, are cut into

@@ -1,6 +1,6 @@
 import {MemoryIndex,docsFrom,mediaDocs,quantize,type Doc,type Found} from '../shared/memory-index';
 import {recent,allVectors,putVectors,SEARCHABLE_PASSAGES,type Media} from '../background/db';
-import {forQuery,forDoc,EMBED_BATCH} from '../shared/embedding';
+import {forQuery,forDoc,EMBED_BATCH,READINGS} from '../shared/embedding';
 import {rest,power} from './power';
 /** Memory search, held in the offscreen document (it lives longer than the worker): everything remembered is loaded and
  * opened once, then kept current as memory changes; what has no embedding yet is embedded in small batches with pauses
@@ -85,13 +85,15 @@ export async function searchWhole(query:string,{focus,...options}:{k?:number;sin
  if(refreshing)await Promise.race([refreshing,new Promise(r=>setTimeout(r,400))]);
  // By meaning when the model is ready (a few milliseconds); while it is still loading (the first question after Chrome
  // starts), by words at once, and the model keeps loading for the next question. A search never waits on the model.
- // Meaning is judged by the focus when there is one (the instruction, the message, the field), the words by everything.
- const vector=await Promise.race([embed([forQuery(focus||query)]).then(v=>v[0]).catch(()=>undefined),new Promise<undefined>(r=>setTimeout(()=>r(undefined),modelReady?2000:250))]);
- if(vector)modelReady=true;
+ // Meaning is judged by the focus when there is one (the instruction, the message, the field), each of its readings
+ // (shared/embedding.ts READINGS) embedded, a memory as close as its closest; the words by everything.
+ const readings=(focus||query).split(READINGS).filter(r=>r.trim()).map(forQuery);
+ const vectors=await Promise.race([embed(readings).catch(()=>undefined),new Promise<undefined>(r=>setTimeout(()=>r(undefined),modelReady?2000:250))]);
+ if(vectors)modelReady=true;
  // Whole once the question was asked by meaning. What was seen a moment ago and is still being embedded is judged by its
  // words meanwhile (shared/rank.ts bearing): waiting for all of memory to be embedded would wait on the recording, which
  // adds to it every few seconds.
- return{found:built.find(query,{...options,query:vector}),whole:!!vector};
+ return{found:built.find(query,{...options,query:vectors}),whole:!!vectors};
 }
 /** Loads memory and the embedding model ahead of the first question (the side panel opening is a good moment). */
 export async function warm(){lastActive=Date.now();await load();await embed([forQuery('warm')]).catch(()=>{});return{ok:true};}

@@ -8,6 +8,7 @@ import {GRAPH_TOOLS,runGraphTool} from './memory/graph';
 import {viewPicture} from './predict';
 import {offscreen} from './offscreen';
 import {loadSettings,activeOn,siteOf} from '../shared/settings';
+import {READINGS} from '../shared/embedding';
 import {INLINE_SYSTEM,PREDICT_SYSTEM,inlineStable,inlineFresh} from '../shared/prompts';
 import {quickIdeas,mergeIdeas,ideasOf} from '../shared/ideas';
 import {textOf} from '../shared/gateway';
@@ -28,8 +29,13 @@ const timeZone=()=>Intl.DateTimeFormat().resolvedOptions().timeZone;
 const contextOf=(m:Omit<Ask,'id'|'instruction'>)=>`${m.selection.slice(0,300)}\n${m.title}\n${m.label??''}\n${m.before.slice(-200)||(m.page??"").slice(0,300)}`;
 const keyOf=(m:Omit<Ask,'id'|'instruction'>)=>`inline|${m.site}|${contextOf(m).slice(0,400)}`;
 /** What closeness in meaning is judged by: the instruction, the selection, where it is and the words just before, not the
- * page's text (which is close in meaning to every page, scripts/relevance.ts); the page's words still match as words. */
-const focusOf=(m:Omit<Ask,'id'|'instruction'>&{instruction?:string})=>[m.instruction,m.selection.slice(0,300),m.title,m.label,m.before.slice(-200)].filter(Boolean).join('\n');
+ * page's text (which is close in meaning to every page, scripts/relevance.ts); the page's words still match as words.
+ * An instruction may be about the selection ("make this formal") or about something else ("where did I read about Groq
+ * latency?" with a lunch invite selected): it is read both ways (READINGS), alone and with where it is. */
+const focusOf=(m:Omit<Ask,'id'|'instruction'>&{instruction?:string})=>{
+ const there=[m.instruction,m.selection.slice(0,300),m.title,m.label,m.before.slice(-200)].filter(Boolean).join('\n');
+ return m.instruction?`${m.instruction}${READINGS}${there}`:there;
+};
 const bundleFor=(m:Omit<Ask,'id'|'instruction'>&{instruction?:string},tab:number|undefined,url:string,wait:number)=>getContext({surface:'inline',tab,url,query:m.instruction?`${m.instruction}\n${contextOf(m)}`:contextOf(m),focus:focusOf(m),field:m.inField?{intent:m.intent??'other',label:m.label??''}:undefined,budget:4000,key:keyOf(m),rerank:true,wait});
 /** The picture taken as a card opened over a drawing, while what they selected was still highlighted as they saw it (it
  * fades once the card has the focus): the card's questions look at it. */
